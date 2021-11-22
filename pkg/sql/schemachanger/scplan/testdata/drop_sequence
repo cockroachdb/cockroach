@@ -7,21 +7,21 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
   transitions:
-    from: [Sequence:{DescID: 52}, ABSENT, DROP]
-    to:   [Sequence:{DescID: 52}, ABSENT, DROP]
+    from: [Sequence:{DescID: 52}, PUBLIC, DROP]
+    to:   [Sequence:{DescID: 52}, TXN_DROPPED, DROP]
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 52
 Stage 1 (non-revertible)
   transitions:
-    from: [Sequence:{DescID: 52}, ABSENT, DROP]
-    to:   [Sequence:{DescID: 52}, ABSENT, DROP]
+    from: [Sequence:{DescID: 52}, TXN_DROPPED, DROP]
+    to:   [Sequence:{DescID: 52}, DROPPED, DROP]
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 52
 Stage 2 (non-revertible)
   transitions:
-    from: [Sequence:{DescID: 52}, ABSENT, DROP]
+    from: [Sequence:{DescID: 52}, DROPPED, DROP]
     to:   [Sequence:{DescID: 52}, ABSENT, DROP]
   ops:
     *scop.DrainDescriptorName
@@ -54,23 +54,23 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
   transitions:
-    from: [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
-    to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
-    from: [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
-    to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
-    from: [Sequence:{DescID: 52}, ABSENT, DROP]
-    to:   [Sequence:{DescID: 52}, ABSENT, DROP]
+    from: [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP]
+    to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP]
+    from: [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP]
+    to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP]
+    from: [Sequence:{DescID: 52}, PUBLIC, DROP]
+    to:   [Sequence:{DescID: 52}, TXN_DROPPED, DROP]
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 52
 Stage 1 (non-revertible)
   transitions:
-    from: [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
+    from: [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP]
     to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
-    from: [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
+    from: [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP]
     to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
-    from: [Sequence:{DescID: 52}, ABSENT, DROP]
-    to:   [Sequence:{DescID: 52}, ABSENT, DROP]
+    from: [Sequence:{DescID: 52}, TXN_DROPPED, DROP]
+    to:   [Sequence:{DescID: 52}, DROPPED, DROP]
   ops:
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
@@ -90,7 +90,7 @@ Stage 2 (non-revertible)
     to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
     from: [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
     to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
-    from: [Sequence:{DescID: 52}, ABSENT, DROP]
+    from: [Sequence:{DescID: 52}, DROPPED, DROP]
     to:   [Sequence:{DescID: 52}, ABSENT, DROP]
   ops:
     *scop.DrainDescriptorName

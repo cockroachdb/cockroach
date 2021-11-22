@@ -7,10 +7,10 @@ DROP TYPE defaultdb.typ
 ----
 Stage 0
   transitions:
-    from: [Type:{DescID: 52}, ABSENT, DROP]
-    to:   [Type:{DescID: 52}, ABSENT, DROP]
-    from: [Type:{DescID: 53}, ABSENT, DROP]
-    to:   [Type:{DescID: 53}, ABSENT, DROP]
+    from: [Type:{DescID: 52}, PUBLIC, DROP]
+    to:   [Type:{DescID: 52}, TXN_DROPPED, DROP]
+    from: [Type:{DescID: 53}, PUBLIC, DROP]
+    to:   [Type:{DescID: 53}, TXN_DROPPED, DROP]
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 52
@@ -18,10 +18,10 @@ Stage 0
       DescID: 53
 Stage 1 (non-revertible)
   transitions:
-    from: [Type:{DescID: 52}, ABSENT, DROP]
-    to:   [Type:{DescID: 52}, ABSENT, DROP]
-    from: [Type:{DescID: 53}, ABSENT, DROP]
-    to:   [Type:{DescID: 53}, ABSENT, DROP]
+    from: [Type:{DescID: 52}, TXN_DROPPED, DROP]
+    to:   [Type:{DescID: 52}, DROPPED, DROP]
+    from: [Type:{DescID: 53}, TXN_DROPPED, DROP]
+    to:   [Type:{DescID: 53}, DROPPED, DROP]
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 52
@@ -29,9 +29,9 @@ Stage 1 (non-revertible)
       DescID: 53
 Stage 2 (non-revertible)
   transitions:
-    from: [Type:{DescID: 52}, ABSENT, DROP]
+    from: [Type:{DescID: 52}, DROPPED, DROP]
     to:   [Type:{DescID: 52}, ABSENT, DROP]
-    from: [Type:{DescID: 53}, ABSENT, DROP]
+    from: [Type:{DescID: 53}, DROPPED, DROP]
     to:   [Type:{DescID: 53}, ABSENT, DROP]
   ops:
     *scop.DrainDescriptorName
