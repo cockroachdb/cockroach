@@ -172,11 +172,6 @@ func (c *conn) handleAuthentication(
 		))
 	}
 
-	if err != nil {
-		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
-	}
-
 	// Set up lazy provider for password or cert-password methods.
 	pwDataFn := func(ctx context.Context) ([]byte, *tree.DTimestamp, error) {
 		pwHash, err := pwRetrievalFn(ctx)
