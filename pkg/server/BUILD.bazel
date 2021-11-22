@@ -128,6 +128,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/hydratedtables",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/singleversion/svprovider",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/colexec",
         "//pkg/sql/commenter",

@@ -302,6 +302,7 @@ go_library(
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/seqexpr",
+        "//pkg/sql/catalog/singleversion",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",

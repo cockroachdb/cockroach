@@ -804,6 +804,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ex.server.cfg.InternalExecutor,
 		&ex.extraTxnState.descCollection,
 		ex.state.mu.txn,
+		ex.planner.execCfg.SingleVersion,
 		inRetryBackoff,
 	)
 	if retryErr {

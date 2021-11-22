@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion/svprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
@@ -512,10 +513,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		compactEngineSpanFunc = cli.CompactEngineSpan
 	}
 
+	svp := svprovider.NewProvider(
+		cfg.AmbientCtx,
+		cfg.db,
+		codec,
+		keys.SingleVersionDescriptorLeasesTableID,
+		cfg.stopper,
+		cfg.sqlLivenessProvider,
+		cfg.sqlLivenessProvider,
+		cfg.rangeFeedFactory,
+	)
+
 	collectionFactory := descs.NewCollectionFactory(
 		cfg.Settings,
 		leaseMgr,
 		virtualSchemas,
+		svp,
 		hydratedTablesCache,
 	)
 
@@ -577,6 +590,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeCache:               cfg.distSender.RangeDescriptorCache(),
 		SQLSQLResponseAdmissionQ: cfg.sqlSQLResponseAdmissionQ,
 		CollectionFactory:        collectionFactory,
+		SingleVersion:            svp,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
@@ -700,6 +714,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		GCJobNotifier:              gcJobNotifier,
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
+		SingleVersion:              svp,
 
 		SystemIDChecker: &catalog.SystemIDChecker{
 			SystemIDChecker: keys.DeprecatedSystemIDChecker(),
