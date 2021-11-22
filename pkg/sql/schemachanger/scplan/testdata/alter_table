@@ -7,9 +7,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 Stage 0
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedColumnDeleteOnly
       Column:
@@ -57,9 +57,9 @@ Stage 0
       Unique: true
 Stage 1
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -69,27 +69,27 @@ Stage 1
       TableID: 52
 Stage 2
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
 Stage 3
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
 Stage 4
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -104,7 +104,7 @@ Stage 5 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -113,7 +113,7 @@ Stage 6 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -124,9 +124,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
 Stage 0
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedColumnDeleteOnly
       Column:
@@ -176,9 +176,9 @@ Stage 0
       Unique: true
 Stage 1
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -188,27 +188,27 @@ Stage 1
       TableID: 52
 Stage 2
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
 Stage 3
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
 Stage 4
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -223,7 +223,7 @@ Stage 5 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -232,7 +232,7 @@ Stage 6 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -244,10 +244,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
 Stage 0
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, ABSENT, ADD] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
       Column:
@@ -333,10 +333,10 @@ Stage 0
       Unique: true
 Stage 1
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -349,30 +349,30 @@ Stage 1
       TableID: 52
 Stage 2
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
 Stage 3
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
 Stage 4
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -390,7 +390,7 @@ Stage 5 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
   ops:
     *scop.MakeDroppedIndexDeleteOnly
@@ -400,7 +400,7 @@ Stage 6 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: j}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
     [Column:{DescID: 52, ColumnID: 3, Name: k}, PUBLIC, ADD] -> PUBLIC
   ops:
     *scop.MakeIndexAbsent
@@ -412,9 +412,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
 Stage 0
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedColumnDeleteOnly
       Column:
@@ -464,9 +464,9 @@ Stage 0
       Unique: true
 Stage 1
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -476,27 +476,27 @@ Stage 1
       TableID: 52
 Stage 2
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
 Stage 3
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
 Stage 4
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -511,7 +511,7 @@ Stage 5 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -520,7 +520,7 @@ Stage 6 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -537,12 +537,12 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 Stage 0
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedColumnDeleteOnly
       Column:
@@ -636,12 +636,12 @@ Stage 0
       Unique: true
 Stage 1
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -657,12 +657,12 @@ Stage 1
       TableID: 53
 Stage 2
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -672,12 +672,12 @@ Stage 2
       TableID: 53
 Stage 3
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, DELETE_AND_WRITE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -687,12 +687,12 @@ Stage 3
       TableID: 53
 Stage 4
   transitions:
-    [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
-    [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -716,10 +716,10 @@ Stage 5 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -731,10 +731,10 @@ Stage 6 (non-revertible)
   transitions:
     [Column:{DescID: 52, ColumnID: 2, Name: a}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
     [Column:{DescID: 53, ColumnID: 3, Name: b}, PUBLIC, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, ABSENT, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
