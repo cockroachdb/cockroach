@@ -105,11 +105,11 @@ export interface StatementsPageStateProps {
   lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
+  sortSetting: SortSetting;
   isTenant?: UIConfigState["isTenant"];
 }
 
 export interface StatementsPageState {
-  sortSetting: SortSetting;
   search?: string;
   pagination: ISortedTablePagination;
   filters?: Filters;
@@ -141,11 +141,6 @@ export class StatementsPage extends React.Component<
       this.props.history.location.search,
     );
     const defaultState = {
-      sortSetting: {
-        // Sort by Execution Count column as default option.
-        ascending: false,
-        columnTitle: "executionCount",
-      },
       pagination: {
         pageSize: 20,
         current: 1,
@@ -167,24 +162,26 @@ export class StatementsPage extends React.Component<
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const ascending = searchParams.get("ascending") || undefined;
-    const columnTitle = searchParams.get("columnTitle") || undefined;
     const searchQuery = searchParams.get("q") || undefined;
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting = this.props.sortSetting;
+
+    if (
+      this.props.onSortingChange &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.onSortingChange("Statements", columnTitle, ascending);
+    }
 
     return {
-      sortSetting: {
-        ascending: ascending === "true",
-        columnTitle,
-      },
       search: searchQuery,
     };
   };
 
   changeSortSetting = (ss: SortSetting): void => {
-    this.setState({
-      sortSetting: ss,
-    });
-
     syncHistory(
       {
         ascending: ss.ascending.toString(),
@@ -421,6 +418,7 @@ export class StatementsPage extends React.Component<
       onColumnsChange,
       nodeRegions,
       isTenant,
+      sortSetting,
     } = this.props;
     const appAttrValue = queryByName(location, appAttr);
     const selectedApp = appAttrValue || "";
@@ -544,7 +542,7 @@ export class StatementsPage extends React.Component<
             className="statements-table"
             data={data}
             columns={displayColumns}
-            sortSetting={this.state.sortSetting}
+            sortSetting={sortSetting}
             onChangeSortSetting={this.changeSortSetting}
             renderNoResult={
               <EmptyStatementsPlaceholder
