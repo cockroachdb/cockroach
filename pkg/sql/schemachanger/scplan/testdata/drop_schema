@@ -121,24 +121,12 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ----
 Stage 0
   transitions:
-    [DefaultExpression:{DescID: 54, ColumnID: 3}, PUBLIC, DROP] -> PUBLIC
     [Sequence:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> PUBLIC
     [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> PUBLIC
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> PUBLIC
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> PUBLIC
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, PUBLIC, DROP] -> PUBLIC
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
-    [TypeReference:{DescID: 61, ReferencedDescID: 59}, PUBLIC, DROP] -> PUBLIC
-    [TypeReference:{DescID: 61, ReferencedDescID: 60}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 54, ColumnID: 1}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP] -> PUBLIC
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> PUBLIC
     [Table:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
@@ -253,24 +241,12 @@ Stage 1 (non-revertible)
       DescID: 52
 Stage 2 (non-revertible)
   transitions:
-    [DefaultExpression:{DescID: 54, ColumnID: 3}, ABSENT, DROP] -> ABSENT
     [Sequence:{DescID: 53}, DROPPED, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
     [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT, DROP] -> ABSENT
     [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT, DROP] -> ABSENT
     [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT, DROP] -> ABSENT
     [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT, DROP] -> ABSENT
     [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
-    [TypeReference:{DescID: 61, ReferencedDescID: 59}, ABSENT, DROP] -> ABSENT
-    [TypeReference:{DescID: 61, ReferencedDescID: 60}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 54, ColumnID: 1}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT, DROP] -> ABSENT
     [Table:{DescID: 54}, DROPPED, DROP] -> ABSENT
     [Type:{DescID: 59}, DROPPED, DROP] -> ABSENT
     [Type:{DescID: 60}, DROPPED, DROP] -> ABSENT
