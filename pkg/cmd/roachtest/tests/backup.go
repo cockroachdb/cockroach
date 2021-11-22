@@ -167,8 +167,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// `cockroach` will be used.
 			const mainVersion = ""
 			roachNodes := c.All()
-			newNode := 1
-			oldNode := 3
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
@@ -179,32 +177,46 @@ func registerBackupMixedVersion(r registry.Registry) {
 				}
 				runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
 			}
-			successfulBackupStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-				backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s'", newNode, destinationName(c))
-				gatewayDB := c.Conn(ctx, newNode)
+			runBackup := func(nodeID int, opts ...string) error {
+				backupOpts := ""
+				if len(opts) > 0 {
+					backupOpts = fmt.Sprintf("WITH %s", strings.Join(opts, ", "))
+				}
+				backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s' %s",
+					nodeID, destinationName(c), backupOpts)
+
+				gatewayDB := c.Conn(ctx, nodeID)
 				defer gatewayDB.Close()
-				_, err = gatewayDB.ExecContext(ctx, backupQuery)
-				require.NoError(t, err)
+				t.Status("Running: ", backupQuery)
+				_, err := gatewayDB.ExecContext(ctx, backupQuery)
+				return err
 			}
-			backupFailsWithExpectedErrorStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-				backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s'", oldNode, destinationName(c))
-				// We run the backup on an oldNode, which should result in an error message
-				gatewayDB := c.Conn(ctx, oldNode)
-				defer gatewayDB.Close()
-				_, err = gatewayDB.ExecContext(ctx, backupQuery)
-				require.Error(t, err)
-				require.True(t, strings.Contains(err.Error(), "ExportRequest was issued from a node running"))
+			successfulBackupStep := func(nodeID int, opts ...string) versionStep {
+				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					require.NoError(t, runBackup(nodeID, opts...))
+				}
 			}
+			backupFailsWithExpectedErrorStep := func(nodeID int, errStr string) versionStep {
+				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					err := runBackup(nodeID)
+					require.Error(t, err)
+					require.True(t, strings.Contains(err.Error(), errStr))
+				}
+			}
+
 			u := newVersionUpgradeTest(c,
 				uploadAndStartFromCheckpointFixture(roachNodes, predV),
 				waitForUpgradeStep(roachNodes),
 				preventAutoUpgradeStep(1),
 				loadBackupDataStep,
 				// Upgrade some of the nodes.
-				binaryUpgradeStep(c.Node(1), mainVersion),
-				binaryUpgradeStep(c.Node(2), mainVersion),
-				successfulBackupStep,
-				backupFailsWithExpectedErrorStep,
+				binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
+				// Backup from new node should succeed
+				successfulBackupStep(1),
+				// Backup from new node with revision history should succeed
+				successfulBackupStep(2, "revision_history"),
+				// Backup from old node fails (see #72852)
+				backupFailsWithExpectedErrorStep(3, "ExportRequest was issued from a node running"),
 			)
 			u.run(ctx, t)
 		},
