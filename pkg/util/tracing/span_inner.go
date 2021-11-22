@@ -85,25 +85,25 @@ func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 func (s *spanInner) Finish() {
-	if s == nil {
+	if s == nil || s.isNoop() {
 		return
 	}
-	if s.isNoop() {
-		return
-	}
+
+	// Copy references that we might need later out of the span. The span can't be
+	// used any more after s.crdb.finish() returns.
+	otelSpan := s.otelSpan
+	netTr := s.netTr
 
 	if !s.crdb.finish() {
-		// The span was already finished. External spans and net/trace are not
-		// always forgiving about spans getting finished twice, but it may happen so
-		// let's be resilient to it.
+		// Short-circuit because netTr.Finish does not tolerate double-finish.
 		return
 	}
 
-	if s.otelSpan != nil {
-		s.otelSpan.End()
+	if otelSpan != nil {
+		otelSpan.End()
 	}
-	if s.netTr != nil {
-		s.netTr.Finish()
+	if netTr != nil {
+		netTr.Finish()
 	}
 }
 

@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
@@ -46,7 +47,12 @@ var followsFromAttribute = []attribute.KeyValue{attribute.String("follows-from",
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent *Span // see WithParent
+	// Parent, if set, indicates the parent span of the span being created with
+	// these spanOptions.
+	// If parent is set, its refCnt is assumed to have been incremented with the
+	// reference held here (see WithParent()). StartSpan() will decrement refCnt.
+	// Because of this, a spanOptions with Parent set cannot be reused.
+	Parent spanRef // see WithParent
 	// ParentDoesNotCollectRecording is set by WithDetachedRecording. It means
 	// that, although this span has a parent, the parent should generally not
 	// include this child's recording when the parent is asked for its own
@@ -79,7 +85,7 @@ type spanOptions struct {
 }
 
 func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
-	if opts.Parent != nil && !opts.Parent.IsNoop() {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.traceID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.traceID
@@ -88,7 +94,7 @@ func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
 }
 
 func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
-	if opts.Parent != nil && !opts.Parent.IsNoop() {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.spanID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.spanID
@@ -102,7 +108,7 @@ func (opts *spanOptions) recordingType() RecordingType {
 	}
 
 	recordingType := RecordingOff
-	if opts.Parent != nil && !opts.Parent.IsNoop() {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if !opts.RemoteParent.Empty() {
 		recordingType = opts.RemoteParent.recordingType
@@ -115,7 +121,7 @@ func (opts *spanOptions) recordingType() RecordingType {
 // RemoteParent,  a SpanContext is returned. If there's no OpenTelemetry parent,
 // both return values will be empty.
 func (opts *spanOptions) otelContext() (oteltrace.Span, oteltrace.SpanContext) {
-	if opts.Parent != nil && opts.Parent.i.otelSpan != nil {
+	if !opts.Parent.empty() && opts.Parent.i.otelSpan != nil {
 		return opts.Parent.i.otelSpan, oteltrace.SpanContext{}
 	}
 	if !opts.RemoteParent.Empty() && opts.RemoteParent.otelCtx.IsValid() {
@@ -139,7 +145,7 @@ type SpanOption interface {
 	apply(spanOptions) spanOptions
 }
 
-type parentOption Span
+type parentOption spanRef
 
 // WithParent instructs StartSpan to create a child Span from a (local) parent
 // Span.
@@ -173,24 +179,95 @@ type parentOption Span
 // which corresponds to the expectation that the parent span will
 // wait for the child to Finish(). If this expectation does not hold,
 // WithFollowsFrom should be added to the StartSpan invocation.
+//
+// WithParent increments sp's reference count. As such, the resulting option
+// must be passed to StartSpan(opt). Once passed to StartSpan(opt), opt cannot
+// be reused. The child span will be responsible for ultimately doing the
+// decrement. The fact that WithParent takes a reference on sp is important to
+// avoid the possibility of deadlocks when buggy code uses a Span after Finish()
+// (which is illegal). See comments on Span.refCnt for details. By taking the
+// reference, it becomes safe (from a deadlock perspective) to call
+// WithParent(sp) concurrently with sp.Finish(). Note that calling
+// WithParent(sp) after sp was re-allocated cannot result in deadlocks
+// regardless of the reference counting.
 func WithParent(sp *Span) SpanOption {
+	if sp == nil {
+		return (parentOption)(spanRef{})
+	}
+
 	// Panic if the parent has already been finished, if configured to do so. If
 	// the parent has finished and we're configured not to panic, StartSpan() will
 	// deal with it when passed this WithParent option.
+	//
+	// Note that this check is best-effort (like all done() checks). More checking
+	// below.
 	_ = sp.detectUseAfterFinish()
 
-	// The sp.IsNoop() case is handled in StartSpan, not here, because we want to
-	// assert that the parent's Tracer is the same as the child's. In contrast, in
-	// the IsSterile() case, it is allowed for the "child" to be created with a
-	// different Tracer than the parent.
-	if sp == nil || sp.IsSterile() {
-		return (*parentOption)(nil)
+	// What comes is tricky. We want to guarantee that sp is not reused after this
+	// method returns. It can be re-used before this method is called, and it can
+	// be re-used during our loop below, but not after. More exactly, we want to
+	// "atomically" check whether sp is available for reuse and, if it isn't, make
+	// sure it doesn't become available for reuse until the would-be child is
+	// created (and beyond, for as long as the child holds a reference to the
+	// parent). We want to do this using atomics only; there's no locks to work
+	// with because the races we're concerned about are races with sp.decRef() and
+	// that method cannot take locks because it can run either under a parent's or
+	// a child's lock when operating on the parent's refCnt.
+	//
+	// The way we do it is through instituting the invariant that, once refCnt
+	// reaches 0, the only things that increments it away from 0 is sp.reset(). In
+	// particular, WithParent(sp) does not make refCnt 0->1 transitions. This way,
+	// if a non-zero refCnt is found, then we know that the span is good to use
+	// and we can add our own reference. Once we've added our reference, this
+	// reference will keep the span good to use until we eventually release it. On
+	// the other hand, if we ever see a zero refCnt, then we can't use the span.
+
+	// Loop until we don't race on sp.refCnt.
+	for {
+		cnt := atomic.LoadInt32(&sp.refCnt)
+		if cnt == 0 {
+			// sp was Finish()ed, and it might be in the pool awaiting reallocation.
+			// It'd be unsafe to hold a reference to sp because of deadlock hazards,
+			// so we'll return an empty option (i.e. the resulting child will be a
+			// root).
+			return (parentOption)(spanRef{})
+		}
+		// Attempt to acquire a reference on sp, but only if we're not racing with anyone.
+		swapped := atomic.CompareAndSwapInt32(&sp.refCnt, cnt, cnt+1)
+		if swapped {
+			// We have a reference. The span can not be re-used while we hold the
+			// reference, so we're good to create the child.
+			break
+		} else {
+			// We raced with someone - possibly with a sp.decRef() that might have
+			// brought the refCnt to zero and made the span available for reuse. We
+			// need to restart to see if that was the case.
+			continue
+		}
 	}
-	return (*parentOption)(sp)
+
+	// Create another reference in the form of a spanRef, and drop the reference
+	// we had. On the happy path, the spanRef will be moved into the child-to-be,
+	// which will own it (it will release() it when either the child or the parent
+	// are Finish()ed).
+	ref := makeSpanRef(sp)
+	defer ref.release()
+	sp.decRef()
+
+	// Sterile spans don't get children. Noop spans also don't, but that case is
+	// handled in StartSpan, not here, because we want to assert that the parent's
+	// Tracer is the same as the child's. In contrast, in the IsSterile() case, it
+	// is allowed for the "child" to be created with a different Tracer than the
+	// parent.
+	if sp.IsSterile() {
+		return (parentOption)(spanRef{})
+	}
+
+	return (parentOption)(ref.move())
 }
 
-func (p *parentOption) apply(opts spanOptions) spanOptions {
-	opts.Parent = (*Span)(p)
+func (p parentOption) apply(opts spanOptions) spanOptions {
+	opts.Parent = (spanRef)(p)
 	return opts
 }
 
