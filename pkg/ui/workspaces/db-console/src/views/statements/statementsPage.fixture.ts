@@ -184,6 +184,16 @@ const statementsPagePropsFixture: StatementsPageProps = {
     ascending: false,
     columnTitle: "executionCount",
   },
+  filters: {
+    app: "",
+    timeNumber: "0",
+    timeUnit: "seconds",
+    fullScan: false,
+    sqlType: "",
+    database: "",
+    regions: "",
+    nodes: "",
+  },
   columns: null,
   match: {
     path: "/statements",
