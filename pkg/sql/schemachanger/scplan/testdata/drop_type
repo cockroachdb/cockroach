@@ -6,20 +6,38 @@ ops
 DROP TYPE defaultdb.typ
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
+  transitions:
+    from: [Type:{DescID: 52}, ABSENT, DROP]
+    to:   [Type:{DescID: 52}, ABSENT, DROP]
+    from: [Type:{DescID: 53}, ABSENT, DROP]
+    to:   [Type:{DescID: 53}, ABSENT, DROP]
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 52
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 53
 Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    DescID: 52
-  *scop.MarkDescriptorAsDropped
-    DescID: 53
+  transitions:
+    from: [Type:{DescID: 52}, ABSENT, DROP]
+    to:   [Type:{DescID: 52}, ABSENT, DROP]
+    from: [Type:{DescID: 53}, ABSENT, DROP]
+    to:   [Type:{DescID: 53}, ABSENT, DROP]
+  ops:
+    *scop.MarkDescriptorAsDropped
+      DescID: 52
+    *scop.MarkDescriptorAsDropped
+      DescID: 53
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 52
-  *scop.DrainDescriptorName
-    TableID: 53
+  transitions:
+    from: [Type:{DescID: 52}, ABSENT, DROP]
+    to:   [Type:{DescID: 52}, ABSENT, DROP]
+    from: [Type:{DescID: 53}, ABSENT, DROP]
+    to:   [Type:{DescID: 53}, ABSENT, DROP]
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 52
+    *scop.DrainDescriptorName
+      TableID: 53
 
 deps
 DROP TYPE defaultdb.typ
