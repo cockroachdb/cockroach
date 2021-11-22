@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "svtestutils",
+    srcs = ["testutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion/svtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sqlliveness",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/hlc",
+        "//pkg/util/syncutil",
+    ],
+)
