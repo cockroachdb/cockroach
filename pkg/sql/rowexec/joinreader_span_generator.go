@@ -666,8 +666,7 @@ func (g *multiSpanGenerator) generateSpans(
 			if inputRowIndices == nil {
 				// MaybeSplitSpanIntoSeparateFamilies is an optimization for doing more
 				// efficient point lookups when the span hits multiple column families.
-				// It doesn't work with inequality ranges because the prefixLen we pass
-				// in here is wrong and possibly other reasons.
+				// It doesn't work with inequality ranges because they aren't point lookups.
 				if g.inequalityColIdx != -1 {
 					g.scratchSpans = append(g.scratchSpans, *generatedSpan)
 				} else {

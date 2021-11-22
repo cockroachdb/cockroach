@@ -1044,7 +1044,7 @@ vectorized: true
           columns: (d, f)
           estimated row count: 1 (missing stats)
           table: def@def_f_key
-          spans: /1-/2
+          spans: /1/0
 
 statement ok
 DROP TABLE def
@@ -1073,7 +1073,7 @@ vectorized: true
           columns: (d, f)
           estimated row count: 1 (missing stats)
           table: def@def_f_key
-          spans: /1-/2
+          spans: /1/0
 
 # Regression test for #20504.
 query T
