@@ -121,6 +121,13 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
+
+	// Tracers are not comparable.
+	cfg.BaseConfig.Tracer = nil
+	cfgExpected.BaseConfig.Tracer = nil
+	cfg.BaseConfig.AmbientCtx.Tracer = nil
+	cfgExpected.BaseConfig.AmbientCtx.Tracer = nil
+
 	require.Equal(t, cfgExpected, cfg)
 
 	// Set all the environment variables to valid values and ensure they are set
