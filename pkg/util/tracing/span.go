@@ -15,11 +15,14 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/logtags"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"golang.org/x/net/trace"
 )
 
 const (
@@ -49,12 +52,92 @@ const (
 // Additionally, the internal span type also supports turning on, stopping,
 // and restarting its data collection (see Span.StartRecording), and this is
 // used extensively in SQL session tracing.
+//
+// Span is a fairly thin wrapper around spanInner, dealing with guarding against
+// use-after-Finish and reference counting for pooling and re-allocating.
 type Span struct {
-	// Span itself is a very thin wrapper around spanInner whose only job is
-	// to guard spanInner against use-after-Finish.
+	// helper is the allocation helper that this span is part of. Used to release
+	// back into a pool on Finish().
+	helper *spanAllocHelper
+
 	i spanInner
+
 	// finished is set on Finish(). Used to detect use-after-Finish.
 	finished int32 // atomic
+
+	// refCnt counts the references to this span held by other spans. The Span can
+	// only be re-allocated when refCnt reaches zero.
+	//
+	// The reference counting mechanism is used only internally by the tracing
+	// infrastructure. Clients using Spans do not track their references because
+	// it'd be too burdensome to require all the references to have a clearly
+	// defined life cycle, and to be explicitly released when they're no longer in
+	// use. For clients, the contract is that a span can be used until Finish().
+	//
+	// For convenience, the span itself holds a reference to itself until
+	// Finish(). This ensures that the reference count will not become zero before
+	// Finish().
+	//
+	// The reference count serves a couple of purposes:
+	// 1) Prevent re-allocation of a Span while child spans are still operating on
+	// it. In particular, this ensures that races between Finish()ing a parent and
+	// a child cannot result in the child operating on a re-allocated parent.
+	// Because of the span's lock ordering convention, a child cannot hold its
+	// lock while operating on the parent. During Finish(), the child drops its
+	// lock and informs the parent that it is Finish()ing. If the parent
+	// Finish()es at the same time, that call could erroneously conclude that the
+	// parent can be made available for re-use, even through the child goroutine
+	// has a pending call into the parent.
+	//
+	// 2) Prevent re-allocation of child spans while a Finish()ing parent is in
+	// the process of transforming the children into roots and inserting them into
+	// the active spans registry. Operating on the registry is done without
+	// holding any span's lock, so a race with a child's Finish() could result in
+	// the registry operating on a re-allocated span.
+	//
+	// 3) Prevent re-allocation of a Span in between the time that WithParent(s)
+	// captures a reference to s and the time when the parent option is used to
+	// create the child. Such an inopportune reuse of a span could only happen is
+	// the span is Finish()ed concurrently with the creation of its child, which
+	// is illegal. Still, we optionally tolerate use-after-Finishes, and this use
+	// cannot be tolerated with the reference count protection. Without this
+	// protection, the tree of spans in a trace could degenerate into a graph
+	// through the introduction of loops. A loop could lead to deadlock due to the
+	// fact that we lock multiple spans at once. The lock ordering convention is
+	// that the parent needs to be locked before the child, which ensures
+	// deadlock-freedom in the absence of loops.
+	// For example:
+	// 1. parent := tr.StartSpan()
+	// 2. parentOpt := WithParent(parent)
+	// 3. parent.Finish()
+	// 4. child := tr.StartSpan(parentOpt)
+	// If "parent" would be re-allocated as "child", then child would have itself
+	// as a parent. The use of parentOpt in step 4) after parent was finished in
+	// step 3) is a use-after-Finish of parent; it is illegal and, if detection is
+	// enabled, it might be detected as such. However, if span pooling and re-use
+	// is enabled, then the detection is not realiable (it does not catch cases
+	// where a span is re-used before a reference to it taken before the prior
+	// Finish() is used).
+	// A span having itself as a parent is just the trivial case of the problem;
+	// loops of arbitrary length are also possible. For example, for a loop of
+	// length 2:
+	// 1. Say we have span A as a parent with span B as a child (A -> B).
+	// 2. parentA := WithParent(A)
+	// 3. parentB := WithParent(B)
+	// 4. A.Finish(); B.Finish();
+	// 5. X := tr.StartSpan(parentA); Y := tr.StartSpan(parentB);
+	// If B is re-used as X, and A is re-used as Y, we get the following graph:
+	//  B<-┐
+	//  |  |
+	//  └->A
+	//
+	// We avoid these hazards by having WithParent(s) increment s' refCnt. Spans
+	// are not re-used while the creation of a child is pending. Spans can be
+	// Finish()ed while the creation of the child is pending, in which case the
+	// creation of the child will reliably detect the use-after-Finish (and turn
+	// it into a no-op if configured to tolerate such illegal uses).
+	refCnt int32 // atomic
+
 	// finishStack is set if debugUseAfterFinish is set. It represents the stack
 	// that called Finish(), in order to report it on further use.
 	finishStack string
@@ -103,9 +186,42 @@ func (sp *Span) detectUseAfterFinish() bool {
 	return alreadyFinished
 }
 
+// incRef increments sp's reference count. The span will not be re-allocated
+// before a corresponding decRef() is performed (i.e. before the count reaches
+// zero).
+func (sp *Span) incRef() {
+	atomic.AddInt32(&sp.refCnt, 1)
+}
+
+// decRef decrements the span's reference count. If it reaches zero, the span is
+// made available for reuse if the Tracer was so configured.
+//
+// Returns true if the value dropped to zero.
+func (sp *Span) decRef() bool {
+	refCnt := atomic.AddInt32(&sp.refCnt, -1)
+	if refCnt < 0 {
+		panic(fmt.Sprintf("refCnt below 0: %s", sp))
+	}
+	// If this was the last reference, make the span available for re-use.
+	if refCnt == 0 {
+		alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
+		if !alreadyFinished {
+			panic("Span reference count dropped to zero before the span was Finish()ed")
+		}
+
+		sp.i.crdb.tracer.releaseSpanToPool(sp)
+		return true
+	}
+	return false
+}
+
 // Tracer exports the tracer this span was created using.
 func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
+}
+
+func (sp *Span) String() string {
+	return sp.OperationName()
 }
 
 // Redactable returns true if this Span's tracer is marked redactable
@@ -116,11 +232,16 @@ func (sp *Span) Redactable() bool {
 	return sp.Tracer().Redactable()
 }
 
-// Finish marks the Span as completed. Its illegal to use a Span after calling
+// Finish marks the Span as completed. It is illegal to use a Span after calling
 // Finish().
 //
 // Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
+	sp.finishInternal()
+}
+
+// finishInternal finishes the span.
+func (sp *Span) finishInternal() {
 	if sp == nil || sp.IsNoop() || sp.detectUseAfterFinish() {
 		return
 	}
@@ -129,6 +250,10 @@ func (sp *Span) Finish() {
 	if sp.Tracer().debugUseAfterFinish {
 		sp.finishStack = string(debug.Stack())
 	}
+	// Release the reference that the span held to itself. Unless we're racing
+	// with the finishing of the parent or one of the children, this one will be
+	// the last reference, and the span will be made available for re-allocation.
+	sp.decRef()
 }
 
 // FinishAndGetRecording finishes the span and gets a recording at the same
@@ -139,7 +264,7 @@ func (sp *Span) Finish() {
 func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 	// Reach directly into sp.i to pass the finishing argument.
 	rec := sp.i.GetRecording(recType, true /* finishing */)
-	sp.Finish()
+	sp.finishInternal()
 	return rec
 }
 
@@ -288,6 +413,139 @@ func (sp *Span) IsSterile() bool {
 	return sp.i.sterile
 }
 
+// parentFinished makes sp a root.
+func (sp *Span) parentFinished() {
+	sp.i.crdb.parentFinished()
+}
+
+// reset prepares sp for (re-)use.
+//
+// sp might be a re-allocated span that was previously used and Finish()ed. In
+// such cases, nobody should still be using a reference to the span - doing so
+// would be a use-after-Finish. The Tracer can be configured to do best-effort
+// detection of such cases (and crash), or it can be configured to tolerate
+// them. When tolerating them, in the face of buggy code, this method might be
+// called concurrently with the bugster accessing the span. This can result in
+// data races, and we don't make much of an effort to avoid them - some fields
+// in the span are not protected by a mutex; others are atomics but this method
+// doesn't always bother doing atomic operations on them. This method does take
+// the crdbSpan's lock, though. That will avoid some races.
+func (sp *Span) reset(
+	traceID tracingpb.TraceID,
+	spanID tracingpb.SpanID,
+	operation string,
+	goroutineID uint64,
+	startTime time.Time,
+	logTags *logtags.Buffer,
+	kind oteltrace.SpanKind,
+	otelSpan oteltrace.Span,
+	netTr trace.Trace,
+	sterile bool,
+) {
+	if sp.i.crdb == nil {
+		// We assume that spans being reset have come from the sync.Pool.
+		panic("unexpected reset of no-op Spans")
+	}
+
+	if refCnt := sp.refCnt; refCnt != 0 {
+		// The span should not have been made available for reuse with live
+		// references.
+		panic(fmt.Sprintf("expected 0 refCnt but found %d: %s", refCnt, sp))
+	}
+
+	// Take a self-reference. This will be held until Finish(), ensuring that the
+	// reference count is not zero before Finish().
+	sp.incRef()
+
+	c := sp.i.crdb
+	sp.i = spanInner{
+		tracer:   sp.i.tracer,
+		crdb:     c,
+		otelSpan: otelSpan,
+		netTr:    netTr,
+		sterile:  sterile,
+	}
+
+	c.traceID = traceID
+	c.spanID = spanID
+	c.operation = operation
+	c.goroutineID = goroutineID
+	c.startTime = startTime
+	c.logTags = logTags
+	{
+		c.mu.Lock()
+		c.mu.finished = false
+		c.mu.duration = -1 // unfinished
+		c.mu.parent = spanRef{}
+		if c.mu.openChildren != nil {
+			panic(fmt.Sprintf("unexpected children in span being reset: %v", c.mu.openChildren))
+		}
+		c.mu.openChildren = sp.helper.childrenAlloc[:0]
+		c.mu.tags = c.mu.tags[:0]
+		if kind != oteltrace.SpanKindUnspecified {
+			c.setTagLocked(spanKindTagKey, attribute.StringValue(kind.String()))
+		}
+		c.mu.recording.logs.Reset()
+		c.mu.recording.structured.Reset()
+		c.mu.recording.recordingType.swap(RecordingOff)
+		c.mu.recording.finishedChildren = c.mu.recording.finishedChildren[:0]
+		c.mu.recording.dropped = false
+		c.mu.Unlock()
+	}
+
+	// We only mark the span as not finished at the end so that accesses to the
+	// span concurrent with this call are detected if the Tracer is configured to
+	// detect use-after-Finish. Similarly, we do the write atomically to prevent
+	// reorderings.
+	atomic.StoreInt32(&sp.finished, 0)
+	sp.finishStack = ""
+}
+
+// spanRef represents a reference to a span. In addition to a simple *Span, a
+// spanRef prevents the referenced span from being reallocated in between the
+// time when this spanRef was created and the time when release() is called. It
+// does this by holding open a reference in the span's reference counter.
+type spanRef struct {
+	*Span
+}
+
+func makeSpanRef(sp *Span) spanRef {
+	sp.incRef()
+	return spanRef{Span: sp}
+}
+
+func (sr *spanRef) empty() bool {
+	return sr.Span == nil
+}
+
+// release decrements the reference counter of the span that this spanRef refers
+// to. If the spanRef does not reference a span, or if release() has already
+// been called, a release() call is a no-op.
+//
+// Note that release() is not thread-safe. When a spanRef is shared between
+// goroutines, the owner span is expected to serialize accesses through the
+// span's lock. Different `spanRefs` can reference the same span though, and
+// they can be used concurrently.
+//
+// Returns true if the span's refcount dropped to zero.
+func (sr *spanRef) release() bool {
+	if sr.Span == nil {
+		// There's no parent; nothing to do.
+		return false
+	}
+	sp := sr.Span
+	sr.Span = nil
+	return sp.decRef()
+}
+
+// move returns a new spanRef holding a reference to sr's span. sr's reference
+// is released.
+func (sr *spanRef) move() spanRef {
+	cpy := *sr
+	sr.Span = nil
+	return cpy
+}
+
 // SpanMeta is information about a Span that is not local to this
 // process. Typically, SpanMeta is populated from information
 // about a Span on the other end of an RPC, and is used to derive
@@ -332,7 +590,7 @@ func (sm SpanMeta) Empty() bool {
 
 func (sm SpanMeta) String() string {
 	var s strings.Builder
-	s.WriteString(fmt.Sprintf("[spanID: %d, traceID: %d", sm.spanID, sm.traceID))
+	s.WriteString(fmt.Sprintf("[spanID: %d, traceID: %d rec: %d", sm.spanID, sm.traceID, sm.recordingType))
 	hasOtelSpan := sm.otelCtx.IsValid()
 	if hasOtelSpan {
 		s.WriteString(" hasOtel")

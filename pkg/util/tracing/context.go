@@ -29,31 +29,20 @@ func SpanFromContext(ctx context.Context) *Span {
 	return nil
 }
 
-// optimizedContext is an implementation of context.Context special
-// cased to carry a Span under activeSpanKey{}. By making an explicit
-// type we unlock optimizations that save allocations by allocating
-// the optimizedContext together with the Span it eventually carries.
-type optimizedContext struct {
-	context.Context
-	sp *Span
-}
-
-func (ctx *optimizedContext) Value(k interface{}) interface{} {
-	if k == (interface{}(activeSpanKey{})) {
-		return ctx.sp
-	}
-	return ctx.Context.Value(k)
-}
-
 // maybeWrapCtx returns a Context wrapping the Span, with two exceptions:
 // 1. if ctx==noCtx, it's a noop
 // 2. if ctx contains the noop Span, and sp is also the noop Span, elide
 //    allocating a new Context.
 //
-// If a non-nil octx is passed in, it forms the returned Context. This can
-// avoid allocations if the caller is able to allocate octx together with
-// the Span, as is commonly possible when StartSpanCtx is used.
-func maybeWrapCtx(ctx context.Context, octx *optimizedContext, sp *Span) (context.Context, *Span) {
+// NOTE(andrei): Our detection of Span use-after-Finish() is not reliable
+// because spans are reused through a sync.Pool; we fail to detect someone
+// holding a reference to a Span (e.g. a Context referencing the span) from
+// before reuse and then using it after span reuse. We could make the detection
+// more reliable by storing the generation number of the span in the Context
+// along with the Span and checking it every time the Span is retrieved from the
+// Context. We'd have to implement our own Context struct so that the Context
+// and the generation number can be allocated together.
+func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 	if ctx == noCtx {
 		return noCtx, sp
 	}
@@ -72,16 +61,11 @@ func maybeWrapCtx(ctx context.Context, octx *optimizedContext, sp *Span) (contex
 			return ctx, sp
 		}
 	}
-	if octx != nil {
-		octx.Context = ctx
-		octx.sp = sp
-		return octx, sp
-	}
 	return context.WithValue(ctx, activeSpanKey{}, sp), sp
 }
 
 // ContextWithSpan returns a Context wrapping the supplied Span.
 func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
-	ctx, _ = maybeWrapCtx(ctx, nil /* octx */, sp)
+	ctx, _ = maybeWrapCtx(ctx, sp)
 	return ctx
 }
