@@ -1052,8 +1052,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: child@primary
-│           │ lookup condition: (column1 = c_id) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = c_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = c_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1434,8 +1433,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@primary
-│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1447,8 +1445,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column4 = b) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column4 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column4 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • scan buffer
@@ -1460,8 +1457,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column3 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
-│           │ remote lookup condition: ((column3 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ lookup condition: ((column3 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • filter
@@ -1477,8 +1473,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
             │
             └── • scan buffer
@@ -1531,8 +1526,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column5 = b) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column5 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column5 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • scan buffer
@@ -1544,8 +1538,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
-│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ lookup condition: ((column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
@@ -1560,8 +1553,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
             └── • scan buffer
@@ -1605,8 +1597,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column5 = b) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column5 = b) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column5 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • scan buffer
@@ -1618,8 +1609,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column4 = a) AND (crdb_region = 'ap-southeast-2')) AND (b > 0)
-│           │ remote lookup condition: ((column4 = a) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ lookup condition: ((column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
@@ -1634,8 +1624,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region = 'ap-southeast-2')
-            │ remote lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((column4 = a) AND (column5 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
             └── • scan buffer
@@ -1769,8 +1758,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
-            │ lookup condition: (column3 = b) AND (crdb_region_col = 'ap-southeast-2')
-            │ remote lookup condition: (column3 = b) AND (crdb_region_col IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: (column3 = b) AND (crdb_region_col IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │ pred: (column1 != pk) OR (crdb_region_col_comp != crdb_region_col)
             │
             └── • scan buffer
@@ -1830,8 +1818,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table_virt@primary
-│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -2009,8 +1996,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table_virt_partial@primary
-│           │ lookup condition: (column1 = pk) AND (crdb_region = 'ap-southeast-2')
-│           │ remote lookup condition: (column1 = pk) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -2259,3 +2245,17 @@ SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
       estimated row count: 1 (100% of the table; stats collected <hidden> ago)
       table: t65064@t65064_username_key
       spans: [/'ca-central-1'/'kharris' - /'ca-central-1'/'kharris'] [/'us-east-1'/'kharris' - /'us-east-1'/'kharris']
+
+# Regression test for #73024. Ensure that uniqueness checks actually check all
+# regions.
+statement ok
+CREATE TABLE t73024 (p INT PRIMARY KEY) LOCALITY REGIONAL BY ROW;
+INSERT INTO t73024 (crdb_region, p) VALUES ('us-east-1', 100);
+
+query error duplicate key value violates unique constraint
+INSERT INTO t73024 VALUES (100);
+
+query I
+SELECT * FROM t73024
+----
+100
