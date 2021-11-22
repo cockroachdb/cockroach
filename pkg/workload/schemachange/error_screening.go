@@ -954,7 +954,7 @@ func databaseHasRegionChange(ctx context.Context, tx pgx.Tx) (bool, error) {
 		tx,
 		`SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE])`,
 	)
-	if err != nil || (!isMultiRegion && err == nil) {
+	if err != nil || !isMultiRegion {
 		return false, err
 	}
 	return scanBool(
