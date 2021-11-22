@@ -1413,11 +1413,11 @@ func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivate(
 
 // GetLocalityOptimizedLookupJoinExprs returns the local and remote lookup
 // expressions needed to build a locality optimized lookup join from the given
-// lookup join private, if possible. Otherwise, it returns ok=false. See the
-// comments above the GenerateLocalityOptimizedAntiJoin and
+// ON conditions and lookup join private, if possible. Otherwise, it returns
+// ok=false. See the comments above the GenerateLocalityOptimizedAntiJoin and
 // GenerateLocalityOptimizedLookupJoin rules for more details.
 func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
-	input memo.RelExpr, private *memo.LookupJoinPrivate,
+	on memo.FiltersExpr, private *memo.LookupJoinPrivate,
 ) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
 	// Respect the session setting LocalityOptimizedSearch.
 	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
@@ -1442,12 +1442,19 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	}
 
 	// We can only generate a locality optimized lookup join if we know there is
-	// at most one row produced for each lookup. This is always true for semi and
-	// anti joins, but only true for inner and left joins if
-	// private.LookupColsAreTableKey is true.
-	if private.JoinType != opt.SemiJoinOp && private.JoinType != opt.AntiJoinOp &&
-		!private.LookupColsAreTableKey {
-		return
+	// at most one row produced for each lookup. This is always true for semi
+	// joins if the ON condition is empty, but only true for inner and left joins
+	// (and for semi joins with an ON condition) if private.LookupColsAreTableKey
+	// is true.
+	//
+	// Locality optimized anti joins are implemented differently (see the
+	// GenerateLocalityOptimizedAntiJoin rule), and therefore we can always
+	// generate a locality optimized anti join regardless of the ON conditions or
+	// value of private.LookupColsAreTableKey.
+	if private.JoinType != opt.AntiJoinOp {
+		if (private.JoinType != opt.SemiJoinOp || len(on) > 0) && !private.LookupColsAreTableKey {
+			return
+		}
 	}
 
 	// The local region must be set, or we won't be able to determine which
