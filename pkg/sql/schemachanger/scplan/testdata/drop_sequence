@@ -51,8 +51,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
   transitions:
-    [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP] -> PUBLIC
     [Sequence:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
@@ -77,8 +75,6 @@ Stage 1 (non-revertible)
       DescID: 52
 Stage 2 (non-revertible)
   transitions:
-    [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP] -> ABSENT
     [Sequence:{DescID: 52}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.DrainDescriptorName

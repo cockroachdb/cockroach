@@ -40,20 +40,8 @@ DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
   transitions:
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> PUBLIC
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, PUBLIC, DROP] -> PUBLIC
-    [InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
-    [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, PUBLIC, DROP] -> PUBLIC
-    [InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 55, ColumnID: 1}, PUBLIC, DROP] -> PUBLIC
     [Sequence:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
-    [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 55, ColumnID: 3}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 55, ColumnID: 4}, PUBLIC, DROP] -> PUBLIC
-    [DefaultExpression:{DescID: 55, ColumnID: 5}, PUBLIC, DROP] -> PUBLIC
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
     [Table:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
@@ -135,20 +123,8 @@ Stage 1 (non-revertible)
       TableID: 54
 Stage 2 (non-revertible)
   transitions:
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT, DROP] -> ABSENT
     [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
-    [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, ABSENT, DROP] -> ABSENT
-    [InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 55, ColumnID: 1}, ABSENT, DROP] -> ABSENT
     [Sequence:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 55, ColumnID: 3}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 55, ColumnID: 4}, ABSENT, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
     [Table:{DescID: 55}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.DrainDescriptorName
