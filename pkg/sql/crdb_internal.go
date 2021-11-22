@@ -1932,7 +1932,11 @@ CREATE VIEW crdb_internal.cluster_contended_indexes (
     crdb_internal.cluster_contention_events.index_id
     = crdb_internal.table_indexes.index_id
     AND crdb_internal.cluster_contention_events.table_id
+      = crdb_internal.table_indexes.descriptor_id
+    AND crdb_internal.cluster_contention_events.table_id
       = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC
 `,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
