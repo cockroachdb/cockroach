@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "svpreemptor",
+    srcs = [
+        "preemptor.go",
+        "row_set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion/svpreemptor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/singleversion/svstorage",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "svpreemptor_test",
+    srcs = [
+        "main_test.go",
+        "preemptor_test.go",
+    ],
+    deps = [
+        ":svpreemptor",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/singleversion",
+        "//pkg/sql/catalog/singleversion/svacquirer",
+        "//pkg/sql/catalog/singleversion/svstorage",
+        "//pkg/sql/catalog/singleversion/svtestutils",
+        "//pkg/sql/sqlliveness",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

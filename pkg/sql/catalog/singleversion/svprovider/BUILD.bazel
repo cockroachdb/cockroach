@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "svprovider",
+    srcs = ["provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion/svprovider",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/singleversion/svacquirer",
+        "//pkg/sql/catalog/singleversion/svpreemptor",
+        "//pkg/sql/catalog/singleversion/svstorage",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+    ],
+)
