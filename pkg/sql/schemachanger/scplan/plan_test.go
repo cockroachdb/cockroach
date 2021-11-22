@@ -182,6 +182,18 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			stages.WriteString(" (non-revertible)")
 		}
 		stages.WriteString("\n")
+		stages.WriteString("  transitions:\n")
+		var transitionsBuf strings.Builder
+		for i := range stage.Before.Nodes {
+			before, after := stage.Before.Nodes[i], stage.After.Nodes[i]
+			if before == after {
+				continue
+			}
+			_, _ = fmt.Fprintf(&transitionsBuf, "%s -> %s\n",
+				screl.NodeString(before), after.Status)
+		}
+		stages.WriteString(indentText(transitionsBuf.String(), "    "))
+		stages.WriteString("  ops:\n")
 		stageOps := ""
 		for _, op := range stage.Ops.Slice() {
 			opMap, err := scgraphviz.ToMap(op)
@@ -190,7 +202,7 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
-		stages.WriteString(indentText(stageOps, "  "))
+		stages.WriteString(indentText(stageOps, "    "))
 	}
 	return stages.String()
 }

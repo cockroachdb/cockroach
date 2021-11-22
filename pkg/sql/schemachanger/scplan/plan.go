@@ -165,11 +165,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 				return nodeRanks[edges[i].To()] > nodeRanks[edges[j].To()]
 			})
 
-		next := scpb.State{
-			Nodes:         append(cur.Nodes[0:0], cur.Nodes...),
-			Statements:    append(cur.Statements[0:0], cur.Statements...),
-			Authorization: cur.Authorization,
-		}
+		next := shallowCopy(cur)
 		isStageRevertible := true
 		var ops []scop.Op
 		for revertible := 1; revertible >= 0; revertible-- {
@@ -219,9 +215,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		// Group the op edges a per-type basis.
 		opTypes := make(map[scop.Type][]*scgraph.OpEdge)
 		for _, oe := range opEdges {
-			for _, op := range oe.Op() {
-				opTypes[op.Type()] = append(opTypes[op.Type()], oe)
-			}
+			opTypes[oe.Type()] = append(opTypes[oe.Type()], oe)
 		}
 
 		// Greedily attempt to find a stage which can be executed. This is sane
@@ -245,4 +239,21 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	}
 	validateStages(stages)
 	return stages
+}
+
+// shallowCopy creates a shallow copy of the passed state. Importantly, it
+// retains copies to the same underlying nodes while allocating new backing
+// slices.
+func shallowCopy(cur scpb.State) scpb.State {
+	return scpb.State{
+		Nodes: append(
+			make([]*scpb.Node, 0, len(cur.Nodes)),
+			cur.Nodes...,
+		),
+		Statements: append(
+			make([]*scpb.Statement, 0, len(cur.Statements)),
+			cur.Statements...,
+		),
+		Authorization: cur.Authorization,
+	}
 }

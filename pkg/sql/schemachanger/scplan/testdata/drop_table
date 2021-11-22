@@ -39,118 +39,145 @@ ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 57
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 56
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 55
+  transitions:
+    [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Sequence:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Table:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 57
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 56
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 55
 Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    DescID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 55
-  *scop.MarkDescriptorAsDropped
-    DescID: 57
-  *scop.DropForeignKeyRef
-    Name: fk_customers
-    Outbound: true
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_customers
-    TableID: 52
-  *scop.DropForeignKeyRef
-    Name: fk_orders
-    Outbound: true
-    TableID: 55
-  *scop.DropForeignKeyRef
-    Name: fk_orders
-    TableID: 53
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.MarkDescriptorAsDropped
-    DescID: 56
-  *scop.RemoveSequenceOwnedBy
-    TableID: 56
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 4
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 5
-    TableID: 55
-  *scop.UpdateRelationDeps
-    TableID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 54
+  transitions:
+    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
+    [OutboundForeignKey:{DescID: 55, Name: fk_customers, ReferencedDescID: 52}, PUBLIC, DROP] -> ABSENT
+    [InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [OutboundForeignKey:{DescID: 55, Name: fk_orders, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 1}, PUBLIC, DROP] -> ABSENT
+    [Sequence:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [SequenceOwnedBy:{DescID: 56, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 4}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 5}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [Table:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+  ops:
+    *scop.MarkDescriptorAsDropped
+      DescID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 57
+      TableID: 55
+    *scop.MarkDescriptorAsDropped
+      DescID: 57
+    *scop.DropForeignKeyRef
+      Name: fk_customers
+      Outbound: true
+      TableID: 55
+    *scop.DropForeignKeyRef
+      Name: fk_customers
+      TableID: 52
+    *scop.DropForeignKeyRef
+      Name: fk_orders
+      Outbound: true
+      TableID: 55
+    *scop.DropForeignKeyRef
+      Name: fk_orders
+      TableID: 53
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 1
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.MarkDescriptorAsDropped
+      DescID: 56
+    *scop.RemoveSequenceOwnedBy
+      TableID: 56
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 4
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 5
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 55
+      TableID: 54
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 57
-  *scop.LogEvent
-    DescID: 57
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy: []
-        dependsOn:
-        - 55
-        tableId: 57
-    Metadata:
-      Statement: DROP TABLE defaultdb.shipments CASCADE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 57
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.LogEvent
-    DescID: 56
-    Direction: 2
-    Element:
-      sequence:
-        sequenceId: 56
-    Metadata:
-      Statement: DROP TABLE defaultdb.shipments CASCADE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.LogEvent
-    DescID: 55
-    Direction: 2
-    Element:
-      table:
-        tableId: 55
-    Metadata:
-      Statement: DROP TABLE defaultdb.shipments CASCADE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
+  transitions:
+    [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
+    [Sequence:{DescID: 56}, DROPPED, DROP] -> ABSENT
+    [Table:{DescID: 55}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 57
+    *scop.LogEvent
+      DescID: 57
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy: []
+          dependsOn:
+          - 55
+          tableId: 57
+      Metadata:
+        Statement: DROP TABLE defaultdb.shipments CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 57
+    *scop.DrainDescriptorName
+      TableID: 56
+    *scop.LogEvent
+      DescID: 56
+      Direction: 2
+      Element:
+        sequence:
+          sequenceId: 56
+      Metadata:
+        Statement: DROP TABLE defaultdb.shipments CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 56
+    *scop.DrainDescriptorName
+      TableID: 55
+    *scop.LogEvent
+      DescID: 55
+      Direction: 2
+      Element:
+        table:
+          tableId: 55
+      Metadata:
+        Statement: DROP TABLE defaultdb.shipments CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 55
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;

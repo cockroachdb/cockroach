@@ -6,35 +6,50 @@ ops
 CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
 ----
 Stage 0
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: id1
-    KeyColumnDirections:
-    - 0
-    - 0
-    KeyColumnIDs:
-    - 1
-    - 2
-    SecondaryIndex: true
-    StoreColumnIDs:
-    - 3
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: id1
+      KeyColumnDirections:
+      - 0
+      - 0
+      KeyColumnIDs:
+      - 1
+      - 2
+      SecondaryIndex: true
+      StoreColumnIDs:
+      - 3
+      TableID: 52
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeAddedSecondaryIndexPublic
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+  ops:
+    *scop.MakeAddedSecondaryIndexPublic
+      IndexID: 2
+      TableID: 52
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
@@ -44,37 +59,52 @@ ops
 CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
 ----
 Stage 0
-  *scop.MakeAddedIndexDeleteOnly
-    Concurrently: true
-    IndexID: 2
-    IndexName: id1
-    Inverted: true
-    KeyColumnDirections:
-    - 0
-    - 0
-    KeyColumnIDs:
-    - 1
-    - 2
-    SecondaryIndex: true
-    StoreColumnIDs:
-    - 3
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteOnly
+      Concurrently: true
+      IndexID: 2
+      IndexName: id1
+      Inverted: true
+      KeyColumnDirections:
+      - 0
+      - 0
+      KeyColumnIDs:
+      - 1
+      - 2
+      SecondaryIndex: true
+      StoreColumnIDs:
+      - 3
+      TableID: 52
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeAddedSecondaryIndexPublic
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+  ops:
+    *scop.MakeAddedSecondaryIndexPublic
+      IndexID: 2
+      TableID: 52
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
@@ -86,35 +116,50 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
                                                             )
 ----
 Stage 0
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: id1
-    KeyColumnDirections:
-    - 0
-    - 0
-    KeyColumnIDs:
-    - 1
-    - 2
-    SecondaryIndex: true
-    StoreColumnIDs:
-    - 3
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: id1
+      KeyColumnDirections:
+      - 0
+      - 0
+      KeyColumnIDs:
+      - 1
+      - 2
+      SecondaryIndex: true
+      StoreColumnIDs:
+      - 3
+      TableID: 52
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeAddedSecondaryIndexPublic
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+  ops:
+    *scop.MakeAddedSecondaryIndexPublic
+      IndexID: 2
+      TableID: 52
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (

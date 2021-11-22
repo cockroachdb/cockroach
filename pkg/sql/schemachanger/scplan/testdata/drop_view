@@ -10,34 +10,44 @@ ops
 DROP VIEW defaultdb.v1
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
+  transitions:
+    [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 53
 Stage 1 (non-revertible)
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 53
-    TableID: 52
-  *scop.MarkDescriptorAsDropped
-    DescID: 53
+  transitions:
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
+  ops:
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 53
+      TableID: 52
+    *scop.MarkDescriptorAsDropped
+      DescID: 53
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 53
-  *scop.LogEvent
-    DescID: 53
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy: []
-        dependsOn:
-        - 52
-        tableId: 53
-    Metadata:
-      Statement: DROP VIEW defaultdb.v1
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
+  transitions:
+    [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 53
+    *scop.LogEvent
+      DescID: 53
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy: []
+          dependsOn:
+          - 52
+          tableId: 53
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 53
 
 deps
 DROP VIEW defaultdb.v1
@@ -67,153 +77,182 @@ ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 54
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 55
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 56
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 59
+  transitions:
+    [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 53
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 54
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 55
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 56
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 59
 Stage 1 (non-revertible)
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 53
-    TableID: 52
-  *scop.MarkDescriptorAsDropped
-    DescID: 53
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 54
-    TableID: 53
-  *scop.MarkDescriptorAsDropped
-    DescID: 54
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 54
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 56
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    DescID: 56
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 59
-    TableID: 56
-  *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 57
-  *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 58
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
-    TableID: 53
-  *scop.MarkDescriptorAsDropped
-    DescID: 55
-  *scop.MarkDescriptorAsDropped
-    DescID: 59
+  transitions:
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
+    [TypeReference:{DescID: 59, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
+    [TypeReference:{DescID: 59, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
+  ops:
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 53
+      TableID: 52
+    *scop.MarkDescriptorAsDropped
+      DescID: 53
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 54
+      TableID: 53
+    *scop.MarkDescriptorAsDropped
+      DescID: 54
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 55
+      TableID: 54
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 56
+      TableID: 54
+    *scop.MarkDescriptorAsDropped
+      DescID: 56
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 59
+      TableID: 56
+    *scop.RemoveTypeBackRef
+      DescID: 59
+      TypeID: 57
+    *scop.RemoveTypeBackRef
+      DescID: 59
+      TypeID: 58
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 55
+      TableID: 53
+    *scop.MarkDescriptorAsDropped
+      DescID: 55
+    *scop.MarkDescriptorAsDropped
+      DescID: 59
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.LogEvent
-    DescID: 55
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy: []
-        dependsOn:
-        - 53
-        - 54
-        tableId: 55
-    Metadata:
-      Statement: DROP VIEW defaultdb.v1 CASCADE
-      TargetMetadata:
-        SourceElementID: 3
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
-  *scop.DrainDescriptorName
-    TableID: 59
-  *scop.LogEvent
-    DescID: 59
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy: []
-        dependsOn:
-        - 56
-        tableId: 59
-    Metadata:
-      Statement: DROP VIEW defaultdb.v1 CASCADE
-      TargetMetadata:
-        SourceElementID: 5
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 59
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.LogEvent
-    DescID: 56
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy:
-        - 59
-        dependsOn:
-        - 54
-        tableId: 56
-    Metadata:
-      Statement: DROP VIEW defaultdb.v1 CASCADE
-      TargetMetadata:
-        SourceElementID: 3
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.DrainDescriptorName
-    TableID: 54
-  *scop.LogEvent
-    DescID: 54
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy:
-        - 55
-        - 56
-        dependsOn:
-        - 53
-        tableId: 54
-    Metadata:
-      Statement: DROP VIEW defaultdb.v1 CASCADE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 54
-  *scop.DrainDescriptorName
-    TableID: 53
-  *scop.LogEvent
-    DescID: 53
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy:
-        - 54
-        - 55
-        dependsOn:
-        - 52
-        tableId: 53
-    Metadata:
-      Statement: DROP VIEW defaultdb.v1 CASCADE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
+  transitions:
+    [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 54}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 55
+    *scop.LogEvent
+      DescID: 55
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy: []
+          dependsOn:
+          - 53
+          - 54
+          tableId: 55
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 55
+    *scop.DrainDescriptorName
+      TableID: 59
+    *scop.LogEvent
+      DescID: 59
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy: []
+          dependsOn:
+          - 56
+          tableId: 59
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 5
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 59
+    *scop.DrainDescriptorName
+      TableID: 56
+    *scop.LogEvent
+      DescID: 56
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy:
+          - 59
+          dependsOn:
+          - 54
+          tableId: 56
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 56
+    *scop.DrainDescriptorName
+      TableID: 54
+    *scop.LogEvent
+      DescID: 54
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy:
+          - 55
+          - 56
+          dependsOn:
+          - 53
+          tableId: 54
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 54
+    *scop.DrainDescriptorName
+      TableID: 53
+    *scop.LogEvent
+      DescID: 53
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy:
+          - 54
+          - 55
+          dependsOn:
+          - 52
+          tableId: 53
+      Metadata:
+        Statement: DROP VIEW defaultdb.v1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 53
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
