@@ -9115,6 +9115,57 @@ anti-join (lookup abc_part@c_idx)
  │    └── filters (true)
  └── filters (true)
 
+# Optimization applies even though the lookup join may have more than one
+# matching row and there's and ON condition.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE f = c AND e % a = 0) AND d = 10
+----
+anti-join (lookup abc_part@c_idx)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part@c_idx)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
+ │    │    ├── right columns: def_part.r:19 d:20 e:21 f:22
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
+ │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(13-16)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:19!null d:20!null e:21 f:22
+ │    │         ├── constraint: /19/20
+ │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(19-22)
+ │    └── filters
+ │         └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
+ └── filters
+      └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
+
 # Optimization does not apply for semi join.
 opt locality=(region=central) expect-not=GenerateLocalityOptimizedAntiJoin
 SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
@@ -9283,6 +9334,48 @@ semi-join (lookup abc_part)
  │         └── fd: ()-->(19-22)
  └── filters (true)
 
+# Locality optimized semi join, with an extra ON filter.
+opt locality=(region=west) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE e = a AND f > b) AND d = 1
+----
+semi-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+ │         └── abc_part.r:7 = 'west' [outer=(7), constraints=(/7: [/'west' - /'west']; tight), fd=()-->(7)]
+ ├── remote lookup expression
+ │    └── filters
+ │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+ │         └── abc_part.r:7 IN ('central', 'east') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east']; tight)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── locality-optimized-search
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── left columns: def_part.r:13 d:14 e:15 f:16
+ │    ├── right columns: def_part.r:19 d:20 e:21 f:22
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── scan def_part
+ │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
+ │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(13-16)
+ │    └── scan def_part
+ │         ├── columns: def_part.r:19!null d:20!null e:21 f:22
+ │         ├── constraint: /19/20
+ │         │    ├── [/'central'/1 - /'central'/1]
+ │         │    └── [/'east'/1 - /'east'/1]
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(19-22)
+ └── filters
+      └── f:4 > b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ])]
+
 # Locality optimized inner join, different join condition.
 opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON f = b WHERE d = 10
@@ -9445,6 +9538,45 @@ semi-join (lookup abc_part@c_idx)
  │         ├── key: ()
  │         └── fd: ()-->(19-22)
  └── filters (true)
+
+# Optimization does not apply for a semi join that may have more than one
+# matching row when there is an ON condition.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE f = c AND e % a = 0) AND d = 10
+----
+semi-join (lookup abc_part@c_idx)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── locality-optimized-search
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── left columns: def_part.r:13 d:14 e:15 f:16
+ │    ├── right columns: def_part.r:19 d:20 e:21 f:22
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── scan def_part
+ │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
+ │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(13-16)
+ │    └── scan def_part
+ │         ├── columns: def_part.r:19!null d:20!null e:21 f:22
+ │         ├── constraint: /19/20
+ │         │    ├── [/'central'/10 - /'central'/10]
+ │         │    └── [/'west'/10 - /'west'/10]
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(19-22)
+ └── filters
+      └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
 
 # Optimization does not apply for an inner join since the lookup join may have more than one
 # matching row.
