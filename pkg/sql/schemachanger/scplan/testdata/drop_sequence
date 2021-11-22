@@ -54,10 +54,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
   transitions:
-    from: [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP]
-    to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP]
-    from: [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP]
-    to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP]
     from: [Sequence:{DescID: 52}, PUBLIC, DROP]
     to:   [Sequence:{DescID: 52}, TXN_DROPPED, DROP]
   ops:
@@ -86,10 +82,6 @@ Stage 1 (non-revertible)
       DescID: 52
 Stage 2 (non-revertible)
   transitions:
-    from: [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
-    to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT, DROP]
-    from: [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
-    to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT, DROP]
     from: [Sequence:{DescID: 52}, DROPPED, DROP]
     to:   [Sequence:{DescID: 52}, ABSENT, DROP]
   ops:

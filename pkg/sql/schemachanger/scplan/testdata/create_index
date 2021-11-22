@@ -127,8 +127,6 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
 ----
 Stage 0
   transitions:
-    from: [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
-    to:   [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
     from: [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD]
     to:   [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD]
   ops:
@@ -147,8 +145,6 @@ Stage 0
       TableID: 52
 Stage 1
   transitions:
-    from: [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
-    to:   [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
     from: [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD]
     to:   [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD]
   ops:
@@ -157,8 +153,6 @@ Stage 1
       TableID: 52
 Stage 2
   transitions:
-    from: [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
-    to:   [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
     from: [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD]
     to:   [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD]
   ops:
@@ -167,8 +161,6 @@ Stage 2
       TableID: 52
 Stage 3
   transitions:
-    from: [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
-    to:   [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
     from: [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD]
     to:   [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD]
   ops:
@@ -177,8 +169,6 @@ Stage 3
       TableID: 52
 Stage 4
   transitions:
-    from: [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
-    to:   [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD]
     from: [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD]
     to:   [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD]
   ops:

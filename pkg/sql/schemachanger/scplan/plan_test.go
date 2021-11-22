@@ -186,6 +186,9 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 		var transitionsBuf strings.Builder
 		for i := range stage.Before.Nodes {
 			before, after := stage.Before.Nodes[i], stage.After.Nodes[i]
+			if before == after {
+				continue
+			}
 			transitionsBuf.WriteString("from: ")
 			transitionsBuf.WriteString(screl.NodeString(before))
 			transitionsBuf.WriteString("\nto:   ")

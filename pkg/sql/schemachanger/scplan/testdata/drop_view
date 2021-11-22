@@ -11,8 +11,6 @@ DROP VIEW defaultdb.v1
 ----
 Stage 0
   transitions:
-    from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP]
     from: [View:{DescID: 53}, PUBLIC, DROP]
     to:   [View:{DescID: 53}, TXN_DROPPED, DROP]
   ops:
@@ -32,8 +30,6 @@ Stage 1 (non-revertible)
       DescID: 53
 Stage 2 (non-revertible)
   transitions:
-    from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP]
     from: [View:{DescID: 53}, DROPPED, DROP]
     to:   [View:{DescID: 53}, ABSENT, DROP]
   ops:
@@ -86,32 +82,16 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
   transitions:
-    from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP]
     from: [View:{DescID: 53}, PUBLIC, DROP]
     to:   [View:{DescID: 53}, TXN_DROPPED, DROP]
-    from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP]
     from: [View:{DescID: 54}, PUBLIC, DROP]
     to:   [View:{DescID: 54}, TXN_DROPPED, DROP]
-    from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, PUBLIC, DROP]
-    from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP]
     from: [View:{DescID: 55}, PUBLIC, DROP]
     to:   [View:{DescID: 55}, TXN_DROPPED, DROP]
-    from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP]
     from: [View:{DescID: 56}, PUBLIC, DROP]
     to:   [View:{DescID: 56}, TXN_DROPPED, DROP]
-    from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, PUBLIC, DROP]
-    to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, PUBLIC, DROP]
     from: [View:{DescID: 59}, PUBLIC, DROP]
     to:   [View:{DescID: 59}, TXN_DROPPED, DROP]
-    from: [TypeReference:{DescID: 59, ReferencedDescID: 57}, PUBLIC, DROP]
-    to:   [TypeReference:{DescID: 59, ReferencedDescID: 57}, PUBLIC, DROP]
-    from: [TypeReference:{DescID: 59, ReferencedDescID: 58}, PUBLIC, DROP]
-    to:   [TypeReference:{DescID: 59, ReferencedDescID: 58}, PUBLIC, DROP]
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 53
@@ -188,32 +168,16 @@ Stage 1 (non-revertible)
       DescID: 59
 Stage 2 (non-revertible)
   transitions:
-    from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP]
     from: [View:{DescID: 53}, DROPPED, DROP]
     to:   [View:{DescID: 53}, ABSENT, DROP]
-    from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT, DROP]
     from: [View:{DescID: 54}, DROPPED, DROP]
     to:   [View:{DescID: 54}, ABSENT, DROP]
-    from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT, DROP]
-    from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP]
     from: [View:{DescID: 55}, DROPPED, DROP]
     to:   [View:{DescID: 55}, ABSENT, DROP]
-    from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT, DROP]
     from: [View:{DescID: 56}, DROPPED, DROP]
     to:   [View:{DescID: 56}, ABSENT, DROP]
-    from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT, DROP]
-    to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT, DROP]
     from: [View:{DescID: 59}, DROPPED, DROP]
     to:   [View:{DescID: 59}, ABSENT, DROP]
-    from: [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT, DROP]
-    to:   [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT, DROP]
-    from: [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT, DROP]
-    to:   [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT, DROP]
   ops:
     *scop.DrainDescriptorName
       TableID: 55
