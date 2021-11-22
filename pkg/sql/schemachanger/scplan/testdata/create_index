@@ -7,7 +7,7 @@ CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
 ----
 Stage 0
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -24,28 +24,28 @@ Stage 0
       TableID: 52
 Stage 1
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 52
 Stage 2
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
 Stage 3
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
 Stage 4
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
@@ -60,7 +60,7 @@ CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
 ----
 Stage 0
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       Concurrently: true
@@ -79,28 +79,28 @@ Stage 0
       TableID: 52
 Stage 1
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 52
 Stage 2
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
 Stage 3
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
 Stage 4
   transitions:
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
@@ -118,7 +118,7 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
 Stage 0
   transitions:
     [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> ABSENT
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -136,7 +136,7 @@ Stage 0
 Stage 1
   transitions:
     [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> ABSENT
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -144,7 +144,7 @@ Stage 1
 Stage 2
   transitions:
     [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> ABSENT
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -152,7 +152,7 @@ Stage 2
 Stage 3
   transitions:
     [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> ABSENT
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -160,7 +160,7 @@ Stage 3
 Stage 4
   transitions:
     [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> ABSENT
-    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, PUBLIC, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2

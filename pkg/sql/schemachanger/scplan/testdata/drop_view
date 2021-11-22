@@ -11,15 +11,15 @@ DROP VIEW defaultdb.v1
 ----
 Stage 0
   transitions:
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 53}, ABSENT, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> PUBLIC
+    [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 53
 Stage 1 (non-revertible)
   transitions:
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 53}, ABSENT, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
   ops:
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 53
@@ -29,7 +29,7 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   transitions:
     [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 53}, ABSENT, DROP] -> ABSENT
+    [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.DrainDescriptorName
       TableID: 53
@@ -80,19 +80,19 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
   transitions:
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 53}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 54}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 55}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 56}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 59}, ABSENT, DROP] -> ABSENT
-    [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT, DROP] -> ABSENT
-    [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> PUBLIC
+    [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
+    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> PUBLIC
+    [View:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> PUBLIC
+    [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> PUBLIC
+    [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, PUBLIC, DROP] -> PUBLIC
+    [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [TypeReference:{DescID: 59, ReferencedDescID: 57}, PUBLIC, DROP] -> PUBLIC
+    [TypeReference:{DescID: 59, ReferencedDescID: 58}, PUBLIC, DROP] -> PUBLIC
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 53
@@ -106,19 +106,19 @@ Stage 0
       DescID: 59
 Stage 1 (non-revertible)
   transitions:
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 53}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 54}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 55}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 56}, ABSENT, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 59}, ABSENT, DROP] -> ABSENT
-    [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT, DROP] -> ABSENT
-    [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
+    [TypeReference:{DescID: 59, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
+    [TypeReference:{DescID: 59, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 53
@@ -157,16 +157,16 @@ Stage 1 (non-revertible)
 Stage 2 (non-revertible)
   transitions:
     [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 53}, ABSENT, DROP] -> ABSENT
+    [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 54}, ABSENT, DROP] -> ABSENT
+    [View:{DescID: 54}, DROPPED, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 55}, ABSENT, DROP] -> ABSENT
+    [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 56}, ABSENT, DROP] -> ABSENT
+    [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT, DROP] -> ABSENT
-    [View:{DescID: 59}, ABSENT, DROP] -> ABSENT
+    [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
     [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT, DROP] -> ABSENT
     [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT, DROP] -> ABSENT
   ops:
