@@ -148,7 +148,7 @@ go_download_sdk(
 
 go_rules_dependencies()
 
-go_register_toolchains()
+go_register_toolchains(nogo = "@cockroach//:crdb_nogo")
 
 ###############################
 # end rules_go dependencies #

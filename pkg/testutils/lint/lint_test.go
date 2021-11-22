@@ -2046,7 +2046,9 @@ func TestLint(t *testing.T) {
 	// See pkg/cmd/roachvet.
 	t.Run("TestRoachVet", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 65517, "Some weird linkage issue")
+		if bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "the roachvet tests are run during the bazel build")
+		}
 		// The -printfuncs functionality is interesting and
 		// under-documented. It checks two things:
 		//
