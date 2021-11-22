@@ -233,7 +233,7 @@ func (s *serialOrderedSynchronizer) consumeMetadata(
 			src.row = row
 			return nil
 		}
-		if row == nil && meta == nil {
+		if row == nil {
 			return nil
 		}
 	}

@@ -138,10 +138,6 @@ func ParseTimeZoneOffset(
 		offset = hoursMinutesSecondsToSeconds(origRepr)
 		offset *= offsetMultiplier
 
-		if err != nil {
-			return 0, "", false
-		}
-
 		return offset, location, true
 	}
 
