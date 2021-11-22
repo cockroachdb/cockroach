@@ -210,7 +210,7 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		timerDuration := time.Until(earliestDeadline)
 
 		if expired {
-			// TODO (Chengxiong) remove "if check" in 22.2
+			// TODO(Chengxiong): remove "if check" in 22.2
 			st := p.ExecCfg().Settings
 			if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
 				if len(progress.UnsplitTables) > 0 {

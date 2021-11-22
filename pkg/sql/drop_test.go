@@ -117,6 +117,57 @@ func getMidKeyInSpan(t *testing.T, kvDB *kv.DB, key, endKey interface{}) roachpb
 	return nil
 }
 
+// hasManuallySplitRanges checks whether there is any range has sticky bit.
+func hasManuallySplitRanges(
+	ctx context.Context, t *testing.T, kvDB *kv.DB, tableSpan roachpb.Span,
+) bool {
+	metaStartKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.Key))
+	metaEndKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.EndKey))
+	ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.NotEmpty(t, ranges)
+	for _, r := range ranges {
+		var desc roachpb.RangeDescriptor
+		if err := r.ValueProto(&desc); err != nil {
+			t.Fatal(err)
+		}
+		if !desc.GetStickyBit().IsEmpty() {
+			return true
+		}
+	}
+	return false
+}
+
+// splitLastRangeInSpan split the last range into two ranges,
+// and check the new range has sticky bit set.
+func splitLastRangeInSpanAndCheck(
+	ctx context.Context, t *testing.T, kvDB *kv.DB, tableSpan roachpb.Span,
+) {
+	metaStartKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.Key))
+	metaEndKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.EndKey))
+	ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastRange := ranges[len(ranges)-1]
+	var lastRangeDesc roachpb.RangeDescriptor
+	if err := lastRange.ValueProto(&lastRangeDesc); err != nil {
+		t.Fatal(err)
+	}
+	splitKey := getMidKeyInSpan(t, kvDB, lastRangeDesc.StartKey, lastRangeDesc.EndKey)
+	splitKey, err = keys.EnsureSafeSplitKey(splitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp); err != nil {
+		t.Fatal(err)
+	}
+
+	require.True(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
+}
+
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -931,8 +982,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 }
 
-// TODO(Chengxiong) remove this test in 22.2
-func TestDropTableUnsplitManuallySplitRanges(t *testing.T) {
+// TODO(Chengxiong): remove this test in 22.2
+func TestDropTableUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
@@ -960,104 +1011,25 @@ func TestDropTableUnsplitManuallySplitRanges(t *testing.T) {
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
-	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, keys.MinNonPredefinedUserDescID, tableName)
-	gr, err := kvDB.Get(ctx, nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-	metaStartKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.Key))
-	metaEndKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.EndKey))
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
-	// The closure checks whether there is any range has sticky bit
-	// hasManualSplitRange==true: fails when no ranges have sticky bit
-	// hasManualSplitRange==false: fails when any range has sticky bit
-	hasManullySplitRange := func() bool {
-		ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		require.NotEmpty(t, ranges)
-		for _, r := range ranges {
-			var desc roachpb.RangeDescriptor
-			if err := r.ValueProto(&desc); err != nil {
-				t.Fatal(err)
-			}
-			if !desc.GetStickyBit().IsEmpty() {
-				return true
-			}
-		}
-		return false
-	}
-
 	// assert that all ranges are not manually split
-	require.False(t, hasManullySplitRange())
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
 
 	// split the last range
-	ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lastRange := ranges[len(ranges)-1]
-	var lastRangeDesc roachpb.RangeDescriptor
-	if err := lastRange.ValueProto(&lastRangeDesc); err != nil {
-		t.Fatal(err)
-	}
-	splitKey := getMidKeyInSpan(t, kvDB, lastRangeDesc.StartKey, lastRangeDesc.EndKey)
-	splitKey, err = keys.EnsureSafeSplitKey(splitKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify ranges are still split before "DROP TABLE" is executed
-	require.True(t, hasManullySplitRange())
+	splitLastRangeInSpanAndCheck(ctx, t, kvDB, tableSpan)
 
 	if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, tableName)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Data hasn't been GC-ed because GC TTL is still set to its original high
-	// value (25h by default)
-	if err := descExists(sqlDB, true, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-	tableSpan = tableDesc.TableSpan(keys.SystemSQLCodec)
-	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
-
-	// Verify ranges are already unsplit before gc is kicked off
-	require.False(t, hasManullySplitRange())
-
-	// Push a new zone config for a few tables with TTL=0 so the data
-	// is deleted immediately.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check GC worked!
-	testutils.SucceedsSoon(t, func() error {
-		if err := descExists(sqlDB, false, tableDesc.GetID()); err != nil {
-			return err
-		}
-
-		return zoneExists(sqlDB, nil, tableDesc.GetID())
-	})
-	tableSpan = tableDesc.TableSpan(keys.SystemSQLCodec)
-	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
-
-	// Verify there is no manually split ranges after gc.
-	require.False(t, hasManullySplitRange())
+	// Verify ranges are already unsplit without kicking off gc
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
 }
 
-func TestDropTableUnsplitManuallySplitRangesNew(t *testing.T) {
+func TestDropTableUnsplitRangesAsync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
@@ -1080,78 +1052,22 @@ func TestDropTableUnsplitManuallySplitRangesNew(t *testing.T) {
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
-	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, keys.MinNonPredefinedUserDescID, tableName)
-	gr, err := kvDB.Get(ctx, nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-	metaStartKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.Key))
-	metaEndKey := keys.RangeMetaKey(keys.MustAddr(tableSpan.EndKey))
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
-	// The closure checks whether there is any range has sticky bit
-	// hasManualSplitRange==true: fails when no ranges have sticky bit
-	// hasManualSplitRange==false: fails when any range has sticky bit
-	hasManullySplitRange := func() bool {
-		ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		require.NotEmpty(t, ranges)
-		for _, r := range ranges {
-			var desc roachpb.RangeDescriptor
-			if err := r.ValueProto(&desc); err != nil {
-				t.Fatal(err)
-			}
-			if !desc.GetStickyBit().IsEmpty() {
-				return true
-			}
-		}
-		return false
-	}
-
 	// assert that all ranges are not manually split
-	require.False(t, hasManullySplitRange())
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
 
 	// split the last range
-	ranges, err := kvDB.Scan(ctx, metaStartKey, metaEndKey, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lastRange := ranges[len(ranges)-1]
-	var lastRangeDesc roachpb.RangeDescriptor
-	if err := lastRange.ValueProto(&lastRangeDesc); err != nil {
-		t.Fatal(err)
-	}
-	splitKey := getMidKeyInSpan(t, kvDB, lastRangeDesc.StartKey, lastRangeDesc.EndKey)
-	splitKey, err = keys.EnsureSafeSplitKey(splitKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp); err != nil {
-		t.Fatal(err)
-	}
+	splitLastRangeInSpanAndCheck(ctx, t, kvDB, tableSpan)
 
 	if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, tableName)); err != nil {
 		t.Fatal(err)
 	}
 
-	// Data hasn't been GC-ed because GC TTL is still set to its original high
-	// value (25h by default)
-	if err := descExists(sqlDB, true, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-	tableSpan = tableDesc.TableSpan(keys.SystemSQLCodec)
-	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
-
 	// Verify ranges are still split before gc is kicked off
-	require.True(t, hasManullySplitRange())
+	require.True(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
 
 	// Push a new zone config for a few tables with TTL=0 so the data
 	// is deleted immediately.
@@ -1171,7 +1087,7 @@ func TestDropTableUnsplitManuallySplitRangesNew(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 
 	// Verify there is no manually split ranges after gc.
-	require.False(t, hasManullySplitRange())
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
 }
 
 // Tests DROP DATABASE after DROP TABLE just before the table name has been
@@ -1624,4 +1540,112 @@ func TestDropPhysicalTableGC(t *testing.T) {
 			require.Zerof(t, actualZoneConfigs, "Zone config for '%s' was not deleted as expected.", table.name)
 		}
 	}
+}
+
+// TODO(Chengxiong): remove this test in 22.2
+func TestDropDatabaseUnsplitRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+	// override binary version to be older
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.UnsplitRangesInAsyncGCJobs - 1),
+	}
+
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	const numRows = 2*row.TableTruncateChunkSize + 1
+	const numKeys = 3 * numRows
+
+	const tableName string = "test1"
+	require.NoError(t, tests.CreateKVTable(sqlDB, tableName, numRows))
+
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
+
+	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+
+	// assert that all ranges are not manually split
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
+
+	// split the last range
+	splitLastRangeInSpanAndCheck(ctx, t, kvDB, tableSpan)
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify ranges are already unsplit without kicking off gc
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
+}
+
+func TestDropDatabaseUnsplitRangesAsync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+
+	defer gcjob.SetSmallMaxGCIntervalForTest()()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	const numRows = 2*row.TableTruncateChunkSize + 1
+	const numKeys = 3 * numRows
+
+	const tableName string = "test1"
+	require.NoError(t, tests.CreateKVTable(sqlDB, tableName, numRows))
+
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
+
+	tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+
+	// assert that all ranges are not manually split
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
+
+	// split the last range
+	splitLastRangeInSpanAndCheck(ctx, t, kvDB, tableSpan)
+
+	if _, err := sqlDB.Exec("DROP DATABASE t"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify ranges are still split before gc is kicked off
+	require.True(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
+
+	// Push a new zone config for a few tables with TTL=0 so the data
+	// is deleted immediately.
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check GC worked!
+	testutils.SucceedsSoon(t, func() error {
+		if err := descExists(sqlDB, false, tableDesc.GetID()); err != nil {
+			return err
+		}
+
+		return zoneExists(sqlDB, nil, tableDesc.GetID())
+	})
+	tableSpan = tableDesc.TableSpan(keys.SystemSQLCodec)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
+
+	// Verify there is no manually split ranges after gc.
+	require.False(t, hasManuallySplitRanges(ctx, t, kvDB, tableSpan))
 }

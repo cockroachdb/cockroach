@@ -230,7 +230,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		})
 	}
 
-	// TODO (Chengxiong) remove this if/else block and only keeps logic in if
+	// TODO(Chengxiong): remove this if/else block and only keeps logic in if
 	// branch in 22.2
 	st := p.EvalContext().Settings
 	if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {

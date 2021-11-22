@@ -326,7 +326,7 @@ func (p *planner) dropTableImpl(
 	return droppedViews, err
 }
 
-// TODO (Chengxiong) Remove this function in 22.2
+// TODO(Chengxiong): Remove this function in 22.2
 // unsplitRangesForTable unsplit any manually split ranges within the table span.
 func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
 	// Gate this on being the system tenant because secondary tenants aren't
@@ -383,7 +383,7 @@ func (p *planner) initiateDropTable(
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
-	// TODO (Chengxiong) Remove this range unsplitting in 22.2
+	// TODO(Chengxiong): Remove this range unsplitting in 22.2
 	st := p.EvalContext().Settings
 	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
 		// Unsplit all manually split ranges in the table so they can be

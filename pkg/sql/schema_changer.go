@@ -644,7 +644,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				dropTime = tableDesc.GetDropTime()
 			}
 
-			// TODO (Chengxiong) remove the "if" check in 22.2
+			// TODO(Chengxiong): remove the "if" check in 22.2
 			var unspliTables []descpb.ID
 			st := sc.execCfg.Settings
 			if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
@@ -2196,7 +2196,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
 		}
 
-		// TODO (Chengxiong) remove the "if check" in 22.2
+		// TODO(Chengxiong): remove the "if check" in 22.2
 		var tablesToUnsplit []descpb.ID
 		st := p.ExecCfg().Settings
 		if st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
