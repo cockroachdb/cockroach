@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -155,6 +156,10 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			return errors.Newf("%s", buf.String())
 		})
 	}
+	// Force a GC in an attempt to run finalizers. Some finalizers run sanity
+	// checks that panic on failure, and ideally we'd run them all before starting
+	// the next test.
+	runtime.GC()
 }
 
 // StopServer stops an individual server in the cluster.

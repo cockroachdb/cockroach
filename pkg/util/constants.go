@@ -95,7 +95,7 @@ func init() {
 
 // ConstantWithMetamorphicTestRange is like ConstantWithMetamorphicTestValue
 // except instead of returning a single metamorphic test value, it returns a
-// random test value in a range.
+// random test value in the semi-open range [min, max).
 //
 // The given name is used for logging.
 func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) int {
