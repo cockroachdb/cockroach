@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1155,6 +1156,7 @@ type ExecutorConfig struct {
 	// SpanConfigReconciliationJobDeps are used to drive the span config
 	// reconciliation job.
 	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+	SingleVersion                   singleversion.Preemptor
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

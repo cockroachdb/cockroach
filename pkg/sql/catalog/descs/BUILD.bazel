@@ -27,6 +27,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
@@ -44,6 +45,7 @@ go_library(
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/singleversion",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
