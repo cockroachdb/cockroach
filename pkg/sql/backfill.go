@@ -717,7 +717,9 @@ func (sc *SchemaChanger) validateConstraints(
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+					if err := validateCheckInTxn(
+						ctx, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr,
+					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
@@ -729,7 +731,9 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsNotNull() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+					if err := validateCheckInTxn(
+						ctx, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr,
+					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -2198,7 +2202,7 @@ func runSchemaChangesInTxn(
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.LeaseMgr(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
+					ctx, &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2294,7 +2298,6 @@ func runSchemaChangesInTxn(
 // reuse an existing kv.Txn safely.
 func validateCheckInTxn(
 	ctx context.Context,
-	leaseMgr *lease.Manager,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
@@ -2307,7 +2310,7 @@ func validateCheckInTxn(
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateCheckExpr(ctx, semaCtx, checkExpr, tableDesc, ie, txn)
+		return validateCheckExpr(ctx, semaCtx, evalCtx.SessionData(), checkExpr, tableDesc, ie, txn)
 	})
 }
 

@@ -2329,7 +2329,7 @@ CREATE TABLE crdb_internal.create_statements (
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(ctx, &p.semaCtx, &name, table)
+			stmt, err = ShowCreateView(ctx, &p.semaCtx, p.SessionData(), &name, table)
 		} else if table.IsSequence() {
 			descType = typeSequence
 			stmt, err = ShowCreateSequence(ctx, &name, table)
@@ -2343,7 +2343,7 @@ CREATE TABLE crdb_internal.create_statements (
 				return err
 			}
 			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.PublicNonPrimaryIndexes(), table, alterStmts,
-				validateStmts, &p.semaCtx); err != nil {
+				validateStmts, &p.semaCtx, p.SessionData()); err != nil {
 				return err
 			}
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
@@ -2390,6 +2390,7 @@ func showAlterStatementWithInterleave(
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 ) error {
 	if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		f := tree.NewFmtCtx(tree.FmtSimple)
@@ -2461,7 +2462,7 @@ func showAlterStatementWithInterleave(
 				sharedPrefixLen += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
 			}
 			// Write the CREATE INDEX statements.
-			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
+			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx, sessionData); err != nil {
 				return err
 			}
 			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -2481,10 +2482,11 @@ func showCreateIndexWithInterleave(
 	parentName tree.TableName,
 	sharedPrefixLen int,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 ) error {
 	f.WriteString("CREATE ")
 	idxStr, err := catformat.IndexForDisplay(
-		ctx, table, &tableName, idx, "" /* partition */, "" /* interleave */, semaCtx,
+		ctx, table, &tableName, idx, "" /* partition */, "" /* interleave */, semaCtx, sessionData,
 	)
 	if err != nil {
 		return err
@@ -2533,7 +2535,9 @@ CREATE TABLE crdb_internal.table_columns (
 					for _, col := range columns {
 						defStr := tree.DNull
 						if col.HasDefault() {
-							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, col.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
+							defExpr, err := schemaexpr.FormatExprForDisplay(
+								ctx, table, col.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+							)
 							if err != nil {
 								return err
 							}

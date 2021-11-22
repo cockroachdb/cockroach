@@ -288,7 +288,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if !u.run.checkOrds.Empty() {
 		checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
 		if err := checkMutationInput(
-			params.ctx, &params.p.semaCtx, u.run.tu.tableDesc(), u.run.checkOrds, checkVals,
+			params.ctx, &params.p.semaCtx, params.p.SessionData(), u.run.tu.tableDesc(), u.run.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}

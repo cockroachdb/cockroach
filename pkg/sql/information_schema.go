@@ -433,7 +433,9 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				}
 				colDefault := tree.DNull
 				if column.HasDefault() {
-					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
+					colExpr, err := schemaexpr.FormatExprForDisplay(
+						ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+					)
 					if err != nil {
 						return err
 					}
@@ -441,7 +443,9 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				}
 				colComputed := emptyString
 				if column.IsComputed() {
-					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, column.GetComputeExpr(), &p.semaCtx, tree.FmtSimple)
+					colExpr, err := schemaexpr.FormatExprForDisplay(
+						ctx, table, column.GetComputeExpr(), &p.semaCtx, p.SessionData(), tree.FmtSimple,
+					)
 					if err != nil {
 						return err
 					}
