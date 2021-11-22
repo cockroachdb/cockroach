@@ -163,6 +163,7 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 func (g *Graph) AddOpEdges(
 	t *scpb.Target, from, to scpb.Status, revertible bool, ops ...scop.Op,
 ) (err error) {
+
 	oe := &OpEdge{
 		op:         ops,
 		revertible: revertible,
@@ -178,6 +179,16 @@ func (g *Graph) AddOpEdges(
 			oe, existing)
 	}
 	g.edges = append(g.edges, oe)
+	var typ scop.Type
+	for i, op := range ops {
+		if i == 0 {
+			typ = op.Type()
+		} else if typ != op.Type() {
+			return errors.Errorf("mixed type for opEdge %s->%s, %s != %s",
+				screl.NodeString(oe.from), screl.NodeString(oe.to), typ, op.Type())
+		}
+	}
+	oe.typ = typ
 	g.nodeOpEdgesFrom[oe.from] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
@@ -250,6 +261,7 @@ type Edge interface {
 type OpEdge struct {
 	from, to   *scpb.Node
 	op         []scop.Op
+	typ        scop.Type
 	revertible bool
 }
 
@@ -264,6 +276,11 @@ func (oe *OpEdge) Op() []scop.Op { return oe.op }
 
 // Revertible returns if the dependency edge is revertible
 func (oe *OpEdge) Revertible() bool { return oe.revertible }
+
+// Type returns the types of operations associated with this edge.
+func (oe *OpEdge) Type() scop.Type {
+	return oe.typ
+}
 
 // DepEdge represents a dependency between two nodes. A dependency
 // implies that the To() node cannot be reached before the From() node. It

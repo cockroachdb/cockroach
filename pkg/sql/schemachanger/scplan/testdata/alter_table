@@ -6,378 +6,481 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 1
-    Element:
-      column:
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        ID: 2
+        Name: j
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 1
+      Element:
         column:
-          id: 2
-          name: j
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 52
-    Metadata:
-      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 1
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 2
-    TableID: 52
-    Unique: true
+          column:
+            id: 2
+            name: j
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 52
+      Metadata:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: new_primary_key
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      ShardedDescriptor: {}
+      StoreColumnIDs:
+      - 2
+      TableID: 52
+      Unique: true
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 2
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-  *scop.MakeAddedPrimaryIndexPublic
-    IndexID: 2
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 52
+    *scop.MakeAddedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 52
+    *scop.MakeColumnPublic
+      ColumnID: 2
+      TableID: 52
 Stage 5 (non-revertible)
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 52
 Stage 6 (non-revertible)
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+  ops:
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 123:::INT8
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 1
-    Element:
-      column:
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        DefaultExpr: 123:::INT8
+        ID: 2
+        Name: j
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 1
+      Element:
         column:
-          defaultExpr: 123:::INT8
-          id: 2
-          name: j
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 52
-    Metadata:
-      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 1
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 2
-    TableID: 52
-    Unique: true
+          column:
+            defaultExpr: 123:::INT8
+            id: 2
+            name: j
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 52
+      Metadata:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: new_primary_key
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      ShardedDescriptor: {}
+      StoreColumnIDs:
+      - 2
+      TableID: 52
+      Unique: true
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 2
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-  *scop.MakeAddedPrimaryIndexPublic
-    IndexID: 2
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 52
+    *scop.MakeAddedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 52
+    *scop.MakeColumnPublic
+      ColumnID: 2
+      TableID: 52
 Stage 5 (non-revertible)
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 52
 Stage 6 (non-revertible)
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+  ops:
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 123:::INT8
-      ID: 2
-      Name: j
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 1
-    Element:
-      column:
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        DefaultExpr: 123:::INT8
+        ID: 2
+        Name: j
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 1
+      Element:
         column:
-          defaultExpr: 123:::INT8
-          id: 2
-          name: j
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 52
-    Metadata:
-      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      DefaultExpr: 456:::INT8
-      ID: 3
-      Name: k
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 1
-    Element:
-      column:
+          column:
+            defaultExpr: 123:::INT8
+            id: 2
+            name: j
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 52
+      Metadata:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        DefaultExpr: 456:::INT8
+        ID: 3
+        Name: k
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 1
+      Element:
         column:
-          defaultExpr: 456:::INT8
-          id: 3
-          name: k
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 52
-    Metadata:
-      Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
-      TargetMetadata:
-        SourceElementID: 1
-        StatementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 1
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 2
-    - 3
-    TableID: 52
-    Unique: true
+          column:
+            defaultExpr: 456:::INT8
+            id: 3
+            name: k
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 52
+      Metadata:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: new_primary_key
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      ShardedDescriptor: {}
+      StoreColumnIDs:
+      - 2
+      - 3
+      TableID: 52
+      Unique: true
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 3
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 2
+      TableID: 52
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 3
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-  *scop.MakeAddedPrimaryIndexPublic
-    IndexID: 2
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 3
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: j}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 52, ColumnID: 3, Name: k}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+  ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 52
+    *scop.MakeAddedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 52
+    *scop.MakeColumnPublic
+      ColumnID: 2
+      TableID: 52
+    *scop.MakeColumnPublic
+      ColumnID: 3
+      TableID: 52
 Stage 5 (non-revertible)
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 52
 Stage 6 (non-revertible)
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+  ops:
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ComputeExpr: i + 1:::INT8
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 1
-    Element:
-      column:
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        ComputeExpr: i + 1:::INT8
+        ID: 2
+        Name: a
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 1
+      Element:
         column:
-          computeExpr: i + 1:::INT8
-          id: 2
-          name: a
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 52
-    Metadata:
-      Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 1
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 2
-    TableID: 52
-    Unique: true
+          column:
+            computeExpr: i + 1:::INT8
+            id: 2
+            name: a
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 52
+      Metadata:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: new_primary_key
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      ShardedDescriptor: {}
+      StoreColumnIDs:
+      - 2
+      TableID: 52
+      Unique: true
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 2
+      TableID: 52
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
 Stage 4
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-  *scop.MakeAddedPrimaryIndexPublic
-    IndexID: 2
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 52
+    *scop.MakeAddedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 52
+    *scop.MakeColumnPublic
+      ColumnID: 2
+      TableID: 52
 Stage 5 (non-revertible)
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 52
 Stage 6 (non-revertible)
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 52
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+  ops:
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
 
 
 create-table
@@ -389,153 +492,189 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 Stage 0
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 2
-      Name: a
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 1
-    Element:
-      column:
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, ABSENT, ADD] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+  ops:
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        ID: 2
+        Name: a
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 1
+      Element:
         column:
-          id: 2
-          name: a
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 52
-    Metadata:
-      Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 1
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 2
-    TableID: 52
-    Unique: true
-  *scop.MakeAddedColumnDeleteOnly
-    Column:
-      ID: 3
-      Name: b
-      Nullable: true
-      Type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    FamilyName: primary
-    TableID: 53
-  *scop.LogEvent
-    DescID: 53
-    Direction: 1
-    Element:
-      column:
+          column:
+            id: 2
+            name: a
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 52
+      Metadata:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: new_primary_key
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 1
+      ShardedDescriptor: {}
+      StoreColumnIDs:
+      - 2
+      TableID: 52
+      Unique: true
+    *scop.MakeAddedColumnDeleteOnly
+      Column:
+        ID: 3
+        Name: b
+        Nullable: true
+        Type:
+          family: IntFamily
+          oid: 20
+          width: 64
+      FamilyName: primary
+      TableID: 53
+    *scop.LogEvent
+      DescID: 53
+      Direction: 1
+      Element:
         column:
-          id: 3
-          name: b
-          nullable: true
-          type:
-            family: IntFamily
-            oid: 20
-            width: 64
-        familyName: primary
-        tableId: 53
-    Metadata:
-      Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
-      TargetMetadata:
-        SourceElementID: 1
-        StatementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.MakeAddedIndexDeleteOnly
-    IndexID: 2
-    IndexName: new_primary_key
-    KeyColumnDirections:
-    - 0
-    KeyColumnIDs:
-    - 2
-    ShardedDescriptor: {}
-    StoreColumnIDs:
-    - 1
-    - 3
-    TableID: 53
-    Unique: true
+          column:
+            id: 3
+            name: b
+            nullable: true
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+          familyName: primary
+          tableId: 53
+      Metadata:
+        Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.MakeAddedIndexDeleteOnly
+      IndexID: 2
+      IndexName: new_primary_key
+      KeyColumnDirections:
+      - 0
+      KeyColumnIDs:
+      - 2
+      ShardedDescriptor: {}
+      StoreColumnIDs:
+      - 1
+      - 3
+      TableID: 53
+      Unique: true
 Stage 1
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 52
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 2
-    TableID: 52
-  *scop.MakeAddedIndexDeleteAndWriteOnly
-    IndexID: 2
-    TableID: 53
-  *scop.MakeAddedColumnDeleteAndWriteOnly
-    ColumnID: 3
-    TableID: 53
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 52
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 2
+      TableID: 52
+    *scop.MakeAddedIndexDeleteAndWriteOnly
+      IndexID: 2
+      TableID: 53
+    *scop.MakeAddedColumnDeleteAndWriteOnly
+      ColumnID: 3
+      TableID: 53
 Stage 2
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 52
-  *scop.BackfillIndex
-    IndexID: 2
-    TableID: 53
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+  ops:
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 52
+    *scop.BackfillIndex
+      IndexID: 2
+      TableID: 53
 Stage 3
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 52
-  *scop.ValidateUniqueIndex
-    IndexID: 2
-    TableID: 53
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+  ops:
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 52
+    *scop.ValidateUniqueIndex
+      IndexID: 2
+      TableID: 53
 Stage 4
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 52
-  *scop.MakeAddedPrimaryIndexPublic
-    IndexID: 2
-    TableID: 52
-  *scop.MakeColumnPublic
-    ColumnID: 2
-    TableID: 52
-  *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-    IndexID: 1
-    TableID: 53
-  *scop.MakeAddedPrimaryIndexPublic
-    IndexID: 2
-    TableID: 53
-  *scop.MakeColumnPublic
-    ColumnID: 3
-    TableID: 53
+  transitions:
+    [Column:{DescID: 52, ColumnID: 2, Name: a}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 53, ColumnID: 3, Name: b}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 53, Name: new_primary_key, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+  ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 52
+    *scop.MakeAddedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 52
+    *scop.MakeColumnPublic
+      ColumnID: 2
+      TableID: 52
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 53
+    *scop.MakeAddedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 53
+    *scop.MakeColumnPublic
+      ColumnID: 3
+      TableID: 53
 Stage 5 (non-revertible)
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 52
-  *scop.MakeDroppedIndexDeleteOnly
-    IndexID: 1
-    TableID: 53
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+  ops:
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 52
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 53
 Stage 6 (non-revertible)
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 52
-  *scop.MakeIndexAbsent
-    IndexID: 1
-    TableID: 53
+  transitions:
+    [PrimaryIndex:{DescID: 52, Name: foo_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 53, Name: bar_pkey, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+  ops:
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 53

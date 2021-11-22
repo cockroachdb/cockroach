@@ -51,331 +51,392 @@ ops
 DROP DATABASE db1 CASCADE
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 54
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 57
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 55
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 58
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 59
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 60
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 61
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 64
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 56
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 62
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 63
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 53
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
+  transitions:
+    [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Table:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Sequence:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 64}, PUBLIC, DROP] -> TXN_DROPPED
+    [Table:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Type:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
+    [Type:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
+    [Schema:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
+    [Database:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 54
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 57
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 55
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 58
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 59
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 60
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 61
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 64
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 56
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 62
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 63
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 53
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 52
 Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    DescID: 57
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 57
-  *scop.UpdateRelationDeps
-    TableID: 57
-  *scop.MarkDescriptorAsDropped
-    DescID: 54
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 57
-    TableID: 54
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 57
-  *scop.UpdateRelationDeps
-    TableID: 57
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 57
-  *scop.UpdateRelationDeps
-    TableID: 57
-  *scop.MarkDescriptorAsDropped
-    DescID: 56
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 3
-    TableID: 56
-  *scop.UpdateRelationDeps
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    DescID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 56
-    TableID: 55
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 58
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    DescID: 58
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 59
-    TableID: 58
-  *scop.MarkDescriptorAsDropped
-    DescID: 59
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 60
-    TableID: 59
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 61
-    TableID: 59
-  *scop.MarkDescriptorAsDropped
-    DescID: 61
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 64
-    TableID: 61
-  *scop.MarkDescriptorAsDropped
-    DescID: 62
-  *scop.RemoveTypeBackRef
-    DescID: 64
-    TypeID: 62
-  *scop.MarkDescriptorAsDropped
-    DescID: 63
-  *scop.RemoveTypeBackRef
-    DescID: 64
-    TypeID: 63
-  *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 60
-    TableID: 58
-  *scop.MarkDescriptorAsDropped
-    DescID: 60
-  *scop.MarkDescriptorAsDropped
-    DescID: 64
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 1
-    TableID: 56
-  *scop.UpdateRelationDeps
-    TableID: 56
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 56
-  *scop.UpdateRelationDeps
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    DescID: 53
-  *scop.MarkDescriptorAsDropped
-    DescID: 52
+  transitions:
+    [DefaultExpression:{DescID: 57, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
+    [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [DefaultExpression:{DescID: 57, ColumnID: 1}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 57, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
+    [Table:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
+    [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
+    [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 64}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 64}, TXN_DROPPED, DROP] -> DROPPED
+    [TypeReference:{DescID: 64, ReferencedDescID: 62}, PUBLIC, DROP] -> ABSENT
+    [TypeReference:{DescID: 64, ReferencedDescID: 63}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [Table:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [Type:{DescID: 62}, TXN_DROPPED, DROP] -> DROPPED
+    [Type:{DescID: 63}, TXN_DROPPED, DROP] -> DROPPED
+    [Schema:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
+    [Database:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
+  ops:
+    *scop.MarkDescriptorAsDropped
+      DescID: 57
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 57
+    *scop.UpdateRelationDeps
+      TableID: 57
+    *scop.MarkDescriptorAsDropped
+      DescID: 54
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 57
+      TableID: 54
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 1
+      TableID: 57
+    *scop.UpdateRelationDeps
+      TableID: 57
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 57
+    *scop.UpdateRelationDeps
+      TableID: 57
+    *scop.MarkDescriptorAsDropped
+      DescID: 56
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 56
+    *scop.UpdateRelationDeps
+      TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 56
+      TableID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 58
+      TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 58
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 59
+      TableID: 58
+    *scop.MarkDescriptorAsDropped
+      DescID: 59
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 60
+      TableID: 59
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 61
+      TableID: 59
+    *scop.MarkDescriptorAsDropped
+      DescID: 61
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 64
+      TableID: 61
+    *scop.MarkDescriptorAsDropped
+      DescID: 62
+    *scop.RemoveTypeBackRef
+      DescID: 64
+      TypeID: 62
+    *scop.MarkDescriptorAsDropped
+      DescID: 63
+    *scop.RemoveTypeBackRef
+      DescID: 64
+      TypeID: 63
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 60
+      TableID: 58
+    *scop.MarkDescriptorAsDropped
+      DescID: 60
+    *scop.MarkDescriptorAsDropped
+      DescID: 64
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 1
+      TableID: 56
+    *scop.UpdateRelationDeps
+      TableID: 56
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 56
+    *scop.UpdateRelationDeps
+      TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 53
+    *scop.MarkDescriptorAsDropped
+      DescID: 52
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 54
-  *scop.LogEvent
-    DescID: 54
-    Direction: 2
-    Element:
-      sequence:
-        sequenceId: 54
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 3
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 54
-  *scop.DrainDescriptorName
-    TableID: 57
-  *scop.LogEvent
-    DescID: 57
-    Direction: 2
-    Element:
-      table:
-        tableId: 57
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 3
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 57
-  *scop.DrainDescriptorName
-    TableID: 55
-  *scop.LogEvent
-    DescID: 55
-    Direction: 2
-    Element:
-      sequence:
-        sequenceId: 55
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 5
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
-  *scop.DrainDescriptorName
-    TableID: 60
-  *scop.LogEvent
-    DescID: 60
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy: []
-        dependsOn:
-        - 58
-        - 59
-        tableId: 60
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 8
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 60
-  *scop.DrainDescriptorName
-    TableID: 64
-  *scop.LogEvent
-    DescID: 64
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy: []
-        dependsOn:
-        - 61
-        tableId: 64
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 10
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 64
-  *scop.DrainDescriptorName
-    TableID: 61
-  *scop.LogEvent
-    DescID: 61
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy:
-        - 64
-        dependsOn:
-        - 59
-        tableId: 61
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 8
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 61
-  *scop.DrainDescriptorName
-    TableID: 59
-  *scop.LogEvent
-    DescID: 59
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy:
-        - 60
-        - 61
-        dependsOn:
-        - 58
-        tableId: 59
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 7
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 59
-  *scop.DrainDescriptorName
-    TableID: 58
-  *scop.LogEvent
-    DescID: 58
-    Direction: 2
-    Element:
-      view:
-        dependedOnBy:
-        - 59
-        - 60
-        dependsOn:
-        - 56
-        tableId: 58
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 6
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 58
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.LogEvent
-    DescID: 56
-    Direction: 2
-    Element:
-      table:
-        tableId: 56
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 5
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.DrainDescriptorName
-    TableID: 62
-  *scop.DrainDescriptorName
-    TableID: 63
-  *scop.DrainDescriptorName
-    TableID: 53
-  *scop.LogEvent
-    DescID: 53
-    Direction: 2
-    Element:
-      schema:
-        dependentObjects:
-        - 55
-        - 56
-        - 58
-        - 59
-        - 60
-        - 61
-        - 62
-        - 63
-        - 64
-        schemaId: 53
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
-      Username: root
-  *scop.DrainDescriptorName
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 2
-    Element:
-      database:
-        databaseId: 52
-        dependentObjects:
-        - 53
-        - 54
-        - 57
-    Metadata:
-      Statement: DROP DATABASE db1 CASCADE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
+  transitions:
+    [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
+    [Table:{DescID: 57}, DROPPED, DROP] -> ABSENT
+    [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 60}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 64}, DROPPED, DROP] -> ABSENT
+    [Table:{DescID: 56}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 62}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 63}, DROPPED, DROP] -> ABSENT
+    [Schema:{DescID: 53}, DROPPED, DROP] -> ABSENT
+    [Database:{DescID: 52}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 54
+    *scop.LogEvent
+      DescID: 54
+      Direction: 2
+      Element:
+        sequence:
+          sequenceId: 54
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 54
+    *scop.DrainDescriptorName
+      TableID: 57
+    *scop.LogEvent
+      DescID: 57
+      Direction: 2
+      Element:
+        table:
+          tableId: 57
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 57
+    *scop.DrainDescriptorName
+      TableID: 55
+    *scop.LogEvent
+      DescID: 55
+      Direction: 2
+      Element:
+        sequence:
+          sequenceId: 55
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 5
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 55
+    *scop.DrainDescriptorName
+      TableID: 60
+    *scop.LogEvent
+      DescID: 60
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy: []
+          dependsOn:
+          - 58
+          - 59
+          tableId: 60
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 60
+    *scop.DrainDescriptorName
+      TableID: 64
+    *scop.LogEvent
+      DescID: 64
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy: []
+          dependsOn:
+          - 61
+          tableId: 64
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 64
+    *scop.DrainDescriptorName
+      TableID: 61
+    *scop.LogEvent
+      DescID: 61
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy:
+          - 64
+          dependsOn:
+          - 59
+          tableId: 61
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 61
+    *scop.DrainDescriptorName
+      TableID: 59
+    *scop.LogEvent
+      DescID: 59
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy:
+          - 60
+          - 61
+          dependsOn:
+          - 58
+          tableId: 59
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 7
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 59
+    *scop.DrainDescriptorName
+      TableID: 58
+    *scop.LogEvent
+      DescID: 58
+      Direction: 2
+      Element:
+        view:
+          dependedOnBy:
+          - 59
+          - 60
+          dependsOn:
+          - 56
+          tableId: 58
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 58
+    *scop.DrainDescriptorName
+      TableID: 56
+    *scop.LogEvent
+      DescID: 56
+      Direction: 2
+      Element:
+        table:
+          tableId: 56
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 5
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 56
+    *scop.DrainDescriptorName
+      TableID: 62
+    *scop.DrainDescriptorName
+      TableID: 63
+    *scop.DrainDescriptorName
+      TableID: 53
+    *scop.LogEvent
+      DescID: 53
+      Direction: 2
+      Element:
+        schema:
+          dependentObjects:
+          - 55
+          - 56
+          - 58
+          - 59
+          - 60
+          - 61
+          - 62
+          - 63
+          - 64
+          schemaId: 53
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.DrainDescriptorName
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 2
+      Element:
+        database:
+          databaseId: 52
+          dependentObjects:
+          - 53
+          - 54
+          - 57
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
 
 deps
 DROP DATABASE db1 CASCADE

@@ -6,28 +6,37 @@ ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
+  transitions:
+    [Sequence:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 52
 Stage 1 (non-revertible)
-  *scop.MarkDescriptorAsDropped
-    DescID: 52
+  transitions:
+    [Sequence:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
+  ops:
+    *scop.MarkDescriptorAsDropped
+      DescID: 52
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 2
-    Element:
-      sequence:
-        sequenceId: 52
-    Metadata:
-      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
+  transitions:
+    [Sequence:{DescID: 52}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 2
+      Element:
+        sequence:
+          sequenceId: 52
+      Metadata:
+        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 52
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
@@ -41,38 +50,49 @@ ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
-  *scop.MarkDescriptorAsDroppedSynthetically
-    DescID: 52
+  transitions:
+    [Sequence:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 52
 Stage 1 (non-revertible)
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 53
-  *scop.UpdateRelationDeps
-    TableID: 53
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    DescID: 52
+  transitions:
+    [DefaultExpression:{DescID: 53, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 54, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [Sequence:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
+  ops:
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 53
+    *scop.UpdateRelationDeps
+      TableID: 53
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 54
+    *scop.UpdateRelationDeps
+      TableID: 54
+    *scop.MarkDescriptorAsDropped
+      DescID: 52
 Stage 2 (non-revertible)
-  *scop.DrainDescriptorName
-    TableID: 52
-  *scop.LogEvent
-    DescID: 52
-    Direction: 2
-    Element:
-      sequence:
-        sequenceId: 52
-    Metadata:
-      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
-      Username: root
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
+  transitions:
+    [Sequence:{DescID: 52}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 52
+    *scop.LogEvent
+      DescID: 52
+      Direction: 2
+      Element:
+        sequence:
+          sequenceId: 52
+      Metadata:
+        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 52
 
 
 deps
