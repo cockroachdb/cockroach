@@ -18,7 +18,6 @@ var rubyPGBlocklist = blocklistsForVersion{
 
 var rubyPGBlockList21_2 = blocklist{
 	"Basic type mapping PG::BasicTypeMapBasedOnResult with usage of result oids for bind params encoder selection can do JSON conversions":                                                                                      "unknown",
-	"Basic type mapping PG::BasicTypeMapBasedOnResult with usage of result oids for copy encoder selection can type cast #copy_data input with explicit encoder":                                                                "unknown",
 	"Basic type mapping PG::BasicTypeMapForQueries Record encoding should do array-as-record encoding":                                                                                                                          "unknown",
 	"Basic type mapping PG::BasicTypeMapForQueries should do IPAddr param encoding":                                                                                                                                             "unknown",
 	"Basic type mapping PG::BasicTypeMapForQueries should do array of string encoding on unknown classes":                                                                                                                       "unknown",
