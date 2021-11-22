@@ -324,6 +324,11 @@ type TxnSender interface {
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
+
+	// ForwardWriteTimestamp forwards the write timestamp of the transaction to
+	// the provided timestamp. It can be used to ensure that a transaction
+	// commits at a timestamp after some event detected out of band.
+	ForwardWriteTimestamp(to hlc.Timestamp) error
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
