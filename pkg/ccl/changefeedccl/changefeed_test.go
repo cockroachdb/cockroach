@@ -4541,7 +4541,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		defer func() {
 			closeFeed(t, foo)
 			if err := g.Wait(); err != nil {
-				require.Truef(t, jobs.HasErrJobCanceled(err), "err=%v", err)
+				require.NotRegexp(t, "unexpected epoch resolved event", err)
 			}
 		}()
 
