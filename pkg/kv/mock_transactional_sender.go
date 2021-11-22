@@ -229,6 +229,12 @@ func (m *MockTransactionalSender) GetTxnRetryableErr(
 
 // ClearTxnRetryableErr is part of the TxnSender interface.
 func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
+	panic("unimplemented")
+}
+
+// ForwardWriteTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) ForwardWriteTimestamp(to hlc.Timestamp) error {
+	panic("unimplemented")
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.

@@ -1403,3 +1403,14 @@ func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
 		tc.mu.txnState = txnPending
 	}
 }
+
+// ForwardWriteTimestamp is part of the TxnSender interface.
+func (tc *TxnCoordSender) ForwardWriteTimestamp(to hlc.Timestamp) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState != txnPending {
+		return errors.Errorf("cannot forward write timestamp for %v transaction", tc.mu.txnState)
+	}
+	tc.mu.txn.WriteTimestamp.Forward(to)
+	return nil
+}

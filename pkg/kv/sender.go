@@ -336,6 +336,10 @@ type TxnSender interface {
 
 	// ClearTxnRetryableErr clears the retryable error, if any.
 	ClearTxnRetryableErr(ctx context.Context)
+	// ForwardWriteTimestamp forwards the write timestamp of the transaction to
+	// the provided timestamp. It can be used to ensure that a transaction
+	// commits at a timestamp after some event detected out of band.
+	ForwardWriteTimestamp(to hlc.Timestamp) error
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

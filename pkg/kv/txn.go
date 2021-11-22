@@ -1688,6 +1688,15 @@ func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
 	return h
 }
 
+// ForwardWriteTimestamp forwards the write timestamp of the transaction to
+// the provided timestamp. It can be used to ensure that a transaction
+// commits at a timestamp after some event detected out of band.
+func (txn *Txn) ForwardWriteTimestamp(to hlc.Timestamp) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ForwardWriteTimestamp(to)
+}
+
 // OnePCNotAllowedError signifies that a request had the Require1PC flag set,
 // but 1PC evaluation was not possible for one reason or another.
 type OnePCNotAllowedError struct{}
