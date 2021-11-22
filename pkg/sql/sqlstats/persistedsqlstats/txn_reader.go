@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -39,7 +40,8 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 	// We compute the current aggregated_ts so that the in-memory stats can be
 	// merged with the persisted stats.
 	curAggTs := s.computeAggregatedTs()
-	memIter := newMemTxnStatsIterator(s.SQLStats, options, curAggTs)
+	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	memIter := newMemTxnStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
 	var persistedIter sqlutil.InternalRows
 	var colCnt int
@@ -105,6 +107,7 @@ func (s *PersistedSQLStats) getFetchQueryForTxnStatsTable(
 		"app_name",
 		"metadata",
 		"statistics",
+		"agg_interval",
 	}
 
 	// [1]: selection columns
@@ -161,6 +164,9 @@ func rowToTxnStats(row tree.Datums) (*roachpb.CollectedTransactionStatistics, er
 	if err = sqlstatsutil.DecodeTxnStatsStatisticsJSON(statistics, &stats.Stats); err != nil {
 		return nil, err
 	}
+
+	aggInterval := tree.MustBeDInterval(row[5]).Duration
+	stats.AggregationInterval = time.Duration(aggInterval.Nanos())
 
 	return &stats, nil
 }

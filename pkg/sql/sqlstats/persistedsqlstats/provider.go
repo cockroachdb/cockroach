@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -41,9 +40,6 @@ const (
 	//  Once we are able get consistent hash value from a query plan, we should
 	//  update this.
 	dummyPlanHash = int64(0)
-
-	// TODO(azhng): Gone after #59205.
-	dummyTransactionFingerprintID = roachpb.TransactionFingerprintID(0)
 )
 
 // ErrConcurrentSQLStatsCompaction is reported when two sql stats compaction
@@ -77,7 +73,7 @@ type PersistedSQLStats struct {
 
 	cfg *Config
 
-	// memoryPressureSignal is used by the persistedsqlstats.StatsWriter to signal
+	// memoryPressureSignal is used by the persistedsqlstats.ApplicationStats to signal
 	// memory pressure during stats recording. A signal is emitted through this
 	// channel either if the fingerprint limit or the memory limit has been
 	// exceeded.
@@ -114,7 +110,6 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 
 // Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.SQLStats.Start(ctx, stopper)
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper)
 }
@@ -199,11 +194,11 @@ func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration
 	return jitteredInterval
 }
 
-// GetWriterForApplication implements sqlstats.Provider interface.
-func (s *PersistedSQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
-	writer := s.SQLStats.GetWriterForApplication(appName)
-	return &StatsWriter{
-		memWriter:            writer,
+// GetApplicationStats implements sqlstats.Provider interface.
+func (s *PersistedSQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
+	appStats := s.SQLStats.GetApplicationStats(appName)
+	return &ApplicationStats{
+		ApplicationStats:     appStats,
 		memoryPressureSignal: s.memoryPressureSignal,
 	}
 }

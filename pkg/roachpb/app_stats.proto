@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 // StatementStatistics represent the statement statistics sent to the DB
 // Console for a given statement fingerprint. Note that these stats are cleared
@@ -180,12 +181,17 @@ message StatementStatisticsKey {
   optional string app = 2 [(gogoproto.nullable) = false];
   optional bool distSQL = 3 [(gogoproto.nullable) = false];
   optional bool failed = 4 [(gogoproto.nullable) = false];
-  optional bool opt = 5 [(gogoproto.nullable) = false];
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
   optional bool full_scan = 8 [(gogoproto.nullable) = false];
   optional string database = 9 [(gogoproto.nullable) = false];
   optional uint64 plan_hash = 10 [(gogoproto.nullable) = false];
+
+  reserved 5;
+  optional uint64 transaction_fingerprint_id = 11
+    [(gogoproto.nullable) = false,
+     (gogoproto.customname) = "TransactionFingerprintID",
+     (gogoproto.casttype) = "TransactionFingerprintID"];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some
@@ -198,6 +204,9 @@ message CollectedStatementStatistics {
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+  // The aggregation duration.
+  optional google.protobuf.Duration aggregation_interval = 5 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
 }
 
 
@@ -212,6 +221,9 @@ message CollectedTransactionStatistics {
   optional TransactionStatistics stats = 3 [(gogoproto.nullable) = false];
   optional google.protobuf.Timestamp aggregated_ts = 4 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
   optional uint64 transaction_fingerprint_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "TransactionFingerprintID", (gogoproto.casttype) = "TransactionFingerprintID"];
+  // The aggregation duration.
+  optional google.protobuf.Duration aggregation_interval = 6 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
 }
 
 

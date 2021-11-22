@@ -75,6 +75,7 @@ interface TState {
   statementFingerprintIds: Long[] | null;
   aggregatedTs: Timestamp | null;
   transactionStats: TransactionStats | null;
+  transactionFingerprintId: Long | null;
 }
 
 export interface TransactionsPageStateProps {
@@ -135,6 +136,7 @@ export class TransactionsPage extends React.Component<
     aggregatedTs: null,
     statementFingerprintIds: null,
     transactionStats: null,
+    transactionFingerprintId: null,
   };
 
   refreshData = (): void => {
@@ -244,6 +246,8 @@ export class TransactionsPage extends React.Component<
         transaction?.stats_data?.statement_fingerprint_ids,
       transactionStats: transaction?.stats_data?.stats,
       aggregatedTs: transaction?.stats_data?.aggregated_ts,
+      transactionFingerprintId:
+        transaction?.stats_data?.transaction_fingerprint_id,
     });
   };
 
@@ -460,6 +464,7 @@ export class TransactionsPage extends React.Component<
       aggregatedTs,
       statementFingerprintIds,
       transactionStats,
+      transactionFingerprintId,
     } = this.state;
     const transactionDetails =
       statementFingerprintIds &&
@@ -483,6 +488,7 @@ export class TransactionsPage extends React.Component<
         error={this.props.error}
         resetSQLStats={this.props.resetSQLStats}
         isTenant={this.props.isTenant}
+        transactionFingerprintId={transactionFingerprintId}
       />
     );
   }

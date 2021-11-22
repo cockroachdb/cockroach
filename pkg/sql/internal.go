@@ -173,7 +173,7 @@ func (ie *InternalExecutor) initConnEx(
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
 	}
-	statsWriter := ie.s.sqlStats.GetWriterForApplication(appStatsBucketName)
+	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName)
 
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
@@ -186,7 +186,7 @@ func (ie *InternalExecutor) initConnEx(
 			clientComm,
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
-			statsWriter,
+			applicationStats,
 		)
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
@@ -199,7 +199,7 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			txn,
 			ie.syntheticDescriptors,
-			statsWriter,
+			applicationStats,
 		)
 	}
 

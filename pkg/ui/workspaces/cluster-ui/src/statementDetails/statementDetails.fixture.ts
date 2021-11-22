@@ -123,6 +123,7 @@ const statementStats: any = {
 };
 
 const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
+const aggregationInterval = 3600; // 1 hour
 
 export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   history,
@@ -153,6 +154,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       {
         label: "4",
         aggregatedTs,
+        aggregationInterval,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -161,6 +163,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       {
         label: "3",
         aggregatedTs,
+        aggregationInterval,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -169,6 +172,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       {
         label: "2",
         aggregatedTs,
+        aggregationInterval,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -177,6 +181,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       {
         label: "1",
         aggregatedTs,
+        aggregationInterval,
         implicitTxn: true,
         database: "defaultdb",
         fullScan: true,
@@ -189,10 +194,6 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       denominator: 36958,
     },
     vec: {
-      numerator: 36958,
-      denominator: 36958,
-    },
-    opt: {
       numerator: 36958,
       denominator: 36958,
     },

@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// StatementWriter is the interface that provides methods to record
-// statement stats for a given application name.
-type StatementWriter interface {
+// Writer is the interface that provides methods to record statement and
+// transaction stats.
+type Writer interface {
 	// RecordStatement records statistics for a statement.
 	RecordStatement(ctx context.Context, key roachpb.StatementStatisticsKey, value RecordedStmtStats) (roachpb.StmtFingerprintID, error)
 
@@ -37,27 +37,14 @@ type StatementWriter interface {
 	// ShouldSaveLogicalPlanDesc returns whether we should save the logical plan
 	// description for a given combination of statement metadata.
 	ShouldSaveLogicalPlanDesc(fingerprint string, implicitTxn bool, database string) bool
-}
 
-// TransactionWriter is the interface that provides methods to record
-// transaction stats for a given application name..
-type TransactionWriter interface {
+	// RecordTransaction records statistics for a transaction.
 	RecordTransaction(ctx context.Context, key roachpb.TransactionFingerprintID, value RecordedTxnStats) error
-}
-
-// Writer is the interface that provides methods to record statement and
-// transaction stats.
-type Writer interface {
-	StatementWriter
-	TransactionWriter
 }
 
 // Reader provides methods to retrieve transaction/statement statistics from
 // the Storage.
 type Reader interface {
-	// GetLastReset returns the last time when the sqlstats is being reset.
-	GetLastReset() time.Time
-
 	// IterateStatementStats iterates through all the collected statement statistics
 	// by using StatementVisitor. Caller can specify iteration behavior, such
 	// as ordering, through IteratorOptions argument. StatementVisitor can return
@@ -73,13 +60,41 @@ type Reader interface {
 	// IterateAggregatedTransactionStats iterates through all the collected app-level
 	// transactions statistics. It behaves similarly to IterateStatementStats.
 	IterateAggregatedTransactionStats(context.Context, *IteratorOptions, AggregatedTransactionVisitor) error
+}
 
-	// GetStatementStats performs a point lookup of statement statistics for a
-	// given key.
-	GetStatementStats(key *roachpb.StatementStatisticsKey) (*roachpb.CollectedStatementStatistics, error)
+// ApplicationStats is an interface to read from or write to the statistics
+// belongs to an application.
+type ApplicationStats interface {
+	Reader
+	Writer
 
-	// GetTransactionStats performs a point lookup of a transaction fingerprint key.
-	GetTransactionStats(appName string, key roachpb.TransactionFingerprintID) (*roachpb.CollectedTransactionStatistics, error)
+	// MergeApplicationStatementStats merges the other application's statement
+	// statistics into the current ApplicationStats. It returns how many number
+	// of statistics were being discarded due to memory constraint. If the
+	// transformer is non-nil, then it is applied to other's statement statistics
+	// before other's statement statistics are merged into the current
+	// ApplicationStats.
+	MergeApplicationStatementStats(
+		ctx context.Context,
+		other ApplicationStats,
+		transformer func(statistics *roachpb.CollectedStatementStatistics),
+	) uint64
+
+	// MergeApplicationTransactionStats merges the other application's transaction
+	// statistics into the current ApplicationStats. It returns how many number
+	// of statistics were being discarded due to memory constraint.
+	MergeApplicationTransactionStats(
+		ctx context.Context,
+		other ApplicationStats,
+	) uint64
+
+	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
+	// interface that inherits all memory limits of the existing
+	NewApplicationStatsWithInheritedOptions() ApplicationStats
+
+	// Free frees the current ApplicationStats and zeros out the memory counts
+	// and fingerprint counts.
+	Free(context.Context)
 }
 
 // IteratorOptions provides the ability to the caller to change how it iterates
@@ -126,9 +141,21 @@ type StatsCollector interface {
 	// was previously tracking before being Reset.
 	PreviousPhaseTimes() *sessionphase.Times
 
-	// Reset resets the StatsCollector with a new Writer and a new copy of the
-	// sessionphase.Times.
-	Reset(Writer, *sessionphase.Times)
+	// Reset resets the StatsCollector with a new ApplicationStats and a new copy
+	// of the sessionphase.Times.
+	Reset(ApplicationStats, *sessionphase.Times)
+
+	// StartExplicitTransaction informs StatsCollector that all subsequent
+	// statements will be executed in the context an explicit transaction.
+	StartExplicitTransaction()
+
+	// EndExplicitTransaction informs the StatsCollector that the explicit txn has
+	// finished execution. (Either COMMITTED or ABORTED). This means the txn's
+	// fingerprint ID is now available. StatsCollector will now go back to update
+	// the transaction fingerprint ID field of all the statement statistics for that
+	// txn.
+	EndExplicitTransaction(ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
+	)
 }
 
 // Storage provides clients with interface to perform read and write operations
@@ -136,9 +163,12 @@ type StatsCollector interface {
 type Storage interface {
 	Reader
 
-	// GetWriterForApplication returns a Writer instance for the given application
-	// name.
-	GetWriterForApplication(appName string) Writer
+	// GetLastReset returns the last time when the sqlstats is being reset.
+	GetLastReset() time.Time
+
+	// GetApplicationStats returns an ApplicationStats instance for the given
+	// application name.
+	GetApplicationStats(appName string) ApplicationStats
 
 	// Reset resets all the statistics stored in-memory in the current Storage.
 	Reset(context.Context) error

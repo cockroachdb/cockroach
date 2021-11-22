@@ -327,8 +327,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		metrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		metrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
 		pool,
-		nil, /* resetInterval */
 		nil, /* reportedProvider */
+		cfg.SQLStatsTestingKnobs,
 	)
 	reportedSQLStatsController :=
 		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
@@ -339,8 +339,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		metrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		metrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
 		pool,
-		sqlstats.SQLStatReset,
 		reportedSQLStats,
+		cfg.SQLStatsTestingKnobs,
 	)
 	s := &Server{
 		cfg:                     cfg,
@@ -445,12 +445,11 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.indexUsageStats.Start(ctx, stopper)
-	// Start a loop to clear SQL stats at the max reset interval. This is
-	// to ensure that we always have some worker clearing SQL stats to avoid
-	// continually allocating space for the SQL stats. Additionally, spawn
-	// a loop to clear the reported stats at the same large interval just
-	// in case the telemetry worker fails.
 	s.sqlStats.Start(ctx, stopper)
+
+	// reportedStats is periodically cleared to prevent too many SQL Stats
+	// accumulated in the reporter when the telemetry server fails.
+	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
 }
 
@@ -626,7 +625,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
-		s.sqlStats.GetWriterForApplication(sd.ApplicationName),
+		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -734,7 +733,7 @@ func (s *Server) newConnExecutor(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	statsWriter sqlstats.Writer,
+	applicationStats sqlstats.ApplicationStats,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -812,11 +811,16 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
-	ex.statsWriter = statsWriter
-	ex.statsCollector = sslocal.NewStatsCollector(statsWriter, ex.phaseTimes)
+	ex.applicationStats = applicationStats
+	ex.statsCollector = sslocal.NewStatsCollector(
+		s.cfg.Settings,
+		applicationStats,
+		ex.phaseTimes,
+		s.cfg.SQLStatsTestingKnobs,
+	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
+		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
@@ -867,7 +871,7 @@ func (s *Server) newConnExecutorWithTxn(
 	srvMetrics *Metrics,
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
-	statsWriter sqlstats.Writer,
+	applicationStats sqlstats.ApplicationStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(
 		ctx,
@@ -876,7 +880,7 @@ func (s *Server) newConnExecutorWithTxn(
 		clientComm,
 		memMetrics,
 		srvMetrics,
-		statsWriter,
+		applicationStats,
 	)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
@@ -1275,10 +1279,10 @@ type connExecutor struct {
 	// executor.
 	dataMutatorIterator *sessionDataMutatorIterator
 
-	// statsWriter is a writer interface for recording per-application SQL usage
-	// statistics. It is maintained to represent statistics for the application
-	// currently identified by sessiondata.ApplicationName.
-	statsWriter sqlstats.Writer
+	// applicationStats records per-application SQL usage statistics. It is
+	// maintained to represent statistics for the application currently identified
+	// by sessiondata.ApplicationName.
+	applicationStats sqlstats.ApplicationStats
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
@@ -2144,7 +2148,7 @@ func (ex *connExecutor) execCopyIn(
 		// state machine, but the copyMachine manages its own transactions without
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
-		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
+		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}

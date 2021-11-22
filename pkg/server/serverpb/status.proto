@@ -38,6 +38,7 @@ import "etcd/raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 message CertificatesRequest {
   // node_id is a string so that "local" can be used to specify that no
@@ -1192,6 +1193,9 @@ message StatementsResponse {
     int32 node_id = 2 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     google.protobuf.Timestamp aggregated_ts = 3 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+    // The aggregation duration.
+    google.protobuf.Duration aggregation_interval = 4 [(gogoproto.nullable) = false,
+      (gogoproto.stdduration) = true];
   }
 
   message CollectedStatementStatistics {

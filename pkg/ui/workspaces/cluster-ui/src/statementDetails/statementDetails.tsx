@@ -36,6 +36,7 @@ import {
   queryByName,
   aggregatedTsAttr,
   summarize,
+  aggregationIntervalAttr,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -79,7 +80,6 @@ interface SingleStatementStatistics {
   database: string;
   distSQL: Fraction;
   vec: Fraction;
-  opt: Fraction;
   implicit_txn: Fraction;
   failed: Fraction;
   node_id: number[];
@@ -444,7 +444,6 @@ export class StatementDetails extends React.Component<
       app,
       distSQL,
       vec,
-      opt,
       failed,
       implicit_txn,
       database,
@@ -528,9 +527,17 @@ export class StatementDetails extends React.Component<
 
     // If the aggregatedTs is unset, we are aggregating over the whole date range.
     const aggregatedTs = queryByName(this.props.location, aggregatedTsAttr);
+    const aggregationInterval =
+      queryByName(this.props.location, aggregationIntervalAttr) || 0;
     const intervalStartTime = aggregatedTs
       ? moment.unix(parseInt(aggregatedTs)).utc()
       : this.props.dateRange[0];
+    const intervalEndTime =
+      aggregatedTs && aggregationInterval
+        ? moment
+            .unix(parseInt(aggregatedTs) + parseInt(aggregationInterval))
+            .utc()
+        : this.props.dateRange[1];
 
     const summary = summarize(statement);
     const showRowsWritten =
@@ -667,8 +674,17 @@ export class StatementDetails extends React.Component<
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Interval start time</Text>
-                  <Text>{intervalStartTime.format("MMM D, h:mm A (UTC)")}</Text>
+                  <Text>Aggregation Interval (UTC)</Text>
+                  <Text>
+                    {intervalStartTime.format("MMM D, h:mm A")} -{" "}
+                    {intervalEndTime.format(
+                      `${
+                        intervalStartTime.isSame(intervalEndTime, "day")
+                          ? ""
+                          : "MMM D,"
+                      }h:mm A`,
+                    )}
+                  </Text>
                 </div>
 
                 {!isTenant && (
@@ -710,10 +726,6 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
                   <Text>{renderBools(failed)}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Used cost-based optimizer?</Text>
-                  <Text>{renderBools(opt)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Distributed execution?</Text>

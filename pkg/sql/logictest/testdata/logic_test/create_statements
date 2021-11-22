@@ -1082,19 +1082,23 @@ CREATE TABLE crdb_internal.session_variables (
 CREATE TABLE crdb_internal.statement_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
    plan_hash BYTES NOT NULL,
    app_name STRING NOT NULL,
    metadata JSONB NOT NULL,
    statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
 )  CREATE TABLE crdb_internal.statement_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
    plan_hash BYTES NOT NULL,
    app_name STRING NOT NULL,
    metadata JSONB NOT NULL,
    statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.table_columns (
    descriptor_id INT8 NULL,
@@ -1182,13 +1186,15 @@ CREATE TABLE crdb_internal.transaction_statistics (
    fingerprint_id BYTES NOT NULL,
    app_name STRING NOT NULL,
    metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
 )  CREATE TABLE crdb_internal.transaction_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
    app_name STRING NOT NULL,
    metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.zones (
    zone_id INT8 NOT NULL,
