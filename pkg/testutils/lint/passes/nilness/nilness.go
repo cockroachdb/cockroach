@@ -109,19 +109,19 @@ var defaultConfig = analyzerConfig{
 	reportDegenerateIfConditions: true,
 }
 
-// CRDBAnalyzer defines a pass that checks for uses of provably nil
+// Analyzer defines a pass that checks for uses of provably nil
 // values that were likely in error with custom configuration
 // suitable for the CRDB codebase.
-var CRDBAnalyzer = &analysis.Analyzer{
+var Analyzer = &analysis.Analyzer{
 	Name:     "nilness",
 	Doc:      doc,
 	Run:      crdbConfig.run,
 	Requires: []*analysis.Analyzer{buildssa.Analyzer},
 }
 
-// Analyzer defines a pass that checks for uses of provably nil values
+// TestAnalyzer defines a pass that checks for uses of provably nil values
 // that were likely in error.
-var Analyzer = &analysis.Analyzer{
+var TestAnalyzer = &analysis.Analyzer{
 	Name:     "nilness",
 	Doc:      doc,
 	Run:      defaultConfig.run,
