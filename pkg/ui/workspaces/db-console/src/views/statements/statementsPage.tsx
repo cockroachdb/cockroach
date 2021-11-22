@@ -36,7 +36,12 @@ import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
 import { queryByName } from "src/util/query";
 
-import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
+import {
+  StatementsPage,
+  AggregateStatistics,
+  Filters,
+  defaultFilters,
+} from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
@@ -240,6 +245,12 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
+export const filtersLocalSetting = new LocalSetting(
+  "filters/StatementsPage",
+  (state: AdminUIState) => state.localSettings,
+  defaultFilters,
+);
+
 export default withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
@@ -253,6 +264,7 @@ export default withRouter(
       nodeRegions: nodeRegionsByIDSelector(state),
       dateRange: selectDateRange(state),
       sortSetting: sortSettingLocalSetting.selector(state),
+      filters: filtersLocalSetting.selector(state),
     }),
     {
       refreshStatements: refreshStatements,
@@ -275,6 +287,7 @@ export default withRouter(
           ascending: ascending,
           columnTitle: columnName,
         }),
+      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
       onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
         trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
       // We use `null` when the value was never set and it will show all columns.
