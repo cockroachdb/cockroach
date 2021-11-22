@@ -3170,6 +3170,13 @@ func (s *Store) ManuallyEnqueue(
 ) (recording tracing.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
+	// Do not enqueue uninitialized replicas. The baseQueue ignores these during
+	// normal queue scheduling, but we error here to signal to the user that the
+	// operation was unsuccessful.
+	if !repl.IsInitialized() {
+		return nil, nil, errors.Errorf("not enqueueing uninitialized replica %s", repl)
+	}
+
 	var queue queueImpl
 	var needsLease bool
 	for _, replicaQueue := range s.scanner.queues {
