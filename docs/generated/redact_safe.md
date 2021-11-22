@@ -35,6 +35,7 @@ pkg/sql/catalog/descpb/structured.go | `ID`
 pkg/sql/catalog/descpb/structured.go | `IndexDescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `IndexID`
 pkg/sql/catalog/descpb/structured.go | `MutationID`
+pkg/sql/catalog/descriptor_id_set.go | `DescriptorIDSet`
 pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/sql/sem/tree/table_ref.go | `ID`
 pkg/sql/sqlliveness/sqlliveness.go | `SessionID`
