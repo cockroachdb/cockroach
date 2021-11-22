@@ -1404,3 +1404,14 @@ func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
 func (tc *TxnCoordSender) hasPerformedWritesLocked() bool {
 	return tc.mu.txn.Sequence != 0
 }
+
+// ForwardWriteTimestamp is part of the TxnSender interface.
+func (tc *TxnCoordSender) ForwardWriteTimestamp(to hlc.Timestamp) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState != txnPending {
+		return errors.Errorf("cannot forward write timestamp for %v transaction", tc.mu.txnState)
+	}
+	tc.mu.txn.WriteTimestamp.Forward(to)
+	return nil
+}
