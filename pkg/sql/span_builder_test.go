@@ -89,6 +89,22 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			containsNull:      false,
 			canSplit:          true,
 		},
+		{
+			sql:               "a INT, b INT, c INT, UNIQUE INDEX i (b), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:             "i",
+			prefixLen:         1,
+			numNeededFamilies: 1,
+			containsNull:      false,
+			canSplit:          true,
+		},
+		{
+			sql:               "a INT, b INT, c INT, UNIQUE INDEX i (b), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:             "i",
+			prefixLen:         1,
+			numNeededFamilies: 1,
+			containsNull:      true,
+			canSplit:          false,
+		},
 	}
 	if _, err := sqlDB.Exec("CREATE DATABASE t"); err != nil {
 		t.Fatal(err)

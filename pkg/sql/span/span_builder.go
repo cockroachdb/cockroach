@@ -46,11 +46,6 @@ type Builder struct {
 	neededFamilies []descpb.FamilyID
 }
 
-// Use some functions that aren't needed right now to make the linter happy.
-var _ = (*Builder).UnsetNeededColumns
-var _ = (*Builder).SetNeededFamilies
-var _ = (*Builder).UnsetNeededFamilies
-
 var builderPool = sync.Pool{
 	New: func() interface{} { return &Builder{} },
 }
@@ -98,24 +93,6 @@ func MakeBuilder(
 // is used by MaybeSplitSpanIntoSeparateFamilies.
 func (s *Builder) SetNeededColumns(neededCols util.FastIntSet) {
 	s.neededFamilies = rowenc.NeededColumnFamilyIDs(neededCols, s.table, s.index)
-}
-
-// UnsetNeededColumns resets the needed columns for column family specific optimizations
-// that the Builder performs.
-func (s *Builder) UnsetNeededColumns() {
-	s.neededFamilies = nil
-}
-
-// SetNeededFamilies sets the needed families of the span builder directly. This information
-// is used by MaybeSplitSpanIntoSeparateFamilies.
-func (s *Builder) SetNeededFamilies(neededFamilies []descpb.FamilyID) {
-	s.neededFamilies = neededFamilies
-}
-
-// UnsetNeededFamilies resets the needed families for column family specific optimizations
-// that the Builder performs.
-func (s *Builder) UnsetNeededFamilies() {
-	s.neededFamilies = nil
 }
 
 // SpanFromEncDatums encodes a span with prefixLen constraint columns from the
@@ -275,11 +252,6 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 		}
 		// * The index cannot be inverted.
 		if s.index.GetType() != descpb.IndexDescriptor_FORWARD {
-			return false
-		}
-
-		// * The index must store some columns.
-		if s.index.NumSecondaryStoredColumns() == 0 {
 			return false
 		}
 
