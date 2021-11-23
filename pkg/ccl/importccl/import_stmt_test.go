@@ -6523,7 +6523,7 @@ DROP VIEW IF EXISTS v`,
 				table:     "simple",
 				sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
 				args:      []interface{}{tableSchemaMR, simpleOcf},
-				errString: "cannot write descriptor for multi-region table",
+				errString: "cannot restore or create multi-region table simple into non-multi-region database foo",
 			},
 			{
 				name:  "import-create-using-multi-region-regional-by-table-to-multi-region-database",
