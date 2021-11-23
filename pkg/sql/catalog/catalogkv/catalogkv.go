@@ -49,22 +49,6 @@ func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 	return descpb.ID(newVal - 1), nil
 }
 
-// GenerateUniqueIDGreaterThanID increments the ID until we create an ID
-// greater than the id passed in.
-func GenerateUniqueIDGreaterThanID(
-	ctx context.Context, db *kv.DB, codec keys.SQLCodec, id int64,
-) (descpb.ID, error) {
-	for {
-		newVal, err := kv.IncrementValRetryable(ctx, db, codec.DescIDSequenceKey(), 1)
-		if err != nil {
-			return descpb.InvalidID, err
-		}
-		if newVal > id+1 {
-			return descpb.ID(newVal - 1), nil
-		}
-	}
-}
-
 // GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
 func GetDescriptorID(
