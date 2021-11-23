@@ -13,6 +13,7 @@ package stmtdiagnostics
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -59,9 +60,12 @@ type Registry struct {
 		// NOTE: This lock can't be held while the registry runs any statements
 		// internally; it'd deadlock.
 		syncutil.Mutex
-		// requests waiting for the right query to come along.
-		requestFingerprints map[RequestID]string
-		// ids of requests that this node is in the process of servicing.
+		// requests waiting for the right query to come along. The conditional
+		// requests are left in this map until they either are satisfied or
+		// expire (i.e. they never enter ongoing map).
+		requestFingerprints map[RequestID]Request
+		// ids of unconditional requests that this node is in the process of
+		// servicing.
 		ongoing map[RequestID]struct{}
 
 		// epoch is observed before reading system.statement_diagnostics_requests, and then
@@ -78,6 +82,22 @@ type Registry struct {
 	// request has been added. The gossip callback will not block sending on this
 	// channel.
 	gossipUpdateChan chan RequestID
+}
+
+// Request describes a statement diagnostics request along with some conditional
+// information.
+type Request struct {
+	fingerprint         string
+	minExecutionLatency time.Duration
+	expiresAt           time.Time
+}
+
+func (r *Request) isExpired(now time.Time) bool {
+	return !r.expiresAt.IsZero() && r.expiresAt.Before(now)
+}
+
+func (r *Request) isConditional() bool {
+	return r.minExecutionLatency != 0
 }
 
 // NewRegistry constructs a new Registry.
@@ -170,19 +190,27 @@ type RequestID int
 // corresponding to the id column in statement_diagnostics.
 type CollectedInstanceID int
 
-// addRequestInternalLocked adds a request to r.mu.requests. If the request is
-// already present, the call is a noop.
+// addRequestInternalLocked adds a request to r.mu.requestFingerprints. If the
+// request is already present or it has already expired, the call is a noop.
 func (r *Registry) addRequestInternalLocked(
-	ctx context.Context, id RequestID, queryFingerprint string,
+	ctx context.Context,
+	id RequestID,
+	queryFingerprint string,
+	minExecutionLatency time.Duration,
+	expiresAt time.Time,
 ) {
 	if r.findRequestLocked(id) {
 		// Request already exists.
 		return
 	}
 	if r.mu.requestFingerprints == nil {
-		r.mu.requestFingerprints = make(map[RequestID]string)
+		r.mu.requestFingerprints = make(map[RequestID]Request)
 	}
-	r.mu.requestFingerprints[id] = queryFingerprint
+	r.mu.requestFingerprints[id] = Request{
+		fingerprint:         queryFingerprint,
+		minExecutionLatency: minExecutionLatency,
+		expiresAt:           expiresAt,
+	}
 }
 
 func (r *Registry) findRequest(requestID RequestID) bool {
@@ -191,9 +219,16 @@ func (r *Registry) findRequest(requestID RequestID) bool {
 	return r.findRequestLocked(requestID)
 }
 
+// findRequestLocked returns whether the request already exists. If the request
+// is not ongoing and has already expired, it is removed from the registry (yet
+// true is still returned).
 func (r *Registry) findRequestLocked(requestID RequestID) bool {
-	_, ok := r.mu.requestFingerprints[requestID]
+	f, ok := r.mu.requestFingerprints[requestID]
 	if ok {
+		if f.isExpired(timeutil.Now()) {
+			// This request has already expired.
+			delete(r.mu.requestFingerprints, requestID)
+		}
 		return true
 	}
 	_, ok = r.mu.ongoing[requestID]
@@ -201,18 +236,23 @@ func (r *Registry) findRequestLocked(requestID RequestID) bool {
 }
 
 // InsertRequest is part of the StmtDiagnosticsRequester interface.
-func (r *Registry) InsertRequest(ctx context.Context, fprint string) error {
-	_, err := r.insertRequestInternal(ctx, fprint)
+func (r *Registry) InsertRequest(
+	ctx context.Context, fprint string, minExecutionLatency time.Duration, expiresAfter time.Duration,
+) error {
+	_, err := r.insertRequestInternal(ctx, fprint, minExecutionLatency, expiresAfter)
 	return err
 }
 
-func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (RequestID, error) {
+func (r *Registry) insertRequestInternal(
+	ctx context.Context, fprint string, minExecutionLatency time.Duration, expiresAfter time.Duration,
+) (RequestID, error) {
 	g, err := r.gossip.OptionalErr(48274)
 	if err != nil {
 		return 0, err
 	}
 
 	var reqID RequestID
+	var expiresAt time.Time
 	err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
@@ -220,7 +260,7 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (Re
 				User: security.RootUserName(),
 			},
 			"SELECT count(1) FROM system.statement_diagnostics_requests "+
-				"WHERE completed = false AND statement_fingerprint = $1",
+				"WHERE completed = false AND statement_fingerprint = $1 AND (expires_at IS NULL OR expires_at > now())",
 			fprint)
 		if err != nil {
 			return err
@@ -230,16 +270,37 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (Re
 		}
 		count := int(*row[0].(*tree.DInt))
 		if count != 0 {
+			// TODO(yuzefovich): introduce an API for users to cancel the
+			// pending request so that a new request with different conditional
+			// could be added.
 			return errors.New("a pending request for the requested fingerprint already exists")
 		}
 
-		row, err = r.ie.QueryRowEx(ctx, "stmt-diag-insert-request", txn,
-			sessiondata.InternalExecutorOverride{
-				User: security.RootUserName(),
-			},
-			"INSERT INTO system.statement_diagnostics_requests (statement_fingerprint, requested_at) "+
-				"VALUES ($1, $2) RETURNING id",
-			fprint, timeutil.Now())
+		now := timeutil.Now()
+		insertColumns := "statement_fingerprint, requested_at"
+		qargs := make([]interface{}, 2, 4)
+		qargs[0] = fprint // statement_fingerprint
+		qargs[1] = now    // requested_at
+		if minExecutionLatency != 0 {
+			insertColumns += ", min_execution_latency"
+			qargs = append(qargs, minExecutionLatency) // min_execution_latency
+		}
+		if expiresAfter != 0 {
+			insertColumns += ", expires_at"
+			expiresAt = now.Add(expiresAfter)
+			qargs = append(qargs, expiresAt) // expires_at
+		}
+		valuesClause := "$1, $2"
+		for i := range qargs[2:] {
+			valuesClause += fmt.Sprintf(", $%d", i+3)
+		}
+		stmt := "INSERT INTO system.statement_diagnostics_requests (" +
+			insertColumns + ") VALUES (" + valuesClause + ") RETURNING id;"
+		row, err = r.ie.QueryRowEx(
+			ctx, "stmt-diag-insert-request", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			stmt, qargs...,
+		)
 		if err != nil {
 			return err
 		}
@@ -257,9 +318,9 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (Re
 	// pick up the request quickly if the right query comes around, without
 	// waiting for the poller.
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.mu.epoch++
-	r.addRequestInternalLocked(ctx, reqID, fprint)
+	r.addRequestInternalLocked(ctx, reqID, fprint, minExecutionLatency, expiresAt)
+	r.mu.Unlock()
 
 	// Notify all the other nodes that they have to poll.
 	buf := make([]byte, 8)
@@ -271,50 +332,80 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (Re
 	return reqID, nil
 }
 
+// IsExecLatencyConditionMet returns true if the completed request's execution
+// latency satisfies the request's condition. If false is returned, it inlines
+// the logic of RemoveOngoing.
+func (r *Registry) IsExecLatencyConditionMet(
+	requestID RequestID, req Request, execLatency time.Duration,
+) bool {
+	if req.minExecutionLatency <= execLatency {
+		return true
+	}
+	// This is a conditional request and the condition is not satisfied, so we
+	// only need to remove the request if it has expired.
+	if req.isExpired(timeutil.Now()) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.mu.requestFingerprints, requestID)
+	}
+	return false
+}
+
 // RemoveOngoing removes the given request from the list of ongoing queries.
-func (r *Registry) RemoveOngoing(requestID RequestID) {
+func (r *Registry) RemoveOngoing(requestID RequestID, req Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Remove the request from r.mu.ongoing.
-	delete(r.mu.ongoing, requestID)
+	if req.isConditional() {
+		if req.isExpired(timeutil.Now()) {
+			delete(r.mu.requestFingerprints, requestID)
+		}
+	} else {
+		delete(r.mu.ongoing, requestID)
+	}
 }
 
 // ShouldCollectDiagnostics checks whether any data should be collected for the
 // given query, which is the case if the registry has a request for this
-// statement's fingerprint; in this case ShouldCollectDiagnostics will not
-// return true again on this note for the same diagnostics request.
+// statement's fingerprint; in this case ShouldCollectDiagnostics will return
+// true again on this node for the same diagnostics request only for conditional
+// requests.
 //
-// If shouldCollect returns true, finishFn must always be called once the data
-// was collected and inserted (even if failures were encountered).
+// If shouldCollect is true, RemoveOngoing needs to be called (which is inlined
+// by IsExecLatencyConditionMet when that returns false).
 func (r *Registry) ShouldCollectDiagnostics(
 	ctx context.Context, fingerprint string,
-) (shouldCollect bool, reqID RequestID) {
+) (shouldCollect bool, reqID RequestID, req Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Return quickly if we have no requests to trace.
 	if len(r.mu.requestFingerprints) == 0 {
-		return false, 0
+		return false, 0, req
 	}
 
 	for id, f := range r.mu.requestFingerprints {
-		if f == fingerprint {
+		if f.fingerprint == fingerprint {
+			if f.isExpired(timeutil.Now()) {
+				delete(r.mu.requestFingerprints, id)
+				return false, 0, req
+			}
 			reqID = id
+			req = f
 			break
 		}
 	}
+
 	if reqID == 0 {
-		return false, 0
+		return false, 0, req
 	}
 
-	// Remove the request.
-	delete(r.mu.requestFingerprints, reqID)
-	if r.mu.ongoing == nil {
-		r.mu.ongoing = make(map[RequestID]struct{})
+	if !req.isConditional() {
+		if r.mu.ongoing == nil {
+			r.mu.ongoing = make(map[RequestID]struct{})
+		}
+		r.mu.ongoing[reqID] = struct{}{}
 	}
-
-	r.mu.ongoing[reqID] = struct{}{}
-	return true, reqID
+	return true, reqID, req
 }
 
 // InsertStatementDiagnostics inserts a trace into system.statement_diagnostics.
@@ -457,8 +548,8 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 			sessiondata.InternalExecutorOverride{
 				User: security.RootUserName(),
 			},
-			"SELECT id, statement_fingerprint FROM system.statement_diagnostics_requests "+
-				"WHERE completed = false")
+			"SELECT id, statement_fingerprint, min_execution_latency, expires_at FROM system.statement_diagnostics_requests "+
+				"WHERE completed = false AND (expires_at IS NULL OR expires_at > now())")
 		if err != nil {
 			return err
 		}
@@ -483,18 +574,26 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 	}
 	defer r.mu.Unlock()
 
+	now := timeutil.Now()
 	var ids util.FastIntSet
 	for _, row := range rows {
 		id := RequestID(*row[0].(*tree.DInt))
 		fprint := string(*row[1].(*tree.DString))
-
+		var minExecutionLatency time.Duration
+		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
+			minExecutionLatency = time.Duration(minExecLatency.Nanos())
+		}
+		var expiresAt time.Time
+		if e, ok := row[3].(*tree.DTimestampTZ); ok {
+			expiresAt = e.Time
+		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, fprint)
+		r.addRequestInternalLocked(ctx, id, fprint, minExecutionLatency, expiresAt)
 	}
 
 	// Remove all other requests.
-	for id := range r.mu.requestFingerprints {
-		if !ids.Contains(int(id)) {
+	for id, req := range r.mu.requestFingerprints {
+		if !ids.Contains(int(id)) || req.isExpired(now) {
 			delete(r.mu.requestFingerprints, id)
 		}
 	}

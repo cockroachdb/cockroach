@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -36,73 +38,158 @@ import (
 
 func TestDiagnosticsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer log.Scope(t).Close(t)
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 
-	// Ask to trace a particular query.
-	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
-	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
-	require.NoError(t, err)
-	reqRow := db.QueryRow(
-		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
-	var completed bool
-	var traceID gosql.NullInt64
-	require.NoError(t, reqRow.Scan(&completed, &traceID))
-	require.False(t, completed)
-	require.False(t, traceID.Valid) // traceID should be NULL
-
-	// Run the query.
-	_, err = db.Exec("INSERT INTO test VALUES (1)")
-	require.NoError(t, err)
-
-	// Check that the row from statement_diagnostics_request was marked as completed.
+	completedQuery := "SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1"
+	checkNotCompleted := func(reqID int64) {
+		reqRow := db.QueryRow(completedQuery, reqID)
+		var completed bool
+		var traceID gosql.NullInt64
+		require.NoError(t, reqRow.Scan(&completed, &traceID))
+		require.False(t, completed)
+		require.False(t, traceID.Valid) // traceID should be NULL
+	}
 	checkCompleted := func(reqID int64) {
-		traceRow := db.QueryRow(
-			"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
+		var completed bool
+		var traceID gosql.NullInt64
+		traceRow := db.QueryRow(completedQuery, reqID)
 		require.NoError(t, traceRow.Scan(&completed, &traceID))
 		require.True(t, completed)
 		require.True(t, traceID.Valid)
 	}
 
-	checkCompleted(reqID)
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	var minExecutionLatency, expiresAfter time.Duration
+
+	// Ask to trace a particular query.
+	t.Run("basic", func(t *testing.T) {
+		reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		// Run the query.
+		_, err = db.Exec("INSERT INTO test VALUES (1)")
+		require.NoError(t, err)
+
+		// Check that the row from statement_diagnostics_request was marked as
+		// completed.
+		checkCompleted(reqID)
+	})
 
 	// Verify that we can handle multiple requests at the same time.
-	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
-	require.NoError(t, err)
-	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test")
-	require.NoError(t, err)
-	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
-	require.NoError(t, err)
+	t.Run("multiple", func(t *testing.T) {
+		id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
 
-	// Run the queries in a different order.
-	_, err = db.Exec("SELECT x FROM test")
-	require.NoError(t, err)
-	checkCompleted(id2)
+		// Run the queries in a different order.
+		_, err = db.Exec("SELECT x FROM test")
+		require.NoError(t, err)
+		checkCompleted(id2)
 
-	_, err = db.Exec("SELECT x FROM test WHERE x > 1")
-	require.NoError(t, err)
-	checkCompleted(id3)
+		_, err = db.Exec("SELECT x FROM test WHERE x > 1")
+		require.NoError(t, err)
+		checkCompleted(id3)
 
-	_, err = db.Exec("INSERT INTO test VALUES (2)")
-	require.NoError(t, err)
-	checkCompleted(id1)
+		_, err = db.Exec("INSERT INTO test VALUES (2)")
+		require.NoError(t, err)
+		checkCompleted(id1)
+	})
 
 	// Verify that EXECUTE triggers diagnostics collection (#66048).
-	id4, err := registry.InsertRequestInternal(ctx, "SELECT x + $1 FROM test")
-	require.NoError(t, err)
-	_, err = db.Exec("PREPARE stmt AS SELECT x + $1 FROM test")
-	require.NoError(t, err)
-	_, err = db.Exec("EXECUTE stmt(1)")
-	require.NoError(t, err)
-	checkCompleted(id4)
+	t.Run("execute", func(t *testing.T) {
+		id, err := registry.InsertRequestInternal(ctx, "SELECT x + $1 FROM test", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		_, err = db.Exec("PREPARE stmt AS SELECT x + $1 FROM test")
+		require.NoError(t, err)
+		_, err = db.Exec("EXECUTE stmt(1)")
+		require.NoError(t, err)
+		checkCompleted(id)
+	})
+
+	// Verify that the bundle for a conditional request is only created when the
+	// condition is satisfied.
+	t.Run("conditional", func(t *testing.T) {
+		minExecutionLatency := 100 * time.Millisecond
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		// Run the fast query.
+		_, err = db.Exec("SELECT pg_sleep(0)")
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		// Run the slow query.
+		_, err = db.Exec("SELECT pg_sleep(0.2)")
+		require.NoError(t, err)
+		checkCompleted(reqID)
+	})
+
+	// Verify that if a conditional request expired, the bundle for it is not
+	// created even if the condition is satisfied.
+	t.Run("conditional expired", func(t *testing.T) {
+		minExecutionLatency := 100 * time.Millisecond
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", minExecutionLatency, time.Nanosecond,
+		)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		// Sleep for a bit and then run the slow query.
+		time.Sleep(100 * time.Millisecond)
+		_, err = db.Exec("SELECT pg_sleep(0.2)")
+		require.NoError(t, err)
+		// The request must have expired by now.
+		checkNotCompleted(reqID)
+	})
+
+	// Verify that if we have an influx of queries matching the fingerprint of
+	// a conditional diagnostics request and at least one instance satisfies the
+	// conditional, then the bundle is collected.
+	t.Run("conditional with concurrency", func(t *testing.T) {
+		minExecutionLatency := 100 * time.Millisecond
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep($1)", minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		// Spin up 10 goroutines where only the last one executes the query slow
+		// enough to satisfy the conditional.
+		const numGoroutines = 10
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+		for i := 0; i < numGoroutines; i++ {
+			go func(i int) {
+				defer wg.Done()
+				sleepDuration := fmt.Sprintf("0.0%d", i)
+				if i == numGoroutines-1 {
+					sleepDuration = "0.2"
+				}
+				_, err := db.Exec("SELECT pg_sleep($1)", sleepDuration)
+				require.NoError(t, err)
+			}(i)
+		}
+
+		// Wait for all goroutines to finish and check that the bundle was
+		// collected.
+		wg.Wait()
+		checkCompleted(reqID)
+	})
 }
 
 // Test that a different node can service a diagnostics request.
 func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
@@ -111,9 +198,11 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	_, err := db0.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 
+	var minExecutionLatency, expiresAfter time.Duration
+
 	// Ask to trace a particular query using node 0.
 	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
-	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(
 		`SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests
@@ -148,11 +237,11 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
 
 	// Verify that we can handle multiple requests at the same time.
-	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
-	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test")
+	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
-	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
+	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
 
 	// Run the queries in a different order.
@@ -164,6 +253,7 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 // TestChangePollInterval ensures that changing the polling interval takes effect.
 func TestChangePollInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// We'll inject a request filter to detect scans due to the polling.
