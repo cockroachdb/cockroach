@@ -288,6 +288,11 @@ const (
 	// system.statement_diagnostics_requests table to support collecting stmt
 	// bundles when the query latency exceeds the user provided threshold.
 	AlterSystemStmtDiagReqs
+	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
+	// Pebble version that provides block property collectors that can be used
+	// for fine-grained time bound iteration. See
+	// https://github.com/cockroachdb/pebble/issues/1190 for details.
+	PebbleFormatBlockPropertyCollector
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -496,6 +501,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemStmtDiagReqs,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
+	},
+	{
+		Key:     PebbleFormatBlockPropertyCollector,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
 
 	// *************************************************
