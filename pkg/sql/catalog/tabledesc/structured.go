@@ -87,6 +87,11 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation bool
+
+	// RemovedDefaultExprFromComputedColumn indicates that the table had at least
+	// one computed column which also had a DEFAULT expression, which therefore
+	// had to be removed. See issue #72881 for details.
+	RemovedDefaultExprFromComputedColumn bool
 }
 
 // FindIndexPartitionByName searches this index descriptor for a partition whose name

@@ -194,6 +194,7 @@ func maybeFillInDescriptor(
 			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(idx)
 		}
 	}
+	changes.RemovedDefaultExprFromComputedColumn = maybeRemoveDefaultExprFromComputedColumns(desc)
 
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
 	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
@@ -212,6 +213,30 @@ func maybeFillInDescriptor(
 		return PostDeserializationTableDescriptorChanges{}, err
 	}
 	return changes, nil
+}
+
+// maybeRemoveDefaultExprFromComputedColumns removes DEFAULT expressions on
+// computed columns. Although we now have a descriptor validation check to
+// prevent this, this hasn't always been the case, so it's theoretically
+// possible to encounter table descriptors which would fail this validation
+// check. See issue #72881 for details.
+func maybeRemoveDefaultExprFromComputedColumns(desc *descpb.TableDescriptor) (hasChanged bool) {
+	doCol := func(col *descpb.ColumnDescriptor) {
+		if col.IsComputed() && col.HasDefault() {
+			col.DefaultExpr = nil
+			hasChanged = true
+		}
+	}
+
+	for i := range desc.Columns {
+		doCol(&desc.Columns[i])
+	}
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
+			doCol(col)
+		}
+	}
+	return hasChanged
 }
 
 // maybeUpgradeForeignKeyRepresentation destructively modifies the input table
