@@ -19,6 +19,7 @@ go_library(
         "//pkg/server/status",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
