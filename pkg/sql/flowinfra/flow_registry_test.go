@@ -221,7 +221,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-		streamID1: {receiver: RowInboundStreamHandler{consumer}, waitGroup: wg},
+		streamID1: {receiver: RowInboundStreamHandler{consumer}, onFinish: wg.Done},
 	}
 	if err := reg.RegisterFlow(
 		context.Background(), id1, f1, inboundStreams, jiffy,
@@ -321,7 +321,7 @@ func TestHandshake(t *testing.T) {
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
 				inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-					streamID: {receiver: RowInboundStreamHandler{consumer}, waitGroup: wg},
+					streamID: {receiver: RowInboundStreamHandler{consumer}, onFinish: wg.Done},
 				}
 				if err := reg.RegisterFlow(
 					context.Background(), flowID, f1, inboundStreams, time.Hour, /* timeout */
@@ -531,8 +531,8 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	rc.InitWithBufSizeAndNumSenders(types.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver:  RowInboundStreamHandler{rc},
-			waitGroup: &wg,
+			receiver: RowInboundStreamHandler{rc},
+			onFinish: wg.Done,
 		},
 	}
 	wg.Add(1)
@@ -575,8 +575,8 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver:  RowInboundStreamHandler{rc},
-			waitGroup: &wg,
+			receiver: RowInboundStreamHandler{rc},
+			onFinish: wg.Done,
 		},
 	}
 
@@ -624,12 +624,12 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	wgRight.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver:  RowInboundStreamHandler{left},
-			waitGroup: &wgLeft,
+			receiver: RowInboundStreamHandler{left},
+			onFinish: wgLeft.Done,
 		},
 		1: {
-			receiver:  RowInboundStreamHandler{right},
-			waitGroup: &wgRight,
+			receiver: RowInboundStreamHandler{right},
+			onFinish: wgRight.Done,
 		},
 	}
 
