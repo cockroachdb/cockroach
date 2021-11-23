@@ -133,6 +133,9 @@ type Table interface {
 	// Unique returns the ith unique constraint defined on this table, where
 	// i < UniqueCount.
 	Unique(i UniqueOrdinal) UniqueConstraint
+
+	// Zone returns a table's zone.
+	Zone() Zone
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check
