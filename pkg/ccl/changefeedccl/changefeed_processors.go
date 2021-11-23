@@ -419,17 +419,23 @@ func (ca *changeAggregator) setupSpansAndFrontier(
 		return nil, err
 	}
 
-	// Checkpointed spans are spans that were above the highwater mark, and we
-	// must preserve that information in the frontier for future checkpointing.
 	// If we don't have a highwater yet (during initial scan) they must at least
 	// be from StatementTime, and given an initial highwater they must all by
 	// definition have been at or after initialHighWater.Next()
-	var checkpointedSpanTs hlc.Timestamp
-	if initialHighWater.IsEmpty() {
-		checkpointedSpanTs = ca.spec.Feed.StatementTime
-	} else {
-		checkpointedSpanTs = initialHighWater.Next()
+	checkpointedSpanTs := ca.spec.Checkpoint.Timestamp
+
+	// Checkpoint records from 21.2 were used only for backfills and did not store
+	// the timestamp, since in a backfill it must either be the StatementTime for
+	// an initial backfill, or right after the high-water for schema backfills.
+	if checkpointedSpanTs.IsEmpty() {
+		if initialHighWater.IsEmpty() {
+			checkpointedSpanTs = ca.spec.Feed.StatementTime
+		} else {
+			checkpointedSpanTs = initialHighWater.Next()
+		}
 	}
+	// Checkpointed spans are spans that were above the highwater mark, and we
+	// must preserve that information in the frontier for future checkpointing.
 	for _, checkpointedSpan := range ca.spec.Checkpoint.Spans {
 		if _, err := ca.frontier.Forward(checkpointedSpan, checkpointedSpanTs); err != nil {
 			return nil, err
@@ -549,12 +555,13 @@ func (ca *changeAggregator) noteResolvedSpan(resolved *jobspb.ResolvedSpan) erro
 	checkpointFrontier := advanced &&
 		(forceFlush || ca.lastFlush.Add(ca.flushFrequency).Before(timeutil.Now()))
 
-	// If backfilling we must also consider the Backfill Checkpointing frequency
-	checkpointBackfill := ca.spec.JobID != 0 && /* enterprise changefeed */
-		resolved.Timestamp.Equal(ca.frontier.BackfillTS()) &&
-		canCheckpointBackfill(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
+		// At a lower frequency we checkpoint specific spans in the job progress
+		// either in backfills or if the highwater mark is excessively lagging behind
+	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
+		(resolved.Timestamp.Equal(ca.frontier.BackfillTS()) || ca.frontier.hasLaggingSpans(&ca.flowCtx.Cfg.Settings.SV)) &&
+		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
 
-	if checkpointFrontier || checkpointBackfill {
+	if checkpointFrontier || checkpointSpans {
 		defer func() {
 			ca.lastFlush = timeutil.Now()
 		}()
@@ -961,7 +968,7 @@ func newJobState(
 	}
 }
 
-func canCheckpointBackfill(sv *settings.Values, lastCheckpoint time.Time) bool {
+func canCheckpointSpans(sv *settings.Values, lastCheckpoint time.Time) bool {
 	freq := changefeedbase.FrontierCheckpointFrequency.Get(sv)
 	if freq == 0 {
 		return false
@@ -969,8 +976,8 @@ func canCheckpointBackfill(sv *settings.Values, lastCheckpoint time.Time) bool {
 	return timeutil.Since(lastCheckpoint) > freq
 }
 
-func (j *jobState) canCheckpointBackfill() bool {
-	return canCheckpointBackfill(&j.settings.SV, j.lastProgressUpdate)
+func (j *jobState) canCheckpointSpans() bool {
+	return canCheckpointSpans(&j.settings.SV, j.lastProgressUpdate)
 }
 
 // canCheckpointHighWatermark returns true if we should update job high water mark (i.e. progress).
@@ -1351,20 +1358,25 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// as we receive spans from the scan request at the Backfill Timestamp
 	inBackfill := !frontierChanged && resolvedSpan.Timestamp.Equal(cf.frontier.BackfillTS())
 
-	// During a backfill we store a checkpoint of completed scans at a throttled rate in the job record
-	updateCheckpoint := inBackfill && cf.js.canCheckpointBackfill()
-
-	var checkpoint jobspb.ChangefeedProgress_Checkpoint
-	if updateCheckpoint {
-		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.flowCtx.Cfg.Settings.SV)
-		checkpoint.Spans = cf.frontier.getCheckpointSpans(maxBytes)
-	}
-
 	// If we're not in a backfill, highwater progress and an empty checkpoint will
 	// be saved. This is throttled however we always persist progress to a schema
 	// boundary.
 	updateHighWater :=
 		!inBackfill && (cf.frontier.schemaChangeBoundaryReached() || cf.js.canCheckpointHighWatermark(frontierChanged))
+
+		// During backfills or when some problematic spans stop advancing, the
+		// highwater mark remains fixed while other spans may significantly outpace
+		// it, therefore to avoid losing that progress on changefeed resumption we
+		// also store as many of those leading spans as we can in the job progress
+	updateCheckpoint :=
+		(inBackfill || cf.frontier.hasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
+
+	// If the highwater has moved an empty checkpoint will be saved
+	var checkpoint jobspb.ChangefeedProgress_Checkpoint
+	if updateCheckpoint {
+		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.flowCtx.Cfg.Settings.SV)
+		checkpoint.Spans, checkpoint.Timestamp = cf.frontier.getCheckpointSpans(maxBytes)
+	}
 
 	if updateCheckpoint || updateHighWater {
 		manageProtected := updateHighWater
@@ -1692,21 +1704,30 @@ func (f *schemaChangeFrontier) SpanFrontier() *span.Frontier {
 }
 
 // getCheckpointSpans returns as many spans that should be checkpointed (are
-// above the highwater mark) as can fit in maxBytes.
-func (f *schemaChangeFrontier) getCheckpointSpans(maxBytes int64) (checkpoint []roachpb.Span) {
+// above the highwater mark) as can fit in maxBytes, along with the earliest
+// timestamp of the checkpointed spans.  A SpanGroup is used to merge adjacent
+// spans above the high-water mark.
+func (f *schemaChangeFrontier) getCheckpointSpans(
+	maxBytes int64,
+) (spans []roachpb.Span, timestamp hlc.Timestamp) {
 	var used int64
 	frontier := f.frontierTimestamp()
+	var checkpointSpanGroup roachpb.SpanGroup
+	checkpointFrontier := hlc.Timestamp{}
 	f.Entries(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
 		if frontier.Less(ts) {
 			used += int64(len(s.Key)) + int64(len(s.EndKey))
 			if used > maxBytes {
 				return span.StopMatch
 			}
-			checkpoint = append(checkpoint, s)
+			checkpointSpanGroup.Add(s)
+			if checkpointFrontier.IsEmpty() || ts.Less(checkpointFrontier) {
+				checkpointFrontier = ts
+			}
 		}
 		return span.ContinueMatch
 	})
-	return checkpoint
+	return checkpointSpanGroup.Slice(), checkpointFrontier
 }
 
 // BackfillTS returns the timestamp of the incoming spans for an ongoing
@@ -1741,4 +1762,14 @@ func (f *schemaChangeFrontier) schemaChangeBoundaryReached() (r bool) {
 	return f.boundaryTime.Equal(f.Frontier()) &&
 		f.latestTs.Equal(f.boundaryTime) &&
 		f.boundaryType != jobspb.ResolvedSpan_NONE
+}
+
+// hasLaggingSpans returns true when the time between the earliest and latest
+// resolved spans has exceeded the configured HighwaterLagCheckpointThreshold
+func (f *schemaChangeFrontier) hasLaggingSpans(sv *settings.Values) bool {
+	lagThreshold := changefeedbase.FrontierHighwaterLagCheckpointThreshold.Get(sv)
+	if lagThreshold == 0 {
+		return false
+	}
+	return f.latestTs.GoTime().Sub(f.Frontier().GoTime()) > lagThreshold
 }
