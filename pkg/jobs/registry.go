@@ -801,7 +801,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
-	// servePauseAndCancelRequests queries tho pause-requested and cancel-requested
+	// servePauseAndCancelRequests queries the pause-requested and cancel-requested
 	// jobs that this node has claimed and sets their states to paused or cancel
 	// respectively, and then stops the execution of those jobs.
 	servePauseAndCancelRequests := func(ctx context.Context, s sqlliveness.Session) {

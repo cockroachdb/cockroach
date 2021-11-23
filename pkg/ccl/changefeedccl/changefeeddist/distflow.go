@@ -66,7 +66,8 @@ func StartDistChangefeed(
 	// spans that are assigned to it.
 	// We could compute per-aggregator checkpoint, but that's probably an overkill.
 	aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
-		Spans: checkpoint.Spans,
+		Spans:     checkpoint.Spans,
+		Timestamp: checkpoint.Timestamp,
 	}
 
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
