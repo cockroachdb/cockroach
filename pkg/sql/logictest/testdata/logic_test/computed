@@ -1025,3 +1025,14 @@ SET experimental_computed_column_rewrites = "bad"
 
 statement error invalid column rewrites expression
 SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"
+
+statement ok
+CREATE TABLE t72881 (
+  c "char",
+  v STRING AS (c) STORED
+);
+INSERT INTO t72881 VALUES ('foo'::STRING)
+
+# Regression test for #72881. Computed columns can't have a DEFAULT expr.
+statement error pgcode 42P16 computed column "v" cannot also have a DEFAULT expression
+ALTER TABLE t72881 ALTER COLUMN v SET DEFAULT 'foo'

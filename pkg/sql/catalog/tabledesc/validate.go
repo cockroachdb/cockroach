@@ -745,11 +745,19 @@ func (desc *wrapper) validateColumns(
 			return errors.Newf("virtual column %q is not computed", column.GetName())
 		}
 
-		if column.HasOnUpdate() && column.IsComputed() {
-			return errors.Newf(
-				"computed column %q cannot also have an ON UPDATE expression",
-				column.GetName(),
-			)
+		if column.IsComputed() {
+			if column.HasDefault() {
+				return pgerror.Newf(pgcode.InvalidTableDefinition,
+					"computed column %q cannot also have a DEFAULT expression",
+					column.GetName(),
+				)
+			}
+			if column.HasOnUpdate() {
+				return pgerror.Newf(pgcode.InvalidTableDefinition,
+					"computed column %q cannot also have an ON UPDATE expression",
+					column.GetName(),
+				)
+			}
 		}
 
 		if column.IsHidden() && column.IsInaccessible() {
