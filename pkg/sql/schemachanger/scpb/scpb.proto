@@ -392,6 +392,5 @@ message DefaultPrivilege {
     cockroach.sql.sqlbase.DefaultPrivilegesForRole.ExplicitRole explicit_role = 2;
     cockroach.sql.sqlbase.DefaultPrivilegesForRole.ForAllRolesPseudoRole for_all_roles = 3;
   }
-    map<uint32, DefaultObjectPrivilege> privileges_per_object = 4 [(gogoproto.nullable) = false,
-      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.AlterDefaultPrivilegesTargetObject"];
+    map<uint32, DefaultObjectPrivilege> privileges_per_object = 4;
 }
