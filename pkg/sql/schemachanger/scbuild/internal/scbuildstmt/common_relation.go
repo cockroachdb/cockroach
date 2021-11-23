@@ -21,11 +21,24 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-func addIfDuplicateDoesNotExistForDir(b BuildCtx, dir scpb.Target_Direction, elem scpb.Element) {
+// TODO: (fqazi) Move decomposition into its own package that will no longer
+// take in any BuildCtx. Our goal will be to instead just generate the elements,
+// and let the caller deal with them after in terms of adding or dropping.
+
+// TODO: (fqazi) Once we get create operations working we should start adding
+// unit tests to test conversions both ways:
+// 1) Convert an existing object
+// 2) Drop it
+// 3) Recreate it with the new schema changer
+// Next compare the contents of the new and old descriptors to validate the
+// conversion process.
+
+// addOrDropForDir enqueues for add or drop depending on the direction.
+func addOrDropForDir(b BuildCtx, dir scpb.Target_Direction, elem scpb.Element) {
 	if dir == scpb.Target_ADD {
 		b.EnqueueAdd(elem)
 	} else {
-		b.EnqueueDropIfNotExists(elem)
+		b.EnqueueDrop(elem)
 	}
 }
 
@@ -150,7 +163,7 @@ func decomposeExprToElements(
 				TypeID:   typeID,
 			}
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, typeRef)
+		addOrDropForDir(b, dir, typeRef)
 	}
 }
 
@@ -173,7 +186,7 @@ func decomposeDefaultExprToElements(
 		DefaultExpr:     defaultExpr,
 		UsesSequenceIDs: sequenceIDs,
 	}
-	addIfDuplicateDoesNotExistForDir(b, dir, &expressionElem)
+	addOrDropForDir(b, dir, &expressionElem)
 	// Decompose any elements required for expressions.
 	decomposeExprToElements(b,
 		defaultExpr,
@@ -192,7 +205,7 @@ func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, dir scpb.Target
 		DescriptorID: tbl.GetID(),
 		Owner:        privileges.Owner().Normalized(),
 	}
-	addIfDuplicateDoesNotExistForDir(b, dir, &ownerElem)
+	addOrDropForDir(b, dir, &ownerElem)
 
 	for _, user := range privileges.Users {
 		userElem := scpb.UserPrivileges{
@@ -200,7 +213,7 @@ func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, dir scpb.Target
 			Username:     user.User().Normalized(),
 			Privileges:   user.Privileges,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, &userElem)
+		addOrDropForDir(b, dir, &userElem)
 	}
 }
 
@@ -210,14 +223,14 @@ func decomposeColumnIntoElements(
 	if column.IsHidden() {
 		return
 	}
-	addIfDuplicateDoesNotExistForDir(b, dir,
+	addOrDropForDir(b, dir,
 		&scpb.ColumnName{
 			TableID:  tbl.GetID(),
 			ColumnID: column.GetID(),
 			Name:     column.GetName(),
 		},
 	)
-	addIfDuplicateDoesNotExistForDir(b, dir,
+	addOrDropForDir(b, dir,
 		columnDescToElement(tbl, column.ColumnDescDeepCopy(), nil, nil))
 	// Convert any default expressions.
 	decomposeDefaultExprToElements(b, tbl, column, dir)
@@ -242,7 +255,7 @@ func decomposeColumnIntoElements(
 			// Remove dependencies to this sequences.
 			sequenceOwnedBy := &scpb.SequenceOwnedBy{SequenceID: seqID,
 				OwnerTableID: tbl.GetID()}
-			addIfDuplicateDoesNotExistForDir(b, dir, sequenceOwnedBy)
+			addOrDropForDir(b, dir, sequenceOwnedBy)
 		}
 	}
 	// If there was a sequence dependency track those.
@@ -254,7 +267,9 @@ func decomposeColumnIntoElements(
 			relationDep := &scpb.RelationDependedOnBy{TableID: seqID,
 				DependedOnBy: tbl.GetID(),
 				ColumnID:     column.GetID()}
-			addIfDuplicateDoesNotExistForDir(b, dir, relationDep)
+			if !b.HasTarget(dir, relationDep) {
+				addOrDropForDir(b, dir, relationDep)
+			}
 		}
 	}
 }
@@ -273,8 +288,7 @@ func decomposeViewDescToElements(
 			TableID: view.GetID(),
 			TypeID:  typeRef,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, typeDep)
-
+		addOrDropForDir(b, dir, typeDep)
 	}
 }
 
@@ -287,7 +301,7 @@ func decomposeSequenceDescToElements(
 		sequenceOwnedBy := &scpb.SequenceOwnedBy{
 			SequenceID:   seq.GetID(),
 			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
-		addIfDuplicateDoesNotExistForDir(b, dir, sequenceOwnedBy)
+		addOrDropForDir(b, dir, sequenceOwnedBy)
 	}
 }
 
@@ -315,14 +329,17 @@ func decomposeTableDescToElements(
 	}
 	// If the node is already added then skip
 	// adding it again.
-	addIfDuplicateDoesNotExistForDir(b, dir, objectElem)
+	if b.HasTarget(dir, objectElem) {
+		return
+	}
+	addOrDropForDir(b, dir, objectElem)
 	nameElem := scpb.Namespace{
 		Name:         tbl.GetName(),
 		DatabaseID:   tbl.GetParentSchemaID(),
 		SchemaID:     tbl.GetParentID(),
 		DescriptorID: tbl.GetID(),
 	}
-	addIfDuplicateDoesNotExistForDir(b, dir, &nameElem)
+	addOrDropForDir(b, dir, &nameElem)
 	// Convert common fields for descriptors into elements.
 	decomposeDescToElements(b, tbl, dir)
 	switch {
@@ -335,13 +352,13 @@ func decomposeTableDescToElements(
 		for _, index := range tbl.AllIndexes() {
 			if index.Primary() {
 				primaryIndex, indexName := primaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
-				addIfDuplicateDoesNotExistForDir(b, dir, primaryIndex)
-				addIfDuplicateDoesNotExistForDir(b, dir, indexName)
+				addOrDropForDir(b, dir, primaryIndex)
+				addOrDropForDir(b, dir, indexName)
 
 			} else {
 				secondaryIndex, indexName := secondaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
-				addIfDuplicateDoesNotExistForDir(b, dir, secondaryIndex)
-				addIfDuplicateDoesNotExistForDir(b, dir, indexName)
+				addOrDropForDir(b, dir, secondaryIndex)
+				addOrDropForDir(b, dir, indexName)
 			}
 		}
 	case tbl.IsSequence():
@@ -361,7 +378,7 @@ func decomposeTableDescToElements(
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, &outBoundFk)
+		addOrDropForDir(b, dir, &outBoundFk)
 		return nil
 	})
 	if err != nil {
@@ -377,7 +394,7 @@ func decomposeTableDescToElements(
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, &inBoundFk)
+		addOrDropForDir(b, dir, &inBoundFk)
 		return nil
 	})
 	if err != nil {
@@ -400,8 +417,8 @@ func decomposeTableDescToElements(
 			IndexID:      0, // Invalid ID
 			ColumnIDs:    constraint.ColumnIDs,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, uniqueWithoutConstraint)
-		addIfDuplicateDoesNotExistForDir(b, dir, constraintName)
+		addOrDropForDir(b, dir, uniqueWithoutConstraint)
+		addOrDropForDir(b, dir, constraintName)
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
@@ -420,11 +437,11 @@ func decomposeTableDescToElements(
 			Validated: constraint.Validity == descpb.ConstraintValidity_Validated,
 			ColumnIDs: constraint.ColumnIDs,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, checkConstraint)
-		addIfDuplicateDoesNotExistForDir(b, dir, constraintName)
+		addOrDropForDir(b, dir, checkConstraint)
+		addOrDropForDir(b, dir, constraintName)
 	}
 	// Add locality information.
-	addIfDuplicateDoesNotExistForDir(b, dir, &scpb.Locality{
+	addOrDropForDir(b, dir, &scpb.Locality{
 		DescriptorID: tbl.GetID(),
 		Locality:     tbl.GetLocalityConfig(),
 	})
@@ -434,14 +451,18 @@ func decomposeTableDescToElements(
 			DependedOnBy: tbl.GetID(),
 			TableID:      dep,
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, dependsOn)
+		if !b.HasTarget(dir, dependsOn) {
+			addOrDropForDir(b, dir, dependsOn)
+		}
 	}
 	for _, depBy := range tbl.GetDependedOnBy() {
 		dependedOnBy := &scpb.RelationDependedOnBy{
 			DependedOnBy: depBy.ID,
 			TableID:      tbl.GetID(),
 		}
-		addIfDuplicateDoesNotExistForDir(b, dir, dependedOnBy)
+		if !b.HasTarget(dir, dependedOnBy) {
+			addOrDropForDir(b, dir, dependedOnBy)
+		}
 	}
 	//TODO (fqazi) Computed Expressions / Update expressions can be moved out
 	// of column (similar to the UML).

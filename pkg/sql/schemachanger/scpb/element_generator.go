@@ -70,11 +70,13 @@ type NodeIterator interface {
 func (e {{ . }}) element() {}
 
 // ForEach{{ . }} iterates over nodes of type {{ . }}.
-func ForEach{{ . }} (b NodeIterator, elementFunc func(element *{{ . }}) ) {
+func ForEach{{ . }} (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *{{ . }}) ) {
 	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
 		e, ok := elem.(*{{ . }})
 		if ok {
-		elementFunc(e)
+		elementFunc(status, dir, e)
 	}
   })
 }

@@ -58,7 +58,9 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 		}))
 		// Detect if foreign keys will end up preventing this drop behavior.
 		scpb.ForEachForeignKeyBackReference(c,
-			func(fk *scpb.ForeignKeyBackReference) {
+			func(_ scpb.Status,
+				_ scpb.Target_Direction,
+				fk *scpb.ForeignKeyBackReference) {
 				dependentTable := c.MustReadTable(fk.ReferenceID)
 				if fk.OriginID == tbl.GetID() {
 					if behavior != tree.DropCascade {
@@ -70,7 +72,9 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 			})
 		// Detect any sequence ownerships and prevent clean up if cascades
 		// are disallowed.
-		scpb.ForEachSequenceOwnedBy(c, func(sequenceOwnedBy *scpb.SequenceOwnedBy) {
+		scpb.ForEachSequenceOwnedBy(c, func(_ scpb.Status,
+			_ scpb.Target_Direction,
+			sequenceOwnedBy *scpb.SequenceOwnedBy) {
 			if sequenceOwnedBy.OwnerTableID != tbl.GetID() {
 				return
 			}

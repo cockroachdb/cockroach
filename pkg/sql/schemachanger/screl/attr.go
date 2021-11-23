@@ -64,6 +64,8 @@ const (
 	Element
 	// Target is the reference from a node to a target.
 	Target
+	// Username is the username of the element
+	Username
 )
 
 var t = reflect.TypeOf
@@ -183,6 +185,7 @@ var Schema = rel.MustSchema("screl",
 	),
 	rel.EntityMapping(t((*scpb.UserPrivileges)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
+		rel.EntityAttr(Username, "Username"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

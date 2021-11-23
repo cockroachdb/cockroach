@@ -130,8 +130,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			// Add a new column element
 			alterTableAddColumn(b, rel, addCol, &n.Table)
 			var addColumn *scpb.ColumnName
-			b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-				if col, ok := elem.(*scpb.ColumnName); ok && dir == scpb.Target_ADD {
+			scpb.ForEachColumnName(b, func(_ scpb.Status, dir scpb.Target_Direction, col *scpb.ColumnName) {
+				if dir == scpb.Target_ADD {
 					if col.TableID == rel.GetID() && col.Name == colName {
 						addColumn = col
 					}

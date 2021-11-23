@@ -52,7 +52,9 @@ func dropView(b BuildCtx, view catalog.TableDescriptor, behavior tree.DropBehavi
 		// Go over the dependencies and generate drop targets
 		// for them. In our case they should only be views.
 		scpb.ForEachRelationDependedOnBy(b,
-			func(dep *scpb.RelationDependedOnBy) {
+			func(_ scpb.Status,
+				_ scpb.Target_Direction,
+				dep *scpb.RelationDependedOnBy) {
 				if dep.TableID != view.GetID() {
 					return
 				}

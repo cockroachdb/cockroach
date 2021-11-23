@@ -22,6 +22,7 @@ var equalityAttrs = []rel.Attr{
 	ReferencedDescID,
 	ColumnID,
 	Name,
+	Username,
 	IndexID,
 	Direction,
 	Status,

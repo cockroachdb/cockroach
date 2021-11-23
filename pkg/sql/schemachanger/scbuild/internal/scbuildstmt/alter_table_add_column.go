@@ -165,22 +165,20 @@ func validateColumnName(
 		}
 		panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.GetName()))
 	}
-	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if t, ok := elem.(*scpb.ColumnName); ok {
-			if t.TableID != table.GetID() || t.Name != d.Name.String() {
-				return
-			}
-			switch dir {
-			case scpb.Target_ADD:
-				panic(pgerror.Newf(pgcode.DuplicateColumn,
-					"duplicate: column %q in the middle of being added, not yet public",
-					col.Name))
-			case scpb.Target_DROP:
-				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"column %q being dropped, try again later", col.Name))
-			default:
-				panic(errors.AssertionFailedf("unknown direction %v", dir))
-			}
+	scpb.ForEachColumnName(b, func(_ scpb.Status, dir scpb.Target_Direction, t *scpb.ColumnName) {
+		if t.TableID != table.GetID() || t.Name != d.Name.String() {
+			return
+		}
+		switch dir {
+		case scpb.Target_ADD:
+			panic(pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public",
+				col.Name))
+		case scpb.Target_DROP:
+			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q being dropped, try again later", col.Name))
+		default:
+			panic(errors.AssertionFailedf("unknown direction %v", dir))
 		}
 	})
 }
@@ -206,8 +204,8 @@ func findOrAddColumnFamily(
 	// name is being dropped and then if there is or isn't a create directive.
 	found := false
 	var familyID descpb.FamilyID
-	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if col, ok := elem.(*scpb.Column); ok && dir == scpb.Target_ADD && col.FamilyName == family {
+	scpb.ForEachColumn(b, func(_ scpb.Status, dir scpb.Target_Direction, col *scpb.Column) {
+		if dir == scpb.Target_ADD && col.FamilyName == family {
 			if create && !ifNotExists {
 				panic(errors.Errorf("family %q already exists", family))
 			}
@@ -267,8 +265,8 @@ func addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// storing columns.
 	{
 		var latestAdded *scpb.PrimaryIndex
-		b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-			if idx, ok := elem.(*scpb.PrimaryIndex); ok && dir == scpb.Target_ADD && idx.TableID == table.GetID() {
+		scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, dir scpb.Target_Direction, idx *scpb.PrimaryIndex) {
+			if dir == scpb.Target_ADD && idx.TableID == table.GetID() {
 				latestAdded = idx
 			}
 		})

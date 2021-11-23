@@ -269,18 +269,40 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     tableId: 57
-- DROP UserPrivileges:{DescID: 57}
+- DROP UserPrivileges:{DescID: 57, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 57
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 59}
+- DROP UserPrivileges:{DescID: 57, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+    username: public
+- DROP UserPrivileges:{DescID: 57, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 59, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 59
     privileges: 2
     username: admin
+- DROP UserPrivileges:{DescID: 59, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    username: public
+- DROP UserPrivileges:{DescID: 59, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    privileges: 2
+    username: root
 - DROP View:{DescID: 59}
   state: PUBLIC
   details:
