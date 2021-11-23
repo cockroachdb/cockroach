@@ -106,7 +106,13 @@ func (v *encryptValue) Type() string {
 	return "string"
 }
 
-var errBinaryOrLibraryNotFound = errors.New("binary or library not found")
+type errBinaryOrLibraryNotFound struct {
+	binary string
+}
+
+func (e errBinaryOrLibraryNotFound) Error() string {
+	return fmt.Sprintf("binary or library %q not found (or was not executable)", e.binary)
+}
 
 func filepathAbs(path string) (string, error) {
 	path, err := filepath.Abs(path)
@@ -181,7 +187,7 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 				return filepathAbs(path)
 			}
 		}
-		return "", errBinaryOrLibraryNotFound
+		return "", errBinaryOrLibraryNotFound{name}
 	}
 	return filepathAbs(path)
 }
@@ -208,7 +214,7 @@ func initBinariesAndLibraries() {
 	}
 
 	workload, err = findBinary(workload, "workload")
-	if errors.Is(err, errBinaryOrLibraryNotFound) {
+	if errors.As(err, &errBinaryOrLibraryNotFound{}) {
 		fmt.Fprintln(os.Stderr, "workload binary not provided, proceeding anyway")
 	} else if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
@@ -835,7 +841,8 @@ func (f *clusterFactory) newCluster(
 	// Attempt to create a cluster several times to be able to move past
 	// temporary flakiness in the cloud providers.
 	const maxAttempts = 3
-	for i := 0; ; i++ {
+	// loop assumes maxAttempts is atleast (1).
+	for i := 1; ; i++ {
 		c := &clusterImpl{
 			// NB: this intentionally avoids re-using the name across iterations in
 			// the loop. See:
@@ -876,7 +883,7 @@ func (f *clusterFactory) newCluster(
 			log.Fatalf(ctx, "%v", err)
 		}
 
-		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i+1, maxAttempts)
+		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		err = execCmd(ctx, l, sargs...)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
@@ -898,7 +905,7 @@ func (f *clusterFactory) newCluster(
 		// (when selecting the test) it's the best we can do for now.
 		c.destroyState.alloc = nil
 		c.Destroy(ctx, closeLogger, l)
-		if i > maxAttempts {
+		if i >= maxAttempts {
 			// Here we have to release the alloc, as we are giving up.
 			cfg.alloc.Release()
 			return nil, err
@@ -1027,7 +1034,8 @@ func (c *clusterImpl) validate(
 ) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
-	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
+	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
+	sargs := []string{roachprod, "list", "--pattern", pattern, "--json", "--quiet"}
 	out, err := execCmdWithBuffer(ctx, l, sargs...)
 	if err != nil {
 		return err

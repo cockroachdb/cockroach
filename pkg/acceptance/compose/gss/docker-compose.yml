@@ -13,9 +13,9 @@ services:
     environment:
       - KRB5_KTNAME=/keytab/crdb.keytab
     volumes:
-      - ../../.localcluster.certs:/certs
+      - ${CERTS_DIR:-../../.localcluster.certs}:/certs
       - keytab:/keytab
-      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+      - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
   psql:
     build: ./psql
     depends_on:
@@ -27,7 +27,7 @@ services:
       - ./kdc/krb5.conf:/etc/krb5.conf
       - ./psql/gss_test.go:/test/gss_test.go
       - ./psql/start.sh:/start.sh
-      - ../../.localcluster.certs:/certs
-      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+      - ${CERTS_DIR:-../../.localcluster.certs}:/certs
+      - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
 volumes:
   keytab:

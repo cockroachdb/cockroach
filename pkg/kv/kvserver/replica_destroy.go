@@ -112,14 +112,21 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// directories belonging to replicas which aren't present. A crash before a
 	// call to postDestroyRaftMuLocked will currently leave the files around
 	// forever.
+	//
+	// TODO(tbg): coming back in 2021, the above should be outdated. The ReplicaID
+	// is set on creation and never changes over the lifetime of a Replica. Also,
+	// the replica is always contained in its descriptor. So this code below should
+	// be removable.
 	if r.raftMu.sideloaded != nil {
-		return r.raftMu.sideloaded.Clear(ctx)
+		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Release the reference to this tenant in metrics, we know the tenant ID is
 	// valid if the replica is initialized.
-	if tenantID, ok := r.TenantID(); ok {
-		r.store.metrics.releaseTenant(ctx, tenantID)
+	if r.tenantMetricsRef != nil {
+		r.store.metrics.releaseTenant(ctx, r.tenantMetricsRef)
 	}
 
 	// Unhook the tenant rate limiter if we have one.

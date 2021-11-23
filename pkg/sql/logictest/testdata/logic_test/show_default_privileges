@@ -212,6 +212,11 @@ user testuser
 query TBTTT
 SHOW DEFAULT PRIVILEGES
 ----
+testuser  false  schemas    testuser  ALL
+testuser  false  sequences  testuser  ALL
+testuser  false  tables     testuser  ALL
+testuser  false  types      public    USAGE
+testuser  false  types      testuser  ALL
 
 user root
 

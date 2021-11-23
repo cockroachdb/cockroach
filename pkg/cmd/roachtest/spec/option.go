@@ -50,6 +50,17 @@ func SSD(n int) Option {
 	return nodeSSDOption(n)
 }
 
+type raid0Option bool
+
+func (o raid0Option) apply(spec *ClusterSpec) {
+	spec.RAID0 = bool(o)
+}
+
+// RAID0 enables RAID 0 striping across all disks on the node.
+func RAID0(enabled bool) Option {
+	return raid0Option(enabled)
+}
+
 type nodeGeoOption struct{}
 
 func (o nodeGeoOption) apply(spec *ClusterSpec) {

@@ -1229,6 +1229,41 @@ func TestClusterSpec_Args_DataDriven(t *testing.T) {
 
 	specs = append(specs, zfsSpecs...)
 
+	// RAID 0 is off by default, unless explicitly asked for in a roachtest.
+	raidSpecs := []ClusterSpec{
+		{
+			Cloud:          GCE,
+			InstanceType:   "",
+			NodeCount:      4,
+			CPUs:           4,
+			SSDs:           1,
+			RAID0:          true,
+			VolumeSize:     0,
+			PreferLocalSSD: true,
+			Zones:          "",
+			Geo:            false,
+			Lifetime:       43200000000000,
+			ReusePolicy:    ReusePolicyAny{},
+		},
+		// AWS roachtests do not currently support local SSDs, so this config
+		// should result in an error.
+		{
+			Cloud:          AWS,
+			InstanceType:   "",
+			NodeCount:      4,
+			CPUs:           4,
+			SSDs:           1,
+			RAID0:          true,
+			VolumeSize:     0,
+			PreferLocalSSD: true,
+			Zones:          "",
+			Geo:            false,
+			Lifetime:       43200000000000,
+			ReusePolicy:    ReusePolicyAny{},
+		},
+	}
+	specs = append(specs, raidSpecs...)
+
 	path := filepath.Join("testdata", "collected_specs.txt")
 	datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 		if td.Cmd != "print-args-for-all" {

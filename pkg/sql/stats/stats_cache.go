@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -181,14 +180,11 @@ func NewTableStatisticsCache(
 func decodeTableStatisticsKV(
 	codec keys.SQLCodec, kv *roachpb.RangeFeedValue, da *rowenc.DatumAlloc,
 ) (tableDesc descpb.ID, err error) {
-	tbl := systemschema.TableStatisticsTable
 	// The primary key of table_statistics is (tableID INT, statisticID INT).
 	types := []*types.T{types.Int, types.Int}
 	dirs := []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC}
 	keyVals := make([]rowenc.EncDatum, 2)
-	_, matches, _, err := rowenc.DecodeIndexKey(
-		codec, tbl, tbl.GetPrimaryIndex(), types, keyVals, dirs, kv.Key,
-	)
+	_, matches, _, err := rowenc.DecodeIndexKey(codec, types, keyVals, dirs, kv.Key)
 	if err != nil {
 		return 0, err
 	}
@@ -439,6 +435,7 @@ const (
 	rowCountIndex
 	distinctCountIndex
 	nullCountIndex
+	avgSizeIndex
 	histogramIndex
 	statsLen
 )
@@ -472,6 +469,7 @@ func (sc *TableStatisticsCache) parseStats(
 		{"rowCount", rowCountIndex, types.Int, false},
 		{"distinctCount", distinctCountIndex, types.Int, false},
 		{"nullCount", nullCountIndex, types.Int, false},
+		{"avgSize", avgSizeIndex, types.Int, false},
 		{"histogram", histogramIndex, types.Bytes, true},
 	}
 	for _, v := range expectedTypes {
@@ -491,6 +489,7 @@ func (sc *TableStatisticsCache) parseStats(
 			RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
 			DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
 			NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
+			AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
 		},
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
@@ -593,6 +592,7 @@ SELECT
 	"rowCount",
 	"distinctCount",
 	"nullCount",
+	"avgSize",
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1

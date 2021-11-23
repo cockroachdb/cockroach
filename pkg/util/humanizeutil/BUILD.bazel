@@ -10,6 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/humanizeutil",
     visibility = ["//visibility:public"],
     deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_spf13_pflag//:pflag",
     ],
@@ -23,5 +25,8 @@ go_test(
         "humanize_test.go",
     ],
     embed = [":humanizeutil"],
-    deps = ["//pkg/util/leaktest"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )

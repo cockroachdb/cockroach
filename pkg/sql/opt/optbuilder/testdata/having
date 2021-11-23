@@ -30,7 +30,7 @@ SELECT s, count(*) FROM kv GROUP BY s HAVING count(*) > 1
 ----
 select
  ├── columns: s:4 count:7!null
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: s:4 count_rows:7!null
  │    ├── grouping columns: s:4
  │    ├── project
@@ -108,7 +108,7 @@ project
  ├── columns: "?column?":7!null
  ├── select
  │    ├── columns: k:1!null v:2!null
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: k:1!null v:2
  │    │    ├── grouping columns: k:1!null v:2
  │    │    └── project
@@ -130,7 +130,7 @@ SELECT count(*), k+w AS r FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 select
  ├── columns: count:7!null r:8!null
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: count_rows:7!null column8:8
  │    ├── grouping columns: column8:8
  │    ├── project
@@ -157,7 +157,7 @@ project
  ├── columns: max:7
  └── select
       ├── columns: v:2!null max:7
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: v:2 max:7
       │    ├── grouping columns: v:2
       │    ├── project
@@ -177,7 +177,7 @@ project
  ├── columns: sum:7
  └── select
       ├── columns: sum:7 column8:8!null
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: sum:7 column8:8
       │    ├── grouping columns: column8:8
       │    ├── project
@@ -199,7 +199,7 @@ project
  ├── columns: sum:7!null
  └── select
       ├── columns: sum:7!null column8:8
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: sum:7 column8:8
       │    ├── grouping columns: column8:8
       │    ├── project
@@ -221,7 +221,7 @@ project
  ├── columns: v:2
  └── select
       ├── columns: t.public.kv.v:2 column7:7!null
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: t.public.kv.v:2 column7:7
       │    ├── grouping columns: t.public.kv.v:2 column7:7
       │    └── project
@@ -243,7 +243,7 @@ SELECT upper(s), count(s), count(upper(s)) FROM t.kv GROUP BY upper(s) HAVING co
 ----
 select
  ├── columns: upper:8 count:7!null count:9!null
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: count:7!null column8:8 count:9!null
  │    ├── grouping columns: column8:8
  │    ├── project
@@ -269,7 +269,7 @@ project
  ├── ordering: +7
  └── select
       ├── columns: v:2 sum:7!null
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: v:2 sum:7!null
       │    ├── grouping columns: v:2
       │    ├── project
@@ -292,7 +292,7 @@ sort
       ├── columns: sum:7!null
       └── select
            ├── columns: v:2 sum:7!null max:8!null
-           ├── group-by
+           ├── group-by (hash)
            │    ├── columns: v:2 sum:7!null max:8!null
            │    ├── grouping columns: v:2
            │    ├── project
@@ -317,7 +317,7 @@ sort
       ├── columns: sum:7!null
       └── select
            ├── columns: v:2!null sum:7!null
-           ├── group-by
+           ├── group-by (hash)
            │    ├── columns: v:2 sum:7!null
            │    ├── grouping columns: v:2
            │    ├── project
@@ -340,7 +340,7 @@ sort
       ├── columns: max:7!null
       └── select
            ├── columns: v:2 max:7!null
-           ├── group-by
+           ├── group-by (hash)
            │    ├── columns: v:2 max:7!null
            │    ├── grouping columns: v:2
            │    ├── project
@@ -363,7 +363,7 @@ sort
       ├── columns: max:7!null
       └── select
            ├── columns: v:2 max:7!null
-           ├── group-by
+           ├── group-by (hash)
            │    ├── columns: v:2 max:7!null
            │    ├── grouping columns: v:2
            │    ├── project

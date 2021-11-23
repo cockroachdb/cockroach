@@ -3,6 +3,7 @@ The following types are considered always safe for reporting:
 File | Type
 --|--
 pkg/base/node_id.go | `*NodeIDContainer`
+pkg/base/node_id.go | `*SQLIDContainer`
 pkg/base/node_id.go | `*StoreIDContainer`
 pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `JobID`

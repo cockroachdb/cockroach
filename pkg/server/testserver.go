@@ -582,11 +582,21 @@ func (ts *TestServer) StartTenant(
 	if params.TempStorageConfig != nil {
 		sqlCfg.TempStorageConfig = *params.TempStorageConfig
 	}
-	tr := params.Tracer
-	if params.Tracer == nil {
-		tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+
+	stopper := params.Stopper
+	if stopper == nil {
+		// We don't share the stopper with the server because we want their Tracers
+		// to be different, to simulate them being different processes.
+		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+		stopper = stop.NewStopper(stop.WithTracer(tr))
+		// The server's stopper stops the tenant, for convenience.
+		ts.Stopper().AddCloser(stop.CloserFn(func() { stopper.Stop(context.Background()) }))
+	} else if stopper.Tracer() == nil {
+		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+		stopper.SetTracer(tr)
 	}
-	baseCfg := makeTestBaseConfig(st, tr)
+
+	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
@@ -602,10 +612,6 @@ func (ts *TestServer) StartTenant(
 		if tenantKnobs.ClusterSettingsUpdater == nil {
 			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
-	}
-	stopper := params.Stopper
-	if stopper == nil {
-		stopper = ts.Stopper()
 	}
 	sqlServer, addr, httpAddr, err := StartTenant(
 		ctx,
@@ -865,6 +871,11 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	var c int64
 	var found bool
 
+	type (
+		int64Valuer  interface{ Value() int64 }
+		int64Counter interface{ Count() int64 }
+	)
+
 	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
 			switch t := v.(type) {
@@ -873,6 +884,12 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 				found = true
 			case *metric.Gauge:
 				c = t.Value()
+				found = true
+			case int64Valuer:
+				c = t.Value()
+				found = true
+			case int64Counter:
+				c = t.Count()
 				found = true
 			}
 		}
@@ -959,6 +976,16 @@ func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
 		)
 	}
 	return ts.sqlServer.spanconfigMgr.SQLTranslator
+}
+
+// SpanConfigSQLWatcherFactory is part of TestServerInterface.
+func (ts *TestServer) SpanConfigSQLWatcherFactory() interface{} {
+	if ts.sqlServer.spanconfigMgr == nil {
+		panic(
+			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
+		)
+	}
+	return ts.sqlServer.spanconfigMgr.SQLWatcherFactory
 }
 
 // SQLServer is part of TestServerInterface.

@@ -82,7 +82,7 @@ type hashJoiner struct {
 	}
 
 	// Context cancellation checker.
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &hashJoiner{}
@@ -161,7 +161,7 @@ func (h *hashJoiner) Start(ctx context.Context) {
 	ctx = h.StartInternal(ctx, hashJoinerProcName)
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
-	h.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	h.cancelChecker.Reset(ctx)
 	h.runningState = hjBuilding
 }
 

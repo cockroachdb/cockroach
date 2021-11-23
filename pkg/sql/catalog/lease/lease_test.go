@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -488,6 +487,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
+	ctx := context.Background()
 	const descID = keys.LeaseTableID
 
 	{
@@ -500,8 +500,8 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 		// starts draining.
 		l1RemovalTracker := leaseRemovalTracker.TrackRemoval(l1.Underlying())
 
-		t.nodes[1].SetDraining(true, nil /* reporter */)
-		t.nodes[2].SetDraining(true, nil /* reporter */)
+		t.nodes[1].SetDraining(ctx, true, nil /* reporter */)
+		t.nodes[2].SetDraining(ctx, true, nil /* reporter */)
 
 		// Leases cannot be acquired when in draining mode.
 		if _, err := t.acquire(1, descID); !testutils.IsError(err, "cannot acquire lease when draining") {
@@ -524,7 +524,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	{
 		// Check that leases with a refcount of 0 are correctly kept in the
 		// store once the drain mode has been exited.
-		t.nodes[1].SetDraining(false, nil /* reporter */)
+		t.nodes[1].SetDraining(ctx, false, nil /* reporter */)
 		l1 := t.mustAcquire(1, descID)
 		t.mustRelease(1, l1, nil)
 		t.expectLeases(descID, "/1/1")
@@ -563,6 +563,8 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
+	tableDesc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
+
 	// Block schema changers so that the table we're about to DROP is not actually
 	// dropped; it will be left in a "deleted" state.
 	mu.Lock()
@@ -576,10 +578,9 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Make sure we can't get a lease on the descriptor.
-	tableDesc := catalogkv.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
-	_, err = t.acquireMinVersion(1, tableDesc.GetID(), tableDesc.GetVersion()+1)
+	_, err = t.acquireMinVersion(1, tableDesc.GetID(), tableDesc.GetVersion()+123)
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
@@ -2007,7 +2008,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	t.expectLeases(afterDesc.GetID(), "/1/1")
 
 	// Call DeleteOrphanedLeases() with the server startup time.
-	t.node(1).DeleteOrphanedLeases(now)
+	t.node(1).DeleteOrphanedLeases(ctx, now)
 	// Orphaned lease is gone.
 	t.expectLeases(beforeDesc.GetID(), "")
 	t.expectLeases(afterDesc.GetID(), "/1/1")
@@ -2505,99 +2506,58 @@ func TestHistoricalAcquireDroppedDescriptor(t *testing.T) {
 	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a AS OF SYSTEM TIME `+now, [][]string{{"a"}})
 }
 
-// Test that attempts to use a descriptor at a timestamp that precedes when
-// a descriptor is dropped but follows the notification that that descriptor
-// was dropped will successfully acquire the lease.
-func TestLeaseAcquireAfterDropWithEarlierTimestamp(t *testing.T) {
+// Tests acquiring read leases on previous versions of a table descriptor from
+// store.
+func TestHistoricalDescriptorAcquire(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	// descID is the ID of the table we're dropping.
-	var descID atomic.Value
-	descID.Store(descpb.ID(0))
-	type refreshEvent struct {
-		unblock chan struct{}
-		ts      hlc.Timestamp
-	}
-	refreshed := make(chan refreshEvent)
 	var stopper *stop.Stopper
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLLeaseManager: &lease.ManagerTestingKnobs{
-					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-						if descpb.GetDescriptorID(descriptor) != descID.Load().(descpb.ID) {
-							return
-						}
-						unblock := make(chan struct{})
-						select {
-						case refreshed <- refreshEvent{
-							unblock: unblock,
-							ts:      descpb.GetDescriptorModificationTime(descriptor),
-						}:
-						case <-stopper.ShouldQuiesce():
-						}
-						select {
-						case <-unblock:
-						case <-stopper.ShouldQuiesce():
-						}
-					},
-				},
-			},
-		},
+		ServerArgs: base.TestServerArgs{},
 	})
 	stopper = tc.Stopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	// Create a schema, create a table in that schema, insert into it, drop it,
-	// detect the drop has made its way to the lease manager and thus the lease
-	// has been removed, and note the timestamp at which the drop occurred, then
-	// ensure that the descriptors can be read at the previous timestamp.
+	// Create a schema, create table, alter table a few times to get some history
+	// of tables while keeping timestamp checkpoints for acquire query
 	tdb.Exec(t, "CREATE SCHEMA sc")
 	tdb.Exec(t, "CREATE TABLE sc.foo (i INT PRIMARY KEY)")
 	tdb.Exec(t, "INSERT INTO sc.foo VALUES (1)")
-	{
+
+	var ts1Str string
+	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1Str)
+	ts1, err := tree.ParseHLC(ts1Str)
+	require.NoError(t, err)
+
+	tdb.Exec(t, "ALTER TABLE sc.foo ADD COLUMN id UUID NOT NULL DEFAULT gen_random_uuid()")
+	tdb.Exec(t, "ALTER TABLE sc.foo RENAME COLUMN i TO former_id")
+	tdb.Exec(t, "ALTER TABLE sc.foo RENAME COLUMN id TO current_id")
+
+	// Store table descriptor ID
+	var tableID atomic.Value
+	storeID := func(val *atomic.Value, name string) {
 		var id descpb.ID
-		tdb.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`, "sc").Scan(&id)
+		tdb.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`, name).Scan(&id)
 		require.NotEqual(t, descpb.ID(0), id)
-		descID.Store(id)
+		val.Store(id)
 	}
-	dropErr := make(chan error, 1)
-	go func() {
-		_, err := tc.ServerConn(0).Exec("DROP SCHEMA sc CASCADE")
-		dropErr <- err
-	}()
+	storeID(&tableID, "foo")
 
-	// Observe that the lease manager has now marked the descriptor as dropped.
-	ev := <-refreshed
+	// Acquire descriptor version valid at timestamp ts1. Waits for the most
+	// recent version with the name column before doing so.
+	_, err = tc.Server(0).LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID.Load().(descpb.ID), base.DefaultRetryOptions())
+	require.NoError(t, err, "Failed to wait for one version of descriptor: %s", err)
+	acquiredDescriptor, err :=
+		tc.Server(0).LeaseManager().(*lease.Manager).Acquire(ctx, ts1, tableID.Load().(descpb.ID))
+	assert.NoError(t, err)
 
-	// Ensure that reads at the previous timestamp will succeed. Before the
-	// commit that introduced this test, they would fail because the fallback
-	// used to read the table descriptor from the store did not exist for the
-	// schema. After this commit, there is no fallback and the lease manager
-	// properly serves the right version for both.
-	tdb.CheckQueryResults(t,
-		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.Prev().AsOfSystemTime(),
-		[][]string{{"1"}})
-
-	// Test that using a timestamp equal to the timestamp at which the descriptor
-	// is dropped results in the proper error.
-	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
-		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.AsOfSystemTime())
-
-	// Also ensure that the subsequent timestamp gets the same error.
-	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
-		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.Next().AsOfSystemTime())
-
-	// Allow everything to continue.
-	close(ev.unblock)
-	require.NoError(t, <-dropErr)
-
-	// Test again, after the namespace entry has been fully removed, that the
-	// query returns the exact same error.
-	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
-		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.AsOfSystemTime())
+	// Ensure the modificationTime <= timestamp < expirationTime
+	modificationTime := acquiredDescriptor.Underlying().GetModificationTime()
+	assert.Truef(t, modificationTime.LessEq(ts1) &&
+		ts1.Less(acquiredDescriptor.Expiration()), "modification: %s, ts1: %s, "+
+		"expiration: %s", modificationTime.String(), ts1.String(),
+		acquiredDescriptor.Expiration().String())
 }
 
 func TestDropDescriptorRacesWithAcquisition(t *testing.T) {

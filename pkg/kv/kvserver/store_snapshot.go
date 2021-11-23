@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -74,7 +74,7 @@ type snapshotStrategy interface {
 
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
-	Status() string
+	Status() redact.RedactableString
 
 	// Close cleans up any resources associated with the snapshot strategy.
 	Close(context.Context)
@@ -105,7 +105,7 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	status string
+	status redact.RedactableString
 
 	// The size of the batches of PUT operations to send to the receiver of the
 	// snapshot. Only used on the sender side.
@@ -160,7 +160,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRawRange(
-		msstw.keyRanges[msstw.currRange].Start.Key, msstw.keyRanges[msstw.currRange].End.Key); err != nil {
+		msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -178,7 +178,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 }
 
 func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
-	for msstw.keyRanges[msstw.currRange].End.Key.Compare(key.Key) <= 0 {
+	for msstw.keyRanges[msstw.currRange].End.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -188,7 +188,7 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 			return err
 		}
 	}
-	if msstw.keyRanges[msstw.currRange].Start.Key.Compare(key.Key) > 0 {
+	if msstw.keyRanges[msstw.currRange].Start.Compare(key.Key) > 0 {
 		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
 	}
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
@@ -290,11 +290,13 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			inSnap := IncomingSnapshot{
 				SnapUUID:          snapUUID,
 				SSTStorageScratch: kvSS.scratch,
-				State:             &header.State,
+				FromReplica:       header.RaftMessageRequest.FromReplica,
+				Desc:              header.State.Desc,
 				snapType:          header.Type,
+				raftAppliedIndex:  header.State.RaftAppliedIndex,
 			}
 
-			kvSS.status = fmt.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
+			kvSS.status = redact.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
 		}
 	}
@@ -359,7 +361,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		bytesSent += int64(b.Len())
 	}
 
-	kvSS.status = fmt.Sprintf("kv pairs: %d", kvs)
+	kvSS.status = redact.Sprintf("kv pairs: %d", kvs)
 	return bytesSent, nil
 }
 
@@ -373,7 +375,9 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 }
 
 // Status implements the snapshotStrategy interface.
-func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
+func (kvSS *kvBatchSnapshotStrategy) Status() redact.RedactableString {
+	return kvSS.status
+}
 
 // Close implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
@@ -449,13 +453,10 @@ func (s *Store) canAcceptSnapshotLocked(
 	desc := *snapHeader.State.Desc
 
 	// First, check for an existing Replica.
-	v, ok := s.mu.replicas.Load(
-		int64(desc.RangeID),
-	)
+	existingRepl, ok := s.mu.replicasByRangeID.Load(desc.RangeID)
 	if !ok {
 		return nil, errors.Errorf("canAcceptSnapshotLocked requires a replica present")
 	}
-	existingRepl := (*Replica)(v)
 	// The raftMu is held which allows us to use the existing replica as a
 	// placeholder when we decide that the snapshot can be applied. As long
 	// as the caller releases the raftMu only after feeding the snapshot

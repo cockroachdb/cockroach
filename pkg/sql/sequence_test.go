@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -225,6 +226,7 @@ func assertColumnOwnsSequences(
 // Relevant sub-issues are referenced in test names/inline comments.
 func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		name string
 		test func(*testing.T, *kv.DB, *sqlutils.SQLRunner)
@@ -380,6 +382,7 @@ CREATE SEQUENCE t.valid_seq OWNED BY t.test.a`)
 // TestCachedSequences tests the behavior of cached sequences.
 func TestCachedSequences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Start test cluster.
 	ctx := context.Background()
@@ -741,6 +744,7 @@ func TestCachedSequences(t *testing.T) {
 // cache sizes of 0 function in the same way as sequences with a cache size of 1.
 func TestSequencesZeroCacheSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}

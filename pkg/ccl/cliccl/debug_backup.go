@@ -703,7 +703,7 @@ func (f backupFileDisplayMsg) MarshalJSON() ([]byte, error) {
 	}{
 		Path:         f.Path,
 		Span:         fmt.Sprint(f.Span),
-		DataSize:     humanizeutil.IBytes(f.EntryCounts.DataSize),
+		DataSize:     string(humanizeutil.IBytes(f.EntryCounts.DataSize)),
 		IndexEntries: f.EntryCounts.IndexEntries,
 		Rows:         f.EntryCounts.Rows,
 	}
@@ -736,7 +736,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 	}{
 		StartTime:           timeutil.Unix(0, b.StartTime.WallTime).Format(time.RFC3339),
 		EndTime:             timeutil.Unix(0, b.EndTime.WallTime).Format(time.RFC3339),
-		DataSize:            humanizeutil.IBytes(b.EntryCounts.DataSize),
+		DataSize:            string(humanizeutil.IBytes(b.EntryCounts.DataSize)),
 		Rows:                b.EntryCounts.Rows,
 		IndexEntries:        b.EntryCounts.IndexEntries,
 		FormatVersion:       b.FormatVersion,

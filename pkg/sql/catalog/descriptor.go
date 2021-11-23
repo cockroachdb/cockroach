@@ -145,7 +145,8 @@ type LeasableDescriptor interface {
 	// GetDrainingNames returns the list of "draining names" for this descriptor.
 	// Draining names are names that were in use by this descriptor, but are no
 	// longer due to renames.
-	GetDrainingNames() []descpb.NameInfo
+	// TODO(postamar): remove GetDrainingNames method in 22.2
+	GetDrainingNames() []descpb.NameInfo // Deprecated
 }
 
 // Descriptor is an interface to be shared by individual descriptor
@@ -216,9 +217,16 @@ type DatabaseDescriptor interface {
 	// MultiRegionEnumID returns the ID of the multi-region enum if the database
 	// is a multi-region database, and an error otherwise.
 	MultiRegionEnumID() (descpb.ID, error)
-	// ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
+	// ForEachSchemaInfo iterates f over each schema info mapping in the
+	// descriptor.
 	// iterutil.StopIteration is supported.
-	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
+	// TODO(postamar): remove ForEachSchemaInfo method in 22.2
+	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error // Deprecated
+	// ForEachNonDroppedSchema iterates f over each non-dropped schema info
+	// mapping in the descriptor.
+	// iterutil.StopIteration is supported.
+	// TODO(postamar): rename this in 22.2 when all mappings are non-dropped.
+	ForEachNonDroppedSchema(func(id descpb.ID, name string) error) error
 	// GetSchemaID returns the ID in the schema mapping entry for the
 	// given name, 0 otherwise.
 	GetSchemaID(name string) descpb.ID
@@ -263,9 +271,6 @@ type TableDescriptor interface {
 	// Sequences count as physical tables because their values are stored in
 	// the KV layer.
 	IsPhysicalTable() bool
-	// IsInterleaved returns true if any part of this this table is interleaved with
-	// another table's data.
-	IsInterleaved() bool
 	// MaterializedView returns whether or not this TableDescriptor is a
 	// MaterializedView.
 	MaterializedView() bool
@@ -764,9 +769,6 @@ func FormatSafeDescriptorProperties(w *redact.StringBuilder, desc Descriptor) {
 			offlineReason != "" {
 			w.Printf(", OfflineReason: %q", redact.Safe(offlineReason))
 		}
-	}
-	if drainingNames := desc.GetDrainingNames(); len(drainingNames) > 0 {
-		w.Printf(", NumDrainingNames: %d", len(drainingNames))
 	}
 }
 

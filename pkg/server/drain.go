@@ -28,14 +28,18 @@ import (
 var (
 	queryWait = settings.RegisterDurationSetting(
 		"server.shutdown.query_wait",
-		"the server will wait for at least this amount of time for active queries to finish",
+		"the server will wait for at least this amount of time for active queries to finish "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting)",
 		10*time.Second,
 	).WithPublic()
 
 	drainWait = settings.RegisterDurationSetting(
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
-			"of the shutdown process",
+			"of the shutdown process "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting)",
 		0*time.Second,
 	).WithPublic()
 )
@@ -207,7 +211,7 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
-	s.sqlServer.leaseMgr.SetDraining(true /* drain */, reporter)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil

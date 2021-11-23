@@ -16,14 +16,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -189,7 +188,7 @@ func getAllDescChanges(
 	startKey := codec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 
-	allRevs, err := storageccl.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
+	allRevs, err := kvclient.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
 	if err != nil {
 		return nil, err
 	}
@@ -226,133 +225,6 @@ func getAllDescChanges(
 		}
 	}
 	return res, nil
-}
-
-// validateMultiRegionBackup validates that for all tables included in the
-// backup, their parent database is also being backed up. For multi-region
-// tables, we require that the parent database is included to ensure that the
-// multi-region enum (which is required for multi-region tables) is also
-// present.
-func validateMultiRegionBackup(
-	backupStmt *annotatedBackupStatement,
-	descs []catalog.Descriptor,
-	tables []catalog.TableDescriptor,
-) error {
-	// We only need to block in the table backup case, so there's nothing to do
-	// if we're running a cluster backup.
-	if backupStmt.Coverage() == tree.AllDescriptors {
-		return nil
-	}
-	// We build a map of the target databases here because the supplied list of
-	// descriptors contains ALL database descriptors for the corresponding
-	// tables (regardless of whether or not the databases are included in the
-	// backup targets list). The map helps below so that we're not looping over
-	// the descriptors slice for every table.
-	databaseTargetIDs := map[descpb.ID]struct{}{}
-	databaseTargetNames := map[tree.Name]struct{}{}
-	for _, name := range backupStmt.Targets.Databases {
-		databaseTargetNames[name] = struct{}{}
-	}
-
-	for _, desc := range descs {
-		switch desc.(type) {
-		case catalog.DatabaseDescriptor:
-			// If the database descriptor found is included in the targets list, add
-			// it to the targetsID map.
-			if _, ok := databaseTargetNames[tree.Name(desc.GetName())]; ok {
-				databaseTargetIDs[desc.GetID()] = struct{}{}
-			}
-		}
-	}
-
-	// Look through the list of tables and for every multi-region table, see if
-	// its parent database is being backed up.
-	for _, table := range tables {
-		if table.GetLocalityConfig() != nil {
-			if _, ok := databaseTargetIDs[table.GetParentID()]; !ok {
-				// Found a table which is being backed up without its parent database.
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"cannot backup individual table %d from multi-region database %d",
-					table.GetID(),
-					table.GetParentID(),
-				)
-			}
-		}
-	}
-	return nil
-}
-
-func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
-	inBackup := make(map[descpb.ID]bool, len(tables))
-	for _, t := range tables {
-		inBackup[t.GetID()] = true
-	}
-
-	for _, table := range tables {
-		if err := catalog.ForEachIndex(table, catalog.IndexOpts{
-			AddMutations: true,
-		}, func(index catalog.Index) error {
-			for i := 0; i < index.NumInterleaveAncestors(); i++ {
-				a := index.GetInterleaveAncestor(i)
-				if !inBackup[a.TableID] {
-					return errors.Errorf(
-						"cannot backup table %q without interleave parent (ID %d)", table.GetName(), a.TableID,
-					)
-				}
-			}
-			for i := 0; i < index.NumInterleavedBy(); i++ {
-				c := index.GetInterleavedBy(i)
-				if !inBackup[c.Table] {
-					return errors.Errorf(
-						"cannot backup table %q without interleave child table (ID %d)", table.GetName(), c.Table,
-					)
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func lookupDatabaseID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, name string,
-) (descpb.ID, error) {
-	found, id, err := catalogkv.LookupDatabaseID(ctx, txn, codec, name)
-	if err != nil {
-		return descpb.InvalidID, err
-	}
-	if !found {
-		return descpb.InvalidID, errors.Errorf("could not find ID for database %s", name)
-	}
-	return id, nil
-}
-
-func fullClusterTargetsRestore(
-	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
-	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	filteredDescs := make([]catalog.Descriptor, 0, len(fullClusterDescs))
-	for _, desc := range fullClusterDescs {
-		if _, isDefaultDB := catalogkeys.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
-			filteredDescs = append(filteredDescs, desc)
-		}
-	}
-	filteredDBs := make([]catalog.DatabaseDescriptor, 0, len(fullClusterDBs))
-	for _, db := range fullClusterDBs {
-		if _, isDefaultDB := catalogkeys.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
-			filteredDBs = append(filteredDBs, db)
-		}
-	}
-
-	// Restore all tenants during full-cluster restore.
-	tenants := lastBackupManifest.GetTenants()
-
-	return filteredDescs, filteredDBs, tenants, nil
 }
 
 // fullClusterTargets returns all of the tableDescriptors to be included in a
@@ -394,6 +266,28 @@ func fullClusterTargets(
 		}
 	}
 	return fullClusterDescs, fullClusterDBs, nil
+}
+
+func fullClusterTargetsRestore(
+	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	var filteredDescs []catalog.Descriptor
+	var filteredDBs []catalog.DatabaseDescriptor
+	for _, desc := range fullClusterDescs {
+		if desc.GetID() != keys.SystemDatabaseID {
+			filteredDescs = append(filteredDescs, desc)
+		}
+	}
+	for _, desc := range fullClusterDBs {
+		if desc.GetID() != keys.SystemDatabaseID {
+			filteredDBs = append(filteredDBs, desc)
+		}
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return filteredDescs, filteredDBs, lastBackupManifest.GetTenants(), nil
 }
 
 // fullClusterTargetsBackup returns the same descriptors referenced in

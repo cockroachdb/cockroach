@@ -122,6 +122,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		DiskMonitor: testDiskMonitor,
 		EvalCtx:     &evalCtx,
 	}
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	oneInput := []execinfrapb.InputSyncSpec{
 		{ColumnTypes: []*types.T{types.Int}},
@@ -222,11 +224,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					Inputs:              colexectestutils.MakeInputs(sources),
 					StreamingMemAccount: &acc,
 					FDSemaphore:         colexecop.NewTestingSemaphore(256),
+					MonitorRegistry:     &monitorRegistry,
 				}
-				// The disk spilling infrastructure relies on different memory
-				// accounts, so if the spilling is supported, we do *not* want to use
-				// streaming memory account.
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				var (
 					result *colexecargs.NewColOperatorResult
 					err    error
@@ -244,14 +243,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						result.Root.Next()
 						result.Root.Next()
 					})
-				}
-				if result != nil {
-					for _, memAccount := range result.OpAccounts {
-						memAccount.Close(ctx)
-					}
-					for _, memMonitor := range result.OpMonitors {
-						memMonitor.Stop(ctx)
-					}
 				}
 				if expectNoMemoryError {
 					require.NoError(t, err, "expected success, found: ", err)

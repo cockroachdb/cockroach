@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -176,6 +177,8 @@ type Server struct {
 	replicationReporter   *reports.Reporter
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
+
+	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
@@ -447,15 +450,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	gcoords, metrics := admission.NewGrantCoordinators(admission.Options{
-		MinCPUSlots:                    1,
-		MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
-		SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
-		SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
-		SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
-		SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
-		Settings:                       st,
-	})
+	gcoords, metrics := admission.NewGrantCoordinators(
+		cfg.AmbientCtx,
+		admission.Options{
+			MinCPUSlots:                    1,
+			MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
+			SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
+			SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
+			SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
+			SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
+			Settings:                       st,
+		})
 	for i := range metrics {
 		registry.AddMetricStruct(metrics[i])
 	}
@@ -612,8 +617,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	var spanConfigAccessor spanconfig.KVAccessor
+	var spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
+		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
+			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
+		} else {
+			spanConfigSubscriber = spanconfigkvsubscriber.New(
+				stopper,
+				db,
+				clock,
+				rangeFeedFactory,
+				keys.SpanConfigurationsTableID,
+				1<<20, /* 1 MB */
+				storeCfg.DefaultSpanConfig,
+				spanConfigKnobs,
+			)
+			storeCfg.SpanConfigSubscriber = spanConfigSubscriber
+		}
+
 		spanConfigAccessor = spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
@@ -808,6 +831,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
+		spanConfigSubscriber:   spanConfigSubscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
@@ -1000,7 +1024,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 // successfully persisted timestamp greater then any wall time used by the
 // server.
 //
-// If prevHLCUpperBound is 0, the function sleeps up to max offset
+// If prevHLCUpperBound is 0, the function sleeps up to max offset.
 func ensureClockMonotonicity(
 	ctx context.Context,
 	clock *hlc.Clock,
@@ -1566,14 +1590,17 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
-	// NB: if this store is freshly initialized (or no upper bound was
-	// persisted), hlcUpperBound will be zero.
-	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
-	if err != nil {
-		return errors.Wrap(err, "reading max HLC upper bound")
-	}
+	// If the server is being restarted, sleep to ensure monotonicity of the HLC
+	// clock. This can be skipped on server bootstrap because the server has never
+	// been used before.
+	var hlcUpperBoundExists bool
+	if !initialStart {
+		hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
+		if err != nil {
+			return errors.Wrap(err, "reading max HLC upper bound")
+		}
+		hlcUpperBoundExists = hlcUpperBound > 0
 
-	if hlcUpperBound > 0 {
 		ensureClockMonotonicity(
 			ctx,
 			s.clock,
@@ -1615,12 +1642,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	// Stores have been initialized, so Node can now provide Pebble metrics.
-	s.storeGrantCoords.SetPebbleMetricsProvider(s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
 		ctx,
-		hlcUpperBound > 0,
+		hlcUpperBoundExists,
 		func(t int64) error { /* function to persist upper bound of HLC to all stores */
 			return s.node.SetHLCUpperBound(context.Background(), t)
 		},
@@ -1726,6 +1753,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	if s.cfg.SpanConfigsEnabled && s.spanConfigSubscriber != nil {
+		if err := s.spanConfigSubscriber.Start(ctx); err != nil {
+			return err
+		}
+	}
 	// Start garbage collecting system events.
 	//
 	// NB: As written, this falls awkwardly between SQL and KV. KV is used only
@@ -2350,16 +2382,19 @@ func (s *SQLServer) startServeSQL(
 		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
 	}
 
-	_ = stopper.RunAsyncTask(pgCtx, "serve-conn", func(pgCtx context.Context) {
-		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, pgL, func(conn net.Conn) {
-			connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
-			tcpKeepAlive.configure(connCtx, conn)
+	_ = stopper.RunAsyncTaskEx(pgCtx,
+		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			err := connManager.ServeWith(ctx, stopper, pgL, func(ctx context.Context, conn net.Conn) {
+				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
+				tcpKeepAlive.configure(connCtx, conn)
 
-			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
-				log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
-			}
-		}))
-	})
+				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+				}
+			})
+			netutil.FatalIfUnexpected(err)
+		})
 
 	// If a unix socket was requested, start serving there too.
 	if len(socketFile) != 0 {
@@ -2381,21 +2416,26 @@ func (s *SQLServer) startServeSQL(
 				log.Ops.Fatalf(ctx, "%v", err)
 			}
 		}
-		if err := stopper.RunAsyncTask(ctx, "unix-ln-close", func(ctx context.Context) {
-			waitQuiesce(ctx)
-		}); err != nil {
+		if err := stopper.RunAsyncTaskEx(ctx,
+			stop.TaskOpts{TaskName: "unix-ln-close", SpanOpt: stop.SterileRootSpan},
+			func(ctx context.Context) {
+				waitQuiesce(ctx)
+			}); err != nil {
 			waitQuiesce(ctx)
 			return err
 		}
 
-		if err := stopper.RunAsyncTask(pgCtx, "unix-ln-serve", func(pgCtx context.Context) {
-			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
-				connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
-				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
-					log.Ops.Errorf(connCtx, "%v", err)
-				}
-			}))
-		}); err != nil {
+		if err := stopper.RunAsyncTaskEx(pgCtx,
+			stop.TaskOpts{TaskName: "unix-listener", SpanOpt: stop.SterileRootSpan},
+			func(ctx context.Context) {
+				err := connManager.ServeWith(ctx, stopper, unixLn, func(ctx context.Context, conn net.Conn) {
+					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
+					if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
+						log.Ops.Errorf(connCtx, "%v", err)
+					}
+				})
+				netutil.FatalIfUnexpected(err)
+			}); err != nil {
 			return err
 		}
 	}

@@ -215,19 +215,22 @@ func ResolveExistingObject(
 		}
 		return nil, prefix, nil
 	}
-	resolvedTn := tree.MakeTableNameFromPrefix(prefix.NamePrefix(), tree.Name(un.Object()))
+	getResolvedTn := func() *tree.TableName {
+		tn := tree.MakeTableNameFromPrefix(prefix.NamePrefix(), tree.Name(un.Object()))
+		return &tn
+	}
 
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
 		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
-			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedTypeError(getResolvedTn())
 		}
 		return typ, prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
-			return nil, prefix, sqlerrors.NewUndefinedRelationError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedRelationError(getResolvedTn())
 		}
 		goodType := true
 		switch lookupFlags.DesiredTableDescKind {
@@ -241,7 +244,7 @@ func ResolveExistingObject(
 			goodType = table.IsSequence()
 		}
 		if !goodType {
-			return nil, prefix, sqlerrors.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
+			return nil, prefix, sqlerrors.NewWrongObjectTypeError(getResolvedTn(), lookupFlags.DesiredTableDescKind.String())
 		}
 
 		// If the table does not have a primary key, return an error

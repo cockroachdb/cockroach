@@ -34,6 +34,7 @@ pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto channe
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto log_channels.go log_channels_generated.go
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto logging.md ../../../docs/generated/logging.md
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto severity.go severity/severity_generated.go
+pkg/util/log/sinks.go://go:generate mockgen -package=log -source=sinks.go -destination=mock_generated.go -mock_names=logSink=MockLogSink logSink
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
 "
 
@@ -45,6 +46,12 @@ pkg/cmd/prereqs/BUILD.bazel
 pkg/cmd/publish-artifacts/BUILD.bazel
 pkg/cmd/roachtest/BUILD.bazel
 pkg/cmd/teamcity-trigger/BUILD.bazel
+"
+
+EXISTING_CRDB_TEST_BUILD_CONSTRAINTS="
+pkg/util/buildutil/crdb_test_dyn.go://go:build bazel
+pkg/util/buildutil/crdb_test_off.go://go:build !crdb_test || crdb_test_off
+pkg/util/buildutil/crdb_test_on.go://go:build crdb_test && !crdb_test_off
 "
 
 git grep 'go:generate stringer' pkg | while read LINE; do
@@ -76,12 +83,25 @@ git grep '//go:generate' -- './*.go' | grep -v stringer | grep -v 'add-leaktest\
     exit 1
 done
 
-git grep 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v generate-test-suites | cut -d: -f1 | while read LINE; do
+git grep 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-test-suites | cut -d: -f1 | while read LINE; do
     if [[ "$EXISTING_BROKEN_TESTS_IN_BAZEL" == *"$LINE"* ]]; then
 	# Grandfathered.
 	continue
     fi
     echo "A new broken test in Bazel was added in $LINE"
     echo 'Ensure the test runs with Bazel, then remove the broken_in_bazel tag.'
+    exit 1
+done
+
+git grep '//go:build' pkg | grep crdb_test | while read LINE; do
+    if [[ "$EXISTING_CRDB_TEST_BUILD_CONSTRAINTS" == *"$LINE"* ]]; then
+        # Grandfathered.
+        continue
+    fi
+    echo "A new crdb_test/crdb_test_off build constraint was added in $LINE"
+    echo 'Make sure you port the conditional compilation logic to the Bazel build,'
+    echo 'which does not use the build tags in the same way.'
+    echo "Once you've done so, you can add the line to "
+    echo 'EXISTING_CRDB_TEST_BUILD_CONSTRAINTS in build/bazelutil/check.sh.'
     exit 1
 done

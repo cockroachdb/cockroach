@@ -13,6 +13,7 @@ package config
 import (
 	"context"
 	"os/user"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -34,14 +35,19 @@ func init() {
 	}
 }
 
-// A sentinel value used to indicate that an installation should
-// take place on the local machine.  Later in the refactoring,
-// this ought to be replaced by a LocalCloudProvider or somesuch.
 const (
+	// DefaultDebugDir is used to stash debug information.
 	DefaultDebugDir = "${HOME}/.roachprod/debug"
-	DefaultHostDir  = "${HOME}/.roachprod/hosts"
-	EmailDomain     = "@cockroachlabs.com"
-	Local           = "local"
+
+	// EmailDomain is used to form the full account name for GCE and Slack.
+	EmailDomain = "@cockroachlabs.com"
+
+	// Local is the prefix used to identify local clusters.
+	// It is also used as the zone for local clusters.
+	Local = "local"
+
+	// ClustersDir is the directory where we cache information about clusters.
+	ClustersDir = "${HOME}/.roachprod/clusters"
 
 	// SharedUser is the linux username for shared use on all vms.
 	SharedUser = "ubuntu"
@@ -49,4 +55,22 @@ const (
 	// MemoryMax is passed to systemd-run; the cockroach process is killed if it
 	// uses more than this percentage of the host's memory.
 	MemoryMax = "95%"
+
+	// DefaultSQLPort is the default port on which the cockroach process is
+	// listening for SQL connections.
+	DefaultSQLPort = 26257
+
+	// DefaultAdminUIPort is the default port on which the cockroach process is
+	// listening for HTTP connections for the Admin UI.
+	DefaultAdminUIPort = 26258
 )
+
+// IsLocalClusterName returns true if the given name is a valid name for a local
+// cluster.
+//
+// Local cluster names are either "local" or start with a "local-" prefix.
+func IsLocalClusterName(clusterName string) bool {
+	return localClusterRegex.MatchString(clusterName)
+}
+
+var localClusterRegex = regexp.MustCompile(`^local(|-[a-zA-Z0-9\-]+)$`)

@@ -435,6 +435,33 @@ and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
 </span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year, isoyear,
+quarter, month, week, dayofweek, isodow, dayofyear, julian,
+hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year,
+month, day, hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year, isoyear,
+quarter, month, week, dayofweek, isodow, dayofyear, julian,
+hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year, isoyear,
+quarter, month, week, dayofweek, isodow, dayofyear, julian,
+hour, minute, second, millisecond, microsecond, epoch,
+timezone, timezone_hour, timezone_minute</p>
+</span></td></tr>
+<tr><td><a name="date_part"></a><code>date_part(element: <a href="string.html">string</a>, input: timetz) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch,
+timezone, timezone_hour, timezone_minute</p>
+</span></td></tr>
 <tr><td><a name="date_trunc"></a><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
 significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: millennium, century, decade, year, quarter, month,
@@ -2491,6 +2518,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="crdb_internal.complete_stream_ingestion_job"></a><code>crdb_internal.complete_stream_ingestion_job(job_id: <a href="int.html">int</a>, cutover_ts: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used to signal a running stream ingestion job to complete. The job will eventually stop ingesting, revert to the specified timestamp and leave the cluster in a consistent state. The specified timestamp can only be specified up to the microsecond. This function does not wait for the job to reach a terminal state, but instead returns the job id as soon as it has signaled the job to complete. This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the job has left the cluster in a consistent state.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.start_replication_stream"></a><code>crdb_internal.start_replication_stream(tenant_id: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used on the producer side to start a replication stream for the specified tenant. The returned stream ID uniquely identifies created stream. The caller must periodically invoke crdb_internal.heartbeat_stream() function to notify that the replication is still ongoing.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2544,6 +2573,9 @@ by dependencies. All foreign keys are added after the creation of the table
 in the alter statements.
 It is not recommended to perform this operation on a database with many
 tables.
+The output can be used to recreate a database.’</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.show_create_all_types"></a><code>crdb_internal.show_create_all_types(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE type statements.
 The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="decode"></a><code>decode(text: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>

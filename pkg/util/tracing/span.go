@@ -91,12 +91,29 @@ func (sp *Span) Finish() {
 	sp.i.Finish()
 }
 
+// FinishAndGetRecording finishes the span and gets a recording at the same
+// time. This is offered as a combined operation because, otherwise, the caller
+// would be forced to collect the recording before finishing and so the span
+// would appear to be unfinished in the recording (it's illegal to collect the
+// recording after the span finishes, except by using this method).
+func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
+	sp.Finish()
+	// Reach directly into sp.i to avoide the done() check in sp.GetRecording().
+	return sp.i.GetRecording(recType)
+}
+
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
 //
-// As a performance optimization, GetRecording does not return tags when the
-// underlying Span is not verbose. Returning tags requires expensive
+// recType indicates the type of information to be returned: structured info or
+// structured + verbose info. The caller can ask for either regardless of the
+// current recording mode (and also regardless of past recording modes) but, of
+// course, GetRecording(RecordingVerbose) will not return verbose info if it was
+// never collected.
+//
+// As a performance optimization, GetRecording does not return tags when
+// recType == RecordingStructured. Returning tags requires expensive
 // stringification.
 //
 // A few internal tags are added to denote span properties:
@@ -104,9 +121,11 @@ func (sp *Span) Finish() {
 //    "_unfinished"	The span was never Finish()ed
 //    "_verbose"	The span is a verbose one
 //    "_dropped"	The span dropped recordings due to sizing constraints
-func (sp *Span) GetRecording() Recording {
-	// It's always valid to get the recording, even for a finished span.
-	return sp.i.GetRecording()
+//
+// If recType is RecordingStructured, the return value will be nil if the span
+// doesn't have any structured events.
+func (sp *Span) GetRecording(recType RecordingType) Recording {
+	return sp.i.GetRecording(recType)
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
@@ -147,17 +166,14 @@ func (sp *Span) SetVerbose(to bool) {
 	sp.i.SetVerbose(to)
 }
 
-// ResetRecording clears any previously recorded information. This doesn't
-// affect any auxiliary trace sinks such as net/trace or zipkin.
-//
-// TODO(irfansharif): Remove this, it's no longer used.
-func (sp *Span) ResetRecording() {
-	sp.i.ResetRecording()
+// RecordingType returns the range's current recording mode.
+func (sp *Span) RecordingType() RecordingType {
+	return sp.i.RecordingType()
 }
 
 // IsVerbose returns true if the Span is verbose. See SetVerbose for details.
 func (sp *Span) IsVerbose() bool {
-	return sp.i.IsVerbose()
+	return sp.RecordingType() == RecordingVerbose
 }
 
 // Record provides a way to record free-form text into verbose spans. Recordings

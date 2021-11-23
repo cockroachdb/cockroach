@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -24,7 +25,10 @@ import (
 type KVAccessor interface {
 	// GetSpanConfigEntriesFor returns the span configurations that overlap with
 	// the given spans.
-	GetSpanConfigEntriesFor(ctx context.Context, spans []roachpb.Span) ([]roachpb.SpanConfigEntry, error)
+	GetSpanConfigEntriesFor(
+		ctx context.Context,
+		spans []roachpb.Span,
+	) ([]roachpb.SpanConfigEntry, error)
 
 	// UpdateSpanConfigEntries updates configurations for the given spans. This
 	// is a "targeted" API: the spans being deleted are expected to have been
@@ -33,35 +37,72 @@ type KVAccessor interface {
 	// divvying up an existing span into multiple others with distinct configs,
 	// callers are to issue a delete for the previous span and upserts for the
 	// new ones.
-	UpdateSpanConfigEntries(ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error
+	UpdateSpanConfigEntries(
+		ctx context.Context,
+		toDelete []roachpb.Span,
+		toUpsert []roachpb.SpanConfigEntry,
+	) error
+}
+
+// KVSubscriber presents a consistent[1] snapshot of a StoreReader that's
+// incrementally maintained with changes made to the global span configurations
+// state (system.span_configurations). The maintenance happens transparently;
+// callers can subscribe to learn about what key spans may have seen a
+// configuration change. After learning about a span update through a callback
+// invocation, subscribers can consult the embedded StoreReader to retrieve an
+// up-to-date[2] config for the updated span. The callback is called in a single
+// goroutine; it should avoid doing any long-running or blocking work.
+//
+// When a callback is first installed, it's invoked with the [min,max) span --
+// a shorthand to indicate that subscribers should consult the StoreReader for all
+// spans of interest. Subsequent updates are of the more incremental kind. It's
+// possible that the span updates received are no-ops, i.e. consulting the
+// StoreReader for the given span would still retrieve the last config observed
+// for the span[3].
+//
+// [1]: The contents of the StoreReader at t1 corresponds exactly to the
+//      contents of the global span configuration state at t0 where t0 <= t1. If
+//      the StoreReader is read from at t2 where t2 > t1, it's guaranteed to
+//      observe a view of the global state at t >= t0.
+// [2]: For the canonical KVSubscriber implementation, this is typically lagging
+//      by the closed timestamp target duration.
+// [3]: The canonical KVSubscriber implementation is bounced whenever errors
+//      occur, which may result in the re-transmission of earlier updates
+//      (typically through a coarsely targeted [min,max) span).
+type KVSubscriber interface {
+	StoreReader
+	Subscribe(func(updated roachpb.Span))
 }
 
 // SQLTranslator translates SQL descriptors and their corresponding zone
 // configurations to constituent spans and span configurations.
 //
 // Concretely, for the following zone configuration hierarchy:
+//
 //    CREATE DATABASE db;
 //    CREATE TABLE db.t1();
 //    ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
 //    ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+//
 // The SQLTranslator produces the following translation (represented as a diff
 // against RANGE DEFAULT for brevity):
+//
 // 		Table/5{3-4}                  num_replicas=7 num_voters=5
 type SQLTranslator interface {
-	// Translate generates the implied span configuration state given a list of
 	// Translate generates the span configuration state given a list of
-	// {descriptor, named zone} IDs. No entry is returned for an ID if it doesn't
-	// exist or has been dropped. The timestamp at which the translation is valid
-	// is also returned.
+	// {descriptor, named zone} IDs. No entry is returned for an ID if it
+	// doesn't exist or if it's dropped. The timestamp at which the translation
+	// is valid is also returned.
 	//
-	// For every ID we first descend the zone configuration hierarchy with the ID
-	// as the root to accumulate IDs of all leaf objects. Leaf objects are tables
-	// and named zones (other than RANGE DEFAULT) which have actual span
-	// configurations associated with them (as opposed to non-leaf nodes that only
-	// serve to hold zone configurations for inheritance purposes). Then, for
-	// for every one of these accumulated IDs, we generate <span, span config>
-	// tuples by following up the inheritance chain to fully hydrate the span
-	// configuration. Translate also accounts for and negotiates subzone spans.
+	// For every ID we first descend the zone configuration hierarchy with the
+	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
+	// tables and named zones (other than RANGE DEFAULT) which have actual span
+	// configurations associated with them (as opposed to non-leaf nodes that
+	// only serve to hold zone configurations for inheritance purposes). Then,
+	// for each one of these accumulated IDs, we generate <span, span
+	// config> tuples by following up the inheritance chain to fully hydrate the
+	// span configuration. Translate also accounts for and negotiates subzone
+	// spans.
 	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
 }
 
@@ -77,6 +118,59 @@ func FullTranslate(
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
+// SQLWatcher watches for events on system.zones and system.descriptors.
+type SQLWatcher interface {
+	// WatchForSQLUpdates watches for updates to zones and descriptors starting at
+	// the given timestamp (exclusive), informing callers using the handler
+	// callback.
+	//
+	// The handler callback[1] is invoked from time to time with a list of updates
+	// and a checkpointTS. Invocations of the handler callback provide the
+	// following semantics:
+	// 	1. Calls to the handler are serial.
+	// 	2. The timestamp supplied to the handler is monotonically increasing.
+	// 	3. The list of DescriptorUpdates supplied to handler includes all events
+	//	in the window (prevInvocationCheckpointTS, checkpointTS].
+	// 	4. No further calls to the handler are made if a call to the handler
+	// 	returns an error.
+	//
+	// These guarantees mean that users of this interface are free to persist the
+	// checkpointTS and later use it to re-establish a SQLWatcher without missing
+	// any updates.
+	//
+	// WatchForSQLUpdates can only ever be called once, effectively making the
+	// SQLWatcher a single use interface.
+	//
+	// WatchForSQLUpdates may run out of memory and return an error if it is
+	// tracking too many events between two checkpoints.
+	//
+	// [1] Users of this interface should not intend to do expensive work in the
+	// handler callback.
+	// TODO(arul): Possibly get rid of this limitation.
+	WatchForSQLUpdates(
+		ctx context.Context,
+		startTS hlc.Timestamp,
+		handler func(ctx context.Context, updates []DescriptorUpdate, checkpointTS hlc.Timestamp) error,
+	) error
+}
+
+// DescriptorUpdate captures the ID and type of a descriptor or zone that the
+// SQLWatcher has observed updated.
+type DescriptorUpdate struct {
+	// ID of the descriptor/zone that has been updated.
+	ID descpb.ID
+
+	// DescriptorType of the descriptor/zone that has been updated. Could be either
+	// the specific type or catalog.Any if no information is available.
+	DescriptorType catalog.DescriptorType
+}
+
+// SQLWatcherFactory is used to construct new SQLWatchers.
+type SQLWatcherFactory interface {
+	// New returns a new SQLWatcher.
+	New() SQLWatcher
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
@@ -86,11 +180,7 @@ type ReconciliationDependencies interface {
 
 	SQLTranslator
 
-	// TODO(arul): We'll also want access to a "SQLWatcher", something that
-	// watches for changes to system.{descriptors, zones} to feed IDs to the
-	// SQLTranslator. These interfaces will be used by the "Reconciler to perform
-	// full/partial reconciliation, checkpoint the span config job, and update KV
-	// with the tenants span config state.
+	SQLWatcherFactory
 }
 
 // Store is a data structure used to store spans and their corresponding
@@ -178,8 +268,8 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
-// Update captures what span has seen a config change. It will be the unit of
-// what a {SQL,KV}Watcher emits, and what can be applied to a StoreWriter.
+// Update captures a span and the corresponding config change. It's the unit of
+// what can be applied to a StoreWriter.
 type Update struct {
 	// Span captures the key span being updated.
 	Span roachpb.Span
@@ -195,8 +285,7 @@ func (u Update) Deletion() bool {
 	return u.Config.IsEmpty()
 }
 
-// Addition returns true if the update corresponds to a span config being
-// added.
+// Addition returns true if the update corresponds to a span config being added.
 func (u Update) Addition() bool {
 	return !u.Deletion()
 }

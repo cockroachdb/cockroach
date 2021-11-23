@@ -90,6 +90,8 @@ const (
 // node simply behaves as though its leniency period is 0. Epoch-based
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
+	serverCtx context.Context
+
 	ac       log.AmbientContext
 	stopper  *stop.Stopper
 	db       *kv.DB
@@ -166,6 +168,7 @@ const PreventAdoptionFile = "DISABLE_STARTING_BACKGROUND_JOBS"
 // sql.newInternalPlanner. It returns a sql.JobExecCtx, but must be
 // coerced into that in the Resumer functions.
 func MakeRegistry(
+	ctx context.Context,
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
@@ -181,6 +184,7 @@ func MakeRegistry(
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
+		serverCtx:           ctx,
 		ac:                  ac,
 		stopper:             stopper,
 		clock:               clock,
@@ -245,7 +249,14 @@ func (r *Registry) ID() base.SQLInstanceID {
 // makeCtx returns a new context from r's ambient context and an associated
 // cancel func.
 func (r *Registry) makeCtx() (context.Context, func()) {
-	return context.WithCancel(r.ac.AnnotateCtx(context.Background()))
+	ctx := r.ac.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	// TODO(knz): This may not be necessary if the AmbientContext had
+	// all the tags already.
+	// See: https://github.com/cockroachdb/cockroach/issues/72815
+	ctx = logtags.AddTags(ctx, logtags.FromContext(r.serverCtx))
+	return context.WithCancel(ctx)
 }
 
 // MakeJobID generates a new job ID.
@@ -825,7 +836,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 	})
 
-	if err := stopper.RunAsyncTask(context.Background(), "jobs/cancel", func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "jobs/cancel", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
@@ -849,7 +860,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}); err != nil {
 		return err
 	}
-	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "jobs/gc", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
@@ -882,7 +893,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}); err != nil {
 		return err
 	}
-	return stopper.RunAsyncTask(context.Background(), "jobs/adopt", func(ctx context.Context) {
+	return stopper.RunAsyncTask(ctx, "jobs/adopt", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 		lc, cleanup := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)

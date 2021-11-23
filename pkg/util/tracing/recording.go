@@ -29,15 +29,47 @@ import (
 type RecordingType int32
 
 const (
-	// RecordingOff means that the Span discards all events handed to it.
-	// Child spans created from it similarly won't be recording by default.
+	// RecordingOff means that the Span discards events passed in.
 	RecordingOff RecordingType = iota
-	// RecordingVerbose means that the Span is adding events passed in via LogKV
-	// and LogData to its recording and that derived spans will do so as well.
-	RecordingVerbose
 
-	// TODO(tbg): add RecordingBackground for always-on tracing.
+	// RecordingStructured means that the Span discards events passed in through
+	// Recordf(), but collects events passed in through RecordStructured(), as
+	// well as information about child spans (their name, start and stop time).
+	RecordingStructured
+
+	// RecordingVerbose means that the Span collects events passed in through
+	// Recordf() in its recording.
+	RecordingVerbose
 )
+
+// ToCarrierValue encodes the RecordingType to be propagated through a carrier.
+func (t RecordingType) ToCarrierValue() string {
+	switch t {
+	case RecordingOff:
+		return "n"
+	case RecordingStructured:
+		return "s"
+	case RecordingVerbose:
+		return "v"
+	default:
+		panic(fmt.Sprintf("invalid RecordingType: %d", t))
+	}
+}
+
+// RecordingTypeFromCarrierValue decodes a recording type carried by a carrier.
+func RecordingTypeFromCarrierValue(val string) RecordingType {
+	switch val {
+	case "v":
+		return RecordingVerbose
+	case "s":
+		return RecordingStructured
+	case "n":
+		return RecordingOff
+	default:
+		// Unrecognized.
+		return RecordingOff
+	}
+}
 
 type traceLogData struct {
 	logRecord

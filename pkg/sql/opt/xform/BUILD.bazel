@@ -43,6 +43,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/errorutil",
         "//pkg/util/log",
         "//pkg/util/treeprinter",

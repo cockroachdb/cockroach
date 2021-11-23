@@ -943,6 +943,7 @@ func (c *cluster) waitAndCollect(t *testing.T, m *monitor) string {
 type monitor struct {
 	seq int
 	gs  map[*monitoredGoroutine]struct{}
+	tr  *tracing.Tracer
 	buf []byte // avoids allocations
 }
 
@@ -960,19 +961,21 @@ type monitoredGoroutine struct {
 
 func newMonitor() *monitor {
 	return &monitor{
+		tr: tracing.NewTracer(),
 		gs: make(map[*monitoredGoroutine]struct{}),
 	}
 }
 
 func (m *monitor) runSync(opName string, fn func(context.Context)) {
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
-		context.Background(), tracing.NewTracer(), opName)
+	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracing.RecordingVerbose))
 	g := &monitoredGoroutine{
-		opSeq:   0, // synchronous
-		opName:  opName,
-		ctx:     ctx,
-		collect: collect,
-		cancel:  cancel,
+		opSeq:  0, // synchronous
+		opName: opName,
+		ctx:    ctx,
+		collect: func() tracing.Recording {
+			return sp.GetRecording(tracing.RecordingVerbose)
+		},
+		cancel: sp.Finish,
 	}
 	m.gs[g] = struct{}{}
 	fn(ctx)
@@ -981,14 +984,15 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 
 func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
 	m.seq++
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
-		context.Background(), tracing.NewTracer(), opName)
+	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracing.RecordingVerbose))
 	g := &monitoredGoroutine{
-		opSeq:   m.seq,
-		opName:  opName,
-		ctx:     ctx,
-		collect: collect,
-		cancel:  cancel,
+		opSeq:  m.seq,
+		opName: opName,
+		ctx:    ctx,
+		collect: func() tracing.Recording {
+			return sp.GetRecording(tracing.RecordingVerbose)
+		},
+		cancel: sp.Finish,
 	}
 	m.gs[g] = struct{}{}
 	go func() {

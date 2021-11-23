@@ -222,7 +222,7 @@ CREATE TYPE typ AS ENUM('a')
 statement ok
 CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
 
-statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+statement error cannot drop type "typ" because other objects still depend on it: test.public.v
 DROP TYPE typ
 
 statement ok
@@ -231,7 +231,7 @@ DROP VIEW v
 statement ok
 CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
 
-statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it
+statement error cannot drop type "typ" because other objects still depend on it: test.public.v
 DROP TYPE typ
 
 statement ok
@@ -244,14 +244,14 @@ statement ok
 CREATE VIEW v AS (SELECT i FROM t)
 
 # Note that v does not depend on typ since it does not use column k.
-statement error cannot drop type "typ" because other objects \(\[test.public.t\]\) still depend on it
+statement error cannot drop type "typ" because other objects still depend on it: test.public.t
 DROP TYPE typ
 
 statement ok
 CREATE VIEW v_dep AS (SELECT k FROM t)
 
 # Since v_dep depends on t.k which uses type typ, v_dep has a dependency to typ.
-statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it
+statement error cannot drop type "typ" because other objects still depend on it: test.public.t, test.public.v_dep
 DROP TYPE typ
 
 statement ok
@@ -260,7 +260,7 @@ CREATE TYPE typ2 AS ENUM('a')
 statement ok
 CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
 
-statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+statement error cannot drop type "typ2" because other objects still depend on it: test.public.v3
 DROP TYPE typ2
 
 statement ok
@@ -275,13 +275,13 @@ CREATE TYPE typ2 AS ENUM('a')
 statement ok
 CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
 
-statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it
+statement error cannot drop type "typ2" because other objects still depend on it: test.public.v3
 DROP TYPE typ2
 
 statement ok
 ALTER TYPE typ2 RENAME TO typ3
 
-statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it
+statement error cannot drop type "typ3" because other objects still depend on it: test.public.v3
 DROP TYPE typ3
 
 statement ok
@@ -294,7 +294,7 @@ statement ok
 CREATE VIEW v4 AS (SELECT i FROM t4)
 
 # Note that v4 does not depend on typ4.
-statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it
+statement error cannot drop type "typ4" because other objects still depend on it: test.public.t4
 DROP TYPE typ4
 
 statement ok
@@ -313,7 +313,7 @@ statement ok
 CREATE VIEW v4_dep AS (SELECT j FROM t4)
 
 # Since v4_dep depends on t4.j which is of type typ4, v4_dep has a dependency to typ4.
-statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it
+statement error cannot drop type "typ4" because other objects still depend on it: test.public.t4, test.public.v4_dep
 DROP type typ4
 
 statement ok
@@ -326,21 +326,21 @@ CREATE TABLE t5 (i INT, j STRING DEFAULT 'a'::typ5::string)
 statement ok
 CREATE VIEW v5 AS (SELECT i FROM t5)
 
-statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it
+statement error cannot drop type "typ5" because other objects still depend on it: test.public.t5
 DROP TYPE typ5
 
 statement ok
 CREATE VIEW v5_dep AS (SELECT j FROM t5)
 
 # Since v5_dep depends on t5.j which uses type typ5, v5_dep has a dependency to typ5.
-statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it
+statement error cannot drop type "typ5" because other objects still depend on it: test.public.t5, test.public.v5_dep
 DROP TYPE typ5
 
 statement ok
 CREATE VIEW v6 AS (SELECT j FROM v4_dep)
 
 # v6 depends on v4_dep.j, which depends on t4.j, which depends on typ4, so v6 also depends on typ4.
-statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it
+statement error cannot drop type "typ4" because other objects still depend on it: test.public.t4, test.public.v4_dep, test.public.v6
 DROP TYPE typ4
 
 statement ok
@@ -352,14 +352,14 @@ statement ok
 CREATE VIEW v7 AS (SELECT i FROM t6)
 
 # Note that v7 does not depend on t6.
-statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it
+statement error cannot drop type "typ6" because other objects still depend on it: test.public.t6
 DROP TYPE typ6
 
 statement ok
 CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
 
 # v7_dep depends on typ6 now.
-statement error cannot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it
+statement error cannot drop type "typ6" because other objects still depend on it: test.public.t6, test.public.v7_dep
 DROP TYPE typ6
 
 
@@ -478,21 +478,21 @@ CREATE TYPE typ8 AS ENUM ('hello');
 statement ok
 CREATE TABLE t8 (x typ8)
 
-statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
 DROP TYPE typ8
 
 # Now add a column with the using the type.
 statement ok
 ALTER TABLE t8 ADD COLUMN y typ8
 
-statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
 DROP TYPE typ8
 
 # If we drop the original column x, t8 should still depend on t.
 statement ok
 ALTER TABLE t8 DROP COLUMN x
 
-statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
 DROP TYPE typ8
 
 # Now remove the other column.
@@ -507,7 +507,7 @@ statement ok
 CREATE TYPE typ8 AS ENUM ('hello');
 ALTER TABLE t8 ADD COLUMN x typ8[]
 
-statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
 DROP TYPE typ8
 
 statement ok
@@ -679,3 +679,337 @@ CREATE TABLE public.trewrite (
    CONSTRAINT new_primary_key PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts (k, ts, c)
 )
+
+subtest create-index
+statement ok
+CREATE TABLE tIndex (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO tIndex VALUES (1,1)
+
+user root
+
+statement ok
+CREATE INDEX foo ON tIndex (b)
+
+statement error relation \"foo\" already exists
+CREATE INDEX foo ON tIndex (a)
+
+statement error column "c" does not exist
+CREATE INDEX bar ON tIndex (c)
+
+statement error index \"bar\" contains duplicate column \"b\"
+CREATE INDEX bar ON tIndex (b, b);
+
+statement ok
+CREATE INDEX bar ON tIndex ((a+b))
+
+statement ok
+CREATE INDEX bar2 ON tIndex (abs(b))
+
+statement ok
+CREATE UNIQUE INDEX bar3 ON tIndex (abs(b))
+
+statement ok
+CREATE INVERTED INDEX bar4 ON tIndex ((ARRAY[a,b]))
+
+statement ok
+CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
+
+statement ok
+CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
+
+query TTBITTBB colnames
+SHOW INDEXES FROM tIndex
+----
+table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit
+tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
+tindex      bar          true        2             a                ASC        false    true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
+tindex      bar2         true        2             a                ASC        false    true
+tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
+tindex      bar3         false       2             a                ASC        false    true
+tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
+tindex      bar4         true        2             a                ASC        false    true
+tindex      foo          true        1             b                ASC        false    false
+tindex      foo          true        2             a                ASC        false    true
+tindex      tindex_pkey  false       1             a                ASC        false    false
+tindex      tindex_pkey  false       2             b                N/A        true     false
+
+statement error  duplicate key value violates unique constraint "bar3"
+INSERT INTO tIndex VALUES (2,1)
+
+statement ok
+INSERT INTO tIndex VALUES (20000,10000)
+
+# FIXME: Disabled until rollback is supported
+#statement error pgcode 23505 violates unique constraint "bar"
+#CREATE UNIQUE INDEX bar ON tIndex (b)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM tIndex
+----
+table_name  index_name   non_unique  seq_in_index  column_name      direction  storing  implicit
+tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
+tindex      bar          true        2             a                ASC        false    true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
+tindex      bar2         true        2             a                ASC        false    true
+tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
+tindex      bar3         false       2             a                ASC        false    true
+tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
+tindex      bar4         true        2             a                ASC        false    true
+tindex      foo          true        1             b                ASC        false    false
+tindex      foo          true        2             a                ASC        false    true
+tindex      tindex_pkey  false       1             a                ASC        false    false
+tindex      tindex_pkey  false       2             b                N/A        true     false
+
+# test for DESC index
+
+statement ok
+DROP TABLE tIndex
+
+statement ok
+CREATE TABLE tIndx (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+INSERT INTO tIndx VALUES (1,1,1), (2,2,2)
+
+statement ok
+CREATE INDEX b_desc ON tIndx (b DESC)
+
+statement ok
+CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM tIndx
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+tindx       b_asc       true        1             b            ASC        false    false
+tindx       b_asc       true        2             c            DESC       false    false
+tindx       b_asc       true        3             a            ASC        false    true
+tindx       b_desc      true        1             b            DESC       false    false
+tindx       b_desc      true        2             a            ASC        false    true
+tindx       tindx_pkey  false       1             a            ASC        false    false
+tindx       tindx_pkey  false       2             b            N/A        true     false
+tindx       tindx_pkey  false       3             c            N/A        true     false
+
+statement error pgcode 42P01 relation "foo" does not exist
+CREATE INDEX fail ON foo (b DESC)
+
+statement ok
+CREATE VIEW vIndx AS SELECT a,b FROM tIndx
+
+statement error pgcode 42809 "vindx" is not an indexable table or a materialized view
+CREATE INDEX failview ON vIndx (b DESC)
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on relation privs
+CREATE INDEX foo ON privs (b)
+
+user root
+
+query TTBITTBB colnames
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+privs       privs_pkey  false       1             a            ASC        false    false
+privs       privs_pkey  false       2             b            N/A        true     false
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+CREATE INDEX foo ON privs (b)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+privs       foo         true        1             b            ASC        false    false
+privs       foo         true        2             a            ASC        false    true
+privs       privs_pkey  false       1             a            ASC        false    false
+privs       privs_pkey  false       2             b            N/A        true     false
+
+
+user root
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true;
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB
+)
+
+
+# Test that creating an index on a column which is currently being dropped
+# causes an error.
+subtest create_index_on_dropping_column
+
+statement ok
+CREATE TABLE create_idx_drop_column (c0 INT PRIMARY KEY, c1 INT);
+
+statement ok
+begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
+
+statement error column "c1" does not exist
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE create_idx_drop_column;
+
+# Sanity test that dropping table descriptors
+# with the wrong type specified is correctly blocked.
+subtest drop-type-sanity
+
+statement ok
+CREATE TABLE t1dr(name varchar(256));
+
+statement ok
+CREATE VIEW v1dr as (select name from t1dr);
+
+statement ok
+CREATE SEQUENCE s1dr;
+
+statement error pq: "t1dr" is not a view
+DROP VIEW t1dr;
+
+statement error pq: "t1dr" is not a sequence
+DROP SEQUENCE t1dr;
+
+statement error pq: "v1dr" is not a table
+DROP TABLE v1dr
+
+statement error pq: "v1dr" is not a sequence
+DROP SEQUENCE v1dr;
+
+statement error pq: "s1dr" is not a view
+DROP VIEW s1dr
+
+statement error pq: "s1dr" is not a table
+DROP TABLE s1dr;
+
+# Event log related subtest
+subtest event-log
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement ok
+set sql_safe_updates=false;
+
+statement ok
+CREATE TABLE t1ev(name varchar(256));
+
+statement ok
+CREATE TABLE t2ev(name varchar(256));
+
+statement ok
+CREATE VIEW v1ev AS (SELECT name FROM t1ev);
+
+statement ok
+CREATE VIEW v2ev AS (SELECT name FROM t2ev);
+
+statement ok
+CREATE VIEW v4ev AS (SELECT name FROM V1EV);
+
+statement ok
+CREATE VIEW v3ev AS (SELECT name FROM V2EV);
+
+statement ok
+DELETE FROM system.eventlog;
+
+statement ok
+DROP VIEW v1ev CASCADE;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog;
+----
+1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW v1ev CASCADE", "User": "root", "ViewName": "test.public.v1ev"}
+
+statement ok
+CREATE VIEW v1ev AS (SELECT name FROM T1EV);
+
+statement ok
+CREATE VIEW v4ev AS (SELECT name FROM V1EV);
+
+statement ok
+DELETE FROM system.eventlog;
+
+statement ok
+DROP TABLE t1ev,t2ev CASCADE;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+ORDER BY timestamp, info DESC;
+----
+1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t2ev", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t1ev", "User": "root"}
+
+statement ok
+CREATE TABLE fooev (i INT PRIMARY KEY);
+
+statement ok
+DELETE FROM system.eventlog;
+
+statement ok
+ALTER TABLE fooev ADD COLUMN j INT
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+ORDER BY timestamp, info DESC;
+----
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "User": "root"}
+
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1;
+
+statement ok
+CREATE SCHEMA db1.sc2;
+
+statement ok
+CREATE DATABASE db2;
+
+statement ok
+CREATE SCHEMA db2.sc3;
+
+statement ok
+delete from system.eventlog;
+
+statement ok
+DROP DATABASE db1 cascade;
+
+statement ok
+DROP DATABASE db2 cascade;
+
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+ORDER BY timestamp, info DESC;
+----
+1  {"DatabaseName": "db1", "DroppedSchemaObjects": ["db1.sc1", "db1.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE db1 CASCADE", "User": "root"}
+1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}

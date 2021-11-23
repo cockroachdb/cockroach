@@ -21,6 +21,14 @@ system         node   NULL            {}       NULL
 test           root   NULL            {}       NULL
 
 statement ok
+CREATE ROLE newrole LOGIN
+
+query B
+SELECT has_database_privilege('newrole', 'a', 'CONNECT')
+----
+true
+
+statement ok
 COMMENT ON DATABASE a IS 'A'
 
 query TTTTTT colnames
@@ -219,26 +227,7 @@ user testuser
 statement error permission denied to create database
 CREATE DATABASE privs
 
-# Unit test for #61150
 user root
-
-statement ok
-CREATE DATABASE d1
-
-statement ok
-BEGIN
-
-statement ok
-DROP DATABASE d1
-
-statement error pgcode 55000 database "d1" is being dropped, try again later
-CREATE DATABASE IF NOT EXISTS d1
-
-statement ok
-END
-
-statement ok
-DROP DATABASE d1
 
 subtest missing-db-error-issue-68060
 

@@ -63,12 +63,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -2685,95 +2683,8 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	"extract": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromTS := args[1].(*tree.DTimestamp)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromInterval := args[1].(*tree.DInterval)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromInterval(fromInterval, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year,\n" +
-				"month, day, hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				date := args[1].(*tree.DDate)
-				fromTime, err := date.ToTime()
-				if err != nil {
-					return nil, err
-				}
-				return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTSTZ := args[1].(*tree.DTimestampTZ)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
-				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch,\n" +
-				"timezone, timezone_hour, timezone_minute",
-			Volatility: tree.VolatilityStable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTime := args[1].(*tree.DTime)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTime(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTime := args[1].(*tree.DTimeTZ)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
-				"timezone, timezone_hour, timezone_minute",
-			Volatility: tree.VolatilityImmutable,
-		},
-	),
+	"extract":   extractBuiltin,
+	"date_part": extractBuiltin,
 
 	// TODO(knz,otan): Remove in 20.2.
 	"extract_duration": makeBuiltin(
@@ -4398,7 +4309,7 @@ value if you rely on the HLC for accuracy.`,
 					return tree.DBoolFalse, nil
 				}
 
-				rootSpan.SetVerboseRecursively(verbosity)
+				rootSpan.SetVerbose(verbosity)
 				return tree.DBoolTrue, nil
 			},
 			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",
@@ -4566,12 +4477,6 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return args[0], nil
 			},
-			// TODO(spaskob): this built-in currently does not actually delete the
-			// data but just marks it as DROP. This is for done for safety in case we
-			// would like to restore the tenant later. If data in needs to be removed
-			// use gc_tenant built-in.
-			// We should just add a new built-in called `drop_tenant` instead and use
-			// this one to really destroy the tenant.
 			Info:       "Destroys a tenant with the provided ID. Must be run by the System tenant.",
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -4895,7 +4800,7 @@ value if you rely on the HLC for accuracy.`,
 					},
 				})
 				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
@@ -4990,7 +4895,7 @@ value if you rely on the HLC for accuracy.`,
 					},
 				})
 				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
 				jsonStr, err := gojson.Marshal(&resp)
@@ -5663,6 +5568,8 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.gc_tenant": makeBuiltin(
+		// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
+		// changes are deployed to all Cockroach Cloud serverless hosts.
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
 			Undocumented: true,
@@ -5788,39 +5695,6 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "This function can be used to report the usage of an arbitrary feature. The " +
 				"feature name is hashed for privacy purposes.",
-			Volatility: tree.VolatilityVolatile,
-		},
-	),
-
-	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"job_id", types.Int},
-				{"cutover_ts", types.TimestampTZ},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				jobID := int(*args[0].(*tree.DInt))
-				cutoverTime := args[1].(*tree.DTimestampTZ).Time
-				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				if streaming.CompleteIngestionHook == nil {
-					return nil, errors.New("completing a stream ingestion job requires a CCL binary")
-				}
-				err := streaming.CompleteIngestionHook(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
-				return tree.NewDInt(tree.DInt(jobID)), err
-			},
-			Info: "This function can be used to signal a running stream ingestion job to complete. " +
-				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
-				"cluster in a consistent state. The specified timestamp can only be specified up to the" +
-				" microsecond. " +
-				"This function does not wait for the job to reach a terminal state, " +
-				"but instead returns the job id as soon as it has signaled the job to complete. " +
-				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
-				" job has left the cluster in a consistent state.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -7822,6 +7696,96 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	}
 	return arrayLower(a, dim-1)
 }
+
+var extractBuiltin = makeBuiltin(
+	tree.FunctionProperties{Category: categoryDateAndTime},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			// extract timeSpan fromTime.
+			fromTS := args[1].(*tree.DTimestamp)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromInterval := args[1].(*tree.DInterval)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromInterval(fromInterval, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year,\n" +
+			"month, day, hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			date := args[1].(*tree.DDate)
+			fromTime, err := date.ToTime()
+			if err != nil {
+				return nil, err
+			}
+			return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTSTZ := args[1].(*tree.DTimestampTZ)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
+			"hour, minute, second, millisecond, microsecond, epoch,\n" +
+			"timezone, timezone_hour, timezone_minute",
+		Volatility: tree.VolatilityStable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTime := args[1].(*tree.DTime)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTime(fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+		Volatility: tree.VolatilityImmutable,
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			fromTime := args[1].(*tree.DTimeTZ)
+			timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+			return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
+		},
+		Info: "Extracts `element` from `input`.\n\n" +
+			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
+			"timezone, timezone_hour, timezone_minute",
+		Volatility: tree.VolatilityImmutable,
+	},
+)
 
 func extractTimeSpanFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)

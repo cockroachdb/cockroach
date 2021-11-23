@@ -356,15 +356,14 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	// Set up the flow on this node.
-	localReq := setupReq
-	localReq.Flow = *flows[thisNodeID]
+	setupReq.Flow = *flows[thisNodeID]
 	var batchReceiver execinfra.BatchReceiver
 	if recv.batchWriter != nil {
 		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
 		// former has the corresponding writer set.
 		batchReceiver = recv
 	}
-	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, batchReceiver, localState)
+	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &setupReq, recv, batchReceiver, localState)
 }
 
 // Run executes a physical plan. The plan should have been finalized using

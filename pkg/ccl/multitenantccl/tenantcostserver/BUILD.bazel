@@ -25,7 +25,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",

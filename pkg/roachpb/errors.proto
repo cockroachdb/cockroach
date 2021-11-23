@@ -90,24 +90,18 @@ message RangeKeyMismatchError {
   optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
   optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
 
-  // deprecated_mismatched_range is an older version of mismatched_range. Can go
-  // away in 21.1, when we don't worry about 20.1 kvservers not populating rangesInternal.
-  optional roachpb.RangeDescriptor deprecated_mismatched_range = 3 [(gogoproto.nullable) = false];
-  // deprecated_suggested_range is an older version of suggested_range. Can go
-  // away in 21.1, when we don't worry about 20.1 kvservers not populating
-  // rangesInternal.
-  optional roachpb.RangeDescriptor deprecated_suggested_range = 4;
-
-  // ranges contains information intended for the client's range cache. The
+  // Ranges contains information intended for the client's range cache. The
   // server populates it with info on the range with the ID addressed by the
   // client (always the first in the array) and then all other ranges
   // overlapping the requested key range, or in between the addressed range and
   // the requested key range.
   //
-  // In 21.1 the customname can be removed, together with the Ranges() accessor.
-  repeated roachpb.RangeInfo ranges = 5 [(gogoproto.customname) = "rangesInternal",
-                                 (gogoproto.nullable) = false];
+  // The slice should always have a length of at least 1. However, users should
+  // call MismatchedRange instead of relying on this in cases where they require
+  // at least one entry.
+  repeated roachpb.RangeInfo ranges = 5 [(gogoproto.nullable) = false];
 
+  reserved 3, 4;
 }
 
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp

@@ -894,7 +894,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: decfam@decfam_pkey
-  spans: /NaN/NaN-/NaN/NaN/#
+  spans: /NaN/NaN-/NaN/-Infinity
 
 # The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
 query T
@@ -1029,7 +1029,7 @@ vectorized: true
   columns: (f float)
   estimated row count: 1 (missing stats)
   table: flt@flt_f_key
-  spans: /NaN-/NaN/PrefixEnd
+  spans: /NaN/0
 
 query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE f = 'NaN'
@@ -1041,7 +1041,7 @@ vectorized: true
   columns: (f float)
   estimated row count: 1 (missing stats)
   table: flt@flt_f_key
-  spans: /NaN-/NaN/PrefixEnd
+  spans: /NaN/0
 
 query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
@@ -1090,7 +1090,7 @@ vectorized: true
   columns: (i int)
   estimated row count: 1 (missing stats)
   table: num@num_i_key
-  spans: /-1-/0
+  spans: /-1/0
 
 query T
 EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
@@ -1102,7 +1102,7 @@ vectorized: true
   columns: (f float)
   estimated row count: 1 (missing stats)
   table: num@num_f_key
-  spans: /-1-/-1/PrefixEnd
+  spans: /-1/0
 
 query T
 EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
@@ -1114,7 +1114,7 @@ vectorized: true
   columns: (d decimal)
   estimated row count: 1 (missing stats)
   table: num@num_d_key
-  spans: /-1-/-1/PrefixEnd
+  spans: /-1/0
 
 query T
 EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
@@ -1126,7 +1126,7 @@ vectorized: true
   columns: (n interval)
   estimated row count: 1 (missing stats)
   table: num@num_n_key
-  spans: /-01:00:00-/1 day -25:00:00
+  spans: /-01:00:00/0
 
 statement ok
 DROP TABLE num
@@ -1862,3 +1862,49 @@ vectorized: true
       estimated row count: 11,110,000 (100% of the table; stats collected <hidden> ago)
       table: nulls@nulls_pkey
       spans: FULL SCAN
+
+# Test resolution of @primary index hint.
+statement ok
+CREATE TABLE tbl_with_no_primary_constraint (
+  id INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+CREATE TABLE tbl_with_primary_named_index (
+  id INT PRIMARY KEY,
+  b INT,
+  INDEX "primary" (b)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM tbl_with_no_primary_constraint@primary ORDER BY id
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (id, b)
+  ordering: +id
+  estimated row count: 1,000 (missing stats)
+  table: tbl_with_no_primary_constraint@tbl_with_no_primary_constraint_pkey
+  spans: FULL SCAN
+
+statement ok
+SHOW PARTITIONS FROM INDEX tbl_with_no_primary_constraint@primary
+
+query T
+EXPLAIN (VERBOSE) SELECT b FROM tbl_with_primary_named_index@primary ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (b)
+  ordering: +b
+  estimated row count: 1,000 (missing stats)
+  table: tbl_with_primary_named_index@primary
+  spans: FULL SCAN
+
+statement ok
+SELECT index_name FROM [SHOW PARTITIONS FROM INDEX tbl_with_primary_named_index@primary]

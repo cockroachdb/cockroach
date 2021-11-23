@@ -80,7 +80,7 @@ func TestBlockingBuffer(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics, quotapool.OnWaitStart(notifyWait))
 	defer func() {
-		require.NoError(t, buf.Close(context.Background()))
+		require.NoError(t, buf.CloseWithReason(context.Background(), nil))
 	}()
 
 	producerCtx, stopProducers := context.WithCancel(context.Background())
@@ -123,7 +123,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics)
 	defer func() {
-		require.NoError(t, buf.Close(context.Background()))
+		require.NoError(t, buf.CloseWithReason(context.Background(), nil))
 	}()
 
 	producerCtx, stopProducer := context.WithCancel(context.Background())

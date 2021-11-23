@@ -63,9 +63,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			return nil, errors.New("no span in ctx")
 		}
 		sp.RecordStructured(newTestStructured(magicValue))
-		sp.SetVerbose(true) // want the tags
-		recs := sp.GetRecording()
-		sp.SetVerbose(false)
+		recs := sp.GetRecording(tracing.RecordingVerbose)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)
 		}
@@ -189,17 +187,15 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithForceRealSpan())
-			sp.SetVerbose(true) // to set the tags
+			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithRecording(tracing.RecordingVerbose))
 			recAny, err := tc.do(ctx)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
 			require.NoError(t, types.UnmarshalAny(recAny, &rec))
 			require.Len(t, rec.StructuredRecords, 1)
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
-			sp.Finish()
 			var n int
-			finalRecs := sp.GetRecording()
+			finalRecs := sp.FinishAndGetRecording(tracing.RecordingVerbose)
 			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
 				n += len(rec.StructuredRecords)
@@ -231,7 +227,8 @@ func TestGRPCInterceptors(t *testing.T) {
 	runtime.GC()
 	testutils.SucceedsSoon(t, func() error {
 		return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
-			return errors.Newf("leaked span: %s %s", sp.GetRecording()[0].Operation, sp.GetRecording()[0].Tags)
+			rec := sp.GetRecording(tracing.RecordingVerbose)[0]
+			return errors.Newf("leaked span: %s %s", rec.Operation, rec.Tags)
 		})
 	})
 }

@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -151,7 +150,6 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
-		catconstants.CrdbInternalInterleaved:                      crdbInternalInterleaved,
 		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
 		catconstants.CrdbInternalLostTableDescriptors:             crdbLostTableDescriptors,
 		catconstants.CrdbInternalClusterInflightTracesTable:       crdbInternalClusterInflightTracesTable,
@@ -1289,6 +1287,11 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)
 		}
 
+		if !p.ExecCfg().Codec.ForSystemTenant() {
+			// Tenant nodes doesn't have trace collector so can't serve this table.
+			return false, pgerror.New(pgcode.FeatureNotSupported,
+				"table crdb_internal.cluster_inflight_traces is not implemented on tenants")
+		}
 		traceCollector := p.ExecCfg().TraceCollector
 		var iter *collector.Iterator
 		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
@@ -1350,7 +1353,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
 		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
-			for _, rec := range span.GetRecording() {
+			for _, rec := range span.GetRecording(tracing.RecordingVerbose) {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
 				spanID := rec.SpanID
@@ -1937,7 +1940,11 @@ CREATE VIEW crdb_internal.cluster_contended_indexes (
     crdb_internal.cluster_contention_events.index_id
     = crdb_internal.table_indexes.index_id
     AND crdb_internal.cluster_contention_events.table_id
+      = crdb_internal.table_indexes.descriptor_id
+    AND crdb_internal.cluster_contention_events.table_id
       = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC
 `,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
@@ -2233,8 +2240,7 @@ CREATE TABLE crdb_internal.create_type_statements (
   descriptor_id      INT,
   descriptor_name    STRING,
   create_statement   STRING,
-  enum_members       STRING[], -- populated only for ENUM types
-	INDEX (descriptor_id)
+  enum_members       STRING[] -- populated only for ENUM types
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2371,7 +2377,7 @@ CREATE TABLE crdb_internal.create_statements (
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(ctx, &p.semaCtx, &name, table)
+			stmt, err = ShowCreateView(ctx, &p.semaCtx, p.SessionData(), &name, table)
 		} else if table.IsSequence() {
 			descType = typeSequence
 			stmt, err = ShowCreateSequence(ctx, &name, table)
@@ -2384,8 +2390,7 @@ CREATE TABLE crdb_internal.create_statements (
 			if err != nil {
 				return err
 			}
-			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.PublicNonPrimaryIndexes(), table, alterStmts,
-				validateStmts, &p.semaCtx); err != nil {
+			if err := showAlterStatement(ctx, &name, contextName, lookup, table, alterStmts, validateStmts); err != nil {
 				return err
 			}
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
@@ -2422,18 +2427,16 @@ CREATE TABLE crdb_internal.create_statements (
 		)
 	})
 
-func showAlterStatementWithInterleave(
+func showAlterStatement(
 	ctx context.Context,
 	tn *tree.TableName,
 	contextName string,
 	lCtx simpleSchemaResolver,
-	allIdx []catalog.Index,
 	table catalog.TableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
-	semaCtx *tree.SemaContext,
 ) error {
-	if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+	return table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		f := tree.NewFmtCtx(tree.FmtSimple)
 		f.WriteString("ALTER TABLE ")
 		f.FormatNode(tn)
@@ -2464,87 +2467,7 @@ func showAlterStatementWithInterleave(
 		f.FormatNameP(&fk.Name)
 
 		return validateStmts.Append(tree.NewDString(f.CloseAndGetString()))
-	}); err != nil {
-		return err
-	}
-
-	for _, idx := range allIdx {
-		// Create CREATE INDEX commands for INTERLEAVE tables. These commands
-		// are included in the ALTER TABLE statements.
-		if idx.NumInterleaveAncestors() > 0 {
-			f := tree.NewFmtCtx(tree.FmtSimple)
-			parentTableID := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1).TableID
-			var err error
-			var parentName tree.TableName
-			if lCtx != nil {
-				parentName, err = getParentAsTableName(lCtx, parentTableID, contextName)
-				if err != nil {
-					return err
-				}
-			} else {
-				parentName = tree.MakeTableNameWithSchema(tree.Name(""), tree.PublicSchemaName, tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
-				parentName.ExplicitCatalog = false
-				parentName.ExplicitSchema = false
-			}
-
-			var tableName tree.TableName
-			if lCtx != nil {
-				tableName, err = getTableNameFromTableDescriptor(lCtx, table, contextName)
-				if err != nil {
-					return err
-				}
-			} else {
-				tableName = tree.MakeTableNameWithSchema(tree.Name(""), tree.PublicSchemaName, tree.Name(fmt.Sprintf("[%d as parent]", table.GetID())))
-				tableName.ExplicitCatalog = false
-				tableName.ExplicitSchema = false
-			}
-			var sharedPrefixLen int
-			for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-				sharedPrefixLen += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
-			}
-			// Write the CREATE INDEX statements.
-			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
-				return err
-			}
-			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func showCreateIndexWithInterleave(
-	ctx context.Context,
-	f *tree.FmtCtx,
-	table catalog.TableDescriptor,
-	idx catalog.Index,
-	tableName tree.TableName,
-	parentName tree.TableName,
-	sharedPrefixLen int,
-	semaCtx *tree.SemaContext,
-) error {
-	f.WriteString("CREATE ")
-	idxStr, err := catformat.IndexForDisplay(
-		ctx, table, &tableName, idx, "" /* partition */, "" /* interleave */, semaCtx,
-	)
-	if err != nil {
-		return err
-	}
-	f.WriteString(idxStr)
-	f.WriteString(" INTERLEAVE IN PARENT ")
-	parentName.Format(f)
-	f.WriteString(" (")
-	// Get all of the columns and write them.
-	comma := ""
-	for i := 0; i < sharedPrefixLen; i++ {
-		name := idx.GetKeyColumnName(i)
-		f.WriteString(comma)
-		f.FormatNameP(&name)
-		comma = ", "
-	}
-	f.WriteString(")")
-	return nil
+	})
 }
 
 // crdbInternalTableColumnsTable exposes the column descriptors.
@@ -2575,7 +2498,9 @@ CREATE TABLE crdb_internal.table_columns (
 					for _, col := range columns {
 						defStr := tree.DNull
 						if col.HasDefault() {
-							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, col.GetDefaultExpr(), &p.semaCtx, tree.FmtParsable)
+							defExpr, err := schemaexpr.FormatExprForDisplay(
+								ctx, table, col.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+							)
 							if err != nil {
 								return err
 							}
@@ -2800,7 +2725,6 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
-		interleaveDep := tree.NewDString("interleave")
 
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
 			db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn,
@@ -2808,25 +2732,6 @@ CREATE TABLE crdb_internal.backward_dependencies (
 			tableID := tree.NewDInt(tree.DInt(table.GetID()))
 			tableName := tree.NewDString(table.GetName())
 
-			reportIdxDeps := func(idx catalog.Index) error {
-				for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-					interleaveParent := idx.GetInterleaveAncestor(i)
-					if err := addRow(
-						tableID, tableName,
-						tree.NewDInt(tree.DInt(idx.GetID())),
-						tree.DNull,
-						tree.NewDInt(tree.DInt(interleaveParent.TableID)),
-						interleaveDep,
-						tree.NewDInt(tree.DInt(interleaveParent.IndexID)),
-						tree.DNull,
-						tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
-							interleaveParent.SharedPrefixLen)),
-					); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
 			if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 				refTbl, err := tableLookup.getTableByID(fk.ReferencedTableID)
 				if err != nil {
@@ -2851,11 +2756,6 @@ CREATE TABLE crdb_internal.backward_dependencies (
 					tree.DNull,
 				)
 			}); err != nil {
-				return err
-			}
-
-			// Record the backward references of the primary index.
-			if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, reportIdxDeps); err != nil {
 				return err
 			}
 
@@ -2959,31 +2859,12 @@ CREATE TABLE crdb_internal.forward_dependencies (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
-		interleaveDep := tree.NewDString("interleave")
 		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
 			func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
-				reportIdxDeps := func(idx catalog.Index) error {
-					for i := 0; i < idx.NumInterleavedBy(); i++ {
-						interleaveRef := idx.GetInterleavedBy(i)
-						if err := addRow(
-							tableID, tableName,
-							tree.NewDInt(tree.DInt(idx.GetID())),
-							tree.NewDInt(tree.DInt(interleaveRef.Table)),
-							interleaveDep,
-							tree.NewDInt(tree.DInt(interleaveRef.Index)),
-							tree.DNull,
-							tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
-								interleaveRef.SharedPrefixLen)),
-						); err != nil {
-							return err
-						}
-					}
-					return nil
-				}
 				if err := table.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 					return addRow(
 						tableID, tableName,
@@ -2998,10 +2879,6 @@ CREATE TABLE crdb_internal.forward_dependencies (
 					return err
 				}
 
-				// Record the backward references of the primary index.
-				if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, reportIdxDeps); err != nil {
-					return err
-				}
 				reportDependedOnBy := func(
 					dep *descpb.TableDescriptor_Reference, depTypeString *tree.DString,
 				) error {
@@ -4274,7 +4151,8 @@ CREATE TABLE crdb_internal.kv_store_status (
   writes_per_second  FLOAT NOT NULL,
   bytes_per_replica  JSON NOT NULL,
   writes_per_replica JSON NOT NULL,
-  metrics            JSON NOT NULL
+  metrics            JSON NOT NULL,
+  properties         JSON NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -4305,6 +4183,19 @@ CREATE TABLE crdb_internal.kv_store_status (
 						return err
 					}
 					metrics.Add(k, metric)
+				}
+
+				properties := json.NewObjectBuilder(3)
+				properties.Add("read_only", json.FromBool(s.Desc.Properties.ReadOnly))
+				properties.Add("encrypted", json.FromBool(s.Desc.Properties.Encrypted))
+				if fsprops := s.Desc.Properties.FileStoreProperties; fsprops != nil {
+					jprops := json.NewObjectBuilder(5)
+					jprops.Add("path", json.FromString(fsprops.Path))
+					jprops.Add("fs_type", json.FromString(fsprops.FsType))
+					jprops.Add("mount_point", json.FromString(fsprops.MountPoint))
+					jprops.Add("mount_options", json.FromString(fsprops.MountOptions))
+					jprops.Add("block_device", json.FromString(fsprops.BlockDevice))
+					properties.Add("file_store_properties", jprops.Build())
 				}
 
 				percentilesToJSON := func(ps roachpb.Percentiles) (json.JSON, error) {
@@ -4365,6 +4256,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 					tree.NewDJSON(bytesPerReplica),
 					tree.NewDJSON(writesPerReplica),
 					tree.NewDJSON(metrics.Build()),
+					tree.NewDJSON(properties.Build()),
 				); err != nil {
 					return err
 				}
@@ -4612,67 +4504,6 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 						); err != nil {
 							return err
 						}
-					}
-				}
-				return nil
-			})
-	},
-}
-
-var crdbInternalInterleaved = virtualSchemaTable{
-	comment: `virtual table with interleaved table information`,
-	schema: `
-CREATE TABLE crdb_internal.interleaved (
-	database_name
-		STRING NOT NULL,
-	schema_name
-		STRING NOT NULL,
-	table_name
-		STRING NOT NULL,
-	index_name
-		STRING NOT NULL,
-	parent_database_name
-		STRING NOT NULL,
-	parent_schema_name
-		STRING NOT NULL,
-	parent_table_name
-		STRING NOT NULL
-);`,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
-			func(db catalog.DatabaseDescriptor, schemaName string, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
-				if !table.IsInterleaved() {
-					return nil
-				}
-				// We want to include dropped indexes for cases where
-				// a revert may end up adding them back.
-				indexes := table.AllIndexes()
-				for _, index := range indexes {
-					if index.NumInterleaveAncestors() == 0 {
-						continue
-					}
-					ancestor := index.GetInterleaveAncestor(index.NumInterleaveAncestors() - 1)
-					parentTable, err := lookupFn.getTableByID(ancestor.TableID)
-					if err != nil {
-						return err
-					}
-					parentSchemaName, err := lookupFn.getSchemaNameByID(parentTable.GetParentSchemaID())
-					if err != nil {
-						return err
-					}
-					parentDatabase, err := lookupFn.getDatabaseByID(parentTable.GetParentID())
-					if err != nil {
-						return err
-					}
-
-					if err := addRow(tree.NewDString(db.GetName()),
-						tree.NewDString(schemaName),
-						tree.NewDString(table.GetName()),
-						tree.NewDString(index.GetName()),
-						tree.NewDString(parentDatabase.GetName()),
-						tree.NewDString(parentSchemaName),
-						tree.NewDString(parentTable.GetName())); err != nil {
-						return err
 					}
 				}
 				return nil

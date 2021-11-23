@@ -47,7 +47,6 @@ CREATE TABLE decimal_t (a DECIMAL PRIMARY KEY)
 # Also split at the beginning of each index (0 for ASC, 100 for DESC) to
 # prevent interfering with previous indexes/tables.
 
-# p1 table (interleaved index)
 statement ok
 ALTER TABLE p1 SPLIT AT VALUES(2)
 
@@ -62,7 +61,6 @@ ALTER INDEX b SPLIT AT VALUES(0)
 statement ok
 ALTER INDEX b SPLIT AT VALUES(2)
 
-# p2 table (interleaved index)
 statement ok
 ALTER TABLE p2 SPLIT AT VALUES(0)
 
@@ -94,8 +92,6 @@ ALTER TABLE p2 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3
 # Verify range distribution #
 #############################
 
-# p1 table (interleaved table)
-
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p1]
 ----
@@ -112,8 +108,6 @@ start_key  end_key  replicas  lease_holder
 NULL       /0       {3}       3
 /0         /2       {4}       4
 /2         NULL     {5}       5
-
-# p2 table (interleaved index)
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p2]
@@ -145,12 +139,12 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#
+      spans: -/3/4
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 3 AND b < 4] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#
+      spans: -/3/4
 
 # Mixed bounds.
 query T
@@ -163,24 +157,22 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a >= 2 AND b <= 3] WH
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= 0 AND b <= 0] WHERE info LIKE '%spans%'
 ----
-      spans: -/0/0/#
+      spans: -/0/1
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a <= -1 AND b <= -1] WHERE info LIKE '%spans%'
 ----
-      spans: -/-1/-1/#
+      spans: -/-1/0
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808] WHERE info LIKE '%spans%'
 ----
-  spans: /1-/1/-9223372036854775808/#
+  spans: /1-/1/-9223372036854775807
 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807] WHERE info LIKE '%spans%'
 ----
-  spans: /1-/1/9223372036854775807/#
-
-# Table c1 (interleaved table)
+  spans: /1-/1/9223372036854775807/PrefixEnd
 
 # Partial primary key does not tighten.
 
@@ -193,9 +185,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM c1 WHERE a <= 3 AND b <= 3] WHERE info LIKE '%spans%'
 ----
-      spans: -/3/3/#
-
-# Table p2 with interleaved index.
+      spans: -/3/4
 
 # From the primary index.
 
@@ -210,9 +200,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i >= 2] WHERE info LI
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2 WHERE i <= 5] WHERE info LIKE '%spans%'
 ----
-  spans: -/5/#
-
-# From the interleaved index: no tightening at all.
+  spans: -/6
 
 # Lower bound (i >= 1 AND d >= 2)
 

@@ -724,8 +724,6 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!**/embedded.go",
-			":!util/timeutil/now_unix.go",
-			":!util/timeutil/now_windows.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
 			":!util/tracing/span.go",
@@ -754,6 +752,42 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Forbid timeutil.Now().Sub(t) in favor of timeutil.Since(t).
+	t.Run("TestNowSub", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\btime(util)?\.Now\(\)\.Sub\(`,
+			"--",
+			"*.go",
+			":!*/lint_test.go", // This file.
+			":!cmd/dev/**",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'timeutil.Since(t)' instead "+
+				"because it is more efficient", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestOsErrorIs", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -765,6 +799,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!cmd/dev/**",
+			":!cmd/mirror/**",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1034,7 +1069,6 @@ func TestLint(t *testing.T) {
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
-			":!sql/schemachanger/scbuild/builder_test.go",
 			":!sql/schemachanger/scgraphviz/graphviz.go",
 		)
 		if err != nil {
@@ -1314,6 +1348,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
 			stream.GrepNot(`^util/timeutil/lowercase_timezones_generated.go$`),
 			stream.GrepNot(`^cmd/roachtest/tests/ruby_pg_blocklist.go$`),
+			stream.GrepNot(`^cmd/roachtest/tests/asyncpg_blocklist.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
@@ -1655,16 +1690,11 @@ func TestLint(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
 		skip.UnderShort(t)
 		skip.UnderBazelWithIssue(t, 68496, "A TON of build errors")
-		var args []string
-		if pkgSpecified {
-			args = []string{pkgScope}
-		} else {
-			args = []string{"-unused.whole-program", pkgScope}
-		}
+
 		cmd, stderr, filter, err := dirCmd(
 			crdb.Dir,
 			"staticcheck",
-			args...)
+			pkgScope)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1681,6 +1711,8 @@ func TestLint(t *testing.T) {
 				// This file is a conditionally-compiled stub implementation that
 				// will produce fake "func is unused" errors.
 				stream.GrepNot(`pkg/build/bazel/non_bazel.go`),
+				// NOTE(ricky): No idea what's wrong with mirror.go. See #72521
+				stream.GrepNot(`pkg/cmd/mirror/mirror.go`),
 				// Skip generated file.
 				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
 				stream.GrepNot(`pkg/ui/distccl/bindata.go`),

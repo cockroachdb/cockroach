@@ -788,12 +788,6 @@ func importPlanHook(
 				return err
 			}
 
-			// IMPORT INTO does not currently support interleaved tables.
-			if found.IsInterleaved() {
-				// TODO(miretskiy): Handle import into when tables are interleaved.
-				return pgerror.New(pgcode.FeatureNotSupported, "Cannot use IMPORT INTO with interleaved tables")
-			}
-
 			// Validate target columns.
 			var intoCols []string
 			var isTargetCol = make(map[string]bool)

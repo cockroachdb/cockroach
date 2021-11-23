@@ -81,9 +81,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 // table descriptor for error reporting.
 type KeyToDescTranslator interface {
 	// KeyToDesc attempts to translate the key found in an error to a table
-	// descriptor. An implementation can return (nil, false) if the translation
-	// failed because the key is not part of a table it was scanning, but is
-	// instead part of an interleaved relative (parent/sibling/child) table.
+	// descriptor.
 	KeyToDesc(roachpb.Key) (catalog.TableDescriptor, bool)
 }
 
@@ -115,8 +113,8 @@ func NewUniquenessConstraintViolationError(
 ) error {
 	index, names, values, err := DecodeRowInfo(ctx, tableDesc, key, value, false)
 	if err != nil {
-		return pgerror.Newf(pgcode.UniqueViolation,
-			"duplicate key value: decoding err=%s", err)
+		return pgerror.Wrap(err, pgcode.UniqueViolation,
+			"duplicate key value got decoding error")
 	}
 
 	// Exclude implicit partitioning columns and hash sharded index columns from
@@ -135,9 +133,7 @@ func NewUniquenessConstraintViolationError(
 }
 
 // NewLockNotAvailableError creates an error that represents an inability to
-// acquire a lock. A nil tableDesc can be provided, which indicates that the
-// table descriptor corresponding to the key is unknown due to a table
-// interleaving.
+// acquire a lock.
 func NewLockNotAvailableError(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
@@ -149,15 +145,10 @@ func NewLockNotAvailableError(
 		baseMsg = "canceling statement due to lock timeout on row"
 	}
 
-	if tableDesc == nil {
-		return pgerror.Newf(pgcode.LockNotAvailable,
-			"%s in interleaved table", baseMsg)
-	}
-
 	index, colNames, values, err := DecodeRowInfo(ctx, tableDesc, key, nil, false)
 	if err != nil {
-		return pgerror.Newf(pgcode.LockNotAvailable,
-			"%s: decoding err=%s", baseMsg, err)
+		return pgerror.Wrapf(err, pgcode.LockNotAvailable,
+			"%s: got decoding error", baseMsg)
 	}
 
 	return pgerror.Newf(pgcode.LockNotAvailable,

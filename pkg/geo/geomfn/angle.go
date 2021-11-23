@@ -105,6 +105,12 @@ func angleFromCoords(c1, c2, c3, c4 geom.Coord) *float64 {
 	// We want the clockwise angle, not the smallest interior angle, so can't use cosine formula.
 	angle := math.Atan2(-coordDet(a, b), coordDot(a, b))
 	// We want the angle in the interval [0,2π), while Atan2 returns [-π,π]
+	//
+	// NB: In Go, the literal -0.0 does not produce negative
+	// zero. However, since IEEE 754 requires that -0.0 == 0.0,
+	// this code is still correct and we use -0.0 here for
+	// semantic clarity.
+	//lint:ignore SA4026 -0.0 used here for clarity
 	if angle == -0.0 {
 		angle = 0.0
 	} else if angle < 0 {

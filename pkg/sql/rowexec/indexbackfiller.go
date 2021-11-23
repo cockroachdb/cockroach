@@ -444,7 +444,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	}); err != nil {
 		return nil, nil, 0, err
 	}
-	prepTime := timeutil.Now().Sub(start)
+	prepTime := timeutil.Since(start)
 	log.VEventf(ctx, 3, "index backfill stats: entries %d, prepare %+v",
 		len(entries), prepTime)
 

@@ -16,9 +16,6 @@ import (
 	"sort"
 )
 
-// Clusters memoizes cluster info for install operations
-var Clusters = map[string]*SyncedCluster{}
-
 var installCmds = map[string]string{
 	"cassandra": `
 echo "deb http://www.apache.org/dist/cassandra/debian 311x main" | \

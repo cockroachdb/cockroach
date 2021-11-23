@@ -134,6 +134,7 @@
 /pkg/ccl/oidcccl/            @cockroachdb/server-prs
 /pkg/ccl/partitionccl/       @cockroachdb/sql-schema @cockroachdb/multiregion
 /pkg/ccl/serverccl/          @cockroachdb/server-prs
+/pkg/ccl/serverccl/statusccl @cockroachdb/sql-observability
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema
@@ -166,6 +167,7 @@
 /pkg/cmd/gossipsim/          @cockroachdb/kv-prs
 /pkg/cmd/import-tools/       @cockroachdb/dev-inf
 /pkg/cmd/internal/issues/    @cockroachdb/test-eng
+/pkg/cmd/mirror/             @cockroachdb/dev-inf
 /pkg/cmd/prereqs/            @cockroachdb/dev-inf
 /pkg/cmd/protoc-gen-gogoroach/ @cockroachdb/server-prs
 /pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf

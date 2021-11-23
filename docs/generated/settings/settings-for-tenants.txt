@@ -11,10 +11,9 @@ cloudstorage.http.custom_ca	string		custom root CA (appended to system's default
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
 cluster.organization	string		organization name
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset
-diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which SQL statement statistics are refreshed even if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.
+diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.
 diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs
 diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported
-diagnostics.sql_stat_reset.interval	duration	1h0m0s	interval controlling how often SQL statement statistics should be reset (should be less than diagnostics.forced_sql_stat_reset.interval). It has a max value of 24H.
 enterprise.license	string		the encoded cluster license
 external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port
 external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)
@@ -54,6 +53,7 @@ server.consistency_check.max_rate	byte size	8.0 MiB	the rate limit (bytes/sec) t
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
+server.identity_map.configuration	string		system-identity to database-username mappings
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
 server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)
@@ -65,9 +65,9 @@ server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provide
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) 
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)
 server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
-server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process
-server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process
-server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish
+server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
+server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
 server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
@@ -79,7 +79,6 @@ sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references 
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
-sql.defaults.copy_partitioning_when_deinterleaving_table.enabled	boolean	false	default value for enable_copying_partitioning_when_deinterleaving_table session variable
 sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 sql.defaults.datestyle.enabled	boolean	false	default value for datestyle_enabled session setting
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
@@ -168,4 +167,4 @@ trace.debug.enable	boolean	false	if set, traces for recent requests can be seen 
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	21.2-4	set the active cluster version in the format '<major>.<minor>'
+version	version	21.2-14	set the active cluster version in the format '<major>.<minor>'

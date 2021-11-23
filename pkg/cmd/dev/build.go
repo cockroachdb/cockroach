@@ -117,7 +117,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	}
 	cross = "cross" + cross
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args = append(args, fmt.Sprintf("--config=%s", cross))
+	args = append(args, fmt.Sprintf("--config=%s", cross), "--config=ci")
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
 	if err != nil {
 		return err
@@ -129,7 +129,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	// TODO(ricky): Actually, we need to shell-quote the arguments,
 	// but that's hard and I don't think it's necessary for now.
 	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
-	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s`\n", cross))
+	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s --config=ci`\n", cross))
 	for _, target := range buildTargets {
 		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target.fullName)))
 	}
@@ -190,6 +190,30 @@ func (d *dev) stageArtifacts(
 	}
 
 	if hoistGeneratedCode {
+		// Clean up ignored .go files. Do this by listing all the
+		// ignored files and filtering out irrelevant ones.
+		// We do this to get rid of stale generated files that might
+		// confuse IDE's, especially if you switch between branches that
+		// have different generated code.
+		lines, err := d.exec.CommandContextSilent(ctx, "git", "status", "--ignored", "--short", filepath.Join(workspace, "pkg"))
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(lines), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || !strings.HasPrefix(line, "!! ") {
+				continue
+			}
+			filename := strings.TrimPrefix(line, "!! ")
+			if !strings.HasSuffix(filename, ".go") || strings.Contains(filename, "zcgo_flags") {
+				continue
+			}
+			if err := d.os.Remove(filename); err != nil {
+				return err
+			}
+		}
+		// Enumerate generated .go files in the sandbox so we can hoist
+		// them out.
 		goFiles, err := d.os.ListFilesWithSuffix(filepath.Join(bazelBin, "pkg"), ".go")
 		if err != nil {
 			return err

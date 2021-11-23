@@ -148,6 +148,7 @@ func generateScanSpans(
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
 	sb := span.MakeBuilder(evalCtx, codec, tabDesc, index)
+	defer sb.Release()
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
@@ -247,12 +248,7 @@ func constructSimpleProjectForPlanNode(
 		r.reqOrdering = ReqOrdering(reqOrdering)
 		return r, nil
 	}
-	var inputCols colinfo.ResultColumns
-	if colNames == nil {
-		// We will need the names of the input columns.
-		inputCols = planColumns(n.(planNode))
-	}
-
+	inputCols := planColumns(n)
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 
@@ -462,14 +458,17 @@ func (ef *execFactory) ConstructGroupBy(
 	groupColOrdering colinfo.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
+	groupingOrderType exec.GroupingOrderType,
 ) (exec.Node, error) {
 	inputPlan := input.(planNode)
 	inputCols := planColumns(inputPlan)
+	// TODO(harding): Use groupingOrder to determine when to use a hash
+	// aggregator.
 	n := &groupNode{
 		plan:             inputPlan,
 		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
 		columns:          getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		groupCols:        convertOrdinalsToInts(groupCols),
+		groupCols:        convertNodeOrdinalsToInts(groupCols),
 		groupColOrdering: groupColOrdering,
 		isScalar:         false,
 		reqOrdering:      ReqOrdering(reqOrdering),
@@ -493,7 +492,7 @@ func (ef *execFactory) ConstructGroupBy(
 func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo) error {
 	for i := range aggregations {
 		agg := &aggregations[i]
-		renderIdxs := convertOrdinalsToInts(agg.ArgCols)
+		renderIdxs := convertNodeOrdinalsToInts(agg.ArgCols)
 
 		f := newAggregateFuncHolder(
 			agg.FuncName,
@@ -1732,6 +1731,7 @@ func (ef *execFactory) ConstructDeleteRange(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
+	defer sb.Release()
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err

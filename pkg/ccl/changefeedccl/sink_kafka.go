@@ -85,6 +85,7 @@ type kafkaSink struct {
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
 	scratch      bufalloc.ByteAllocator
+	metrics      *sliMetrics
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
@@ -195,12 +196,18 @@ func (s *kafkaSink) Close() error {
 	return nil
 }
 
+type messageMetadata struct {
+	alloc         kvevent.Alloc
+	updateMetrics recordEmittedMessagesCallback
+	mvcc          hlc.Timestamp
+}
+
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
 	ctx context.Context,
 	topicDescr TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	topic, isKnownTopic := s.topics[topicDescr.GetID()]
@@ -212,7 +219,7 @@ func (s *kafkaSink) EmitRow(
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: alloc,
+		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordEmittedMessages()},
 	}
 	return s.emitMessage(ctx, msg)
 }
@@ -221,6 +228,8 @@ func (s *kafkaSink) EmitRow(
 func (s *kafkaSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	defer s.metrics.recordResolvedCallback()()
+
 	// Periodically ping sarama to refresh its metadata. This means talking to
 	// zookeeper, so it shouldn't be done too often, but beyond that this
 	// constant was picked pretty arbitrarily.
@@ -272,6 +281,8 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 
 // Flush implements the Sink interface.
 func (s *kafkaSink) Flush(ctx context.Context) error {
+	defer s.metrics.recordFlushRequestCallback()()
+
 	flushCh := make(chan struct{}, 1)
 
 	s.mu.Lock()
@@ -344,8 +355,11 @@ func (s *kafkaSink) workerLoop() {
 			ackMsg, ackError = err.Msg, err.Err
 		}
 
-		if r, ok := ackMsg.Metadata.(kvevent.Alloc); ok {
-			r.Release(s.ctx)
+		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
+			if ackError == nil {
+				m.updateMetrics(1, m.mvcc, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
+			}
+			m.alloc.Release(s.ctx)
 		}
 
 		s.mu.Lock()
@@ -612,7 +626,11 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 }
 
 func makeKafkaSink(
-	ctx context.Context, u sinkURL, targets jobspb.ChangefeedTargets, opts map[string]string,
+	ctx context.Context,
+	u sinkURL,
+	targets jobspb.ChangefeedTargets,
+	opts map[string]string,
+	m *sliMetrics,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -630,6 +648,7 @@ func makeKafkaSink(
 		kafkaCfg:       config,
 		bootstrapAddrs: u.Host,
 		topics:         makeTopicsMap(kafkaTopicPrefix, kafkaTopicName, targets),
+		metrics:        m,
 	}
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {

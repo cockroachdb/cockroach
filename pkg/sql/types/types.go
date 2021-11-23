@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
 
@@ -1324,8 +1325,10 @@ func (f Family) Name() string {
 	return ret
 }
 
-// CanonicalType returns the canonical type of the given type's family. If the
-// family does not have a canonical type, the original type is returned.
+// CanonicalType returns the canonical type of the given type's family. The
+// original type is returned for some types that do not have a canonical type.
+// For array and tuple types, a new type is returned where the content types
+// have been set to their canonical types.
 func (t *T) CanonicalType() *T {
 	switch t.Family() {
 	case BoolFamily:
@@ -1358,8 +1361,11 @@ func (t *T) CanonicalType() *T {
 	case UuidFamily:
 		return Uuid
 	case ArrayFamily:
-		// ArrayFamily has no canonical type.
-		return t
+		newContents := t.ArrayContents().CanonicalType()
+		if newContents == t.ArrayContents() {
+			return t
+		}
+		return MakeArray(newContents)
 	case INetFamily:
 		return INet
 	case TimeFamily:
@@ -1369,8 +1375,22 @@ func (t *T) CanonicalType() *T {
 	case TimeTZFamily:
 		return TimeTZ
 	case TupleFamily:
-		// TupleFamily has no canonical type.
-		return t
+		isCanonical := true
+		oldContents := t.TupleContents()
+		for i := range oldContents {
+			if oldContents[i].CanonicalType() != oldContents[i] {
+				isCanonical = false
+				break
+			}
+		}
+		if isCanonical {
+			return t
+		}
+		newContents := make([]*T, len(oldContents))
+		for i := range newContents {
+			newContents[i] = oldContents[i].CanonicalType()
+		}
+		return MakeTuple(newContents)
 	case BitFamily:
 		return VarBit
 	case GeometryFamily:
@@ -2412,6 +2432,16 @@ func (t *T) String() string {
 		}
 	}
 	return t.Name()
+}
+
+// MarshalText is implemented here so that gogo/protobuf know how to text marshal
+// protobuf struct directly/indirectly depends on types.T without panic.
+func (t *T) MarshalText() (text []byte, err error) {
+	var buf bytes.Buffer
+	if err := proto.MarshalText(&buf, &t.InternalType); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // DebugString returns a detailed dump of the type protobuf struct, suitable for

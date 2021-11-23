@@ -27,6 +27,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/resources/mgmt/subscriptions"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,17 +41,14 @@ const (
 	// ProviderName is "azure".
 	ProviderName = "azure"
 	remoteUser   = "ubuntu"
-	tagCluster   = "cluster"
 	tagComment   = "comment"
-	// RFC3339-formatted timestamp.
-	tagCreated   = "created"
-	tagLifetime  = "lifetime"
-	tagRoachprod = "roachprod"
 	tagSubnet    = "subnetPrefix"
 )
 
-// init registers Provider with the top-level vm package.
-func init() {
+// Init registers the Azure provider with vm.Providers.
+//
+// If the Azure CLI utilities are not installed, the provider is a stub.
+func Init() {
 	const unimplemented = "please install the Azure CLI utilities +" +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 
@@ -92,6 +90,11 @@ func (p *Provider) Active() bool {
 	return true
 }
 
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
+}
+
 // CleanSSH implements vm.Provider, is a no-op, and returns nil.
 func (p *Provider) CleanSSH() error {
 	return nil
@@ -101,6 +104,12 @@ func (p *Provider) CleanSSH() error {
 // On Azure, the SSH public key is set as part of VM instance creation.
 func (p *Provider) ConfigSSH() error {
 	return nil
+}
+
+func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
+	m := vm.GetDefaultLabelMap(opts)
+	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
+	return m
 }
 
 // Create implements vm.Provider.
@@ -118,11 +127,19 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return errors.Wrapf(err, "could not find SSH public key file")
 	}
 
+	m := getAzureDefaultLabelMap(opts)
 	clusterTags := make(map[string]*string)
-	clusterTags[tagCluster] = to.StringPtr(opts.ClusterName)
-	clusterTags[tagCreated] = to.StringPtr(timeutil.Now().Format(time.RFC3339))
-	clusterTags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
-	clusterTags[tagRoachprod] = to.StringPtr("true")
+	for key, value := range opts.CustomLabels {
+		_, ok := m[strings.ToLower(key)]
+		if ok {
+			return fmt.Errorf("duplicate label name defined: %s", key)
+		}
+
+		clusterTags[key] = to.StringPtr(value)
+	}
+	for key, value := range m {
+		clusterTags[key] = to.StringPtr(value)
+	}
 
 	getClusterResourceGroupName := func(location string) string {
 		return fmt.Sprintf("%s-%s", opts.ClusterName, location)
@@ -256,7 +273,7 @@ func (p *Provider) DeleteCluster(name string) error {
 		return err
 	}
 
-	filter := fmt.Sprintf("tagName eq '%s' and tagValue eq '%s'", tagCluster, name)
+	filter := fmt.Sprintf("tagName eq '%s' and tagValue eq '%s'", vm.TagCluster, name)
 	it, err := client.ListComplete(ctx, filter, nil /* limit */)
 	if err != nil {
 		return err
@@ -308,14 +325,14 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	}
 
 	futures := make([]compute.VirtualMachinesUpdateFuture, len(vms))
-	for idx, vm := range vms {
-		vmParts, err := parseAzureID(vm.ProviderID)
+	for idx, m := range vms {
+		vmParts, err := parseAzureID(m.ProviderID)
 		if err != nil {
 			return err
 		}
 		update := compute.VirtualMachineUpdate{
 			Tags: map[string]*string{
-				tagLifetime: to.StringPtr(lifetime.String()),
+				vm.TagLifetime: to.StringPtr(lifetime.String()),
 			},
 		}
 		futures[idx], err = client.Update(ctx, vmParts.resourceGroup, vmParts.resourceName, update)
@@ -393,16 +410,21 @@ func (p *Provider) List() (vm.List, error) {
 	var ret vm.List
 	for it.NotDone() {
 		found := it.Value()
-
-		if _, ok := found.Tags[tagRoachprod]; !ok {
+		if _, ok := found.Tags[vm.TagRoachprod]; !ok {
 			if err := it.NextWithContext(ctx); err != nil {
 				return nil, err
 			}
 			continue
 		}
 
+		tags := make(map[string]string)
+		for key, value := range found.Tags {
+			tags[key] = *value
+		}
+
 		m := vm.VM{
 			Name:        *found.Name,
+			Labels:      tags,
 			Provider:    ProviderName,
 			ProviderID:  *found.ID,
 			RemoteUser:  remoteUser,
@@ -410,10 +432,12 @@ func (p *Provider) List() (vm.List, error) {
 			MachineType: string(found.HardwareProfile.VMSize),
 			// We add a fake availability-zone suffix since other roachprod
 			// code assumes particular formats. For example, "eastus2z".
-			Zone: *found.Location + "z",
+			Zone:        *found.Location + "z",
+			SQLPort:     config.DefaultSQLPort,
+			AdminUIPort: config.DefaultAdminUIPort,
 		}
 
-		if createdPtr := found.Tags[tagCreated]; createdPtr == nil {
+		if createdPtr := found.Tags[vm.TagCreated]; createdPtr == nil {
 			m.Errors = append(m.Errors, vm.ErrNoExpiration)
 		} else if parsed, err := time.Parse(time.RFC3339, *createdPtr); err == nil {
 			m.CreatedAt = parsed
@@ -421,7 +445,7 @@ func (p *Provider) List() (vm.List, error) {
 			m.Errors = append(m.Errors, vm.ErrNoExpiration)
 		}
 
-		if lifetimePtr := found.Tags[tagLifetime]; lifetimePtr == nil {
+		if lifetimePtr := found.Tags[vm.TagLifetime]; lifetimePtr == nil {
 			m.Errors = append(m.Errors, vm.ErrNoExpiration)
 		} else if parsed, err := time.ParseDuration(*lifetimePtr); err == nil {
 			m.Lifetime = parsed
@@ -494,9 +518,13 @@ func (p *Provider) createVM(
 	}
 
 	tags := make(map[string]*string)
-	tags[tagCreated] = to.StringPtr(timeutil.Now().Format(time.RFC3339))
-	tags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
-	tags[tagRoachprod] = to.StringPtr("true")
+	for key, value := range opts.CustomLabels {
+		tags[key] = to.StringPtr(value)
+	}
+	m := getAzureDefaultLabelMap(opts)
+	for key, value := range m {
+		tags[key] = to.StringPtr(value)
+	}
 
 	osVolumeSize := int32(opts.OsVolumeSize)
 	if osVolumeSize < 32 {
@@ -850,7 +878,7 @@ func (p *Provider) createVNets(
 
 	vnetResourceGroupTags := make(map[string]*string)
 	vnetResourceGroupTags[tagComment] = to.StringPtr("DO NOT DELETE: Used by all roachprod clusters")
-	vnetResourceGroupTags[tagRoachprod] = to.StringPtr("true")
+	vnetResourceGroupTags[vm.TagRoachprod] = to.StringPtr("true")
 
 	vnetResourceGroupName := func(location string) string {
 		return fmt.Sprintf("roachprod-vnets-%s", location)

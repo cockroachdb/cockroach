@@ -449,7 +449,7 @@ func (n *Node) start(
 	// gossip can bootstrap using the most recently persisted set of
 	// node addresses.
 	if err := n.storeCfg.Gossip.SetStorage(n.stores); err != nil {
-		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
+		return errors.Wrap(err, "failed to initialize the gossip interface")
 	}
 
 	// Initialize remaining stores/engines, if any.
@@ -1039,7 +1039,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			// Tenants get a redacted recording, i.e. with anything
 			// sensitive stripped out of the verbose messages. However,
 			// structured payloads stay untouched.
-			if rec := grpcSpan.GetRecording(); rec != nil {
+			if rec := grpcSpan.GetRecording(grpcSpan.RecordingType()); rec != nil {
 				err := redactRecordingForTenant(tenID, rec)
 				if err == nil {
 					br.CollectedSpans = append(br.CollectedSpans, rec...)

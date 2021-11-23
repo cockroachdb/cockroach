@@ -1,5 +1,3 @@
-# LogicTest: !3node-tenant(49854)
-
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -451,7 +449,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100067 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100066 time_precision_is_set:false udt_metadata:<array_type_oid:100067 > > TypeMeta:<Version:0 > > time_precision_is_set:false
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100067 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100066 time_precision_is_set: false udt_metadata: <   array_type_oid: 100067 > > time_precision_is_set:false
 
 # Test tables using enums in DEFAULT expressions.
 statement ok
@@ -1292,19 +1290,6 @@ CREATE TABLE table_ifne (x INT)
 statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
-# Regression test for incorrectly serializing NULL expression type annotation in
-# a enum tuple.
-statement ok
-CREATE TYPE greeting58889 AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
-CREATE TABLE t58889 AS SELECT enum_range('hello'::greeting58889)[g] as _enum FROM generate_series(1, 5) as g;
-ALTER TABLE t58889 SPLIT AT SELECT i FROM generate_series(1, 5) as g(i);
-ALTER TABLE t58889 SCATTER;
-
-query T
-SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
-----
-hi
-
 
 subtest enum_array_cast
 
@@ -1600,3 +1585,19 @@ SELECT * FROM enum_table
 ----
 a
 c
+
+# Regression test for not hydrating an enum when it is used in a tuple.
+statement ok
+DROP TYPE IF EXISTS greeting;
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE seed AS SELECT g::INT8 AS _int8 FROM generate_series(1, 5) AS g;
+WITH
+  cte1 (col1)
+    AS (
+      SELECT * FROM (VALUES (COALESCE((NULL, 'hello':::greeting), (1, 'howdy':::greeting))), ((2, 'hi':::greeting)))
+    ),
+  cte2 (col2) AS (SELECT _int8 FROM seed)
+SELECT
+  col1, col2
+FROM
+  cte1, cte2;

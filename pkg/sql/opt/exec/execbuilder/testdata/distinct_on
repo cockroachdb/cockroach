@@ -404,7 +404,7 @@ vectorized: true
 • project
 │ columns: (min)
 │
-└── • group
+└── • group (hash)
     │ columns: (y, min)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: min(x)
@@ -436,7 +436,7 @@ vectorized: true
         │ estimated row count: 1 (missing stats)
         │ filter: min = 1
         │
-        └── • group
+        └── • group (hash)
             │ columns: (y, min)
             │ estimated row count: 100 (missing stats)
             │ aggregate 0: min(x)

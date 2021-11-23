@@ -123,6 +123,10 @@ exec-sql
 SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
 RESTORE FROM 'nodelocal://1/no_region_cluster_backup/';
 ----
+NOTICE: setting the PRIMARY REGION as eu-north-1 on database defaultdb
+HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
+NOTICE: setting the PRIMARY REGION as eu-north-1 on database postgres
+HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
 NOTICE: setting the PRIMARY REGION as eu-north-1 on database no_region_db
 HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults.primary_region = 'region' or use RESET CLUSTER SETTING sql.defaults.primary_region to disable this behavior
 NOTICE: setting the PRIMARY REGION as eu-north-1 on database no_region_db_2
@@ -131,10 +135,10 @@ HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults
 query-sql
 SHOW DATABASES;
 ----
-defaultdb root <nil> {} <nil>
+defaultdb root eu-north-1 {eu-north-1} zone
 no_region_db root eu-north-1 {eu-north-1} zone
 no_region_db_2 root eu-north-1 {eu-north-1} zone
-postgres root <nil> {} <nil>
+postgres root eu-north-1 {eu-north-1} zone
 system node <nil> {} <nil>
 
 query-sql
@@ -151,9 +155,9 @@ RESTORE DATABASE eu_central_db FROM 'nodelocal://1/eu_central_database_backup/';
 query-sql
 SHOW DATABASES;
 ----
-defaultdb root <nil> {} <nil>
+defaultdb root eu-north-1 {eu-north-1} zone
 eu_central_db root eu-central-1 {eu-central-1} zone
 no_region_db root eu-north-1 {eu-north-1} zone
 no_region_db_2 root eu-north-1 {eu-north-1} zone
-postgres root <nil> {} <nil>
+postgres root eu-north-1 {eu-north-1} zone
 system node <nil> {} <nil>

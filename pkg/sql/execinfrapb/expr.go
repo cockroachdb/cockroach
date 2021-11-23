@@ -48,6 +48,8 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
+//
+// evalCtx will not be mutated.
 func processExpression(
 	exprSpec Expression,
 	evalCtx *tree.EvalContext,
@@ -143,6 +145,8 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // DeserializeExpr deserializes expr, binds the indexed variables to the
 // provided IndexedVarHelper, and evaluates any constants in the expression.
+//
+// evalCtx will not be mutated.
 func DeserializeExpr(
 	expr string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, vars *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {

@@ -4,40 +4,43 @@
   width: 506px;
   height: 240px;
 
-  .label {
-    display: block;
-    margin-bottom: 1rem;
-  }
-
-  .popup-content {
-    :global(.ant-calendar-picker) {
-      width: 290px;
-      margin-right: 14px;
-      input {
-        padding-left: 34px;
-      }
-    }
-
-    :global(.ant-time-picker-icon),
-    :global(.ant-calendar-picker-icon) {
-      left: 12px;
-    }
-
-    :global(.ant-time-picker) {
-      width: 150px;
-    }
-  }
-
-  .popup-footer {
-    margin-top: 24px;
-    text-align: right;
-    button {
-      margin-left: 8px;
-    }
-  }
-
   :global(.ant-popover-arrow) {
     display: none;
+  }
+}
+
+.popup-content {
+  .label {
+    display: block;
+  }
+
+  .divider {
+    height: 12px;
+  }
+
+  :global(.ant-calendar-picker) {
+    width: 290px;
+    margin-right: 14px;
+    input {
+      padding-left: 34px;
+    }
+  }
+
+  :global(.ant-time-picker-icon),
+  :global(.ant-calendar-picker-icon) {
+    left: 12px;
+  }
+
+  :global(.ant-time-picker) {
+    width: 150px;
+  }
+}
+
+.popup-footer {
+  margin-top: 24px;
+  text-align: right;
+  button {
+    margin-left: 8px;
   }
 }
 

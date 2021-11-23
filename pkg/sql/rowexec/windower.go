@@ -69,7 +69,7 @@ type windower struct {
 	diskMonitor  *mon.BytesMonitor
 
 	scratch       []byte
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	partitionBy                []uint32
 	allRowsPartitioned         *rowcontainer.HashDiskBackedRowContainer
@@ -207,7 +207,7 @@ func newWindower(
 func (w *windower) Start(ctx context.Context) {
 	ctx = w.StartInternal(ctx, windowerProcName)
 	w.input.Start(ctx)
-	w.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	w.cancelChecker.Reset(ctx)
 	w.runningState = windowerAccumulating
 }
 

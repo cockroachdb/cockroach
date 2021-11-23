@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -155,26 +156,18 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 	return runner
 }
 
-// InternalExecFn is the type of functions that operates using an internalExecutor.
-type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error
-
-// HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
-// passes the fn the exported InternalExecutor instead of the whole unexported
-// extendedEvalContenxt, so it can be implemented outside pkg/sql.
-type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
-
 // makeFixedTimestampRunner creates a HistoricalTxnRunner suitable for use by the helpers.
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
-) HistoricalInternalExecTxnRunner {
-	runner := func(ctx context.Context, retryable InternalExecFn) error {
+) sqlutil.HistoricalInternalExecTxnRunner {
+	runner := func(ctx context.Context, retryable sqlutil.InternalExecFn) error {
 		return sc.fixedTimestampTxn(ctx, readAsOf, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
 			ie := createSchemaChangeEvalCtx(
 				ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors,
-			).InternalExecutor.(*InternalExecutor)
+			).InternalExecutor.(sqlutil.InternalExecutor)
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -292,9 +285,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			if col := m.AsColumn(); col != nil {
 				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
-				if !canClearRangeForDrop(idx) {
-					droppedIndexes = append(droppedIndexes, idx)
-				}
+				// no-op
 			} else if c := m.AsConstraint(); c != nil {
 				constraintsToDrop = append(constraintsToDrop, c)
 			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil {
@@ -710,14 +701,17 @@ func (sc *SchemaChanger) validateConstraints(
 				// print the check expression back to the user.
 				evalCtx.Txn = txn
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
-				semaCtx := tree.MakeSemaContext()
 				collection := evalCtx.Descs
-				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
+				resolver := descs.NewDistSQLTypeResolver(collection, txn)
+				semaCtx := tree.MakeSemaContext()
+				semaCtx.TypeResolver = &resolver
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+					if err := validateCheckInTxn(
+						ctx, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr,
+					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
@@ -729,7 +723,9 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsNotNull() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+					if err := validateCheckInTxn(
+						ctx, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr,
+					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -769,74 +765,6 @@ func (sc *SchemaChanger) getTableVersion(
 	return tableDesc, nil
 }
 
-// TruncateInterleavedIndexes truncates the input set of indexes from the given
-// table. It is used in the schema change GC job to delete interleaved index
-// data as part of a TRUNCATE statement. Note that we cannot use
-// SchemaChanger.truncateIndexes instead because that accesses the most recent
-// version of the table when deleting. In this case, we need to use the version
-// of the table before truncation, which is passed in.
-func TruncateInterleavedIndexes(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	table catalog.TableDescriptor,
-	indexIDs []descpb.IndexID,
-) error {
-	log.Infof(ctx, "truncating %d interleaved indexes", len(indexIDs))
-	chunkSize := int64(indexTruncateChunkSize)
-	alloc := &rowenc.DatumAlloc{}
-	codec, db := execCfg.Codec, execCfg.DB
-	zoneConfigIndexIDList := make([]uint32, len(indexIDs))
-	for i, id := range indexIDs {
-		zoneConfigIndexIDList[i] = uint32(id)
-	}
-	for _, id := range indexIDs {
-		idx, err := table.FindIndexWithID(id)
-		if err != nil {
-			return err
-		}
-		var resume roachpb.Span
-		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
-			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.GetID(), rowIdx, resume)
-			resumeAt := resume
-			// Make a new txn just to drop this chunk.
-			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				rd := row.MakeDeleter(
-					codec, table, nil /* requestedCols */, &execCfg.Settings.SV, true, /* internal */
-					execCfg.GetRowMetrics(true /* internal */),
-				)
-				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &execCfg.Settings.SV); err != nil {
-					return err
-				}
-				resume, err := td.deleteIndex(
-					ctx,
-					idx,
-					resumeAt,
-					chunkSize,
-					false, /* traceKV */
-				)
-				done = resume.Key == nil
-				return err
-			}); err != nil {
-				return err
-			}
-		}
-		// All the data chunks have been removed. Now also removed the
-		// zone configs for the dropped indexes, if any.
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			freshTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, table.GetID())
-			if err != nil {
-				return err
-			}
-			return RemoveIndexZoneConfigs(ctx, txn, execCfg, freshTableDesc, zoneConfigIndexIDList)
-		}); err != nil {
-			return err
-		}
-	}
-	log.Infof(ctx, "finished truncating interleaved indexes")
-	return nil
-}
-
 // truncateIndexes truncate the KV ranges corresponding to dropped indexes.
 //
 // The indexes are dropped chunk by chunk, each chunk being deleted in
@@ -846,66 +774,46 @@ func (sc *SchemaChanger) truncateIndexes(
 ) error {
 	log.Infof(ctx, "clearing data for %d indexes", len(dropped))
 
-	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
-	if sc.testingKnobs.BackfillChunkSize > 0 {
-		chunkSize = sc.testingKnobs.BackfillChunkSize
-	}
 	alloc := &rowenc.DatumAlloc{}
 	droppedIndexIDs := make([]uint32, len(dropped))
 	for i, idx := range dropped {
 		droppedIndexIDs[i] = uint32(idx.GetID())
 	}
 	for _, idx := range dropped {
-		var resume roachpb.Span
-		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
-			resumeAt := resume
-			if log.V(2) {
-				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
-					sc.descID, sc.mutationID, rowIdx, resume)
+		if log.V(2) {
+			log.Infof(ctx, "drop index (%d, %d)",
+				sc.descID, sc.mutationID)
+		}
+
+		// Make a new txn just to drop this index.
+		if err := sc.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, tc *descs.Collection,
+		) error {
+			if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
+				if err := fn(roachpb.Span{}); err != nil {
+					return err
+				}
+			}
+			if fn := sc.execCfg.DistSQLRunTestingKnobs.RunAfterBackfillChunk; fn != nil {
+				defer fn()
 			}
 
-			// Make a new txn just to drop this chunk.
-			if err := sc.txn(ctx, func(
-				ctx context.Context, txn *kv.Txn, tc *descs.Collection,
-			) error {
-				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
-					if err := fn(resume); err != nil {
-						return err
-					}
-				}
-				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunAfterBackfillChunk; fn != nil {
-					defer fn()
-				}
-
-				// Retrieve a lease for this table inside the current txn.
-				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
-				if err != nil {
-					return err
-				}
-				rd := row.MakeDeleter(
-					sc.execCfg.Codec, tableDesc, nil /* requestedCols */, &sc.settings.SV,
-					true /* internal */, sc.execCfg.GetRowMetrics(true /* internal */),
-				)
-				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &sc.settings.SV); err != nil {
-					return err
-				}
-				if !canClearRangeForDrop(idx) {
-					resume, err = td.deleteIndex(
-						ctx,
-						idx,
-						resumeAt,
-						chunkSize,
-						false, /* traceKV */
-					)
-					done = resume.Key == nil
-					return err
-				}
-				done = true
-				return td.clearIndex(ctx, idx)
-			}); err != nil {
+			// Retrieve a lease for this table inside the current txn.
+			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
+			if err != nil {
 				return err
 			}
+			rd := row.MakeDeleter(
+				sc.execCfg.Codec, tableDesc, nil /* requestedCols */, &sc.settings.SV,
+				true /* internal */, sc.execCfg.GetRowMetrics(true /* internal */),
+			)
+			td := tableDeleter{rd: rd, alloc: alloc}
+			if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &sc.settings.SV); err != nil {
+				return err
+			}
+			return td.clearIndex(ctx, idx)
+		}); err != nil {
+			return err
 		}
 
 		// All the data chunks have been removed. Now also removed the
@@ -1510,12 +1418,12 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 
 	if len(forwardIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
-			return ValidateForwardIndexes(ctx, tableDesc, forwardIndexes, runHistoricalTxn, true /* withFirstMutationPubic */, false /* gatherAllInvalid */)
+			return ValidateForwardIndexes(ctx, tableDesc, forwardIndexes, runHistoricalTxn, true /* withFirstMutationPubic */, false /* gatherAllInvalid */, sessiondata.InternalExecutorOverride{})
 		})
 	}
 	if len(invertedIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
-			return ValidateInvertedIndexes(ctx, sc.execCfg.Codec, tableDesc, invertedIndexes, runHistoricalTxn, false /* gatherAllInvalid */)
+			return ValidateInvertedIndexes(ctx, sc.execCfg.Codec, tableDesc, invertedIndexes, runHistoricalTxn, false /* gatherAllInvalid */, sessiondata.InternalExecutorOverride{})
 		})
 	}
 	if err := grp.Wait(); err != nil {
@@ -1546,8 +1454,9 @@ func ValidateInvertedIndexes(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn HistoricalInternalExecTxnRunner,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
 	gatherAllInvalid bool,
+	execOverride sessiondata.InternalExecutorOverride,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1562,8 +1471,7 @@ func ValidateInvertedIndexes(
 		countReady[i] = make(chan struct{})
 
 		grp.GoCtx(func(ctx context.Context) error {
-			// Inverted indexes currently can't be interleaved, so a KV scan can be
-			// used to get the index length.
+			// KV scan can be used to get the index length.
 			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
 			// distributed execution and avoid bypassing the SQL decoding
 			start := timeutil.Now()
@@ -1571,7 +1479,7 @@ func ValidateInvertedIndexes(
 			span := tableDesc.IndexSpan(codec, idx.GetID())
 			key := span.Key
 			endKey := span.EndKey
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ *InternalExecutor) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
 				for {
 					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
 					if err != nil {
@@ -1635,7 +1543,7 @@ func ValidateInvertedIndexes(
 				colNameOrExpr = fmt.Sprintf("%q", col.ColName())
 			}
 
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				var stmt string
 				geoConfig := idx.GetGeoConfig()
 				if geoindex.IsEmptyConfig(&geoConfig) {
@@ -1655,7 +1563,7 @@ func ValidateInvertedIndexes(
 					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
 				}
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, sessiondata.InternalExecutorOverride{}, stmt)
+					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, execOverride, stmt)
 					if err != nil {
 						return err
 					}
@@ -1704,9 +1612,10 @@ func ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn HistoricalInternalExecTxnRunner,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
+	execOverride sessiondata.InternalExecutorOverride,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
 
@@ -1768,16 +1677,15 @@ func ValidateForwardIndexes(
 
 			// Retrieve the row count in the index.
 			var idxLen int64
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
 				// If the index is a partial index the predicate must be added
 				// as a filter to the query to force scanning the index.
 				if idx.IsPartial() {
 					query = fmt.Sprintf(`%s WHERE %s`, query, idx.GetPredicate())
 				}
-
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sessiondata.InternalExecutorOverride{}, query)
+					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, execOverride, query)
 					if err != nil {
 						return err
 					}
@@ -1860,7 +1768,7 @@ func ValidateForwardIndexes(
 		}
 
 		// Count the number of rows in the table.
-		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
+		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			var s strings.Builder
 			for _, idx := range indexes {
 				// For partial indexes, count the number of rows in the table
@@ -1876,7 +1784,7 @@ func ValidateForwardIndexes(
 			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
 
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
+				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, execOverride, query)
 				if err != nil {
 					return err
 				}
@@ -1988,16 +1896,20 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 func runSchemaChangesInTxn(
 	ctx context.Context, planner *planner, tableDesc *tabledesc.Mutable, traceKV bool,
 ) error {
-	if len(tableDesc.DrainingNames) > 0 {
+	// TODO(postamar): remove if-block in 22.2
+	//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
+	if len(tableDesc.GetDrainingNames()) > 0 {
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
-		for _, drain := range tableDesc.DrainingNames {
+		//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
+		for _, drain := range tableDesc.GetDrainingNames() {
 			key := catalogkeys.EncodeNameKey(planner.ExecCfg().Codec, drain)
 			if err := planner.Txn().Del(ctx, key); err != nil {
 				return err
 			}
 		}
-		tableDesc.DrainingNames = nil
+		//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
+		tableDesc.SetDrainingNames(nil)
 	}
 
 	if tableDesc.Dropped() {
@@ -2120,24 +2032,6 @@ func runSchemaChangesInTxn(
 		if err := tableDesc.MakeMutationComplete(tableDesc.Mutations[m.MutationOrdinal()]); err != nil {
 			return err
 		}
-
-		// If the mutation we processed was a primary key swap, there is some
-		// extra work that needs to be done. Note that we don't need to create
-		// a job to clean up the dropped indexes because those mutations can
-		// get processed in this txn on the new table.
-		if err := maybeRemoveInterleaveBackreference(
-			ctx, planner.txn, planner.Descriptors(), m, tableDesc, func(
-				ctx context.Context, ancestor *tabledesc.Mutable,
-			) error {
-				return planner.writeSchemaChange(ctx, ancestor, descpb.InvalidMutationID,
-					fmt.Sprintf("remove interleaved backreference from table %s(%d) "+
-						"for primary key swap of table %s(%d)",
-						ancestor.Name, ancestor.ID, tableDesc.Name, tableDesc.GetID(),
-					))
-			},
-		); err != nil {
-			return err
-		}
 	}
 	// Clear all the mutations except for adding constraints.
 	tableDesc.Mutations = make([]descpb.DescriptorMutation, len(constraintAdditionMutations))
@@ -2161,7 +2055,7 @@ func runSchemaChangesInTxn(
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.LeaseMgr(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
+					ctx, &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2257,7 +2151,6 @@ func runSchemaChangesInTxn(
 // reuse an existing kv.Txn safely.
 func validateCheckInTxn(
 	ctx context.Context,
-	leaseMgr *lease.Manager,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
@@ -2270,7 +2163,7 @@ func validateCheckInTxn(
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateCheckExpr(ctx, semaCtx, checkExpr, tableDesc, ie, txn)
+		return validateCheckExpr(ctx, semaCtx, evalCtx.SessionData(), checkExpr, tableDesc, ie, txn)
 	})
 }
 

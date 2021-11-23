@@ -80,8 +80,8 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if desc.GetID() != id {
 		t.Fatalf("expected ID == %d, got %d", id, desc.GetID())
 	}
-	if len(desc.GetPrivileges().Users) != 2 {
-		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
+	if len(desc.GetPrivileges().Users) != 3 {
+		t.Fatalf("wrong number of privilege users, expected 3, got: %d", len(desc.GetPrivileges().Users))
 	}
 }
 
@@ -96,7 +96,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges: descpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 		{
@@ -105,7 +105,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name:         "multi-region-db",
 				ID:           200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{},
-				Privileges:   descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Privileges:   descpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 	}
@@ -143,7 +143,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: false},
+					"schema1": {ID: 52},
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{
@@ -169,7 +169,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 500, Dropped: false},
+					"schema1": {ID: 500},
 				},
 			},
 		},
@@ -179,7 +179,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
-					"schema1": {ID: 52, Dropped: false},
+					"schema1": {ID: 52},
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{
@@ -268,7 +268,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		descs := catalog.MakeMapDescGetter()
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()

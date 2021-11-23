@@ -385,7 +385,7 @@ project
  ├── columns: x:1(int!null) x:5(string!null) y:2(int!null)
  ├── select
  │    ├── columns: a.x:1(int!null) y:2(int!null) max:10(string!null)
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: a.x:1(int!null) y:2(int!null) max:10(string!null)
  │    │    ├── grouping columns: a.x:1(int!null)
  │    │    ├── inner-join (hash)
@@ -416,7 +416,7 @@ SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
 ----
 project
  ├── columns: exists:10(bool!null)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: true_agg:12(bool) rownum:14(int!null)
  │    ├── grouping columns: rownum:14(int!null)
  │    ├── left-join (cross)

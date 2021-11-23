@@ -607,13 +607,24 @@ func (rf *cFetcher) StartScan(
 	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := rowinfra.KeyLimit(limitHint)
 	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up
-		// of more than one key. We take the maximum possible keys
-		// per row out of all the table rows we could potentially
-		// scan over.
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key. We take the maximum possible keys per row out of all
+		// the table rows we could potentially scan over.
+		//
+		// Note that unlike for the row.Fetcher, we don't need an extra key to
+		// form the last row in the cFetcher because we are eagerly finalizing
+		// each row once we know that all KVs comprising that row have been
+		// fetched. Consider several cases:
+		// - the table has only one column family - then we can finalize each
+		//   row right after the first KV is decoded;
+		// - the table has multiple column families:
+		//   - KVs for all column families are present for all rows - then for
+		//     each row, when its last KV is fetched, the row can be finalized
+		//     (and firstBatchLimit asks exactly for the correct number of KVs);
+		//   - KVs for some column families are omitted for some rows - then we
+		//     will actually fetch more KVs than necessary, but we'll decode
+		//     limitHint number of rows.
 		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
-		// We need an extra key to make sure we form the last row.
-		firstBatchLimit++
 	}
 
 	f, err := row.NewKVFetcher(
@@ -954,12 +965,11 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateFinalizeRow:
-			// Populate any system columns in the output.
+			// Populate the timestamp system column if needed. We have to do it
+			// on a per row basis since each row can be modified at a different
+			// time.
 			if rf.table.timestampOutputIdx != noOutputColumn {
 				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
-			}
-			if rf.table.oidOutputIdx != noOutputColumn {
-				rf.machine.tableoidCol.Set(rf.machine.rowIdx, tree.NewDOid(tree.DInt(rf.table.desc.GetID())))
 			}
 
 			// We're finished with a row. Fill the row in with nulls if
@@ -969,6 +979,10 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if err := rf.fillNulls(); err != nil {
 				return nil, err
 			}
+			// Note that we haven't set the tableoid value (if that system
+			// column is requested) yet, but it is ok for the purposes of the
+			// memory accounting - oids are fixed length values and, thus, have
+			// already been accounted for when the batch was allocated.
 			rf.accountingHelper.AccountForSet(rf.machine.rowIdx)
 			rf.machine.rowIdx++
 			rf.shiftState()
@@ -1340,6 +1354,16 @@ func (rf *cFetcher) fillNulls() error {
 }
 
 func (rf *cFetcher) finalizeBatch() {
+	// Populate the tableoid system column for the whole batch if necessary.
+	if rf.table.oidOutputIdx != noOutputColumn {
+		id := rf.table.desc.GetID()
+		for i := 0; i < rf.machine.rowIdx; i++ {
+			// Note that we don't need to update the memory accounting because
+			// oids are fixed length values and have already been accounted for
+			// when finalizing each row.
+			rf.machine.tableoidCol.Set(i, rf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id))))
+		}
+	}
 	rf.machine.batch.SetLength(rf.machine.rowIdx)
 	rf.machine.rowIdx = 0
 }
@@ -1382,15 +1406,13 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	}
 	nIndexCols := rf.table.index.NumKeyColumns() + rf.table.index.NumKeySuffixColumns()
 	tableKeyVals := make([]rowenc.EncDatum, nIndexCols)
-	_, ok, _, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-		rf.table.desc,
-		rf.table.index,
+	_, _, err := rowenc.DecodeKeyVals(
 		rf.table.keyValTypes,
 		tableKeyVals,
 		rf.table.indexColumnDirs,
 		key[rf.table.knownPrefixLength:],
 	)
-	if !ok || err != nil {
+	if err != nil {
 		return nil, false
 	}
 	return rf.table.desc, true

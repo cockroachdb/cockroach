@@ -743,6 +743,8 @@ type Engine interface {
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
+	// Properties returns the low-level properties for the engine's underlying storage.
+	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.
 	Compact() error
 	// Flush causes the engine to write all in-memory data to disk
@@ -951,25 +953,6 @@ type EncryptionRegistries struct {
 	// KeyRegistry is the list of keys, scrubbed of actual key data.
 	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
 	KeyRegistry []byte
-}
-
-// PutProto sets the given key to the protobuf-serialized byte string
-// of msg. Returns the length in bytes of key and the value.
-//
-// Deprecated: use MVCCPutProto instead.
-func PutProto(
-	writer Writer, key roachpb.Key, msg protoutil.Message,
-) (keyBytes, valBytes int64, err error) {
-	bytes, err := protoutil.Marshal(msg)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	if err := writer.PutUnversioned(key, bytes); err != nil {
-		return 0, 0, err
-	}
-
-	return int64(MVCCKey{Key: key}.EncodedSize()), int64(len(bytes)), nil
 }
 
 // Scan returns up to max key/value objects starting from start (inclusive)

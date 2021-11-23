@@ -425,7 +425,7 @@ func mysqlTableToCockroach(
 			seqVals[id] = startingValue
 		}
 		var err error
-		privilegeDesc := descpb.NewDefaultPrivilegeDescriptor(owner)
+		privilegeDesc := descpb.NewBasePrivilegeDescriptor(owner)
 		seqDesc, err = sql.NewSequenceTableDesc(
 			ctx,
 			seqName,

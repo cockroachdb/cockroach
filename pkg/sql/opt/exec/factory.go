@@ -331,6 +331,9 @@ type ExecutionStats struct {
 	SeekCount         optional.Uint
 	InternalSeekCount optional.Uint
 
+	MaxAllocatedMem  optional.Uint
+	MaxAllocatedDisk optional.Uint
+
 	// Nodes on which this operator was executed.
 	Nodes []string
 
@@ -342,3 +345,18 @@ type ExecutionStats struct {
 // BuildPlanForExplainFn builds an execution plan against the given
 // base factory.
 type BuildPlanForExplainFn func(f Factory) (Plan, error)
+
+// GroupingOrderType is the grouping column order type for group by and distinct
+// operations.
+type GroupingOrderType int
+
+const (
+	// NoStreaming means that the grouping columns have no useful order, so a
+	// hash aggregator should be used.
+	NoStreaming GroupingOrderType = iota
+	// PartialStreaming means that the grouping columns are partially ordered, so
+	// some optimizations can be done during aggregation.
+	PartialStreaming
+	// Streaming means that the grouping columns are fully ordered.
+	Streaming
+)

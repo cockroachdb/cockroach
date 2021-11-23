@@ -181,6 +181,10 @@ message RestoreDetails {
       (gogoproto.customname) = "ParentID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
+    uint32 parent_schema_id = 5 [
+      (gogoproto.customname) = "ParentSchemaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
     // ToExisting represents whether this descriptor is being remapped to a
     // descriptor that already exists in the cluster.
     bool to_existing = 3;
@@ -425,7 +429,15 @@ message NewSchemaChangeDetails {
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {
+  // Tracks the current status of nodes in an ordered manner for
+  // keeping track of progress.
   repeated cockroach.sql.schemachanger.scpb.Status states = 1;
+  // Statements for the schema changes which this job is currently
+  // running work for. A transaction can have multiple statements
+  // for example associated.
+  repeated cockroach.sql.schemachanger.scpb.Statement statements = 2;
+  // Authorization information for the schema change.
+  cockroach.sql.schemachanger.scpb.Authorization authorization = 3;
 }
 
 // AutoSpanConfigReconciliationDetails is the job detail information for the
@@ -488,14 +500,7 @@ message SchemaChangeGCDetails {
   // Indexes to GC.
   repeated DroppedIndex indexes = 1 [(gogoproto.nullable) = false];
 
-  // The below two fields are used only in the case of TRUNCATE operating on
-  // tables with interleaved indexes. They are only set together.
-
-  // InterleavedTable is the table being truncated. In particular, it is the
-  // TableDescriptor before any of the truncate modifications have been applied.
-  sqlbase.TableDescriptor interleaved_table = 4;
-  // InterleavedIndexes is the set of interleaved indexes to truncate.
-  repeated sqlbase.IndexDescriptor interleaved_indexes = 5 [(gogoproto.nullable) = false];
+  reserved 4, 5;
 
   // Entire tables to GC.
   repeated DroppedID tables = 2 [(gogoproto.nullable) = false];

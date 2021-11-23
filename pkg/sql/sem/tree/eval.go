@@ -2983,8 +2983,8 @@ func MatchLikeEscape(
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -3008,8 +3008,8 @@ func ConvertLikeToRegexp(
 	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return nil, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return nil, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 	return re, nil
 }
@@ -3033,8 +3033,8 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -3295,6 +3295,14 @@ type InternalExecutor interface {
 	) (Datums, error)
 }
 
+// ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
+// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
+type ExecConfigAccessor interface {
+
+	// JobRegistry returns jobs.Registry from ExecutorConfig
+	JobRegistry() interface{}
+}
+
 // PrivilegedAccessor gives access to certain queries that would otherwise
 // require someone with RootUser access to query a given data source.
 // It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
@@ -3541,6 +3549,8 @@ type EvalContext struct {
 	// variables from a parent session.
 	InternalExecutor InternalExecutor
 
+	ExecConfigAccessor ExecConfigAccessor
+
 	Planner EvalPlanner
 
 	PrivilegedAccessor PrivilegedAccessor
@@ -3677,7 +3687,12 @@ func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
 func (ctx *EvalContext) Stop(c context.Context) {
-	ctx.Mon.Stop(c)
+	if r := recover(); r != nil {
+		ctx.Mon.EmergencyStop(c)
+		panic(r)
+	} else {
+		ctx.Mon.Stop(c)
+	}
 }
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.

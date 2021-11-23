@@ -319,7 +319,7 @@ func createPostgresSequences(
 			schema.GetID(),
 			getNextPlaceholderDescID(),
 			hlc.Timestamp{WallTime: walltime},
-			descpb.NewDefaultPrivilegeDescriptor(owner),
+			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
 			nil, /* params */
 			// If this is multi-region, this will get added by WriteDescriptors.
@@ -613,7 +613,6 @@ func readPostgresStmt(
 			Columns:          stmt.Columns,
 			Storing:          stmt.Storing,
 			Inverted:         stmt.Inverted,
-			Interleave:       stmt.Interleave,
 			PartitionByIndex: stmt.PartitionByIndex,
 			StorageParams:    stmt.StorageParams,
 		}

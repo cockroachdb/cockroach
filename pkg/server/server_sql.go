@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -71,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -111,6 +113,7 @@ import (
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
 type SQLServer struct {
+	ambientCtx       log.AmbientContext
 	stopper          *stop.Stopper
 	sqlIDContainer   *base.SQLIDContainer
 	pgServer         *pgwire.Server
@@ -358,6 +361,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
 	cfg.sqlLivenessProvider = slprovider.New(
+		cfg.AmbientCtx,
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
 	)
 	cfg.sqlInstanceProvider = instanceprovider.New(
@@ -375,6 +379,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		td := tracedumper.NewTraceDumper(ctx, cfg.InflightTraceDirName, cfg.Settings)
 		*jobRegistry = *jobs.MakeRegistry(
+			ctx,
 			cfg.AmbientCtx,
 			cfg.stopper,
 			cfg.clock,
@@ -762,6 +767,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 
 	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
+	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
@@ -782,6 +788,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
 	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg, ieFactory)
+	execCfg.IndexValidator = scsqldeps.NewIndexValidator(execCfg.DB,
+		execCfg.Codec,
+		execCfg.Settings,
+		ieFactory,
+		sql.ValidateForwardIndexes,
+		sql.ValidateInvertedIndexes,
+		sql.NewFakeSessionData)
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 
@@ -842,6 +855,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
+		sqlWatcherFactory := spanconfigsqlwatcher.NewFactory(
+			codec,
+			cfg.Settings,
+			cfg.rangeFeedFactory,
+			1<<20, /* 1 MB bufferMemLimit */
+			cfg.stopper,
+			spanConfigKnobs,
+		)
 		spanConfigMgr = spanconfigmanager.New(
 			cfg.db,
 			jobRegistry,
@@ -849,6 +870,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			cfg.Settings,
 			cfg.spanConfigAccessor,
+			sqlWatcherFactory,
 			sqlTranslator,
 			spanConfigKnobs,
 		)
@@ -894,6 +916,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	return &SQLServer{
+		ambientCtx:              cfg.BaseConfig.AmbientCtx,
 		stopper:                 cfg.stopper,
 		sqlIDContainer:          cfg.nodeIDContainer,
 		pgServer:                pgServer,
@@ -973,7 +996,7 @@ func (s *SQLServer) initInstanceID(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = s.sqlIDContainer.SetSQLInstanceID(instanceID)
+	err = s.sqlIDContainer.SetSQLInstanceID(ctx, instanceID)
 	if err != nil {
 		return err
 	}
@@ -1108,7 +1131,7 @@ func (s *SQLServer) preStart(
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
-	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
+	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
 
 	// Start scheduled jobs daemon.
 	jobs.StartJobSchedulerDaemon(
@@ -1151,4 +1174,9 @@ func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
 // testing.
 func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
+}
+
+// AnnotateCtx annotates the given context with the server tracer and tags.
+func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
+	return s.ambientCtx.AnnotateCtx(ctx)
 }

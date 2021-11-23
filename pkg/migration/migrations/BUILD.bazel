@@ -3,11 +3,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "migrations",
     srcs = [
+        "alter_statement_diagnostics_requests.go",
+        "alter_table_statistics_avg_size.go",
         "alter_web_sessions_create_indexes.go",
         "database_role_settings.go",
         "delete_deprecated_namespace_tabledesc.go",
+        "ensure_no_draining_names.go",
         "fix_descriptor_migration.go",
-        "interleaved_tables.go",
         "join_tokens.go",
         "migrations.go",
         "records_based_registry.go",
@@ -66,11 +68,13 @@ go_library(
 go_test(
     name = "migrations_test",
     srcs = [
+        "alter_statement_diagnostics_requests_test.go",
+        "alter_table_statistics_avg_size_test.go",
         "alter_web_sessions_create_indexes_test.go",
         "delete_deprecated_namespace_tabledesc_external_test.go",
+        "ensure_no_draining_names_external_test.go",
         "fix_descriptor_migration_external_test.go",
         "helpers_test.go",
-        "interleaved_tables_external_test.go",
         "main_test.go",
         "on_update_test.go",
         "retry_jobs_with_exponential_backoff_external_test.go",

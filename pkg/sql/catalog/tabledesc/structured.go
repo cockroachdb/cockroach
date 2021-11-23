@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -76,8 +75,12 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedFormatVersion indicates that the FormatVersion was upgraded.
 	UpgradedFormatVersion bool
 
+	// FixedIndexEncodingType indicates that the encoding type of a public index
+	// was fixed.
+	FixedIndexEncodingType bool
+
 	// UpgradedIndexFormatVersion indicates that the format version of at least
-	// one index descriptor was upgraded
+	// one index descriptor was upgraded.
 	UpgradedIndexFormatVersion bool
 
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
@@ -131,13 +134,28 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if idx.NumSecondaryStoredColumns() == 0 {
+	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
 		return 1, nil
 	}
-	return len(desc.Families), nil
+	// Calculate the number of column families used by the secondary index. We
+	// only need to look at the stored columns because column families are only
+	// applicable to the value part of the KV.
+	//
+	// 0th family is always present.
+	numUsedFamilies := 1
+	storedColumnIDs := idx.CollectSecondaryStoredColumnIDs()
+	for _, family := range desc.Families[1:] {
+		for _, columnID := range family.ColumnIDs {
+			if storedColumnIDs.Contains(columnID) {
+				numUsedFamilies++
+				break
+			}
+		}
+	}
+	return numUsedFamilies, nil
 }
 
-// buildIndexName returns an index name that is not equal to any
+// BuildIndexName returns an index name that is not equal to any
 // of tableDesc's indexes, roughly following Postgres's conventions for naming
 // anonymous indexes. For example:
 //
@@ -150,9 +168,7 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 //   CREATE INDEX ON t ((a + b), c, lower(d))
 //   => t_expr_c_expr1_idx
 //
-func buildIndexName(tableDesc *Mutable, index catalog.Index) (string, error) {
-	idx := index.IndexDesc()
-
+func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, error) {
 	// An index name has a segment for the table name, each key column, and a
 	// final word (either "idx" or "key").
 	segments := make([]string, 0, len(idx.KeyColumnNames)+2)
@@ -680,7 +696,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	// Assign names to unnamed indexes.
 	err := catalog.ForEachDeletableNonPrimaryIndex(desc, func(idx catalog.Index) error {
 		if len(idx.GetName()) == 0 {
-			name, err := buildIndexName(desc, idx)
+			name, err := BuildIndexName(desc, idx.IndexDesc())
 			if err != nil {
 				return err
 			}
@@ -981,16 +997,6 @@ func (desc *Mutable) OriginalID() descpb.ID {
 // OriginalVersion implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion.Version
-}
-
-// ValidateIndexNameIsUnique validates that the index name does not exist.
-func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
-	if catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
-		return idx.GetName() == indexName
-	}) != nil {
-		return sqlerrors.NewRelationAlreadyExistsError(indexName)
-	}
-	return nil
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
@@ -1535,13 +1541,6 @@ func (desc *wrapper) FindFKByName(name string) (*descpb.ForeignKeyConstraint, er
 		}
 	}
 	return nil, fmt.Errorf("fk %q does not exist", name)
-}
-
-// IsInterleaved implements the TableDescriptor interface.
-func (desc *wrapper) IsInterleaved() bool {
-	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
-		return idx.IsInterleaved()
-	})
 }
 
 // IsPrimaryIndexDefaultRowID returns whether or not the table's primary
@@ -2153,8 +2152,6 @@ func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roac
 
 // TableSpan implements the TableDescriptor interface.
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
-	// TODO(jordan): Why does IndexSpan consider interleaves but TableSpan does
-	// not? Should it?
 	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
@@ -2268,14 +2265,6 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 		fk := &desc.InboundFKs[i]
 		refs[fk.OriginTableID] = struct{}{}
 	}
-	for _, index := range desc.NonDropIndexes() {
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			refs[index.GetInterleaveAncestor(i).TableID] = struct{}{}
-		}
-		for i := 0; i < index.NumInterleavedBy(); i++ {
-			refs[index.GetInterleavedBy(i).Table] = struct{}{}
-		}
-	}
 
 	for _, c := range desc.NonDropColumns() {
 		for i := 0; i < c.NumUsesSequences(); i++ {
@@ -2330,6 +2319,8 @@ func (desc *Mutable) SetParentSchemaID(schemaID descpb.ID) {
 
 // AddDrainingName adds a draining name to the TableDescriptor's slice of
 // draining names.
+//
+// Deprecated: Do not use.
 func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }

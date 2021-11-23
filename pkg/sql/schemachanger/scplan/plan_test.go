@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -53,7 +54,7 @@ func TestPlanAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema":
+			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -70,6 +71,8 @@ func TestPlanAlterTable(t *testing.T) {
 				case *tree.CreateDatabase:
 					tableName = ""
 				case *tree.CreateSchema:
+					tableName = ""
+				case *tree.CreateIndex:
 					tableName = ""
 				default:
 					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
@@ -116,8 +119,8 @@ func TestPlanAlterTable(t *testing.T) {
 					stmt := stmts[0]
 					alter, ok := stmt.AST.(*tree.AlterTable)
 					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-					_, err = scbuild.Build(ctx, deps, nil, alter)
-					require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
+					_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
+					require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				})
 				return ""
 
@@ -179,6 +182,18 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			stages.WriteString(" (non-revertible)")
 		}
 		stages.WriteString("\n")
+		stages.WriteString("  transitions:\n")
+		var transitionsBuf strings.Builder
+		for i := range stage.Before.Nodes {
+			before, after := stage.Before.Nodes[i], stage.After.Nodes[i]
+			if before == after {
+				continue
+			}
+			_, _ = fmt.Fprintf(&transitionsBuf, "%s -> %s\n",
+				screl.NodeString(before), after.Status)
+		}
+		stages.WriteString(indentText(transitionsBuf.String(), "    "))
+		stages.WriteString("  ops:\n")
 		stageOps := ""
 		for _, op := range stage.Ops.Slice() {
 			opMap, err := scgraphviz.ToMap(op)
@@ -187,7 +202,7 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
-		stages.WriteString(indentText(stageOps, "  "))
+		stages.WriteString(indentText(stageOps, "    "))
 	}
 	return stages.String()
 }

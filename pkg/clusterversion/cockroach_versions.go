@@ -104,7 +104,9 @@ type Key int
 // When introducing a version constant, you'll want to:
 //   (1) Add it at the end of this block. For versions introduced during and
 //       after the 21.1 release, Internal versions must be even-numbered. The
-//       odd versions are used for internal book-keeping.
+//       odd versions are used for internal book-keeping. The Internal version
+//       should be the previous Internal version for the same minor release plus
+//       two.
 //   (2) Add it at the end of the `versionsSingleton` block below.
 //
 // Migrations
@@ -213,12 +215,6 @@ const (
 	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
 	// type.
 	AutoSpanConfigReconciliationJob
-	// PreventNewInterleavedTables interleaved table creation is completely
-	// blocked on this version.
-	PreventNewInterleavedTables
-	// EnsureNoInterleavedTables interleaved tables no longer exist in
-	// this version.
-	EnsureNoInterleavedTables
 	// DefaultPrivileges default privileges are supported in this version.
 	DefaultPrivileges
 	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
@@ -276,6 +272,22 @@ const (
 	// requires the limit to always be overshot in order to properly enforce
 	// limits when splitting requests.
 	TargetBytesAvoidExcess
+	// AvoidDrainingNames avoids using the draining_names field when renaming or
+	// dropping descriptors.
+	AvoidDrainingNames
+	// DrainingNamesMigration adds the migration which guarantees that no
+	// descriptors have draining names.
+	DrainingNamesMigration
+	// TraceIDDoesntImplyStructuredRecording changes the contract about the kind
+	// of span that RPCs get on the server depending on the tracing context.
+	TraceIDDoesntImplyStructuredRecording
+	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
+	// table system.table_statistics that contains a new statistic.
+	AlterSystemTableStatisticsAddAvgSizeCol
+	// AlterSystemStmtDiagReqs adds the migration for
+	// system.statement_diagnostics_requests table to support collecting stmt
+	// bundles when the query latency exceeds the user provided threshold.
+	AlterSystemStmtDiagReqs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -391,14 +403,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1136},
 	},
 	{
-		Key:     PreventNewInterleavedTables,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1138},
-	},
-	{
-		Key:     EnsureNoInterleavedTables,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1140},
-	},
-	{
 		Key:     DefaultPrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1142},
 	},
@@ -472,6 +476,26 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TargetBytesAvoidExcess,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     AvoidDrainingNames,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 6},
+	},
+	{
+		Key:     DrainingNamesMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     TraceIDDoesntImplyStructuredRecording,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 10},
+	},
+	{
+		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     AlterSystemStmtDiagReqs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
 	},
 
 	// *************************************************

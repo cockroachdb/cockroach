@@ -1266,7 +1266,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0
+	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0 &&
+		!ba.Header.ReturnOnRangeBoundary
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -1342,7 +1343,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnOnRangeBoundary
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
 				var replyKeys int64
@@ -1365,7 +1366,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						log.Fatalf(ctx, "received %d results, limit was %d", replyKeys, ba.MaxSpanRequestKeys)
 					}
 					ba.MaxSpanRequestKeys -= replyKeys
-					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
@@ -1379,6 +1379,13 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						resumeReason = roachpb.RESUME_BYTE_LIMIT
 						return
 					}
+				}
+				// If we hit a range boundary, return a partial result if requested. We
+				// do this after checking the limits, so that they take precedence.
+				if ba.Header.ReturnOnRangeBoundary && replyKeys > 0 && !lastRange {
+					couldHaveSkippedResponses = true
+					resumeReason = roachpb.RESUME_RANGE_BOUNDARY
+					return
 				}
 			}
 		}
@@ -1636,7 +1643,7 @@ func (ds *DistSender) sendPartialBatch(
 			// Range descriptor might be out of date - evict it. This is likely the
 			// result of a range split. If we have new range descriptors, insert them
 			// instead.
-			for _, ri := range tErr.Ranges() {
+			for _, ri := range tErr.Ranges {
 				// Sanity check that we got the different descriptors. Getting the same
 				// descriptor and putting it in the cache would be bad, as we'd go through
 				// an infinite loops of retries.
@@ -1646,7 +1653,7 @@ func (ds *DistSender) sendPartialBatch(
 						routingTok.Desc(), ri.Desc, pErr))}
 				}
 			}
-			routingTok.EvictAndReplace(ctx, tErr.Ranges()...)
+			routingTok.EvictAndReplace(ctx, tErr.Ranges...)
 			// On addressing errors (likely a split), we need to re-invoke
 			// the range descriptor lookup machinery, so we recurse by
 			// sending batch to just the partial span this descriptor was
@@ -1655,7 +1662,7 @@ func (ds *DistSender) sendPartialBatch(
 			// to it matches the positions into our batch (using the full
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
-			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges())
+			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 			return response{reply: reply, positions: positions, pErr: pErr}
 		}
@@ -2198,7 +2205,7 @@ func skipStaleReplicas(
 	if !routing.Valid() {
 		return noMoreReplicasErr(
 			ambiguousError,
-			errors.Newf("routing information detected to be stale; lastErr: %s", lastErr))
+			errors.Wrap(lastErr, "routing information detected to be stale"))
 	}
 
 	for {

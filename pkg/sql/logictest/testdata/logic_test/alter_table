@@ -28,6 +28,12 @@ b            INT8       true         NULL            ·                      {t_
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (b)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS foo UNIQUE (f)
+
 query TTTTRT
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -37,7 +43,7 @@ LIMIT 1
 ----
 SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
 
-statement error pgcode 42P07 duplicate index name: "foo"
+statement error pgcode 42710 constraint with name \"foo\" already exists
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -116,7 +122,7 @@ statement ok
 DELETE FROM t WHERE a = -2
 
 statement ok
-ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS check_a CHECK (a > 0)
 
 statement error CHECK
 INSERT INTO t (a) VALUES (-3)
@@ -132,8 +138,19 @@ t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS check_a CHECK (a < 0)
+
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT t_f_fkey FOREIGN KEY (a) REFERENCES other (b)
+
+# Should be a no-op.
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS t_f_fkey FOREIGN KEY (a) REFERENCES other (b)
+
+# Should be a no-op.
+statement ok
+ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS t_f_fkey CHECK (a < 0)
 
 # added constraints with generated names avoid name collisions.
 statement ok
@@ -1821,7 +1838,7 @@ subtest unique_index_duplicate_name
 statement ok
 CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
 
-statement error pgcode 42P07 duplicate index name: \"idx\"
+statement error pgcode 42710 constraint with name \"idx\" already exists
 ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
 
 # Regression test for a bug which occurred when adding a foreign key

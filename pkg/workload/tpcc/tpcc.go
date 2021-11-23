@@ -40,7 +40,6 @@ type tpcc struct {
 	seed             uint64
 	warehouses       int
 	activeWarehouses int
-	interleaved      bool
 	nowString        []byte
 	numConns         int
 
@@ -184,10 +183,6 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
-		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
-		if err := g.Flags().MarkHidden("interleaved"); err != nil {
-			panic(errors.Wrap(err, "no interleaved flag?"))
-		}
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -197,7 +192,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
-			`Number of concurrent workers. Defaults to --warehouses * %d`, numWorkersPerWarehouse,
+			`Number of concurrent workers. Defaults to --warehouses * %d`, NumWorkersPerWarehouse,
 		))
 		g.flags.IntVar(&g.numConns, `conns`, 0, fmt.Sprintf(
 			`Number of connections. Defaults to --warehouses * %d (except in nowait mode, where it defaults to --workers`,
@@ -324,7 +319,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			w.initNonUniformRandomConstants()
 
 			if w.workers == 0 {
-				w.workers = w.activeWarehouses * numWorkersPerWarehouse
+				w.workers = w.activeWarehouses * NumWorkersPerWarehouse
 			}
 
 			if w.numConns == 0 {
@@ -339,9 +334,9 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 			}
 
-			if w.waitFraction > 0 && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
+			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
 				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
-					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
+					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
 			}
 
 			if w.serializable {
@@ -595,10 +590,6 @@ func (w *tpcc) Tables() []workload.Table {
 				w.separateColumnFamilies,
 				tpccDistrictColumnFamiliesSuffix,
 			),
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccDistrictSchemaInterleaveSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `d_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -617,10 +608,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: makeSchema(
 			tpccCustomerSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccCustomerSchemaInterleaveSuffix,
-			),
 			maybeAddColumnFamiliesSuffix(
 				w.separateColumnFamilies,
 				tpccCustomerColumnFamiliesSuffix,
@@ -659,10 +646,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order`,
 		Schema: makeSchema(
 			tpccOrderSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccOrderSchemaInterleaveSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `o_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -704,10 +687,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `stock`,
 		Schema: makeSchema(
 			tpccStockSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccStockSchemaInterleaveSuffix,
-			),
 			maybeAddFkSuffix(
 				w.deprecatedFkIndexes,
 				deprecatedTpccStockSchemaFkSuffix,
@@ -724,10 +703,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: makeSchema(
 			tpccOrderLineSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccOrderLineSchemaInterleaveSuffix,
-			),
 			maybeAddFkSuffix(
 				w.deprecatedFkIndexes,
 				deprecatedTpccOrderLineSchemaFkSuffix,

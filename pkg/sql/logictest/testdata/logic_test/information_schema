@@ -424,7 +424,6 @@ crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
 crdb_internal       index_usage_statistics
-crdb_internal       interleaved
 crdb_internal       invalid_objects
 crdb_internal       jobs
 crdb_internal       kv_node_liveness
@@ -708,6 +707,7 @@ query T
 SELECT table_name FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
+abc
 
 # Check that one can see all tables with the empty prefix.
 query T rowsort
@@ -741,7 +741,6 @@ gossip_network
 gossip_nodes
 index_columns
 index_usage_statistics
-interleaved
 invalid_objects
 jobs
 kv_node_liveness
@@ -996,12 +995,14 @@ geography_columns
 geometry_columns
 spatial_ref_sys
 xyz
+abc
 
 # Check that the other_db tables become visible to non-root when the current database is changed.
 query T
 SET DATABASE = other_db; SELECT table_name FROM information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
+abc
 
 user root
 
@@ -1095,7 +1096,6 @@ system         crdb_internal       gossip_network                         SYSTEM
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
-system         crdb_internal       interleaved                            SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
@@ -1406,6 +1406,7 @@ SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db
 ----
 table_catalog  table_schema  table_name  table_type  is_insertable_into  version
 other_db       public        xyz         BASE TABLE  YES                 6
+other_db       public        abc         VIEW        NO                  1
 
 
 user root
@@ -1593,6 +1594,7 @@ system              public             630200280_20_5_not_null                  
 system              public             630200280_20_6_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_7_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_8_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_9_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             primary                                                                                                         system         public        table_statistics                 PRIMARY KEY      NO             NO
 system              public             630200280_45_1_not_null                                                                                         system         public        tenant_usage                     CHECK            NO             NO
 system              public             630200280_45_2_not_null                                                                                         system         public        tenant_usage                     CHECK            NO             NO
@@ -1678,6 +1680,7 @@ system              public             630200280_20_5_not_null                  
 system              public             630200280_20_6_not_null                                                                                         rowCount IS NOT NULL
 system              public             630200280_20_7_not_null                                                                                         distinctCount IS NOT NULL
 system              public             630200280_20_8_not_null                                                                                         nullCount IS NOT NULL
+system              public             630200280_20_9_not_null                                                                                         avgSize IS NOT NULL
 system              public             630200280_21_1_not_null                                                                                         localityKey IS NOT NULL
 system              public             630200280_21_2_not_null                                                                                         localityValue IS NOT NULL
 system              public             630200280_21_3_not_null                                                                                         latitude IS NOT NULL
@@ -2102,7 +2105,9 @@ system         public        statement_diagnostics            statement         
 system         public        statement_diagnostics            statement_fingerprint                                                                                     2
 system         public        statement_diagnostics            trace                                                                                                     5
 system         public        statement_diagnostics_requests   completed                                                                                                 2
+system         public        statement_diagnostics_requests   expires_at                                                                                                7
 system         public        statement_diagnostics_requests   id                                                                                                        1
+system         public        statement_diagnostics_requests   min_execution_latency                                                                                  6
 system         public        statement_diagnostics_requests   requested_at                                                                                              5
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                                                  4
 system         public        statement_diagnostics_requests   statement_fingerprint                                                                                     3
@@ -2117,10 +2122,11 @@ system         public        statement_statistics             plan              
 system         public        statement_statistics             plan_hash                                                                                                 4
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
+system         public        table_statistics                 avgSize                                                                                                   9
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
 system         public        table_statistics                 distinctCount                                                                                             7
-system         public        table_statistics                 histogram                                                                                                 9
+system         public        table_statistics                 histogram                                                                                                 10
 system         public        table_statistics                 name                                                                                                      3
 system         public        table_statistics                 nullCount                                                                                                 8
 system         public        table_statistics                 rowCount                                                                                                  6
@@ -2664,7 +2670,6 @@ NULL     public   system         crdb_internal       gossip_network             
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NULL          YES
-NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
@@ -3270,7 +3275,6 @@ NULL     public   system         crdb_internal       gossip_network             
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NULL          YES
-NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
@@ -4608,105 +4612,106 @@ subtest variables
 query TT colnames
 SELECT * FROM information_schema.session_variables where variable not in ('crdb_version', 'session_id', 'distsql', 'vectorize', 'experimental_distsql_planning')
 ----
-variable                                               value
-allow_prepare_as_opt_plan                              off
-application_name                                       ·
-backslash_quote                                        safe_encoding
-bytea_output                                           hex
-client_encoding                                        UTF8
-client_min_messages                                    notice
-database                                               test
-datestyle                                              ISO, MDY
-datestyle_enabled                                      off
-default_int_size                                       8
-default_tablespace                                     ·
-default_transaction_isolation                          serializable
-default_transaction_priority                           normal
-default_transaction_read_only                          off
-default_transaction_use_follower_reads                 off
-disable_partially_distributed_plans                    off
-disable_plan_gists                                     off
-disallow_full_table_scans                              off
-distsql_workmem                                        64 MiB
-enable_copying_partitioning_when_deinterleaving_table  off
-enable_drop_enum_value                                 on
-enable_experimental_alter_column_type_general          off
-enable_experimental_stream_replication                 off
-enable_implicit_select_for_update                      on
-enable_insert_fast_path                                on
-enable_multiregion_placement_policy                    off
-enable_seqscan                                         on
-enable_zigzag_join                                     on
-escape_string_warning                                  on
-experimental_computed_column_rewrites                  ·
-experimental_enable_auto_rehoming                      off
-experimental_enable_hash_sharded_indexes               off
-experimental_enable_implicit_column_partitioning       off
-experimental_enable_temp_tables                        off
-experimental_enable_unique_without_index_constraints   on
-experimental_use_new_schema_changer                    off
-extra_float_digits                                     0
-force_savepoint_restart                                off
-foreign_key_cascades_limit                             10000
-idle_in_session_timeout                                0
-idle_in_transaction_session_timeout                    0
-inject_retry_errors_enabled                            off
-integer_datetimes                                      on
-intervalstyle                                          postgres
-intervalstyle_enabled                                  off
-is_superuser                                           on
-large_full_scan_rows                                   1000
-lc_collate                                             C.UTF-8
-lc_ctype                                               C.UTF-8
-lc_messages                                            C.UTF-8
-lc_monetary                                            C.UTF-8
-lc_numeric                                             C.UTF-8
-lc_time                                                C.UTF-8
-locality                                               region=test,dc=dc1
-locality_optimized_partitioned_index_scan              on
-lock_timeout                                           0
-max_identifier_length                                  128
-max_index_keys                                         32
-node_id                                                1
-null_ordered_last                                      off
-on_update_rehome_row_enabled                           on
-optimizer                                              on
-optimizer_use_histograms                               on
-optimizer_use_multicol_stats                           on
-override_multi_region_zone_config                      off
-prefer_lookup_joins_for_fks                            off
-propagate_input_ordering                               off
-reorder_joins_limit                                    8
-require_explicit_primary_keys                          off
-results_buffer_size                                    16384
-role                                                   none
-row_security                                           off
-save_tables_prefix                                     ·
-search_path                                            "$user", public
-serial_normalization                                   rowid
-server_encoding                                        UTF8
-server_version                                         13.0.0
-server_version_num                                     130000
-session_authorization                                  root
-session_user                                           root
-sql_safe_updates                                       off
-ssl_renegotiation_limit                                0
-standard_conforming_strings                            on
-statement_timeout                                      0
-stub_catalog_tables                                    on
-synchronize_seqscans                                   on
-synchronous_commit                                     on
-testing_vectorize_inject_panics                        off
-timezone                                               UTC
-tracing                                                off
-transaction_isolation                                  serializable
-transaction_priority                                   normal
-transaction_read_only                                  off
-transaction_rows_read_err                              0
-transaction_rows_read_log                              0
-transaction_rows_written_err                           0
-transaction_rows_written_log                           0
-transaction_status                                     NoTxn
+variable                                              value
+allow_prepare_as_opt_plan                             off
+application_name                                      ·
+backslash_quote                                       safe_encoding
+bytea_output                                          hex
+client_encoding                                       UTF8
+client_min_messages                                   notice
+database                                              test
+datestyle                                             ISO, MDY
+datestyle_enabled                                     off
+default_int_size                                      8
+default_tablespace                                    ·
+default_transaction_isolation                         serializable
+default_transaction_priority                          normal
+default_transaction_read_only                         off
+default_transaction_use_follower_reads                off
+disable_partially_distributed_plans                   off
+disable_plan_gists                                    off
+disallow_full_table_scans                             off
+distsql_workmem                                       64 MiB
+enable_drop_enum_value                                on
+enable_experimental_alter_column_type_general         off
+enable_experimental_stream_replication                off
+enable_implicit_select_for_update                     on
+enable_insert_fast_path                               on
+enable_multiregion_placement_policy                   off
+enable_seqscan                                        on
+enable_zigzag_join                                    on
+escape_string_warning                                 on
+experimental_computed_column_rewrites                 ·
+experimental_enable_auto_rehoming                     off
+experimental_enable_hash_sharded_indexes              off
+experimental_enable_implicit_column_partitioning      off
+experimental_enable_temp_tables                       off
+experimental_enable_unique_without_index_constraints  on
+experimental_use_new_schema_changer                   off
+extra_float_digits                                    0
+force_savepoint_restart                               off
+foreign_key_cascades_limit                            10000
+idle_in_session_timeout                               0
+idle_in_transaction_session_timeout                   0
+inject_retry_errors_enabled                           off
+integer_datetimes                                     on
+intervalstyle                                         postgres
+intervalstyle_enabled                                 off
+is_superuser                                          on
+join_reader_ordering_strategy_batch_size              10 KiB
+large_full_scan_rows                                  1000
+lc_collate                                            C.UTF-8
+lc_ctype                                              C.UTF-8
+lc_messages                                           C.UTF-8
+lc_monetary                                           C.UTF-8
+lc_numeric                                            C.UTF-8
+lc_time                                               C.UTF-8
+locality                                              region=test,dc=dc1
+locality_optimized_partitioned_index_scan             on
+lock_timeout                                          0
+max_identifier_length                                 128
+max_index_keys                                        32
+node_id                                               1
+null_ordered_last                                     off
+on_update_rehome_row_enabled                          on
+optimizer                                             on
+optimizer_use_histograms                              on
+optimizer_use_multicol_stats                          on
+override_multi_region_zone_config                     off
+parallelize_multi_key_lookup_joins_enabled            off
+prefer_lookup_joins_for_fks                           off
+propagate_input_ordering                              off
+reorder_joins_limit                                   8
+require_explicit_primary_keys                         off
+results_buffer_size                                   16384
+role                                                  none
+row_security                                          off
+save_tables_prefix                                    ·
+search_path                                           "$user", public
+serial_normalization                                  rowid
+server_encoding                                       UTF8
+server_version                                        13.0.0
+server_version_num                                    130000
+session_authorization                                 root
+session_user                                          root
+sql_safe_updates                                      off
+ssl_renegotiation_limit                               0
+standard_conforming_strings                           on
+statement_timeout                                     0
+stub_catalog_tables                                   on
+synchronize_seqscans                                  on
+synchronous_commit                                    on
+testing_vectorize_inject_panics                       off
+timezone                                              UTC
+tracing                                               off
+transaction_isolation                                 serializable
+transaction_priority                                  normal
+transaction_read_only                                 off
+transaction_rows_read_err                             0
+transaction_rows_read_log                             0
+transaction_rows_written_err                          0
+transaction_rows_written_log                          0
+transaction_status                                    NoTxn
 
 # information_schema can be used with the anonymous database.
 # It should show information across all databases.

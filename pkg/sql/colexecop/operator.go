@@ -161,14 +161,13 @@ type Closers []Closer
 // sense.
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		prefix += ":"
 		for _, closer := range c {
 			if err := closer.Close(); err != nil && log.V(1) {
-				log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
+				log.Infof(ctx, "%s: error closing Closer: %v", prefix, err)
 			}
 		}
 	}); err != nil && log.V(1) {
-		log.Infof(ctx, "%s runtime error closing the closers: %v", prefix, err)
+		log.Infof(ctx, "%s: runtime error closing the closers: %v", prefix, err)
 	}
 }
 

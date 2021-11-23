@@ -201,6 +201,19 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 			return "values", nil
 		}
 
+	case groupByOp:
+		a := n.args.(*groupByArgs)
+		switch a.groupingOrderType {
+		case exec.Streaming:
+			return "group (streaming)", nil
+		case exec.PartialStreaming:
+			return "group (partial streaming)", nil
+		case exec.NoStreaming:
+			return "group (hash)", nil
+		default:
+			return "", errors.AssertionFailedf("unhandled group by order type %d", a.groupingOrderType)
+		}
+
 	case hashJoinOp:
 		a := n.args.(*hashJoinArgs)
 		if len(n.args.(*hashJoinArgs).LeftEqCols) == 0 {
@@ -280,7 +293,7 @@ var nodeNames = [...]string{
 	explainOptOp:           "explain",
 	exportOp:               "export",
 	filterOp:               "filter",
-	groupByOp:              "group",
+	groupByOp:              "", // This node does not have a fixed name.
 	hashJoinOp:             "", // This node does not have a fixed name.
 	indexJoinOp:            "index join",
 	insertFastPathOp:       "insert fast path",
@@ -356,25 +369,32 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
-			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))
+			e.ob.AddField("actual row count", string(humanizeutil.Count(s.RowCount.Value())))
 		}
 		// Omit vectorized batches in non-verbose mode.
 		if e.ob.flags.Verbose {
 			if s.VectorizedBatchCount.HasValue() {
-				e.ob.AddField("vectorized batch count", humanizeutil.Count(s.VectorizedBatchCount.Value()))
+				e.ob.AddField("vectorized batch count",
+					string(humanizeutil.Count(s.VectorizedBatchCount.Value())))
 			}
 		}
 		if s.KVTime.HasValue() {
-			e.ob.AddField("KV time", humanizeutil.Duration(s.KVTime.Value()))
+			e.ob.AddField("KV time", string(humanizeutil.Duration(s.KVTime.Value())))
 		}
 		if s.KVContentionTime.HasValue() {
-			e.ob.AddField("KV contention time", humanizeutil.Duration(s.KVContentionTime.Value()))
+			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
 		}
 		if s.KVRowsRead.HasValue() {
-			e.ob.AddField("KV rows read", humanizeutil.Count(s.KVRowsRead.Value()))
+			e.ob.AddField("KV rows read", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
 		if s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
+		}
+		if s.MaxAllocatedMem.HasValue() {
+			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
+		}
+		if s.MaxAllocatedDisk.HasValue() {
+			e.ob.AddField("estimated max sql temp disk usage", humanize.IBytes(s.MaxAllocatedDisk.Value()))
 		}
 		if e.ob.flags.Verbose {
 			if s.StepCount.HasValue() {
@@ -400,7 +420,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			estimatedRowCountString = fmt.Sprintf("%s - %s", humanizeutil.Count(minEstimatedRowCount), humanizeutil.Count(maxEstimatedRowCount))
 		} else {
 			estimatedRowCount := uint64(math.Round(s.RowCount))
-			estimatedRowCountString = humanizeutil.Count(estimatedRowCount)
+			estimatedRowCountString = string(humanizeutil.Count(estimatedRowCount))
 		}
 
 		// Show the estimated row count (except Values, where it is redundant).
@@ -430,7 +450,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 						if timeSinceStats < 0 {
 							timeSinceStats = 0
 						}
-						duration = humanizeutil.LongDuration(timeSinceStats)
+						duration = string(humanizeutil.LongDuration(timeSinceStats))
 					}
 					e.ob.AddField("estimated row count", fmt.Sprintf(
 						"%s (%s%% of the table; stats collected %s ago)",

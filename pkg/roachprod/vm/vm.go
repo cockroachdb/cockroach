@@ -11,7 +11,6 @@
 package vm
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -20,11 +19,30 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	// TagCluster is cluster name tag const.
+	TagCluster = "cluster"
+	// TagCreated is created time tag const, RFC3339-formatted timestamp.
+	TagCreated = "created"
+	// TagLifetime is lifetime tag const.
+	TagLifetime = "lifetime"
+	// TagRoachprod is roachprod tag const, value is true & false.
+	TagRoachprod = "roachprod"
+)
+
+// GetDefaultLabelMap returns a label map for a common set of labels.
+func GetDefaultLabelMap(opts CreateOpts) map[string]string {
+	return map[string]string{
+		TagCluster:   opts.ClusterName,
+		TagLifetime:  opts.Lifetime.String(),
+		TagRoachprod: "true",
+	}
+}
 
 // A VM is an abstract representation of a specific machine instance.  This type is used across
 // the various cloud providers supported by roachprod.
@@ -33,8 +51,9 @@ type VM struct {
 	CreatedAt time.Time `json:"created_at"`
 	// If non-empty, indicates that some or all of the data in the VM instance
 	// is not present or otherwise invalid.
-	Errors   []error       `json:"errors"`
-	Lifetime time.Duration `json:"lifetime"`
+	Errors   []error           `json:"errors"`
+	Lifetime time.Duration     `json:"lifetime"`
+	Labels   map[string]string `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
 	// The name of the cloud provider that hosts the VM instance
@@ -56,6 +75,19 @@ type VM struct {
 	// Project represents the project to which this vm belongs, if the VM is in a
 	// cloud that supports project (i.e. GCE). Empty otherwise.
 	Project string `json:"project"`
+
+	// SQLPort is the port on which the cockroach process is listening for SQL
+	// connections.
+	// Usually config.DefaultSQLPort, except for local clusters.
+	SQLPort int `json:"sql_port"`
+
+	// AdminUIPort is the port on which the cockroach process is listening for
+	// HTTP traffic for the Admin UI.
+	// Usually config.DefaultAdminUIPort, except for local clusters.
+	AdminUIPort int `json:"adminui_port"`
+
+	// LocalClusterName is only set for VMs in a local cluster.
+	LocalClusterName string `json:"local_cluster_name,omitempty"`
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -79,16 +111,16 @@ func (vm *VM) IsLocal() bool {
 
 // Locality returns the cloud, region, and zone for the VM.  We want to include the cloud, since
 // GCE and AWS use similarly-named regions (e.g. us-east-1)
-func (vm *VM) Locality() string {
+func (vm *VM) Locality() (string, error) {
 	var region string
 	if vm.IsLocal() {
 		region = vm.Zone
 	} else if match := regionRE.FindStringSubmatch(vm.Zone); len(match) == 2 {
 		region = match[1]
 	} else {
-		log.Fatalf(context.Background(), "unable to parse region from zone %q", vm.Zone)
+		return "", errors.Newf("unable to parse region from zone %q", vm.Zone)
 	}
-	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone)
+	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone), nil
 }
 
 // ZoneEntry returns a line representing the VMs DNS zone entry
@@ -138,8 +170,10 @@ const (
 
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
-	ClusterName    string
-	Lifetime       time.Duration
+	ClusterName  string
+	Lifetime     time.Duration
+	CustomLabels map[string]string
+
 	GeoDistributed bool
 	VMProviders    []string
 	SSDOpts        struct {
@@ -154,7 +188,6 @@ type CreateOpts struct {
 }
 
 // DefaultCreateOpts returns a new vm.CreateOpts with default values set.
-//lint:ignore U1001 unused
 func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
 		ClusterName:    "",
@@ -222,6 +255,10 @@ type Provider interface {
 	// Providers[gce.ProviderName] != nil doesn't work because
 	// Providers[gce.ProviderName] can be a stub.
 	Active() bool
+
+	// ProjectActive returns true if the given project is currently active in the
+	// provider.
+	ProjectActive(project string) bool
 }
 
 // DeleteCluster is an optional capability for a Provider which can
@@ -375,7 +412,7 @@ func ExpandZonesFlag(zoneFlag []string) (zones []string, err error) {
 		}
 		n, err := strconv.Atoi(zone[colonIdx+1:])
 		if err != nil {
-			return zones, fmt.Errorf("failed to parse %q: %v", zone, err)
+			return zones, errors.Wrapf(err, "failed to parse %q", zone)
 		}
 		for i := 0; i < n; i++ {
 			zones = append(zones, zone[:colonIdx])

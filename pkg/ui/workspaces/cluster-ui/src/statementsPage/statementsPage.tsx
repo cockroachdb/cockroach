@@ -10,8 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { isNil, merge } from "lodash";
-import Helmet from "react-helmet";
+import { isNil, merge, isEqual } from "lodash";
 import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Loading } from "src/loading";
@@ -31,11 +30,9 @@ import {
 } from "../queryFilter";
 
 import {
-  appAttr,
   calculateTotalWorkload,
   unique,
   containAny,
-  queryByName,
   syncHistory,
 } from "src/util";
 import {
@@ -91,7 +88,7 @@ export interface StatementsPageDispatchProps {
     ascending: boolean,
   ) => void;
   onDiagnosticsReportDownload?: (report: IStatementDiagnosticsReport) => void;
-  onFilterChange?: (value: string) => void;
+  onFilterChange?: (value: Filters) => void;
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onDateRangeChange: (start: Moment, end: Moment) => void;
@@ -107,11 +104,12 @@ export interface StatementsPageStateProps {
   lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
+  sortSetting: SortSetting;
+  filters: Filters;
   isTenant?: UIConfigState["isTenant"];
 }
 
 export interface StatementsPageState {
-  sortSetting: SortSetting;
   search?: string;
   pagination: ISortedTablePagination;
   filters?: Filters;
@@ -139,54 +137,80 @@ export class StatementsPage extends React.Component<
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
   constructor(props: StatementsPageProps) {
     super(props);
-    const filters = getFiltersFromQueryString(
-      this.props.history.location.search,
-    );
     const defaultState = {
-      sortSetting: {
-        // Sort by Execution Count column as default option.
-        ascending: false,
-        columnTitle: "executionCount",
-      },
       pagination: {
         pageSize: 20,
         current: 1,
       },
       search: "",
-      filters: filters,
-      activeFilters: calculateActiveFilters(filters),
     };
-
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
   }
 
-  static defaultProps: Partial<StatementsPageProps> = {
-    isTenant: false,
-  };
-
   getStateFromHistory = (): Partial<StatementsPageState> => {
-    const { history } = this.props;
+    const { history, sortSetting, filters } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const ascending = searchParams.get("ascending") || undefined;
-    const columnTitle = searchParams.get("columnTitle") || undefined;
+
+    // Search query.
     const searchQuery = searchParams.get("q") || undefined;
 
+    // Sort Settings.
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    if (
+      this.props.onSortingChange &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.onSortingChange("Statements", columnTitle, ascending);
+    }
+
+    // Filters.
+    const filtersQueryString = getFiltersFromQueryString(
+      history.location.search,
+    );
+    const hasFilter = searchParams.get("app") || undefined;
+    if (
+      this.props.onFilterChange &&
+      hasFilter &&
+      !isEqual(filtersQueryString, filters)
+    ) {
+      // If we have filters on query string and they're different
+      // from the current filter state on props (localStorage),
+      // we want to update the value on localStorage.
+      this.props.onFilterChange(filtersQueryString);
+    } else if (!isEqual(filters, defaultFilters)) {
+      // If the filters on props (localStorage) are different
+      // from the default values, we want to update the History,
+      // so the url can be easily shared with the filters selected.
+      syncHistory(
+        {
+          app: filters.app,
+          timeNumber: filters.timeNumber,
+          timeUnit: filters.timeUnit,
+          sqlType: filters.sqlType,
+          database: filters.database,
+          regions: filters.regions,
+          nodes: filters.nodes,
+        },
+        this.props.history,
+      );
+    }
+    // If we have a new filter selection on query params, they
+    // take precedent on what is stored on localStorage.
+    const latestFilter = hasFilter ? filtersQueryString : filters;
+
     return {
-      sortSetting: {
-        ascending: ascending === "true",
-        columnTitle,
-      },
       search: searchQuery,
+      filters: latestFilter,
+      activeFilters: calculateActiveFilters(latestFilter),
     };
   };
 
   changeSortSetting = (ss: SortSetting): void => {
-    this.setState({
-      sortSetting: ss,
-    });
-
     syncHistory(
       {
         ascending: ss.ascending.toString(),
@@ -236,10 +260,47 @@ export class StatementsPage extends React.Component<
     }
   }
 
+  // When we change tabs inside the SQL Activity page,
+  // the constructor is called only on the first time.
+  // The component update event is called frequently
+  // and can be used to update the query params by using
+  // this function that makes sure it's only updating
+  // if the values did change and we're on the correct
+  // tab (Statements).
+  updateQueryParamsOnTabSwitch(): void {
+    const { filters } = this.state;
+    const filtersQueryString = getFiltersFromQueryString(
+      this.props.history.location.search,
+    );
+    const searchParams = new URLSearchParams(
+      this.props.history.location.search,
+    );
+    const tab = searchParams.get("tab") || "";
+    if (
+      tab === "Statements" &&
+      !isEqual(filters, defaultFilters) &&
+      !isEqual(filters, filtersQueryString)
+    ) {
+      syncHistory(
+        {
+          app: filters.app,
+          timeNumber: filters.timeNumber,
+          timeUnit: filters.timeUnit,
+          sqlType: filters.sqlType,
+          database: filters.database,
+          regions: filters.regions,
+          nodes: filters.nodes,
+        },
+        this.props.history,
+      );
+    }
+  }
+
   componentDidUpdate = (
     __: StatementsPageProps,
     prevState: StatementsPageState,
   ): void => {
+    this.updateQueryParamsOnTabSwitch();
     if (this.state.search && this.state.search !== prevState.search) {
       this.props.onSearchComplete(this.filteredStatementsData());
     }
@@ -271,11 +332,12 @@ export class StatementsPage extends React.Component<
   };
 
   onSubmitFilters = (filters: Filters): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(filters);
+    }
+
     this.setState({
-      filters: {
-        ...this.state.filters,
-        ...filters,
-      },
+      filters: filters,
       activeFilters: calculateActiveFilters(filters),
     });
 
@@ -305,12 +367,15 @@ export class StatementsPage extends React.Component<
   };
 
   onClearFilters = (): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(defaultFilters);
+    }
+
     this.setState({
-      filters: {
-        ...defaultFilters,
-      },
+      filters: defaultFilters,
       activeFilters: 0,
     });
+
     this.resetPagination();
     syncHistory(
       {
@@ -357,9 +422,7 @@ export class StatementsPage extends React.Component<
         statement =>
           databases.length == 0 || databases.includes(statement.database),
       )
-      .filter(statement =>
-        this.state.filters.fullScan ? statement.fullScan : true,
-      )
+      .filter(statement => (filters.fullScan ? statement.fullScan : true))
       .filter(statement =>
         search
           .split(" ")
@@ -415,7 +478,6 @@ export class StatementsPage extends React.Component<
       statements,
       apps,
       databases,
-      location,
       onDiagnosticsReportDownload,
       onStatementClick,
       resetSQLStats,
@@ -423,9 +485,8 @@ export class StatementsPage extends React.Component<
       onColumnsChange,
       nodeRegions,
       isTenant,
+      sortSetting,
     } = this.props;
-    const appAttrValue = queryByName(location, appAttr);
-    const selectedApp = appAttrValue || "";
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
@@ -447,7 +508,7 @@ export class StatementsPage extends React.Component<
     // hiding columns that won't be displayed for tenants.
     const columns = makeStatementsColumns(
       statements,
-      selectedApp,
+      filters.app,
       totalWorkload,
       nodeRegions,
       "statement",
@@ -546,7 +607,7 @@ export class StatementsPage extends React.Component<
             className="statements-table"
             data={data}
             columns={displayColumns}
-            sortSetting={this.state.sortSetting}
+            sortSetting={sortSetting}
             onChangeSortSetting={this.changeSortSetting}
             renderNoResult={
               <EmptyStatementsPlaceholder
@@ -568,15 +629,12 @@ export class StatementsPage extends React.Component<
 
   render(): React.ReactElement {
     const {
-      location,
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
     } = this.props;
-    const app = queryByName(location, appAttr);
     return (
       <div className={cx("root", "table-area")}>
-        <Helmet title={app ? `${app} App | Statements` : "Statements"} />
         <Loading
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}

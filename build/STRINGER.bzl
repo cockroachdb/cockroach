@@ -14,10 +14,10 @@ def stringer(src, typ, name):
          GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
          # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
          env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
-         $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type={} $<
+         $(location @com_github_cockroachdb_tools//cmd/stringer:stringer) -output=$@ -type={} $<
       """.format(typ),
         tools = [
             "@go_sdk//:bin/go",
-            "@org_golang_x_tools//cmd/stringer",
+            "@com_github_cockroachdb_tools//cmd/stringer",
         ],
     )

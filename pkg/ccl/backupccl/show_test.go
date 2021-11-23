@@ -353,7 +353,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 
 		want := [][]string{
 			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CONNECT, CREATE, DELETE, DROP, GRANT, INSERT, ` +
-				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT ALL ON mi5 TO root; `, `root`},
+				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT CONNECT ON mi5 TO public; GRANT ALL ON mi5 TO root; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
 				`GRANT ALL ON locator TO root; `, `root`},
 			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT USAGE ON continent TO public; GRANT ALL ON continent TO root; `, `root`},
@@ -433,6 +433,11 @@ func TestShowBackups(t *testing.T) {
 	require.Equal(t, 4, len(b1))
 	b2 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
+
+	require.Equal(t,
+		sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[2][0], full),
+		sqlDBRestore.QueryStr(t, `SHOW BACKUP LATEST IN $1`, full),
+	)
 }
 
 func TestShowBackupTenants(t *testing.T) {

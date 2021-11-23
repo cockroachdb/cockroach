@@ -24,6 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,6 +38,9 @@ type CatalogReader interface {
 	// MustReadImmutableDescriptor reads a descriptor from the catalog by ID.
 	MustReadImmutableDescriptor(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
 
+	// GetFullyQualifiedName gets the fully qualified name from a descriptor ID.
+	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
+
 	// AddSyntheticDescriptor adds a synthetic descriptor to the reader state.
 	// Subsequent calls to MustReadImmutableDescriptor for this ID will return
 	// this synthetic descriptor instead of what it would have otherwise returned.
@@ -41,6 +48,17 @@ type CatalogReader interface {
 
 	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
 	RemoveSyntheticDescriptor(id descpb.ID)
+
+	// AddPartitioning adds partitioning information on an index descriptor.
+	AddPartitioning(
+		tableDesc *tabledesc.Mutable,
+		indexDesc *descpb.IndexDescriptor,
+		partitionFields []string,
+		listPartition []*scpb.ListPartition,
+		rangePartition []*scpb.RangePartitions,
+		allowedNewColumnNames []tree.Name,
+		allowImplicitPartitioning bool,
+	) error
 }
 
 // MutationVisitorStateUpdater is the interface for updating the visitor state.
@@ -57,17 +75,32 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
 }
 
+// EventLogWriter encapsulates operations for generating
+// event log entries.
+type EventLogWriter interface {
+	AddDropEvent(
+		ctx context.Context,
+		descID descpb.ID,
+		metadata *scpb.ElementMetadata,
+		event eventpb.EventPayload,
+	) error
+}
+
 // NewMutationVisitor creates a new scop.MutationVisitor.
-func NewMutationVisitor(cr CatalogReader, s MutationVisitorStateUpdater) scop.MutationVisitor {
+func NewMutationVisitor(
+	cr CatalogReader, s MutationVisitorStateUpdater, ev EventLogWriter,
+) scop.MutationVisitor {
 	return &visitor{
 		cr: cr,
 		s:  s,
+		ev: ev,
 	}
 }
 
 type visitor struct {
 	cr CatalogReader
 	s  MutationVisitorStateUpdater
+	ev EventLogWriter
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
@@ -127,13 +160,13 @@ func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mut
 func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteAndWriteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	return mutationStateChange(
 		ctx,
-		table,
+		tbl,
 		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
@@ -142,12 +175,12 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 
 func (m *visitor) UpdateRelationDeps(ctx context.Context, op scop.UpdateRelationDeps) error {
 	// TODO(fqazi): Only implemented for sequences.
-	tableDesc, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	// Determine all the dependencies for this descriptor.
-	dependedOnBy := make([]descpb.TableDescriptor_Reference, len(tableDesc.DependedOnBy))
+	dependedOnBy := make([]descpb.TableDescriptor_Reference, len(tbl.DependedOnBy))
 	addDependency := func(dep descpb.TableDescriptor_Reference) {
 		for _, existingDep := range dependedOnBy {
 			if dep.Equal(existingDep) {
@@ -156,7 +189,7 @@ func (m *visitor) UpdateRelationDeps(ctx context.Context, op scop.UpdateRelation
 			dependedOnBy = append(dependedOnBy, dep)
 		}
 	}
-	for _, col := range tableDesc.Columns {
+	for _, col := range tbl.Columns {
 		sequenceRefByID := true
 		// Parse the default expression to determine
 		// if all references are by ID.
@@ -181,7 +214,7 @@ func (m *visitor) UpdateRelationDeps(ctx context.Context, op scop.UpdateRelation
 			})
 		}
 	}
-	tableDesc.DependedOnBy = dependedOnBy
+	tbl.DependedOnBy = dependedOnBy
 	return nil
 }
 
@@ -189,11 +222,11 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	ctx context.Context, op scop.RemoveColumnDefaultExpression,
 ) error {
 	// Remove the descriptors namespaces as the last stage
-	tableDesc, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	column, err := tableDesc.FindColumnWithID(op.ColumnID)
+	column, err := tbl.FindColumnWithID(op.ColumnID)
 	if err != nil {
 		return err
 	}
@@ -205,21 +238,21 @@ func (m *visitor) RemoveColumnDefaultExpression(
 }
 
 func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) error {
-	mutDesc, err := m.checkOutType(ctx, op.TypeID)
+	typ, err := m.checkOutType(ctx, op.TypeID)
 	if err != nil {
 		return err
 	}
-	mutDesc.AddReferencingDescriptorID(op.DescID)
+	typ.AddReferencingDescriptorID(op.DescID)
 	// Sanity: Validate that a back reference exists by now.
 	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err
 	}
-	refDescs, err := desc.GetReferencedDescIDs()
+	refDescIDs, err := desc.GetReferencedDescIDs()
 	if err != nil {
 		return err
 	}
-	if !refDescs.Contains(op.TypeID) {
+	if !refDescIDs.Contains(op.TypeID) {
 		return errors.AssertionFailedf("Back reference for type %d is missing inside descriptor %d.",
 			op.TypeID, op.DescID)
 	}
@@ -230,35 +263,38 @@ func (m *visitor) RemoveRelationDependedOnBy(
 	ctx context.Context, op scop.RemoveRelationDependedOnBy,
 ) error {
 	// Remove the descriptors namespaces as the last stage
-	tableDesc, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	for depIdx, dependedOnBy := range tableDesc.DependedOnBy {
+	for depIdx, dependedOnBy := range tbl.DependedOnBy {
 		if dependedOnBy.ID == op.DependedOnBy {
-			tableDesc.DependedOnBy = append(tableDesc.DependedOnBy[:depIdx], tableDesc.DependedOnBy[depIdx+1:]...)
+			tbl.DependedOnBy = append(tbl.DependedOnBy[:depIdx], tbl.DependedOnBy[depIdx+1:]...)
 			break
 		}
+	}
+	if len(tbl.DependedOnBy) == 0 {
+		tbl.DependedOnBy = nil
 	}
 	return nil
 }
 
 func (m *visitor) RemoveSequenceOwnedBy(ctx context.Context, op scop.RemoveSequenceOwnedBy) error {
-	mutDesc, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	mutDesc.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
-	mutDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
+	tbl.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
+	tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
 	return nil
 }
 
 func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackRef) error {
-	mutDesc, err := m.checkOutType(ctx, op.TypeID)
+	typ, err := m.checkOutType(ctx, op.TypeID)
 	if err != nil {
 		return err
 	}
-	mutDesc.RemoveReferencingDescriptorID(op.DescID)
+	typ.RemoveReferencingDescriptorID(op.DescID)
 	return nil
 }
 
@@ -314,13 +350,13 @@ func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescript
 }
 
 func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	mut, err := removeMutation(
 		ctx,
-		table,
+		tbl,
 		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	)
@@ -330,7 +366,7 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 	// TODO(ajwerner): Should the op just have the column descriptor? What's the
 	// type hydration status here? Cloning is going to blow away hydration. Is
 	// that okay?
-	table.Columns = append(table.Columns,
+	tbl.Columns = append(tbl.Columns,
 		*(protoutil.Clone(mut.GetColumn())).(*descpb.ColumnDescriptor))
 	return nil
 }
@@ -338,59 +374,65 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	var idx descpb.IndexDescriptor
-	for i := range table.Indexes {
-		if table.Indexes[i].ID != op.IndexID {
+	for i := range tbl.Indexes {
+		if tbl.Indexes[i].ID != op.IndexID {
 			continue
 		}
-		idx = table.Indexes[i]
-		table.Indexes = append(table.Indexes[:i], table.Indexes[i+1:]...)
+		idx = tbl.Indexes[i]
+		tbl.Indexes = append(tbl.Indexes[:i], tbl.Indexes[i+1:]...)
 		break
+	}
+	if len(tbl.Indexes) == 0 {
+		tbl.Indexes = nil
 	}
 	if idx.ID == 0 {
 		return errors.AssertionFailedf("failed to find index %d in descriptor %v",
-			op.IndexID, table)
+			op.IndexID, tbl)
 	}
-	return table.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP)
+	return tbl.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP)
 }
 
 func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDeleteAndWriteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	var col descpb.ColumnDescriptor
-	for i := range table.Columns {
-		if table.Columns[i].ID != op.ColumnID {
+	for i := range tbl.Columns {
+		if tbl.Columns[i].ID != op.ColumnID {
 			continue
 		}
-		col = table.Columns[i]
-		table.Columns = append(table.Columns[:i], table.Columns[i+1:]...)
+		col = tbl.Columns[i]
+		tbl.Columns = append(tbl.Columns[:i], tbl.Columns[i+1:]...)
 		break
 	}
-	if col.ID == 0 {
-		return errors.AssertionFailedf("failed to find column %d in %v", col.ID, table)
+	if len(tbl.Columns) == 0 {
+		tbl.Columns = nil
 	}
-	table.AddColumnMutation(&col, descpb.DescriptorMutation_DROP)
+	if col.ID == 0 {
+		return errors.AssertionFailedf("failed to find column %d in %v", col.ID, tbl)
+	}
+	tbl.AddColumnMutation(&col, descpb.DescriptorMutation_DROP)
 	return nil
 }
 
 func (m *visitor) MakeDroppedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDeleteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	return mutationStateChange(
 		ctx,
-		table,
+		tbl,
 		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
@@ -398,13 +440,13 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 }
 
 func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	mut, err := removeMutation(
 		ctx,
-		table,
+		tbl,
 		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
@@ -412,20 +454,20 @@ func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent
 		return err
 	}
 	col := mut.GetColumn()
-	table.RemoveColumnFromFamilyAndPrimaryIndex(col.ID)
+	tbl.RemoveColumnFromFamilyAndPrimaryIndex(col.ID)
 	return nil
 }
 
 func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteAndWriteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	return mutationStateChange(
 		ctx,
-		table,
+		tbl,
 		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
@@ -435,53 +477,56 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 func (m *visitor) MakeAddedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
-	if op.Column.ID >= table.NextColumnID {
-		table.NextColumnID = op.Column.ID + 1
+	if op.Column.ID >= tbl.NextColumnID {
+		tbl.NextColumnID = op.Column.ID + 1
 	}
-	var foundFamily bool
-	for i := range table.Families {
-		fam := &table.Families[i]
-		if foundFamily = fam.ID == op.FamilyID; foundFamily {
-			fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
-			fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
-			break
+	if !op.Column.IsComputed() ||
+		!op.Column.Virtual {
+		var foundFamily bool
+		for i := range tbl.Families {
+			fam := &tbl.Families[i]
+			if foundFamily = fam.ID == op.FamilyID; foundFamily {
+				fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
+				fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
+				break
+			}
+		}
+		// Only create column families for non-computed columns
+		if !foundFamily {
+			tbl.Families = append(tbl.Families, descpb.ColumnFamilyDescriptor{
+				Name:        op.FamilyName,
+				ID:          op.FamilyID,
+				ColumnNames: []string{op.Column.Name},
+				ColumnIDs:   []descpb.ColumnID{op.Column.ID},
+			})
+			sort.Slice(tbl.Families, func(i, j int) bool {
+				return tbl.Families[i].ID < tbl.Families[j].ID
+			})
+			if tbl.NextFamilyID <= op.FamilyID {
+				tbl.NextFamilyID = op.FamilyID + 1
+			}
 		}
 	}
-	if !foundFamily {
-		table.Families = append(table.Families, descpb.ColumnFamilyDescriptor{
-			Name:        op.FamilyName,
-			ID:          op.FamilyID,
-			ColumnNames: []string{op.Column.Name},
-			ColumnIDs:   []descpb.ColumnID{op.Column.ID},
-		})
-		sort.Slice(table.Families, func(i, j int) bool {
-			return table.Families[i].ID < table.Families[j].ID
-		})
-		if table.NextFamilyID <= op.FamilyID {
-			table.NextFamilyID = op.FamilyID + 1
-		}
-	}
-	table.AddColumnMutation(&op.Column, descpb.DescriptorMutation_ADD)
+	tbl.AddColumnMutation(&op.Column, descpb.DescriptorMutation_ADD)
 	return nil
 }
 
 func (m *visitor) MakeDroppedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeDroppedIndexDeleteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	return mutationStateChange(
 		ctx,
-		table,
+		tbl,
 		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
@@ -491,43 +536,82 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-
-	// NOTE: There is no ordering guarantee between operations which might
-	// touch the primary index. Remove it if it has not already been overwritten.
-	if table.PrimaryIndex.ID == op.Index.ID {
-		table.PrimaryIndex = descpb.IndexDescriptor{}
+	if tbl.PrimaryIndex.ID != op.IndexID {
+		return errors.AssertionFailedf("index being dropped (%d) does not match existing primary index (%d).", op.IndexID, tbl.PrimaryIndex.ID)
 	}
-
-	idx := protoutil.Clone(&op.Index).(*descpb.IndexDescriptor)
-	return table.AddIndexMutation(idx, descpb.DescriptorMutation_DROP)
+	idx := protoutil.Clone(&tbl.PrimaryIndex).(*descpb.IndexDescriptor)
+	return tbl.AddIndexMutation(idx, descpb.DescriptorMutation_DROP)
 }
 
 func (m *visitor) MakeAddedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
 ) error {
-
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
-	if op.Index.ID >= table.NextIndexID {
-		table.NextIndexID = op.Index.ID + 1
+	if op.IndexID >= tbl.NextIndexID {
+		tbl.NextIndexID = op.IndexID + 1
 	}
-	// Make some adjustments to the index descriptor so that it behaves correctly
-	// as a secondary index while being added.
-	idx := protoutil.Clone(&op.Index).(*descpb.IndexDescriptor)
-	return table.AddIndexMutation(idx, descpb.DescriptorMutation_ADD)
+	// Resolve column names
+	colNames, err := columnNamesFromIDs(tbl, op.KeyColumnIDs)
+	if err != nil {
+		return err
+	}
+	storeColNames, err := columnNamesFromIDs(tbl, op.StoreColumnIDs)
+	if err != nil {
+		return err
+	}
+	// Setup the index descriptor type.
+	indexType := descpb.IndexDescriptor_FORWARD
+	if op.Inverted {
+		indexType = descpb.IndexDescriptor_INVERTED
+	}
+	// Setup the encoding type.
+	encodingType := descpb.PrimaryIndexEncoding
+	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
+	if op.SecondaryIndex {
+		encodingType = descpb.SecondaryIndexEncoding
+		indexVersion = descpb.StrictIndexColumnIDGuaranteesVersion
+	}
+	// Create an index descriptor from the the operation.
+	idx := &descpb.IndexDescriptor{
+		Name:                op.IndexName,
+		ID:                  op.IndexID,
+		Unique:              op.Unique,
+		Version:             indexVersion,
+		KeyColumnNames:      colNames,
+		KeyColumnIDs:        op.KeyColumnIDs,
+		StoreColumnIDs:      op.StoreColumnIDs,
+		StoreColumnNames:    storeColNames,
+		KeyColumnDirections: op.KeyColumnDirections,
+		Type:                indexType,
+		KeySuffixColumnIDs:  op.KeySuffixColumnIDs,
+		CompositeColumnIDs:  op.CompositeColumnIDs,
+		CreatedExplicitly:   true,
+		EncodingType:        encodingType,
+	}
+	if idx.Name == "" {
+		name, err := tabledesc.BuildIndexName(tbl, idx)
+		if err != nil {
+			return err
+		}
+		idx.Name = name
+	}
+	if op.ShardedDescriptor != nil {
+		idx.Sharded = *op.ShardedDescriptor
+	}
+	return tbl.AddIndexMutation(idx, descpb.DescriptorMutation_ADD)
 }
 
 func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstraint) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -542,36 +626,66 @@ func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstr
 	} else {
 		ck.Validity = descpb.ConstraintValidity_Validating
 	}
-	table.Checks = append(table.Checks, ck)
+	tbl.Checks = append(tbl.Checks, ck)
+	return nil
+}
+
+func (m *visitor) MakeAddedSecondaryIndexPublic(
+	ctx context.Context, op scop.MakeAddedSecondaryIndexPublic,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	for idx, idxMutation := range tbl.GetMutations() {
+		if idxMutation.GetIndex() != nil &&
+			idxMutation.GetIndex().ID == op.IndexID {
+			err := tbl.MakeMutationComplete(idxMutation)
+			if err != nil {
+				return err
+			}
+			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
+			break
+		}
+	}
+	if len(tbl.Mutations) == 0 {
+		tbl.Mutations = nil
+	}
 	return nil
 }
 
 func (m *visitor) MakeAddedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
 ) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
+	index, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	indexDesc := index.IndexDescDeepCopy()
 	if _, err := removeMutation(
 		ctx,
-		table,
-		descriptorutils.MakeIndexIDMutationSelector(op.Index.ID),
+		tbl,
+		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	); err != nil {
 		return err
 	}
-	table.PrimaryIndex = *(protoutil.Clone(&op.Index)).(*descpb.IndexDescriptor)
+	tbl.PrimaryIndex = indexDesc
 	return nil
 }
 
 func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	_, err = removeMutation(ctx,
-		table,
+		tbl,
 		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
@@ -579,25 +693,25 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 }
 
 func (m *visitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	table.AddFamily(op.Family)
-	if op.Family.ID >= table.NextFamilyID {
-		table.NextFamilyID = op.Family.ID + 1
+	tbl.AddFamily(op.Family)
+	if op.Family.ID >= tbl.NextFamilyID {
+		tbl.NextFamilyID = op.Family.ID + 1
 	}
 	return nil
 }
 
 func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyRef) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	fks := table.TableDesc().OutboundFKs
+	fks := tbl.TableDesc().OutboundFKs
 	if !op.Outbound {
-		fks = table.TableDesc().InboundFKs
+		fks = tbl.TableDesc().InboundFKs
 	}
 	newFks := make([]descpb.ForeignKeyConstraint, 0, len(fks)-1)
 	for _, fk := range fks {
@@ -610,11 +724,88 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 		}
 	}
 	if op.Outbound {
-		table.TableDesc().OutboundFKs = newFks
+		tbl.TableDesc().OutboundFKs = newFks
 	} else {
-		table.TableDesc().InboundFKs = newFks
+		tbl.TableDesc().InboundFKs = newFks
 	}
 	return nil
+}
+
+func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
+	descID := screl.GetDescID(op.Element.Element())
+	fullName, err := m.cr.GetFullyQualifiedName(ctx, descID)
+	if err != nil {
+		return err
+	}
+	if op.Direction == scpb.Target_DROP {
+		switch op.Element.GetValue().(type) {
+		case *scpb.Table:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropTable{
+					TableName: fullName,
+				},
+			)
+		case *scpb.View:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropView{
+					ViewName: fullName,
+				},
+			)
+		case *scpb.Sequence:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropSequence{
+					SequenceName: fullName,
+				},
+			)
+		case *scpb.Database:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropDatabase{
+					DatabaseName: fullName,
+				},
+			)
+		case *scpb.Schema:
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.DropSchema{
+					SchemaName: fullName,
+				},
+			)
+		default:
+			panic("unknown element type")
+		}
+	} else if op.Direction == scpb.Target_ADD {
+		switch element := op.Element.GetValue().(type) {
+		case *scpb.Column:
+			table, err := m.checkOutTable(ctx, op.DescID)
+			if err != nil {
+				return err
+			}
+			mutation, err := descriptorutils.FindMutation(table,
+				descriptorutils.MakeColumnIDMutationSelector(element.Column.ID))
+			if err != nil {
+				return err
+			}
+			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
+				&eventpb.AlterTable{
+					TableName:  fullName,
+					MutationID: uint32(mutation.MutationID()),
+				})
+		default:
+			panic("unknown element type")
+		}
+	}
+	return nil
+}
+
+func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	index, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	return m.cr.AddPartitioning(tbl, index.IndexDesc(), op.PartitionFields, op.ListPartitions, op.RangePartitions, nil, true)
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

@@ -231,12 +231,15 @@ CREATE TABLE system.web_sessions (
 	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
 
-	// table_statistics is used to track statistics collected about individual columns
-	// or groups of columns from every table in the database. Each row contains the
-	// number of distinct values of the column group and (optionally) a histogram if there
-	// is only one column in columnIDs.
+	// table_statistics is used to track statistics collected about individual
+	// columns or groups of columns from every table in the database. Each row
+	// contains the number of distinct values of the column group, the number of
+	// null values, the average size of the column(s), and (optionally) a
+	// histogram if there is only one column in columnIDs.
 	//
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
+	// Note: avgSize is a newer statistic than the RFC above. It contains the
+	// average size of the column group in bytes.
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
 	"tableID"       INT8       NOT NULL,
@@ -247,9 +250,10 @@ CREATE TABLE system.table_statistics (
 	"rowCount"      INT8       NOT NULL,
 	"distinctCount" INT8       NOT NULL,
 	"nullCount"     INT8       NOT NULL,
+	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	histogram       BYTES,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
+	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "avgSize", histogram)
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -403,10 +407,12 @@ CREATE TABLE system.statement_diagnostics_requests(
 	statement_fingerprint STRING NOT NULL,
 	statement_diagnostics_id INT8,
 	requested_at TIMESTAMPTZ NOT NULL,
+	min_execution_latency INTERVAL NULL,
+	expires_at TIMESTAMPTZ NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
-	INDEX completed_idx (completed, id) STORING (statement_fingerprint),
+	INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at),
 
-	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at)
+	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -833,6 +839,7 @@ var (
 
 	falseBoolString = "false"
 	trueBoolString  = "true"
+	zeroIntString   = "0:::INT8"
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = registerSystemTable(
@@ -1261,11 +1268,12 @@ var (
 				{Name: "rowCount", ID: 6, Type: types.Int},
 				{Name: "distinctCount", ID: 7, Type: types.Int},
 				{Name: "nullCount", ID: 8, Type: types.Int},
-				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "avgSize", ID: 9, Type: types.Int, DefaultExpr: &zeroIntString},
+				{Name: "histogram", ID: 10, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
+					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_avgSize_histogram",
 					ID:   0,
 					ColumnNames: []string{
 						"tableID",
@@ -1276,9 +1284,10 @@ var (
 						"rowCount",
 						"distinctCount",
 						"nullCount",
+						"avgSize",
 						"histogram",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -1716,25 +1725,27 @@ var (
 				{Name: "statement_fingerprint", ID: 3, Type: types.String, Nullable: false},
 				{Name: "statement_diagnostics_id", ID: 4, Type: types.Int, Nullable: true},
 				{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
+				{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
+				{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 				},
 			},
 			pk("id"),
 			// Index for the polling query.
 			descpb.IndexDescriptor{
-				Name:                "completed_idx",
+				Name:                "completed_idx_v2",
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		))
@@ -2245,7 +2256,14 @@ var (
 					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
 				},
 			},
-			pk("start_key"),
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  keys.SpanConfigurationsTablePrimaryKeyIndexID,
+				Unique:              true,
+				KeyColumnNames:      []string{"start_key"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
+			},
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{

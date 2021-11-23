@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -393,6 +394,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    check-size will result in a test error if the rule application or memo
 //    group count exceeds the corresponding limit.
 //
+//  - index-candidates
+//
+//    Walks through the SQL statement to determine candidates for index
+//    recommendation. See the indexrec package.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -661,6 +667,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
+		ot.checkExpectedRules(tb, d)
 		return result
 
 	case "expr":
@@ -708,6 +715,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		return result
 
+	case "index-candidates":
+		result := ot.IndexCandidates()
+		return result
+
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
 		return ""
@@ -736,15 +747,7 @@ func formatRuleSet(r RuleSet) string {
 	return buf.String()
 }
 
-func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
-	fillInLazyProps(e)
-
-	if rel, ok := e.(memo.RelExpr); ok {
-		for _, cols := range ot.Flags.ColStats {
-			memo.RequestColStat(&ot.evalCtx, rel, cols)
-		}
-	}
-
+func (ot *OptTester) checkExpectedRules(tb testing.TB, d *datadriven.TestData) {
 	if !ot.Flags.ExpectedRules.SubsetOf(ot.appliedRules) {
 		unseen := ot.Flags.ExpectedRules.Difference(ot.appliedRules)
 		d.Fatalf(tb, "expected to see %s, but was not triggered. Did see %s",
@@ -755,6 +758,17 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 		seen := ot.Flags.UnexpectedRules.Intersection(ot.appliedRules)
 		d.Fatalf(tb, "expected not to see %s, but it was triggered", formatRuleSet(seen))
 	}
+}
+
+func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
+	fillInLazyProps(e)
+
+	if rel, ok := e.(memo.RelExpr); ok {
+		for _, cols := range ot.Flags.ColStats {
+			memo.RequestColStat(&ot.evalCtx, rel, cols)
+		}
+	}
+	ot.checkExpectedRules(tb, d)
 }
 
 // Fills in lazily-derived properties (for display).
@@ -1146,9 +1160,11 @@ func (ot *OptTester) PlaceholderFastPath() (_ opt.Expr, ok bool, _ error) {
 // Memo returns a string that shows the memo data structure that is constructed
 // by the optimizer.
 func (ot *OptTester) Memo() (string, error) {
-	var o xform.Optimizer
-	o.Init(&ot.evalCtx, ot.catalog)
-	if _, err := ot.optimizeExpr(&o); err != nil {
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return !ot.Flags.DisableRules.Contains(int(ruleName))
+	})
+	if _, err := ot.optimizeExpr(o); err != nil {
 		return "", err
 	}
 	return o.FormatMemo(ot.Flags.MemoFormat), nil
@@ -1971,6 +1987,44 @@ func (ot *OptTester) CheckSize() (string, error) {
 		return "", fmt.Errorf("memo groups exceeded limit: %d groups", groups)
 	}
 	return fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups), nil
+}
+
+// IndexCandidates is used with the index-candidates option. It finds index
+// candidates for the SQL statement and formats them as a sorted string.
+func (ot *OptTester) IndexCandidates() string {
+	expr, _ := ot.OptNorm()
+	indexCandidates := indexrec.FindIndexCandidateSet(expr, expr.(memo.RelExpr).Memo().Metadata())
+
+	// Build a formatted string to output from the map of indexCandidates.
+	tablesOutput := make([]string, 0, len(indexCandidates))
+	for t, indexes := range indexCandidates {
+		var tableSb strings.Builder
+		tableName := t.Name()
+		tableSb.WriteString(tableName.String())
+		tableSb.WriteString(":\n")
+		indexesOutput := make([]string, len(indexes))
+		for i, index := range indexes {
+			var indexSb strings.Builder
+			indexSb.WriteString(" (")
+			for j, indexCol := range index {
+				if j > 0 {
+					indexSb.WriteString(", ")
+				}
+				colName := indexCol.Column.ColName()
+				indexSb.WriteString(colName.String())
+				if indexCol.Descending {
+					indexSb.WriteString(" DESC")
+				}
+			}
+			indexSb.WriteString(")\n")
+			indexesOutput[i] = indexSb.String()
+		}
+		sort.Strings(indexesOutput)
+		tableSb.WriteString(strings.Join(indexesOutput, ""))
+		tablesOutput = append(tablesOutput, tableSb.String())
+	}
+	sort.Strings(tablesOutput)
+	return strings.Join(tablesOutput, "")
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

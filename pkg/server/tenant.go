@@ -67,7 +67,7 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -81,14 +81,6 @@ func StartTenant(
 		settings:                args.Settings,
 	})
 
-	connManager := netutil.MakeServer(
-		args.stopper,
-		// The SQL server only uses connManager.ServeWith. The both below
-		// are unused.
-		nil, // tlsConfig
-		nil, // handler
-	)
-
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
 	grpcMain.setMode(modeOperational)
@@ -96,7 +88,18 @@ func StartTenant(
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
 
-	background := baseCfg.AmbientCtx.AnnotateCtx(context.Background())
+	// Add the server tags to the startup context.
+	//
+	// We use args.BaseConfig here instead of baseCfg directly because
+	// makeTenantSQLArgs defines its own AmbientCtx instance and it's
+	// defined by-value.
+	ctx = args.BaseConfig.AmbientCtx.AnnotateCtx(ctx)
+
+	// Add the server tags to a generic background context for use
+	// by async goroutines.
+	// We can only annotate the context after makeTenantSQLServerArgs
+	// has defined the instance ID container in the AmbientCtx.
+	background := args.BaseConfig.AmbientCtx.AnnotateCtx(context.Background())
 
 	// StartListenRPCAndSQL will replace the SQLAddr fields if we choose
 	// to share the SQL and gRPC port so here, since the tenant config
@@ -119,8 +122,8 @@ func StartTenant(
 			// quiescing starts to allow that worker to shut down.
 			_ = pgL.Close()
 		}
-		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-pgl", waitQuiesce); err != nil {
-			waitQuiesce(ctx)
+		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
+			waitQuiesce(background)
 			return nil, "", "", err
 		}
 	}
@@ -142,8 +145,8 @@ func StartTenant(
 			<-args.stopper.ShouldQuiesce()
 			_ = httpL.Close()
 		}
-		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-http", waitQuiesce); err != nil {
-			waitQuiesce(ctx)
+		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-http", waitQuiesce); err != nil {
+			waitQuiesce(background)
 			return nil, "", "", err
 		}
 	}
@@ -164,6 +167,16 @@ func StartTenant(
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
+	// Also add the SQL instance tag to the tenant status server's
+	// ambient context.
+	//
+	// We use the tag "sqli" instead of just "sql" because the latter is
+	// too generic and would be hard to search if someone was looking at
+	// a log message and wondering what it stands for.
+	//
+	// TODO(knz): find a way to share common logging tags between
+	// multiple AmbientContext instances.
+	tenantStatusServer.AmbientContext.AddLogTag("sqli", s.sqlIDContainer)
 
 	if err != nil {
 		return nil, "", "", err
@@ -172,17 +185,16 @@ func StartTenant(
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
 	tenantStatusServer.RegisterService(grpcMain.Server)
-	startRPCServer(workersCtx)
+	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
 	gwMux, gwCtx, conn, err := ConfigureGRPCGateway(
 		ctx,
-		workersCtx,
+		background,
 		args.AmbientCtx,
 		tenantStatusServer.rpcCtx,
 		s.stopper,
@@ -205,30 +217,29 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
-	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
-		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-		mux.Handle("/", debugServer)
-		mux.Handle("/_status/", gwMux)
-		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
-			// Return Bad Request if called with arguments.
-			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				return
-			}
-		})
-		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
-		mux.Handle(statusVars, http.HandlerFunc(f))
-		ff := loadVarsHandler(ctx, args.runtime)
-		mux.Handle(loadStatusVars, http.HandlerFunc(ff))
+	mux := http.NewServeMux()
+	debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	mux.Handle("/", debugServer)
+	mux.Handle("/_status/", gwMux)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+		// Return Bad Request if called with arguments.
+		if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+	})
+	f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
+	mux.Handle(statusVars, http.HandlerFunc(f))
+	ff := loadVarsHandler(ctx, args.runtime)
+	mux.Handle(loadStatusVars, http.HandlerFunc(ff))
 
-		tlsConnManager := netutil.MakeServer(
-			args.stopper,
-			serverTLSConfig, // tlsConfig
-			mux,             // handler
-		)
-
-		netutil.FatalIfUnexpected(tlsConnManager.Serve(httpL))
+	connManager := netutil.MakeServer(
+		args.stopper,
+		serverTLSConfig, // tlsConfig
+		mux,             // handler
+	)
+	if err := args.stopper.RunAsyncTask(background, "serve-http", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(connManager.Serve(httpL))
 	}); err != nil {
 		return nil, "", "", err
 	}
@@ -324,9 +335,11 @@ func loadVarsHandler(
 ) func(http.ResponseWriter, *http.Request) {
 	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
 	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
+	cpuNowNanos := metric.NewGauge(rsr.CPUNowNS.GetMetadata())
 	registry := metric.NewRegistry()
 	registry.AddMetric(cpuUserNanos)
 	registry.AddMetric(cpuSysNanos)
+	registry.AddMetric(cpuNowNanos)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
@@ -334,11 +347,13 @@ func loadVarsHandler(
 			// Just log but don't return an error to match the _status/vars metrics handler.
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		}
+
 		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
 		utime := userTimeMillis * 1e6
 		stime := sysTimeMillis * 1e6
 		cpuUserNanos.Update(utime)
 		cpuSysNanos.Update(stime)
+		cpuNowNanos.Update(timeutil.Now().UnixNano())
 
 		exporter := metric.MakePrometheusExporter()
 		exporter.ScrapeRegistry(registry, true)
@@ -351,10 +366,23 @@ func loadVarsHandler(
 }
 
 func makeTenantSQLServerArgs(
-	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
+	startupCtx context.Context,
+	stopper *stop.Stopper,
+	kvClusterName string,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
-	baseCfg.AmbientCtx.AddLogTag("sql", nil)
+
+	// We want all log messages issued on behalf of this SQL instance to report
+	// the instance ID (once known) as a tag.
+	instanceIDContainer := base.NewSQLIDContainer(0, nil)
+	// We use the tag "sqli" instead of just "sql" because the latter is
+	// too generic and would be hard to search if someone was looking at
+	// a log message and wondering what it stands for.
+	baseCfg.AmbientCtx.AddLogTag("sqli", instanceIDContainer)
+	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
+
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
 	// and this tenant work.
 	//
@@ -468,7 +496,7 @@ func makeTenantSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
+	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
 	registry.AddMetricStruct(runtime)
 
 	esb := &externalStorageBuilder{}
@@ -507,7 +535,7 @@ func makeTenantSQLServerArgs(
 			externalStorageFromURI: externalStorageFromURI,
 			// Set instance ID to 0 and node ID to nil to indicate
 			// that the instance ID will be bound later during preStart.
-			nodeIDContainer: base.NewSQLIDContainer(0, nil),
+			nodeIDContainer: instanceIDContainer,
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect: tenantConnect,

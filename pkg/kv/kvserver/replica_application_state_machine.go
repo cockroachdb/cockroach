@@ -428,9 +428,10 @@ type replicaAppBatch struct {
 // the batch. This allows the batch to make an accurate determination about
 // whether to accept or reject the next command that is staged without needing
 // to actually update the replica state machine in between.
-func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+func (b *replicaAppBatch) Stage(
+	ctx context.Context, cmdI apply.Command,
+) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	ctx := cmd.ctx
 	if cmd.ent.Index == 0 {
 		return nil, makeNonDeterministicFailure("processRaftCommand requires a non-zero index")
 	}
@@ -457,7 +458,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		cmd.raftCmd.LogicalOpLog = nil
 		cmd.raftCmd.ClosedTimestamp = nil
 	} else {
-		if err := b.assertNoCmdClosedTimestampRegression(cmd); err != nil {
+		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
 			return nil, err
 		}
 		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
@@ -469,6 +470,10 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// Acquire the split or merge lock, if necessary. If a split or merge
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
+	//
+	// TODO(tbg): can't this happen in splitPreApply which is called from
+	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
+	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
 		var err error
 		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
@@ -886,7 +891,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
-	tenantID := r.mu.tenantID
 	r.mu.Unlock()
 	if closedTimestampUpdated {
 		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)
@@ -895,7 +899,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Record the stats delta in the StoreMetrics.
 	deltaStats := *b.state.Stats
 	deltaStats.Subtract(prevStats)
-	r.store.metrics.addMVCCStats(ctx, tenantID, deltaStats)
+	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, deltaStats)
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
@@ -988,7 +992,9 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 
 // Assert that the closed timestamp carried by the command is not below one from
 // previous commands.
-func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCmd) error {
+func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
+	ctx context.Context, cmd *replicatedCmd,
+) error {
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
 	}
@@ -1008,7 +1014,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 			prevReq.SafeString("<unknown; not leaseholder or not lease request>")
 		}
 
-		logTail, err := b.r.printRaftTail(cmd.ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
+		logTail, err := b.r.printRaftTail(ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
 		if err != nil {
 			if logTail != "" {
 				logTail = logTail + "\n; error printing log: " + err.Error()
@@ -1020,7 +1026,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 		return errors.AssertionFailedf(
 			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
-				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=true"+
+				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
 			cmd.idKey, cmd.ent.Term, cmd.ent.Index, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
@@ -1039,9 +1045,10 @@ type ephemeralReplicaAppBatch struct {
 }
 
 // Stage implements the apply.Batch interface.
-func (mb *ephemeralReplicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+func (mb *ephemeralReplicaAppBatch) Stage(
+	ctx context.Context, cmdI apply.Command,
+) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	ctx := cmd.ctx
 
 	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
 	mb.state.LeaseAppliedIndex = cmd.leaseIndex
@@ -1067,10 +1074,9 @@ func (mb *ephemeralReplicaAppBatch) Close() {
 // side effects of commands, such as finalizing splits/merges and informing
 // raft about applied config changes.
 func (sm *replicaStateMachine) ApplySideEffects(
-	cmdI apply.CheckedCommand,
+	ctx context.Context, cmdI apply.CheckedCommand,
 ) (apply.AppliedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	ctx := cmd.ctx
 
 	// Deal with locking during side-effect handling, which is sometimes
 	// associated with complex commands such as splits and merged.
@@ -1259,6 +1265,47 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			return nil
 		}
 		return sm.r.withRaftGroup(true, func(rn *raft.RawNode) (bool, error) {
+			// NB: `etcd/raft` configuration changes diverge from the official Raft way
+			// in that a configuration change becomes active when the corresponding log
+			// entry is applied (rather than appended). This ultimately enables the way
+			// we do things where the state machine's view of the range descriptor always
+			// dictates the active replication config but it is much trickier to prove
+			// correct. See:
+			//
+			// https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
+			//
+			// INVARIANT: a leader will not append a config change to its logs when it
+			// hasn't applied all previous config changes in its logs.
+			//
+			// INVARIANT: a node will not campaign until it has applied any
+			// configuration changes with indexes less than or equal to its committed
+			// index.
+			//
+			// INVARIANT: appending a config change to the log (at leader or follower)
+			// implies that any previous config changes are durably known to be
+			// committed. That is, a commit index is persisted (and synced) that
+			// encompasses any earlier config changes before a new config change is
+			// appended.
+			//
+			// Together, these invariants ensure that a follower that is behind by
+			// multiple configuration changes will be using one of the two most recent
+			// configuration changes "by the time it matters", which is what is
+			// required for correctness (configuration changes are sequenced so that
+			// neighboring configurations are mutually compatible, i.e. don't cause
+			// split brain). To see this, consider a follower that is behind by
+			// multiple configuration changes. This is fine unless this follower
+			// becomes the leader (as it would then make quorum determinations based
+			// on its active config). To become leader, it needs to campaign, and
+			// thanks to the second invariant, it will only do so once it has applied
+			// all the configuration changes in its committed log. If it is to win the
+			// election, it will also have all committed configuration changes in its
+			// log (though not necessarily knowing that they are all committed). But
+			// the third invariant implies that when the follower received the most
+			// recent configuration change into its log, the one preceding it was
+			// durably marked as committed on the follower. In summary, we now know
+			// that it will apply all the way up to and including the second most
+			// recent configuration change, which is compatible with the most recent
+			// one.
 			rn.ApplyConfChange(cmd.confChange.ConfChangeI)
 			return true, nil
 		})

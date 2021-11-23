@@ -32,11 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,10 +59,15 @@ func (ti testInfra) newExecDeps(
 		ti.lm.Codec(),
 		txn,
 		descsCollection,
-		nil,              /* jobRegistry */
-		noopBackfiller{}, /* indexBackfiller */
-		nil,              /* testingKnobs */
-		nil,              /* statements */
+		nil,                  /* jobRegistry */
+		noopBackfiller{},     /* indexBackfiller */
+		noopIndexValidator{}, /* indexValidator */
+		noopCCLCallbacks{},   /* noopCCLCallbacks */
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return nil
+		},
+		nil, /* testingKnobs */
+		nil, /* statements */
 		phase,
 	)
 }
@@ -155,10 +162,13 @@ CREATE TABLE db.t (
 	}
 
 	indexToAdd := descpb.IndexDescriptor{
-		ID:             2,
-		Name:           "foo",
-		KeyColumnIDs:   []descpb.ColumnID{1},
-		KeyColumnNames: []string{"i"},
+		ID:                2,
+		Name:              "foo",
+		Version:           descpb.StrictIndexColumnIDGuaranteesVersion,
+		CreatedExplicitly: true,
+		KeyColumnIDs:      []descpb.ColumnID{1},
+		KeyColumnNames:    []string{"i"},
+		StoreColumnNames:  []string{},
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
@@ -183,8 +193,12 @@ CREATE TABLE db.t (
 			ops: func() scop.Ops {
 				return scop.MakeOps(
 					&scop.MakeAddedIndexDeleteOnly{
-						TableID: table.ID,
-						Index:   indexToAdd,
+						TableID:             table.ID,
+						IndexID:             indexToAdd.ID,
+						IndexName:           indexToAdd.Name,
+						KeyColumnIDs:        indexToAdd.KeyColumnIDs,
+						KeyColumnDirections: indexToAdd.KeyColumnDirections,
+						SecondaryIndex:      true,
 					},
 				)
 			},
@@ -227,7 +241,6 @@ CREATE TABLE db.t (
 // is fixed up.
 func TestSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 	t.Run("add column", func(t *testing.T) {
 		ti := setupTestInfra(t)
@@ -248,24 +261,22 @@ func TestSchemaChanger(t *testing.T) {
 			//
 			//  ALTER TABLE foo ADD COLUMN j INT;
 			//
+			metadata := &scpb.TargetMetadata{
+				StatementID:     0,
+				SubWorkID:       1,
+				SourceElementID: 1}
 			targetSlice = []*scpb.Target{
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
-					TableID: fooTable.GetID(),
-					Index: descpb.IndexDescriptor{
-						Name:                "new_primary_key",
-						ID:                  2,
-						KeyColumnIDs:        []descpb.ColumnID{1},
-						KeyColumnNames:      []string{"i"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						StoreColumnIDs:      []descpb.ColumnID{2},
-						StoreColumnNames:    []string{"j"},
-						Unique:              true,
-						Type:                descpb.IndexDescriptor_FORWARD,
-						Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
-						EncodingType:        descpb.PrimaryIndexEncoding,
-					},
-					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
-				}),
+					TableID:             fooTable.GetID(),
+					IndexName:           "new_primary_key",
+					IndexID:             2,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+					StoringColumnIDs:    []descpb.ColumnID{2},
+					Unique:              true,
+					Inverted:            false,
+				},
+					metadata),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
 					TableID:    fooTable.GetID(),
 					FamilyID:   descpb.FamilyID(0),
@@ -277,34 +288,37 @@ func TestSchemaChanger(t *testing.T) {
 						Nullable:       true,
 						PGAttributeNum: 2,
 					},
-				}),
+				},
+					metadata),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
-					TableID: fooTable.GetID(),
-					Index: descpb.IndexDescriptor{
-						Name:                "primary",
-						ID:                  1,
-						KeyColumnIDs:        []descpb.ColumnID{1},
-						KeyColumnNames:      []string{"i"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						Unique:              true,
-						Type:                descpb.IndexDescriptor_FORWARD,
-					},
-					OtherPrimaryIndexID: 2,
-				}),
+					TableID:             fooTable.GetID(),
+					IndexName:           "primary",
+					IndexID:             1,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+					Unique:              true,
+					Inverted:            false,
+				},
+					metadata),
 			}
 
 			nodes := scpb.State{
-				{
-					Target: targetSlice[0],
-					Status: scpb.Status_ABSENT,
+				Nodes: []*scpb.Node{
+					{
+						Target: targetSlice[0],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[1],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[2],
+						Status: scpb.Status_PUBLIC,
+					},
 				},
-				{
-					Target: targetSlice[1],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: targetSlice[2],
-					Status: scpb.Status_PUBLIC,
+				Statements: []*scpb.Statement{
+					{},
 				},
 			}
 
@@ -341,17 +355,22 @@ func TestSchemaChanger(t *testing.T) {
 			return nil
 		}))
 		require.Equal(t, scpb.State{
-			{
-				Target: targetSlice[0],
-				Status: scpb.Status_PUBLIC,
+			Nodes: []*scpb.Node{
+				{
+					Target: targetSlice[0],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[1],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[2],
+					Status: scpb.Status_ABSENT,
+				},
 			},
-			{
-				Target: targetSlice[1],
-				Status: scpb.Status_PUBLIC,
-			},
-			{
-				Target: targetSlice[2],
-				Status: scpb.Status_ABSENT,
+			Statements: []*scpb.Statement{
+				{},
 			},
 		}, after)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
@@ -370,7 +389,7 @@ func TestSchemaChanger(t *testing.T) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
+				outputNodes, err := scbuild.Build(ctx, buildDeps, scpb.State{}, parsed[0].AST.(*tree.AlterTable))
 				require.NoError(t, err)
 
 				for _, phase := range []scop.Phase{
@@ -419,4 +438,45 @@ func (n noopBackfiller) BackfillIndex(
 	return nil
 }
 
+type noopIndexValidator struct{}
+
+func (noopIndexValidator) ValidateForwardIndexes(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	withFirstMutationPublic bool,
+	gatherAllInvalid bool,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return nil
+}
+
+func (noopIndexValidator) ValidateInvertedIndexes(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	gatherAllInvalid bool,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return nil
+}
+
+type noopCCLCallbacks struct {
+}
+
+func (noopCCLCallbacks) AddPartitioning(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	indexDesc *descpb.IndexDescriptor,
+	partitionFields []string,
+	listPartition []*scpb.ListPartition,
+	rangePartition []*scpb.RangePartitions,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) error {
+	return nil
+}
+
 var _ scexec.IndexBackfiller = noopBackfiller{}
+var _ scexec.IndexValidator = noopIndexValidator{}
+var _ scexec.Partitioner = noopCCLCallbacks{}

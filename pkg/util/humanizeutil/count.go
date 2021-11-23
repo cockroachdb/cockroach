@@ -10,10 +10,13 @@
 
 package humanizeutil
 
-import "github.com/dustin/go-humanize"
+import (
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
+)
 
 // Count formats a unitless integer value like a row count. It uses separating
 // commas for large values (e.g. "1,000,000").
-func Count(val uint64) string {
-	return humanize.Comma(int64(val))
+func Count(val uint64) redact.SafeString {
+	return redact.SafeString(humanize.Comma(int64(val)))
 }

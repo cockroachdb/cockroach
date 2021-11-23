@@ -579,7 +579,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 				// to run for 5 minutes, we should be fine here, however we want to guarantee
 				// there's at least 10s left to go. Check this.
 				t.WorkerStatus("checking workload is still running")
-				runDuration := timeutil.Now().Sub(workloadStartTime)
+				runDuration := timeutil.Since(workloadStartTime)
 				if runDuration > desiredRunDuration-10*time.Second {
 					t.Fatalf("not enough workload time left to reliably determine performance (%s left)",
 						desiredRunDuration-runDuration)

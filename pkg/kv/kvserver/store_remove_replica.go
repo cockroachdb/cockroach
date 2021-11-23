@@ -69,7 +69,6 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// destroy status.
 	var desc *roachpb.RangeDescriptor
 	var replicaID roachpb.ReplicaID
-	var tenantID roachpb.TenantID
 	{
 		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
@@ -112,7 +111,6 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 		replicaID = rep.mu.replicaID
-		tenantID = rep.mu.tenantID
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()
 	}
@@ -144,7 +142,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 
-	s.metrics.subtractMVCCStats(ctx, tenantID, rep.GetMVCCStats())
+	s.metrics.subtractMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
 
@@ -238,11 +236,10 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	defer s.mu.Unlock()
 
 	// Sanity check, could be removed.
-	value, stillExists := s.mu.replicas.Load(int64(rep.RangeID))
+	existing, stillExists := s.mu.replicasByRangeID.Load(rep.RangeID)
 	if !stillExists {
 		log.Fatalf(ctx, "uninitialized replica was removed in the meantime")
 	}
-	existing := (*Replica)(value)
 	if existing == rep {
 		log.Infof(ctx, "removing uninitialized replica %v", rep)
 	} else {
@@ -264,7 +261,7 @@ func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachp
 	s.unquiescedReplicas.Unlock()
 	delete(s.mu.uninitReplicas, rangeID)
 	s.replicaQueues.Delete(int64(rangeID))
-	s.mu.replicas.Delete(int64(rangeID))
+	s.mu.replicasByRangeID.Delete(rangeID)
 	s.unregisterLeaseholderByID(ctx, rangeID)
 }
 

@@ -99,7 +99,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
-			Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
+			Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			NextColumnID:   2,
 			NextFamilyID:   1,
 			NextIndexID:    2,
@@ -245,9 +245,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Same(t, immByName, immByID)
 
 			mut.Name = "new_name"
-			mut.SetDrainingNames([]descpb.NameInfo{{
-				Name: "db",
-			}})
 
 			// Don't write the descriptor, just write the namespace entry.
 			// This will mean that resolution still is based on the old name.

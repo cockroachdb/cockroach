@@ -223,7 +223,7 @@ func (v *valueGenerator) closeAll() {
 }
 
 func (v *valueGenerator) toString(value []byte) string {
-	return fmt.Sprintf("%s", value)
+	return string(value)
 }
 
 func (v *valueGenerator) parse(input string) []byte {

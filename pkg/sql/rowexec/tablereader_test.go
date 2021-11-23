@@ -321,7 +321,7 @@ func TestTableReaderDrain(t *testing.T) {
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
-	tracer := tracing.NewTracer()
+	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 	st := s.ClusterSettings()
@@ -400,9 +400,8 @@ func TestLimitScans(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{Limit: limit}
 
 	// Now we're going to run the tableReader and trace it.
-	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
+	tracer := s.TracerI().(*tracing.Tracer)
+	sp := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 	flowCtx.CollectStats = true
@@ -441,7 +440,7 @@ func TestLimitScans(t *testing.T) {
 	// scans from the same key as the DistSender retries scans when it detects
 	// splits.
 	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.GetID()))
-	spans := sp.GetRecording()
+	spans := sp.GetRecording(tracing.RecordingVerbose)
 	ranges := make(map[string]struct{})
 	for _, span := range spans {
 		if span.Operation == tableReaderProcName {
@@ -508,15 +507,20 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 			spec := execinfrapb.TableReaderSpec{
 				Table: *tableDesc.TableDesc(),
-				Spans: []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
+				// Spans will be set below.
 			}
 			post := execinfrapb.PostProcessSpec{}
 
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				// We have to set the spans on each iteration since the
+				// txnKVFetcher reuses the passed-in slice and destructively
+				// modifies it.
+				spec.Spans = []roachpb.Span{span}
 				tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
 				if err != nil {
 					b.Fatal(err)

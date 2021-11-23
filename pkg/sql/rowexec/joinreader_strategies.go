@@ -14,11 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -48,7 +50,7 @@ import (
 type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
-	getLookupRowsBatchSizeHint() int64
+	getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64
 	// getMaxLookupKeyCols returns the maximum number of key columns used to
 	// lookup into the index.
 	getMaxLookupKeyCols() int
@@ -152,7 +154,7 @@ type joinReaderNoOrderingStrategy struct {
 // and 11 with varying batch sizes and choosing the smallest batch size that
 // offered a significant performance improvement. Larger batch sizes offered
 // small to no marginal improvements.
-func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64 {
 	return 2 << 20 /* 2 MiB */
 }
 
@@ -359,7 +361,7 @@ type joinReaderIndexJoinStrategy struct {
 // and 19 with varying batch sizes and choosing the smallest batch size that
 // offered a significant performance improvement. Larger batch sizes offered
 // small to no marginal improvements.
-func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
+func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64 {
 	return 4 << 20 /* 4 MB */
 }
 
@@ -502,10 +504,26 @@ type joinReaderOrderingStrategy struct {
 	testingInfoSpilled bool
 }
 
-func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+const joinReaderOrderingStrategyBatchSizeDefault = 10 << 10 /* 10 KiB */
+
+// JoinReaderOrderingStrategyBatchSize determines the size of input batches used
+// to construct a single lookup KV batch by joinReaderOrderingStrategy.
+var JoinReaderOrderingStrategyBatchSize = settings.RegisterByteSizeSetting(
+	"sql.distsql.join_reader_ordering_strategy.batch_size",
+	"size limit on the input rows to construct a single lookup KV batch",
+	joinReaderOrderingStrategyBatchSizeDefault,
+	settings.PositiveInt,
+)
+
+func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint(sd *sessiondata.SessionData) int64 {
 	// TODO(asubiotto): Eventually we might want to adjust this batch size
 	//  dynamically based on whether the result row container spilled or not.
-	return 10 << 10 /* 10 KiB */
+	if sd.JoinReaderOrderingStrategyBatchSize == 0 {
+		// In some tests the session data might not be set - use the default
+		// value then.
+		return joinReaderOrderingStrategyBatchSizeDefault
+	}
+	return sd.JoinReaderOrderingStrategyBatchSize
 }
 
 func (s *joinReaderOrderingStrategy) getMaxLookupKeyCols() int {

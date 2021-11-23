@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -479,9 +480,15 @@ func prepareNewTablesForIngestion(
 		if err != nil {
 			return nil, err
 		}
+		oldParentSchemaID := tableDesc.Desc.GetUnexposedParentSchemaID()
+		parentSchemaID := oldParentSchemaID
+		if rw, ok := schemaRewrites[oldParentSchemaID]; ok {
+			parentSchemaID = rw.ID
+		}
 		tableRewrites[tableDesc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-			ID:       id,
-			ParentID: parentID,
+			ID:             id,
+			ParentSchemaID: parentSchemaID,
+			ParentID:       parentID,
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
@@ -601,7 +608,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 		// Update the parent database with this schema information.
 		dbDesc.Schemas[newMutableSchemaDescriptor.Name] =
-			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID, Dropped: false}
+			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID}
 
 		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
 			ID: id,
@@ -956,6 +963,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 			// TODO(michae2): collect distinct and null counts during import.
 			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
 			nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
+			avgRowSize := uint64(memo.UnknownAvgRowSize)
 			// Because we don't yet have real distinct and null counts, only produce
 			// single-column stats to avoid the appearance of perfectly correlated
 			// columns.
@@ -966,6 +974,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 					statistic.RowCount = rowCount
 					statistic.DistinctCount = distinctCount
 					statistic.NullCount = nullCount
+					statistic.AvgSize = avgRowSize
 				}
 				// TODO(michae2): parallelize insertion of statistics.
 				err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, nil /* txn */, statistics)
@@ -1485,22 +1494,33 @@ func (r *importResumer) dropSchemas(
 			return nil, errors.Newf("unable to resolve schema desc with ID %d", schema.Desc.ID)
 		}
 
-		schemaDesc.DrainingNames = append(schemaDesc.DrainingNames,
-			descpb.NameInfo{ParentID: details.ParentID, ParentSchemaID: keys.RootNamespaceID,
-				Name: schemaDesc.Name})
-
-		// Update the parent database with information about the dropped schema.
-		if dbDesc.Schemas == nil {
-			dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-		}
-		dbDesc.Schemas[schema.Desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID,
-			Dropped: true}
-
 		// Mark the descriptor as dropped and write it to the batch.
+		// Delete namespace entry or update draining names depending on version.
+
 		schemaDesc.SetDropped()
 		droppedSchemaIDs = append(droppedSchemaIDs, schemaDesc.GetID())
 
 		b := txn.NewBatch()
+		// TODO(postamar): remove version gate and else-block in 22.2
+		if execCfg.Settings.Version.IsActive(ctx, clusterversion.AvoidDrainingNames) {
+			if dbDesc.Schemas != nil {
+				delete(dbDesc.Schemas, schemaDesc.GetName())
+			}
+			b.Del(catalogkeys.EncodeNameKey(p.ExecCfg().Codec, schemaDesc))
+		} else {
+			//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
+			schemaDesc.AddDrainingName(descpb.NameInfo{
+				ParentID:       details.ParentID,
+				ParentSchemaID: keys.RootNamespaceID,
+				Name:           schemaDesc.Name,
+			})
+			// Update the parent database with information about the dropped schema.
+			if dbDesc.Schemas == nil {
+				dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+			}
+			dbDesc.Schemas[schema.Desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID, Dropped: true}
+		}
+
 		if err := descsCol.WriteDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 			schemaDesc, b); err != nil {
 			return nil, err

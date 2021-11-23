@@ -30,7 +30,7 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	leftSource, rightSource execinfra.RowSource
 	leftRows, rightRows     []rowenc.EncDatumRow
@@ -117,7 +117,7 @@ func newMergeJoiner(
 func (m *mergeJoiner) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.streamMerger.start(ctx)
-	m.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	m.cancelChecker.Reset(ctx)
 }
 
 // Next is part of the Processor interface.

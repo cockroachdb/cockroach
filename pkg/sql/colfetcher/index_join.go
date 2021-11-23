@@ -211,11 +211,9 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			s.mu.Unlock()
 			return batch
 		case indexJoinDone:
-			// Eagerly close the index joiner. Note that Close() is idempotent,
-			// so it's ok if it'll be closed again.
-			if err := s.Close(); err != nil {
-				colexecerror.InternalError(err)
-			}
+			// Eagerly close the index joiner. Note that closeInternal() is
+			// idempotent, so it's ok if it'll be closed again.
+			s.closeInternal()
 			return coldata.ZeroBatch
 		}
 	}
@@ -388,7 +386,6 @@ func NewColIndexJoin(
 	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
@@ -416,7 +413,7 @@ func NewColIndexJoin(
 	table := spec.BuildTableDescriptor()
 	index := table.ActiveIndexes()[spec.IndexIdx]
 	tableArgs, idxMap, err := populateTableArgs(
-		ctx, flowCtx, evalCtx, table, index, nil, /* invertedCol */
+		ctx, flowCtx, table, index, nil, /* invertedCol */
 		spec.Visibility, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
@@ -438,7 +435,10 @@ func NewColIndexJoin(
 		}
 	} else {
 		proc := &execinfra.ProcOutputHelper{}
-		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, evalCtx); err != nil {
+		// It is ok to use the evalCtx of the flowCtx here since we only use the
+		// ProcOutputHelper to get a set of the needed columns and will not be
+		// evaluating any expressions.
+		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, flowCtx.EvalCtx); err != nil {
 			return nil, err
 		}
 		neededColOrdsInWholeTable = proc.NeededColumns()
@@ -449,7 +449,7 @@ func NewColIndexJoin(
 	}
 
 	if err = keepOnlyNeededColumns(
-		evalCtx, tableArgs, idxMap, neededColumns, post, helper, flowCtx.TraceKV, flowCtx.PreserveFlowSpecs,
+		flowCtx, tableArgs, idxMap, neededColumns, post, helper,
 	); err != nil {
 		return nil, err
 	}
@@ -550,15 +550,21 @@ func (s *ColIndexJoin) Release() {
 
 // Close implements the colexecop.Closer interface.
 func (s *ColIndexJoin) Close() error {
-	s.rf.Close(s.EnsureCtx())
+	s.closeInternal()
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil
 	}
+	return nil
+}
+
+// closeInternal is a subset of Close() which doesn't finish the operator's
+// span.
+func (s *ColIndexJoin) closeInternal() {
+	s.rf.Close(s.EnsureCtx())
 	if s.spanAssembler != nil {
 		// spanAssembler can be nil if Release() has already been called.
 		s.spanAssembler.Close()
 	}
 	s.batch = nil
-	return nil
 }

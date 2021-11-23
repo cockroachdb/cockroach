@@ -169,7 +169,7 @@ func (r *Reporter) CreateReport(
 ) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
 	secret := sql.ClusterSecret.Get(&r.Settings.SV)
-	uptime := int64(timeutil.Now().Sub(r.StartTime).Seconds())
+	uptime := int64(timeutil.Since(r.StartTime).Seconds())
 
 	// Populate the hardware, OS, binary, and location of the CRDB node or SQL
 	// instance.

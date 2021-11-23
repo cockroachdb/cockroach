@@ -188,7 +188,7 @@ func (t *testImpl) GetStatus() string {
 	defer t.mu.Unlock()
 	status, ok := t.mu.status[t.runnerID]
 	if ok {
-		return fmt.Sprintf("%s (set %s ago)", status.msg, timeutil.Now().Sub(status.time).Round(time.Second))
+		return fmt.Sprintf("%s (set %s ago)", status.msg, timeutil.Since(status.time).Round(time.Second))
 	}
 	return "N/A"
 }
@@ -482,6 +482,10 @@ type loggingOpt struct {
 	// artifactsDir is that path to the dir that will contain the artifacts for
 	// all the tests.
 	artifactsDir string
+	// path to the literal on-agent directory where artifacts are stored. May
+	// be different from artifactsDir since the roachtest may be running in
+	// a container.
+	literalArtifactsDir string
 	// runnerLogPath is that path to the runner's log file.
 	runnerLogPath string
 }

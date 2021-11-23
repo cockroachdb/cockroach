@@ -221,7 +221,7 @@ project
       ├── columns: k:1!null max:11!null
       ├── key: (1)
       ├── fd: ()-->(11)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null max:11!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -260,7 +260,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(11), (1)-->(12)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null sum:11!null max:12!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -333,7 +333,7 @@ project
       ├── columns: k:1!null min:11!null max:12!null
       ├── key: (1)
       ├── fd: ()-->(11), (1)-->(12)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null min:11!null max:12!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -372,7 +372,7 @@ project
       ├── columns: k:1!null sum:11!null max:12!null
       ├── key: (1)
       ├── fd: ()-->(12), (1)-->(11)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null sum:11!null max:12!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -471,7 +471,7 @@ project
       ├── columns: k:1!null min:11!null max:12
       ├── key: (1)
       ├── fd: ()-->(11), (1)-->(12)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null min:11 max:12
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -513,7 +513,7 @@ project
       ├── columns: k:1!null count:11!null
       ├── key: (1)
       ├── fd: ()-->(11)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null count:11!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -552,7 +552,7 @@ project
  │    ├── project
  │    │    ├── columns: exists:22!null
  │    │    ├── outer: (4)
- │    │    ├── group-by
+ │    │    ├── group-by (hash)
  │    │    │    ├── columns: ref_1.k:7!null true_agg:21
  │    │    │    ├── grouping columns: ref_1.k:7!null
  │    │    │    ├── outer: (4)
@@ -605,7 +605,7 @@ project
       ├── columns: k:5!null string_agg:12!null
       ├── key: (5)
       ├── fd: ()-->(12)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:5!null string_agg:12!null
       │    ├── grouping columns: k:5!null
       │    ├── key: (5)
@@ -656,7 +656,7 @@ project
       ├── immutable
       ├── key: (5)
       ├── fd: ()-->(13)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:5 string_agg:13
       │    ├── grouping columns: k:5
       │    ├── immutable

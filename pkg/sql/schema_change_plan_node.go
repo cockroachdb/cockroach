@@ -16,18 +16,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
 )
 
 // SchemaChange provides the planNode for the new schema changer.
@@ -54,13 +57,13 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		scs.stmts,
 	)
 	outputNodes, err := scbuild.Build(ctx, deps, scs.state, stmt)
-	if scbuild.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
+	if scerrors.HasNotImplemented(err) && mode == sessiondatapb.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
 	if err != nil {
 		// If we need to wait for a concurrent schema change to finish, release our
 		// leases, and then return the error to wait and retry.
-		if cscErr := (*scbuild.ConcurrentSchemaChangeError)(nil); errors.As(err, &cscErr) {
+		if scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID {
 			p.Descriptors().ReleaseLeases(ctx)
 		}
 		return nil, false, err
@@ -104,7 +107,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 				if err != nil {
 					return err
 				}
-				blocked = scbuild.HasConcurrentSchemaChanges(table)
+				blocked = catalog.HasConcurrentSchemaChanges(table)
 				return nil
 			}); err != nil {
 			return err
@@ -135,6 +138,11 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.Descriptors(),
 		p.ExecCfg().JobRegistry,
 		p.ExecCfg().IndexBackfiller,
+		p.ExecCfg().IndexValidator,
+		scsqldeps.NewCCLCallbacks(p.ExecCfg().Settings, p.EvalContext()),
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return LogEventForSchemaChanger(ctx, p.ExecCfg(), txn, depth+1, descID, metadata, event)
+		},
 		p.ExecCfg().NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.StatementPhase,

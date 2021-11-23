@@ -17,11 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// IsInterleaved returns whether the index is interleaved or not.
-func (desc *IndexDescriptor) IsInterleaved() bool {
-	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
-}
-
 // IsSharded returns whether the index is hash sharded or not.
 func (desc *IndexDescriptor) IsSharded() bool {
 	return desc.Sharded.IsSharded

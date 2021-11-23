@@ -118,3 +118,29 @@ SELECT DISTINCT v FROM kv
 2
 NULL
 3
+
+# Check that zigzag join works in always mode.
+statement ok
+RESET experimental_distsql_planning;
+CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), INDEX bc_idx(b,c));
+INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
+SET enable_zigzag_join = true;
+SET experimental_distsql_planning = always
+
+query III rowsort
+SELECT n,a,b FROM a WHERE a = 5 AND b = 2
+----
+5  5  2
+
+query T
+SELECT * FROM [EXPLAIN SELECT n,a,b FROM a WHERE a = 5 AND b = 2] OFFSET 2
+----
+·
+• zigzag join
+  pred: (a = 5) AND (b = 2)
+  left table: a@a_idx
+  left columns: (n, a)
+  left fixed values: 1 column
+  right table: a@b_idx
+  right columns: (b)
+  right fixed values: 1 column

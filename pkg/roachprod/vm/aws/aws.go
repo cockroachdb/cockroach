@@ -21,11 +21,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -35,9 +37,10 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
-// init will inject the AWS provider into vm.Providers, but only
-// if the aws tool is available on the local path.
-func init() {
+// Init initializes the AWS provider and registers it into vm.Providers.
+//
+// If the aws tool is not available on the local path, the provider is a stub.
+func Init() {
 	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
 	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
 	// The latter prefix will base64-encode the file contents. See
@@ -299,7 +302,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
-		o.UseMultipleDisks, "Enable the use of multiple stores by creating one store directory per disk. "+
+		false, "Enable the use of multiple stores by creating one store directory per disk. "+
 			"Default is to raid0 stripe all disks. "+
 			"See repeating --"+ProviderName+"-ebs-volume for adding extra volumes.")
 	flags.Float64Var(&o.CreateRateLimit, ProviderName+"-create-rate-limit", o.CreateRateLimit, "aws"+
@@ -426,6 +429,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			zones[i] = expandedZones[z]
 		}
 	}
+
 	var g errgroup.Group
 	limiter := rate.NewLimiter(rate.Limit(p.opts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
@@ -765,6 +769,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
+				Labels:      tagMap,
 				PrivateIP:   in.PrivateIPAddress,
 				Provider:    ProviderName,
 				ProviderID:  in.InstanceID,
@@ -773,6 +778,8 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				VPC:         in.VpcID,
 				MachineType: in.InstanceType,
 				Zone:        in.Placement.AvailabilityZone,
+				SQLPort:     config.DefaultSQLPort,
+				AdminUIPort: config.DefaultAdminUIPort,
 			}
 			ret = append(ret, m)
 		}
@@ -824,13 +831,34 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	cpuOptions := p.opts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
-	// all of our metadata into the TagSpec.
-	tagSpecs := fmt.Sprintf(
-		"ResourceType=instance,Tags=["+
-			"{Key=Lifetime,Value=%s},"+
-			"{Key=Name,Value=%s},"+
-			"{Key=Roachprod,Value=true},"+
-			"]", opts.Lifetime, name)
+	// all of our metadata into the tagSpec.
+	m := vm.GetDefaultLabelMap(opts)
+	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
+	m["Name"] = name
+	var awsLabelsNameMap = map[string]string{
+		vm.TagCluster:   "Cluster",
+		vm.TagCreated:   "Created",
+		vm.TagLifetime:  "Lifetime",
+		vm.TagRoachprod: "Roachprod",
+	}
+
+	var sb strings.Builder
+	sb.WriteString("ResourceType=instance,Tags=[")
+	for key, value := range opts.CustomLabels {
+		_, ok := m[strings.ToLower(key)]
+		if ok {
+			return fmt.Errorf("duplicate label name defined: %s", key)
+		}
+		fmt.Fprintf(&sb, "{Key=%s,Value=%s},", key, value)
+	}
+	for key, value := range m {
+		if n, ok := awsLabelsNameMap[key]; ok {
+			key = n
+		}
+		fmt.Fprintf(&sb, "{Key=%s,Value=%s},", key, value)
+	}
+	s := sb.String()
+	tagSpecs := fmt.Sprintf("%s]", s[:len(s)-1])
 
 	var data struct {
 		Instances []struct {
@@ -937,4 +965,9 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
+}
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	return project == ""
 }

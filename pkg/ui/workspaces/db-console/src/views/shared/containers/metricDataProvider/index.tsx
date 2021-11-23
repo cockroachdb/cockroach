@@ -20,7 +20,7 @@ import {
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { MilliToNano } from "src/util/convert";
+import { MilliToNano, MilliToSeconds } from "src/util/convert";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -29,8 +29,14 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { PayloadAction } from "src/interfaces/action";
-import { TimeWindow, TimeScale } from "src/redux/timewindow";
+import {
+  TimeWindow,
+  TimeScale,
+  findClosestTimeScale,
+  defaultTimeScaleOptions,
+} from "@cockroachlabs/cluster-ui";
 import { History } from "history";
+import { refreshSettings } from "src/redux/apiReducers";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -90,6 +96,7 @@ interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
   timeInfo: QueryTimeInfo;
   requestMetrics: typeof requestMetricsAction;
+  refreshNodeSettings: typeof refreshSettings;
   setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
@@ -104,6 +111,10 @@ interface MetricsDataProviderExplicitProps {
   // If current is true, uses the current time instead of the global timewindow.
   current?: boolean;
   children?: React.ReactElement<{}>;
+  adjustTimeScaleOnChange?: (
+    curTimeScale: TimeScale,
+    timeWindow: TimeWindow,
+  ) => TimeScale;
 }
 
 /**
@@ -192,6 +203,7 @@ class MetricsDataProvider extends React.Component<
   componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refreshMetricsIfStale(this.props);
+    this.props.refreshNodeSettings();
   }
 
   componentDidUpdate() {
@@ -216,6 +228,7 @@ class MetricsDataProvider extends React.Component<
   }
 
   render() {
+    const { adjustTimeScaleOnChange } = this.props;
     // MetricsDataProvider should contain only one direct child.
     const child = React.Children.only(this.props.children);
     const dataProps: MetricsDataComponentProps = {
@@ -224,6 +237,7 @@ class MetricsDataProvider extends React.Component<
       setTimeRange: this.props.setTimeRange,
       setTimeScale: this.props.setTimeScale,
       history: this.props.history,
+      adjustTimeScaleOnChange,
     };
     return React.cloneElement(
       child as React.ReactElement<MetricsDataComponentProps>,
@@ -240,11 +254,23 @@ const timeInfoSelector = createSelector(
     if (!_.isObject(tw.currentWindow)) {
       return null;
     }
+
+    // It is possible for the currentWindow and scale to be out of sync due to
+    // the flow of some events such as drag-to-zoom. Thus, the source of truth for
+    // scale here should be based on the currentWindow.
+    const { currentWindow } = tw;
+    const start = currentWindow.start.valueOf();
+    const end = currentWindow.end.valueOf();
+    const syncedScale = findClosestTimeScale(
+      defaultTimeScaleOptions,
+      MilliToSeconds(end - start),
+    );
+
     return {
-      start: Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
-      end: Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
+      start: Long.fromNumber(MilliToNano(start)),
+      end: Long.fromNumber(MilliToNano(end)),
       sampleDuration: Long.fromNumber(
-        MilliToNano(tw.scale.sampleSize.asMilliseconds()),
+        MilliToNano(syncedScale.sampleSize.asMilliseconds()),
       ),
     };
   },
@@ -280,6 +306,7 @@ const metricsDataProviderConnected = connect(
   },
   {
     requestMetrics: requestMetricsAction,
+    refreshNodeSettings: refreshSettings,
   },
 )(MetricsDataProvider);
 

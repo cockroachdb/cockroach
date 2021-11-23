@@ -23,20 +23,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	// cld "github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	_ "github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
-	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var rootCmd = &cobra.Command{
@@ -62,55 +58,6 @@ destroy the cluster.
 	Version: "details:\n" + build.GetInfo().Long(),
 }
 
-var (
-	numNodes           int
-	numRacks           int
-	username           string
-	dryrun             bool
-	destroyAllMine     bool
-	extendLifetime     time.Duration
-	wipePreserveCerts  bool
-	listDetails        bool
-	listJSON           bool
-	listMine           bool
-	listPattern        string
-	sqlCockroachBinary = "cockroach"
-	secure             = false
-	extraSSHOptions    = ""
-	nodeEnv            = []string{
-		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
-	}
-	nodeArgs          []string
-	tag               string
-	external          = false
-	certsDir          string
-	adminurlOpen      = false
-	adminurlPath      = ""
-	adminurlIPs       = false
-	useTreeDist       = true
-	encrypt           = false
-	skipInit          = false
-	quiet             = false
-	sig               = 9
-	waitFlag          = false
-	startOpts         = install.StartOptsType{}
-	stageOS           string
-	stageDir          string
-	logsDir           string
-	logsFilter        string
-	logsProgramFilter string
-	logsFrom          time.Time
-	logsTo            time.Time
-	logsInterval      time.Duration
-	maxConcurrency    int
-
-	monitorIgnoreEmptyNodes bool
-	monitorOneShot          bool
-
-	cachedHostsCluster string
-)
-
 // Provide `cobra.Command` functions with a standard return code handler.
 // Exit codes come from rperrors.Error.ExitCode().
 //
@@ -134,7 +81,19 @@ func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 	}
 }
 
-var createVMOpts vm.CreateOpts
+// clusterOpts returns the ClusterSettings according to the command-line flags.
+func clusterOpts() install.ClusterSettings {
+	return install.ClusterSettings{
+		Tag:            tag,
+		PGUrlCertsDir:  pgurlCertsDir,
+		Secure:         secure,
+		Quiet:          quiet || !term.IsTerminal(int(os.Stdout.Fd())),
+		UseTreeDist:    useTreeDist,
+		Env:            nodeEnv,
+		NumRacks:       numRacks,
+		MaxConcurrency: maxConcurrency,
+	}
+}
 
 var createCmd = &cobra.Command{
 	Use:   "create <cluster>",
@@ -176,18 +135,12 @@ Cloud Clusters
 Local Clusters
 
   A local cluster stores the per-node data in ${HOME}/local on the machine
-  roachprod is being run on. Local clusters requires local ssh access. Unlike
-  cloud clusters there can be only a single local cluster, the local cluster is
-  always named "local", and has no expiration (unlimited lifetime).
+  roachprod is being run on. Whether a cluster is local is specified on creation
+  by using the name 'local' or 'local-<anything>'. Local clusters have no expiration.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Create(numNodes, username, createVMOpts, clusterOpts)
+		return roachprod.Create(numNodes, username, createVMOpts, args[0], clusterOpts())
 	}),
 }
 
@@ -206,41 +159,28 @@ if the user would like to update the keys on the remote hosts.
 
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.SetupSSH(clusterOpts, username)
+		return roachprod.SetupSSH(args[0], clusterOpts(), username)
 	}),
 }
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy [ --all-mine | <cluster 1> [<cluster 2> ...] ]",
+	Use:   "destroy [ --all-mine | --all-local | <cluster 1> [<cluster 2> ...] ]",
 	Short: "destroy clusters",
 	Long: `Destroy one or more local or cloud-based clusters.
 
 The destroy command accepts the names of the clusters to destroy. Alternatively,
-the --all-mine flag can be provided to destroy all clusters that are owned by the
-current user.
+the --all-mine flag can be provided to destroy all (non-local) clusters that are
+owned by the current user, or the --all-local flag can be provided to destroy
+all local clusters.
 
 Destroying a cluster releases the resources for a cluster. For a cloud-based
 cluster the machine and associated disk resources are freed. For a local
-cluster, any processes started by roachprod are stopped, and the ${HOME}/local
-directory is removed.
+cluster, any processes started by roachprod are stopped, and the node
+directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		var clusters []install.SyncedCluster
-		for _, clusterName := range args {
-			cluster := install.SyncedCluster{
-				Name: clusterName, Tag: tag, CertsDir: certsDir, Secure: secure,
-				Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-				Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-			}
-			clusters = append(clusters, cluster)
-		}
-		return roachprod.Destroy(clusters, destroyAllMine, username)
+		return roachprod.Destroy(args, clusterOpts(), destroyAllMine, destroyAllLocal, username)
 	}),
 }
 
@@ -249,16 +189,20 @@ var cachedHostsCmd = &cobra.Command{
 	Short: "list all clusters (and optionally their host numbers) from local cache",
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		cachedHosts, err := roachprod.CachedHosts(cachedHostsCluster)
-		if err != nil {
-			return err
-		}
-		for _, host := range cachedHosts {
-			if strings.HasPrefix(host, "teamcity") {
-				continue
+		roachprod.CachedClusters(func(clusterName string, numVMs int) {
+			if strings.HasPrefix(clusterName, "teamcity") {
+				return
 			}
-			fmt.Println(host)
-		}
+			fmt.Printf("%s", clusterName)
+			// When invoked by bash-completion, cachedHostsCluster is what the user
+			// has currently typed -- if this cluster matches that, expand its hosts.
+			if strings.HasPrefix(cachedHostsCluster, clusterName) {
+				for i := 1; i <= numVMs; i++ {
+					fmt.Printf(" %s:%d", clusterName, i)
+				}
+			}
+			fmt.Printf("\n")
+		})
 		return nil
 	}),
 }
@@ -341,7 +285,7 @@ hosts file.
 				if listDetails {
 					c.PrintDetails()
 				} else {
-					fmt.Fprintf(tw, "%s:\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
+					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
 					if !c.IsLocal() {
 						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
 					} else {
@@ -415,12 +359,7 @@ destroyed:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Extend(clusterOpts, extendLifetime)
+		return roachprod.Extend(args[0], clusterOpts(), extendLifetime)
 	}),
 }
 
@@ -464,12 +403,7 @@ cluster setting will be set to its value.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Start(clusterOpts, startOpts)
+		return roachprod.Start(args[0], clusterOpts(), startOpts)
 	}),
 }
 
@@ -480,17 +414,16 @@ var stopCmd = &cobra.Command{
 
 Stop roachprod created processes running on the nodes in a cluster, including
 processes started by the "start", "run" and "ssh" commands. Every process
-started by roachprod is tagged with a ROACHPROD=<node> environment variable
-which is used by "stop" to locate the processes and terminate them. By default
-processes are killed with signal 9 (SIGKILL) giving them no chance for a graceful
-exit.
+started by roachprod is tagged with a ROACHPROD environment variable which is
+used by "stop" to locate the processes and terminate them. By default processes
+are killed with signal 9 (SIGKILL) giving them no chance for a graceful exit.
 
 The --sig flag will pass a signal to kill to allow us finer control over how we
 shutdown cockroach. The --wait flag causes stop to loop waiting for all
-processes with the ROACHPROD=<node> environment variable to exit. Note that
-stop will wait forever if you specify --wait with a non-terminating signal
-(e.g. SIGHUP). --wait defaults to true for signal 9 (SIGKILL) and false for all
-other signals.
+processes with the right ROACHPROD environment variable to exit. Note that stop
+will wait forever if you specify --wait with a non-terminating signal (e.g.
+SIGHUP). --wait defaults to true for signal 9 (SIGKILL) and false for all other
+signals.
 ` + tagHelp + `
 `,
 	Args: cobra.ExactArgs(1),
@@ -499,12 +432,7 @@ other signals.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Stop(clusterOpts, sig, wait)
+		return roachprod.Stop(args[0], clusterOpts(), sig, wait)
 	}),
 }
 
@@ -519,12 +447,7 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Init(clusterOpts, username)
+		return roachprod.Init(args[0], clusterOpts(), username)
 	}),
 }
 
@@ -544,12 +467,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Status(clusterOpts)
+		return roachprod.Status(args[0], clusterOpts())
 	}),
 }
 
@@ -564,11 +482,6 @@ into a single stream.
 `,
 	Args: cobra.RangeArgs(1, 2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
 		logsOpts := roachprod.LogsOpts{
 			Dir: logsDir, Filter: logsFilter, ProgramFilter: logsProgramFilter,
 			Interval: logsInterval, From: logsFrom, To: logsTo, Out: cmd.OutOrStdout(),
@@ -577,9 +490,9 @@ into a single stream.
 		if len(args) == 2 {
 			dest = args[1]
 		} else {
-			dest = clusterOpts.Name + ".logs"
+			dest = args[0] + ".logs"
 		}
-		return roachprod.Logs(logsOpts, clusterOpts, dest, username)
+		return roachprod.Logs(logsOpts, args[0], clusterOpts(), dest, username)
 	}),
 }
 
@@ -602,12 +515,7 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Monitor(clusterOpts, monitorIgnoreEmptyNodes, monitorOneShot)
+		return roachprod.Monitor(args[0], clusterOpts(), monitorIgnoreEmptyNodes, monitorOneShot)
 	}),
 }
 
@@ -622,12 +530,7 @@ nodes.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Wipe(clusterOpts, wipePreserveCerts)
+		return roachprod.Wipe(args[0], clusterOpts(), wipePreserveCerts)
 	}),
 }
 
@@ -657,12 +560,7 @@ the 'zfs rollback' command:
 
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Reformat(clusterOpts, args[1])
+		return roachprod.Reformat(args[0], clusterOpts(), args[1])
 	}),
 }
 
@@ -674,12 +572,7 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Run(clusterOpts, extraSSHOptions, args[1:])
+		return roachprod.Run(args[0], clusterOpts(), extraSSHOptions, args[1:])
 	}),
 }
 
@@ -690,12 +583,7 @@ var resetCmd = &cobra.Command{
 environments and will fall back to a no-op.`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Reset(clusterOpts, numNodes, username)
+		return roachprod.Reset(args[0], clusterOpts(), numNodes, username)
 	}),
 }
 
@@ -708,12 +596,7 @@ var installCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Install(clusterOpts, args[1:])
+		return roachprod.Install(args[0], clusterOpts(), args[1:])
 	}),
 }
 
@@ -723,17 +606,12 @@ var downloadCmd = &cobra.Command{
 	Long:  "Downloads 3rd party tools, using a GCS cache if possible.",
 	Args:  cobra.RangeArgs(3, 4),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
 		src, sha := args[1], args[2]
 		var dest string
 		if len(args) == 4 {
 			dest = args[3]
 		}
-		return roachprod.Download(clusterOpts, src, sha, dest)
+		return roachprod.Download(args[0], clusterOpts(), src, sha, dest)
 	}),
 }
 
@@ -790,16 +668,11 @@ Some examples of usage:
 `,
 	Args: cobra.RangeArgs(2, 3),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
 		versionArg := ""
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(clusterOpts, stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(args[0], clusterOpts(), stageOS, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -813,12 +686,7 @@ start."
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.DistributeCerts(clusterOpts)
+		return roachprod.DistributeCerts(args[0], clusterOpts())
 	}),
 }
 
@@ -834,12 +702,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Put(clusterOpts, src, dest)
+		return roachprod.Put(args[0], clusterOpts(), src, dest)
 	}),
 }
 
@@ -856,12 +719,7 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.Get(clusterOpts, src, dest)
+		return roachprod.Get(args[0], clusterOpts(), src, dest)
 	}),
 }
 
@@ -871,12 +729,7 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.SQL(clusterOpts, sqlCockroachBinary, args[1:])
+		return roachprod.SQL(args[0], clusterOpts(), args[1:])
 	}),
 }
 
@@ -887,12 +740,7 @@ var pgurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.PgURL(clusterOpts, external)
+		return roachprod.PgURL(args[0], clusterOpts(), external)
 	}),
 }
 
@@ -922,15 +770,10 @@ Examples:
     roachprod pprof-heap CLUSTERNAME:1
 `,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
 		if cmd.CalledAs() == "pprof-heap" {
 			pprofOptions.heap = true
 		}
-		return roachprod.Pprof(clusterOpts, pprofOptions.duration, pprofOptions.heap, pprofOptions.open, pprofOptions.startingPort)
+		return roachprod.Pprof(args[0], clusterOpts(), pprofOptions.duration, pprofOptions.heap, pprofOptions.open, pprofOptions.startingPort)
 	}),
 }
 
@@ -942,12 +785,7 @@ var adminurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		return roachprod.AdminURL(clusterOpts, adminurlIPs, adminurlOpen, adminurlPath)
+		return roachprod.AdminURL(args[0], clusterOpts(), adminurlIPs, adminurlOpen, adminurlPath)
 	}),
 }
 
@@ -958,12 +796,7 @@ var ipCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterOpts := install.SyncedCluster{
-			Name: args[0], Tag: tag, CertsDir: certsDir, Secure: secure,
-			Quiet: quiet, UseTreeDist: useTreeDist, Args: nodeArgs,
-			Env: nodeEnv, NumRacks: numRacks, MaxConcurrency: maxConcurrency,
-		}
-		ips, err := roachprod.IP(clusterOpts, external)
+		ips, err := roachprod.IP(args[0], clusterOpts(), external)
 		if err != nil {
 			return err
 		}
@@ -984,6 +817,8 @@ var versionCmd = &cobra.Command{
 }
 
 func main() {
+	roachprod.InitProviders()
+
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
 	// order to separate the commands into logical groups.
@@ -1022,223 +857,13 @@ func main() {
 		cachedHostsCmd,
 		versionCmd,
 	)
-	rootCmd.BashCompletionFunction = fmt.Sprintf(`__custom_func()
-	{
-		# only complete the 2nd arg, e.g. adminurl <foo>
-		if ! [ $c -eq 2 ]; then
-			return
-		fi
+	setBashCompletionFunction()
 
-		# don't complete commands which do not accept a cluster/host arg
-		case ${last_command} in
-			%s)
-				return
-				;;
-		esac
-
-		local hosts_out
-		if hosts_out=$(roachprod cached-hosts --cluster="${cur}" 2>/dev/null); then
-				COMPREPLY=( $( compgen -W "${hosts_out[*]}" -- "$cur" ) )
-		fi
-
-	}`,
-		strings.Join(func(cmds ...*cobra.Command) (s []string) {
-			for _, cmd := range cmds {
-				s = append(s, fmt.Sprintf("%s_%s", rootCmd.Name(), cmd.Name()))
-			}
-			return s
-		}(createCmd, listCmd, syncCmd, gcCmd), " | "),
-	)
-
-	rootCmd.PersistentFlags().BoolVarP(
-		&quiet, "quiet", "q", false, "disable fancy progress output")
-	rootCmd.PersistentFlags().IntVarP(
-		&maxConcurrency, "max-concurrency", "", 32,
-		"maximum number of operations to execute on nodes concurrently, set to zero for infinite")
-	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
-		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
-			"Username to run under, detect if blank")
-	}
-
-	for _, cmd := range []*cobra.Command{statusCmd, monitorCmd, startCmd,
-		stopCmd, runCmd, wipeCmd, reformatCmd, installCmd, putCmd, getCmd,
-		sqlCmd, pgurlCmd, adminurlCmd, ipCmd,
-	} {
-		cmd.Flags().BoolVar(
-			&ssh.InsecureIgnoreHostKey, "insecure-ignore-host-key", true, "don't check ssh host keys")
-	}
-
-	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
-		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
-	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
-		"local-ssd", true, "Use local SSD")
-	createCmd.Flags().StringVar(&createVMOpts.SSDOpts.FileSystem,
-		"filesystem", vm.Ext4, "The underlying file system(ext4/zfs). ext4 is used by default.")
-	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.NoExt4Barrier,
-		"local-ssd-no-ext4-barrier", true,
-		`Mount the local SSD with the "-o nobarrier" flag. `+
-			`Ignored if --local-ssd=false is specified.`)
-	createCmd.Flags().IntVarP(&numNodes,
-		"nodes", "n", 4, "Total number of nodes, distributed across all clouds")
-
-	createCmd.Flags().IntVarP(&createVMOpts.OsVolumeSize,
-		"os-volume-size", "", 10, "OS disk volume size in GB")
-
-	createCmd.Flags().StringSliceVarP(&createVMOpts.VMProviders,
-		"clouds", "c", []string{gce.ProviderName},
-		fmt.Sprintf("The cloud provider(s) to use when creating new vm instances: %s", vm.AllProviderNames()))
-	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
-		"geo", false, "Create geo-distributed cluster")
-	// Allow each Provider to inject additional configuration flags
-	for _, p := range vm.Providers {
-		p.Flags().ConfigureCreateFlags(createCmd.Flags())
-
-		for _, cmd := range []*cobra.Command{
-			destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
-		} {
-			p.Flags().ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
-		}
-		// createCmd only accepts a single GCE project, as opposed to all the other
-		// commands.
-		p.Flags().ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
-	}
-
-	destroyCmd.Flags().BoolVarP(&destroyAllMine,
-		"all-mine", "m", false, "Destroy all clusters belonging to the current user")
-
-	extendCmd.Flags().DurationVarP(&extendLifetime,
-		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
-
-	listCmd.Flags().BoolVarP(&listDetails,
-		"details", "d", false, "Show cluster details")
-	listCmd.Flags().BoolVar(&listJSON,
-		"json", false, "Show cluster specs in a json format")
-	listCmd.Flags().BoolVarP(&listMine,
-		"mine", "m", false, "Show only clusters belonging to the current user")
-	listCmd.Flags().StringVar(&listPattern,
-		"pattern", "", "Show only clusters matching the regex pattern. Empty string matches everything.")
-
-	adminurlCmd.Flags().BoolVar(
-		&adminurlOpen, `open`, false, `Open the url in a browser`)
-	adminurlCmd.Flags().StringVar(
-		&adminurlPath, `path`, "/", `Path to add to URL (e.g. to open a same page on each node)`)
-	adminurlCmd.Flags().BoolVar(
-		&adminurlIPs, `ips`, false, `Use Public IPs instead of DNS names in URL`)
-
-	gcCmd.Flags().BoolVarP(
-		&dryrun, "dry-run", "n", dryrun, "dry run (don't perform any actions)")
-	gcCmd.Flags().StringVar(&config.SlackToken, "slack-token", "", "Slack bot token")
-
-	pgurlCmd.Flags().BoolVar(
-		&external, "external", false, "return pgurls for external connections")
-	pgurlCmd.Flags().StringVar(
-		&certsDir, "certs-dir", "./certs", "cert dir to use for secure connections")
-
-	pprofCmd.Flags().DurationVar(
-		&pprofOptions.duration, "duration", 30*time.Second, "Duration of profile to capture")
-	pprofCmd.Flags().BoolVar(
-		&pprofOptions.heap, "heap", false, "Capture a heap profile instead of a CPU profile")
-	pprofCmd.Flags().BoolVar(
-		&pprofOptions.open, "open", false, "Open the profile using `go tool pprof -http`")
-	pprofCmd.Flags().IntVar(
-		&pprofOptions.startingPort, "starting-port", 9000, "Initial port to use when opening pprof's HTTP interface")
-
-	ipCmd.Flags().BoolVar(
-		&external, "external", false, "return external IP addresses")
-
-	runCmd.Flags().BoolVar(
-		&secure, "secure", false, "use a secure cluster")
-	runCmd.Flags().StringVarP(
-		&extraSSHOptions, "ssh-options", "O", "", "extra args to pass to ssh")
-
-	startCmd.Flags().IntVarP(&numRacks,
-		"racks", "r", 0, "the number of racks to partition the nodes into")
-
-	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
-	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
-
-	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
-
-	for _, cmd := range []*cobra.Command{
-		startCmd, statusCmd, stopCmd, runCmd,
-	} {
-		cmd.Flags().StringVar(
-			&tag, "tag", "", "the process tag")
-	}
-
-	for _, cmd := range []*cobra.Command{
-		startCmd, putCmd, getCmd,
-	} {
-		cmd.Flags().BoolVar(new(bool), "scp", false, "DEPRECATED")
-		_ = cmd.Flags().MarkDeprecated("scp", "always true")
-	}
-
-	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
-
-	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
-	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
-
-	stageURLCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
-
-	logsCmd.Flags().StringVar(
-		&logsFilter, "filter", "", "re to filter log messages")
-	logsCmd.Flags().Var(
-		flagutil.Time(&logsFrom), "from", "time from which to stream logs")
-	logsCmd.Flags().Var(
-		flagutil.Time(&logsTo), "to", "time to which to stream logs")
-	logsCmd.Flags().DurationVar(
-		&logsInterval, "interval", 200*time.Millisecond, "interval to poll logs from host")
-	logsCmd.Flags().StringVar(
-		&logsDir, "logs-dir", "logs", "path to the logs dir, if remote, relative to username's home dir, ignored if local")
-	logsCmd.Flags().StringVar(
-		&logsProgramFilter, "logs-program", "^cockroach$", "regular expression of the name of program in log files to search")
-
-	monitorCmd.Flags().BoolVar(
-		&monitorIgnoreEmptyNodes,
-		"ignore-empty-nodes",
-		false,
-		"Automatically detect the (subset of the given) nodes which to monitor "+
-			"based on the presence of a nontrivial data directory.")
-
-	monitorCmd.Flags().BoolVar(
-		&monitorOneShot,
-		"oneshot",
-		false,
-		"Report the status of all targeted nodes once, then exit. The exit "+
-			"status is nonzero if (and only if) any node was found not running.")
-
-	cachedHostsCmd.Flags().StringVar(&cachedHostsCluster, "cluster", "", "print hosts matching cluster")
-
+	// Add help about specifying nodes
 	for _, cmd := range []*cobra.Command{
 		getCmd, putCmd, runCmd, startCmd, statusCmd, stopCmd,
 		wipeCmd, pgurlCmd, adminurlCmd, sqlCmd, installCmd,
 	} {
-		switch cmd {
-		case startCmd:
-			cmd.Flags().BoolVar(
-				&startOpts.Sequential, "sequential", true,
-				"start nodes sequentially so node IDs match hostnames")
-			cmd.Flags().StringArrayVarP(
-				&nodeArgs, "args", "a", nil, "node arguments")
-			cmd.Flags().StringArrayVarP(
-				&nodeEnv, "env", "e", nodeEnv, "node environment variables")
-			cmd.Flags().BoolVar(
-				&startOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
-			cmd.Flags().BoolVar(
-				&startOpts.SkipInit, "skip-init", skipInit, "skip initializing the cluster")
-			cmd.Flags().IntVar(
-				&startOpts.StoreCount, "store-count", 1, "number of stores to start each node with")
-			fallthrough
-		case sqlCmd:
-			cmd.Flags().StringVarP(
-				&sqlCockroachBinary, "binary", "b", "cockroach",
-				"the remote cockroach binary to use")
-			fallthrough
-		case pgurlCmd, adminurlCmd:
-			cmd.Flags().BoolVar(
-				&secure, "secure", false, "use a secure cluster")
-		}
-
 		if cmd.Long == "" {
 			cmd.Long = cmd.Short
 		}
@@ -1261,6 +886,8 @@ Node specification
     marc-test-9
 `, cmd.Name())
 	}
+
+	initFlags()
 
 	var err error
 	config.OSUser, err = user.Current()

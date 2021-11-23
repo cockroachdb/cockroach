@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 )
 
 // Context defaults.
@@ -403,6 +405,11 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	// NB: The OnChange callback will be called on server startup when the version
+	// is initialized.
+	st.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
+		tr.SetBackwardsCompatibilityWith211(!newVersion.IsActive(clusterversion.TraceIDDoesntImplyStructuredRecording))
+	})
 	baseCfg := MakeBaseConfig(st, tr)
 	kvCfg := MakeKVConfig(storeSpec)
 
@@ -477,7 +484,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
-	details := []string{fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
+	details := []redact.RedactableString{redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
 	pebbleCache := pebble.NewCache(cfg.CacheSize)
 	defer pebbleCache.Unref()
 
@@ -520,7 +527,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
+			details = append(details, redact.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
 			if spec.StickyInMemoryEngineID != "" {
 				if cfg.TestingKnobs.Server == nil {
@@ -538,6 +545,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				if err != nil {
 					return Engines{}, err
 				}
+				details = append(details, redact.Sprintf("store %d: %+v", i, e.Properties()))
 				engines = append(engines, e)
 			} else {
 				e, err := storage.Open(ctx,
@@ -569,7 +577,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
-			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
+			details = append(details, redact.Sprintf("store %d: max size %s, max open file limit %d",
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
@@ -603,6 +611,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, err
 			}
+			details = append(details, redact.Sprintf("store %d: %+v", i, eng.Properties()))
 			engines = append(engines, eng)
 		}
 	}

@@ -756,7 +756,7 @@ project
  ├── columns: count:21(int!null)
  ├── immutable
  ├── stats: [rows=0.333333333]
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2(geography!null) count_rows:21(int!null)
       ├── grouping columns: b:2(geography!null)
       ├── immutable

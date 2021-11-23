@@ -109,7 +109,7 @@ back to this document and perform these steps:
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile)).
 * [ ] Adjust version in the TeamCity agent image ([setup script](./packer/teamcity-agent.sh))
 * [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
-/* [ ] Download ALL the archives (`.tar.gz`, `.zip`) for the new Go version from https://golang.org/dl/ and mirror them in the `public-bazel-artifacts` bucket in the `Bazel artifacts` project in GCP (sub-directory `go`, next to the other Go SDK's).
+* [ ] Download ALL the archives (`.tar.gz`, `.zip`) for the new Go version from https://golang.org/dl/ and mirror them in the `public-bazel-artifacts` bucket in the `Bazel artifacts` project in GCP (sub-directory `go`, next to the other Go SDK's).
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases).
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
@@ -166,7 +166,11 @@ file on your local branch, 2) push a commit containing this import to the `vendo
 6. Run `cd vendor && git diff && cd ..`  to ensure the vendor directory contains the package(s)
    you imported
 7. Run `make buildshort` to ensure your code compiles.
-8. Run `./dev generate bazel` to regenerate DEPS.bzl with the updated Go dependency information.
+8. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
+   Note that you need engineer permissions to mirror dependencies; if you want to get the Bazel build
+   working locally without mirroring, `./dev generate bazel` will work, but you won't be able to check
+   your changes in. (Assuming that you do have engineer permissions, you can run
+   `gcloud auth application-default login` to authenticate if you get a credentials error.)
 9. Follow instructions for [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
 
 ### Updating a Dependency

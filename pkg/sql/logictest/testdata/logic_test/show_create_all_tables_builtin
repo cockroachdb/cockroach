@@ -2,7 +2,8 @@ statement error pq: crdb_internal.show_create_all_tables: database "d" does not 
 SELECT crdb_internal.show_create_all_tables('d')
 
 statement ok
-CREATE DATABASE d
+CREATE DATABASE d;
+REVOKE CONNECT ON DATABASE d FROM public
 
 query T
 SELECT crdb_internal.show_create_all_tables('d')

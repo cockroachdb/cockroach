@@ -38,6 +38,7 @@ const (
 	OptKeyInValue               = `key_in_value`
 	OptTopicInValue             = `topic_in_value`
 	OptResolvedTimestamps       = `resolved`
+	OptMinCheckpointFrequency   = `min_checkpoint_frequency`
 	OptUpdatedTimestamps        = `updated`
 	OptMVCCTimestamps           = `mvcc_timestamp`
 	OptDiff                     = `diff`
@@ -48,6 +49,7 @@ const (
 	OptWebhookAuthHeader        = `webhook_auth_header`
 	OptWebhookClientTimeout     = `webhook_client_timeout`
 	OptOnError                  = `on_error`
+	OptMetricsScope             = `metrics_label`
 
 	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
 	// events which add or remove any column.
@@ -152,6 +154,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptKeyInValue:               sql.KVStringOptRequireNoValue,
 	OptTopicInValue:             sql.KVStringOptRequireNoValue,
 	OptResolvedTimestamps:       sql.KVStringOptAny,
+	OptMinCheckpointFrequency:   sql.KVStringOptRequireValue,
 	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
 	OptMVCCTimestamps:           sql.KVStringOptRequireNoValue,
 	OptDiff:                     sql.KVStringOptRequireNoValue,
@@ -166,6 +169,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptWebhookAuthHeader:        sql.KVStringOptRequireValue,
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
 	OptOnError:                  sql.KVStringOptRequireValue,
+	OptMetricsScope:             sql.KVStringOptRequireValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -184,7 +188,8 @@ var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
 	OptMVCCTimestamps, OptDiff,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
-	OptInitialScan, OptNoInitialScan)
+	OptInitialScan, OptNoInitialScan,
+	OptMinCheckpointFrequency, OptMetricsScope)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil

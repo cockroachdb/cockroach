@@ -55,24 +55,6 @@ func TestFormatSafeDescriptorProperties(t *testing.T) {
 			}).BuildCreatedMutable(),
 			exp: "ID: 12, Version: 1, IsUncommitted: true, ModificationTime: \"0,0\", State: PUBLIC",
 		},
-		{
-			desc: func() catalog.Descriptor {
-				desc := tabledesc.NewBuilder(&descpb.TableDescriptor{
-					ID:                      27,
-					Version:                 2,
-					ParentID:                12,
-					UnexposedParentSchemaID: 51,
-					State:                   descpb.DescriptorState_PUBLIC,
-				}).BuildExistingMutableTable()
-				desc.MaybeIncrementVersion()
-				desc.AddDrainingName(descpb.NameInfo{
-					ParentID:       12,
-					ParentSchemaID: 51,
-				})
-				return desc.ImmutableCopy()
-			}(),
-			exp: "ID: 27, Version: 3, IsUncommitted: true, ModificationTime: \"0,0\", ParentID: 12, ParentSchemaID: 51, State: PUBLIC, NumDrainingNames: 1",
-		},
 	} {
 		t.Run("", func(t *testing.T) {
 			var buf redact.StringBuilder

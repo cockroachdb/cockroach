@@ -193,8 +193,9 @@ func (f *RangeFeed) Start(ctx context.Context) error {
 	return nil
 }
 
-// Close closes the RangeFeed and waits for it to shut down.
-// Close is idempotent.
+// Close closes the RangeFeed and waits for it to shut down; it does so
+// idempotently. It waits for the currently running handler, if any, to complete
+// and guarantees that no future handlers will be invoked after this point.
 func (f *RangeFeed) Close() {
 	f.closeOnce.Do(func() {
 		f.cancel()

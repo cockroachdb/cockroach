@@ -103,14 +103,16 @@ var retiredSettings = map[string]struct{}{
 	"kv.closed_timestamp.close_fraction":                             {},
 	"sql.telemetry.query_sampling.qps_threshold":                     {},
 	"sql.telemetry.query_sampling.sample_rate":                       {},
+	"diagnostics.sql_stat_reset.interval":                            {},
 
 	// removed as of 22.1.
-	"sql.defaults.drop_enum_value.enabled":    {},
-	"trace.lightstep.token":                   {},
-	"trace.datadog.agent":                     {},
-	"trace.datadog.project":                   {},
-	"sql.defaults.interleaved_tables.enabled": {},
-	"server.declined_reservation_timeout":     {},
+	"sql.defaults.drop_enum_value.enabled":                             {},
+	"trace.lightstep.token":                                            {},
+	"trace.datadog.agent":                                              {},
+	"trace.datadog.project":                                            {},
+	"sql.defaults.interleaved_tables.enabled":                          {},
+	"sql.defaults.copy_partitioning_when_deinterleaving_table.enabled": {},
+	"server.declined_reservation_timeout":                              {},
 }
 
 // register adds a setting to the registry.

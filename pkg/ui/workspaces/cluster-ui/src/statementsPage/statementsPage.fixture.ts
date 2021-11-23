@@ -267,6 +267,20 @@ const statementsPagePropsFixture: StatementsPageProps = {
     "3": "gcp-us-west1",
     "4": "gcp-europe-west1",
   },
+  sortSetting: {
+    ascending: false,
+    columnTitle: "executionCount"
+  },
+  filters: {
+    app: "",
+    timeNumber: "0",
+    timeUnit: "seconds",
+    fullScan: false,
+    sqlType: "",
+    database: "",
+    regions: "",
+    nodes: "",
+  },
   statements: [
     {
       label:
@@ -738,6 +752,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onSearchComplete: noop,
   onDiagnosticsReportDownload: noop,
   onColumnsChange: noop,
+  onSortingChange: noop,
+  onFilterChange: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {

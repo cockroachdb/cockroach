@@ -121,14 +121,16 @@ func (h *unreliableRaftHandler) HandleRaftResponse(
 }
 
 func (h *unreliableRaftHandler) HandleSnapshot(
-	header *kvserver.SnapshotRequest_Header, respStream kvserver.SnapshotResponseStream,
+	ctx context.Context,
+	header *kvserver.SnapshotRequest_Header,
+	respStream kvserver.SnapshotResponseStream,
 ) error {
 	if header.RaftMessageRequest.RangeID == h.rangeID && h.snapErr != nil {
 		if err := h.snapErr(header); err != nil {
 			return err
 		}
 	}
-	return h.RaftMessageHandler.HandleSnapshot(header, respStream)
+	return h.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // testClusterStoreRaftMessageHandler exists to allows a store to be stopped and
@@ -166,13 +168,15 @@ func (h *testClusterStoreRaftMessageHandler) HandleRaftResponse(
 }
 
 func (h *testClusterStoreRaftMessageHandler) HandleSnapshot(
-	header *kvserver.SnapshotRequest_Header, respStream kvserver.SnapshotResponseStream,
+	ctx context.Context,
+	header *kvserver.SnapshotRequest_Header,
+	respStream kvserver.SnapshotResponseStream,
 ) error {
 	store, err := h.getStore()
 	if err != nil {
 		return err
 	}
-	return store.HandleSnapshot(header, respStream)
+	return store.HandleSnapshot(ctx, header, respStream)
 }
 
 // testClusterPartitionedRange is a convenient abstraction to create a range on a node

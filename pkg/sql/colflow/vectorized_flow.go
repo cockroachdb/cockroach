@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -309,7 +310,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if util.CrdbTestBuild && f.FlowBase.Started() {
+	if buildutil.CrdbTestBuild && f.FlowBase.Started() {
 		// Check that all closers have been closed. Note that we don't check
 		// this in case the flow was never started in the first place (it is ok
 		// to not check this since closers haven't allocated any resources in
@@ -543,18 +544,13 @@ type vectorizedFlowCreator struct {
 	opChains execinfra.OpChains
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
-	// monitors contains all monitors (for both memory and disk usage) of the
-	// components in the vectorized flow.
-	monitors []*mon.BytesMonitor
-	// accounts contains all monitors (for both memory and disk usage) of the
-	// components in the vectorized flow.
-	accounts []*mon.BoundAccount
 	// releasables contains all components that should be released back to their
 	// pools during the flow cleanup.
 	releasables []execinfra.Releasable
 
-	diskQueueCfg colcontainer.DiskQueueCfg
-	fdSemaphore  semaphore.Semaphore
+	monitorRegistry colexecargs.MonitorRegistry
+	diskQueueCfg    colcontainer.DiskQueueCfg
+	fdSemaphore     semaphore.Semaphore
 
 	// numClosers and numClosed are used to assert during testing that the
 	// expected number of components are closed.
@@ -607,9 +603,8 @@ func newVectorizedFlowCreator(
 		admissionInfo:          admissionInfo,
 		procIdxQueue:           creator.procIdxQueue,
 		opChains:               creator.opChains,
-		monitors:               creator.monitors,
-		accounts:               creator.accounts,
 		releasables:            creator.releasables,
+		monitorRegistry:        creator.monitorRegistry,
 		diskQueueCfg:           diskQueueCfg,
 		fdSemaphore:            fdSemaphore,
 	}
@@ -617,12 +612,7 @@ func newVectorizedFlowCreator(
 }
 
 func (s *vectorizedFlowCreator) cleanup(ctx context.Context) {
-	for _, acc := range s.accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range s.monitors {
-		mon.Stop(ctx)
-	}
+	s.monitorRegistry.Close(ctx)
 }
 
 // Release implements the execinfra.Releasable interface.
@@ -649,66 +639,19 @@ func (s *vectorizedFlowCreator) Release() {
 	if s.exprHelper != nil {
 		s.exprHelper.SemaCtx = nil
 	}
+	s.monitorRegistry.Reset()
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp: s.streamIDToInputOp,
 		streamIDToSpecIdx: s.streamIDToSpecIdx,
 		exprHelper:        s.exprHelper,
 		// procIdxQueue is a slice of ints, so it's ok to just slice up to 0 to
 		// prime it for reuse.
-		procIdxQueue: s.procIdxQueue[:0],
-		opChains:     s.opChains[:0],
-		// There is no need to deeply reset the memory monitoring infra slices
-		// because these objects are very tiny in the grand scheme of things.
-		monitors:    s.monitors[:0],
-		accounts:    s.accounts[:0],
-		releasables: s.releasables[:0],
+		procIdxQueue:    s.procIdxQueue[:0],
+		opChains:        s.opChains[:0],
+		releasables:     s.releasables[:0],
+		monitorRegistry: s.monitorRegistry,
 	}
 	vectorizedFlowCreatorPool.Put(s)
-}
-
-// createBufferingUnlimitedMemMonitor instantiates an unlimited memory monitor.
-// These should only be used when spilling to disk and an operator is made aware
-// of a memory usage limit separately.
-// The receiver is updated to have a reference to the unlimited memory monitor.
-// TODO(asubiotto): This identical to the helper function in
-//  NewColOperatorResult, meaning that we should probably find a way to refactor
-//  this.
-func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BytesMonitor {
-	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
-	)
-	s.monitors = append(s.monitors, bufferingOpUnlimitedMemMonitor)
-	return bufferingOpUnlimitedMemMonitor
-}
-
-// createDiskAccounts instantiates an unlimited disk monitor and disk accounts
-// to be used for disk spilling infrastructure in vectorized engine.
-// TODO(azhng): consolidate all allocation monitors/account management into one
-// place after branch cut for 20.1.
-func (s *vectorizedFlowCreator) createDiskAccounts(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, numAccounts int,
-) (*mon.BytesMonitor, []*mon.BoundAccount) {
-	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, name)
-	s.monitors = append(s.monitors, diskMonitor)
-	diskAccounts := make([]*mon.BoundAccount, numAccounts)
-	for i := range diskAccounts {
-		diskAcc := diskMonitor.MakeBoundAccount()
-		diskAccounts[i] = &diskAcc
-	}
-	s.accounts = append(s.accounts, diskAccounts...)
-	return diskMonitor, diskAccounts
-}
-
-// newStreamingMemAccount creates a new memory account bound to the monitor in
-// flowCtx and accumulates it into streamingMemAccounts slice.
-func (s *vectorizedFlowCreator) newStreamingMemAccount(
-	flowCtx *execinfra.FlowCtx,
-) *mon.BoundAccount {
-	streamingMemAccount := flowCtx.EvalCtx.Mon.MakeBoundAccount()
-	s.accounts = append(s.accounts, &streamingMemAccount)
-	return &streamingMemAccount
 }
 
 // setupRemoteOutputStream sets up an Outbox that will operate according to
@@ -725,7 +668,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	getStats func() []*execinfrapb.ComponentStats,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+		colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 		op, outputTyps, getStats,
 	)
 	if err != nil {
@@ -787,14 +730,12 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	mmName := "hash-router-[" + strings.Join(streamIDs, ",") + "]"
 
-	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, mmName)
+	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	allocators := make([]*colmem.Allocator, len(output.Streams))
 	for i := range allocators {
-		acc := hashRouterMemMonitor.MakeBoundAccount()
-		allocators[i] = colmem.NewAllocator(ctx, &acc, factory)
-		s.accounts = append(s.accounts, &acc)
+		allocators[i] = colmem.NewAllocator(ctx, accounts[i], factory)
 	}
-	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	diskMon, diskAccounts := s.monitorRegistry.CreateDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx),
 		s.diskQueueCfg, s.fdSemaphore, diskAccounts,
@@ -806,7 +747,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 
 	foundLocalOutput := false
 	for i, op := range outputs {
-		if util.CrdbTestBuild {
+		if buildutil.CrdbTestBuild {
 			op = colexec.NewInvariantsChecker(op)
 		}
 		stream := &output.Streams[i]
@@ -901,7 +842,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", err)
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
-				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 				input.ColumnTypes,
 				inputStream.StreamID,
 				admissionOptions{
@@ -915,7 +856,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecop.Operator(inbox)
 			ms := colexecop.MetadataSource(inbox)
-			if util.CrdbTestBuild {
+			if buildutil.CrdbTestBuild {
 				op = colexec.NewInvariantsChecker(op)
 				ms = op.(colexecop.MetadataSource)
 			}
@@ -941,7 +882,7 @@ func (s *vectorizedFlowCreator) setupInput(
 		statsInputs := inputStreamOps
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			os := colexec.NewOrderedSynchronizer(
-				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 				execinfra.GetWorkMemLimit(flowCtx), inputStreamOps,
 				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
@@ -974,7 +915,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// instead.
 			statsInputs = nil
 		}
-		if util.CrdbTestBuild {
+		if buildutil.CrdbTestBuild {
 			opWithMetaInfo.Root = colexec.NewInvariantsChecker(opWithMetaInfo.Root)
 			opWithMetaInfo.MetadataSources[0] = opWithMetaInfo.Root.(colexecop.MetadataSource)
 		}
@@ -1060,7 +1001,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// We need to use the row receiving output.
 			if input != nil {
 				// We successfully removed the columnarizer.
-				if util.CrdbTestBuild {
+				if buildutil.CrdbTestBuild {
 					// That columnarizer was added as a closer, so we need to
 					// decrement the number of expected closers.
 					s.numClosers--
@@ -1143,14 +1084,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 
-			var inputs []colexecargs.OpWithMetaInfo
+			inputs := make([]colexecargs.OpWithMetaInfo, len(pspec.Input))
 			for i := range pspec.Input {
-				input, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
-				if localErr != nil {
-					err = localErr
+				inputs[i], err = s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
+				if err != nil {
 					return
 				}
-				inputs = append(inputs, input)
 			}
 
 			// Before we can safely use types we received over the wire in the
@@ -1162,25 +1101,22 @@ func (s *vectorizedFlowCreator) setupFlow(
 			args := &colexecargs.NewColOperatorArgs{
 				Spec:                 pspec,
 				Inputs:               inputs,
-				StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
+				StreamingMemAccount:  s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      localProcessors,
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
 				Factory:              factory,
+				MonitorRegistry:      &s.monitorRegistry,
 			}
+			numOldMonitors := len(s.monitorRegistry.GetMonitors())
 			if args.ExprHelper.SemaCtx == nil {
 				args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
 			}
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 			if result != nil {
-				// Even when err is non-nil, it is possible that the buffering memory
-				// monitor and account have been created, so we always want to accumulate
-				// them for a proper cleanup.
-				s.monitors = append(s.monitors, result.OpMonitors...)
-				s.accounts = append(s.accounts, result.OpAccounts...)
 				s.releasables = append(s.releasables, result)
 			}
 			if err != nil {
@@ -1190,7 +1126,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
 			}
-			if util.CrdbTestBuild {
+			if buildutil.CrdbTestBuild {
 				toCloseCopy := append(colexecop.Closers{}, result.ToClose...)
 				for i := range toCloseCopy {
 					func(idx int) {
@@ -1208,9 +1144,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 
 			if s.recordingStats {
+				newMonitors := s.monitorRegistry.GetMonitors()[numOldMonitors:]
 				if err := s.wrapWithVectorizedStatsCollectorBase(
 					&result.OpWithMetaInfo, result.KVReader, result.Columnarizer, inputs,
-					flowCtx.ProcessorComponentID(pspec.ProcessorID), result.OpMonitors,
+					flowCtx.ProcessorComponentID(pspec.ProcessorID), newMonitors,
 				); err != nil {
 					return
 				}

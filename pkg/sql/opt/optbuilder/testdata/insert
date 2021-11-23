@@ -1224,23 +1224,24 @@ insert decimals
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:9 => a:1
- │    ├── column2:8 => b:2
- │    ├── c_default:10 => c:3
- │    └── d_comp:11 => d:4
- ├── check columns: check1:12 check2:13
+ │    ├── column2:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    └── d_comp:12 => d:4
+ ├── check columns: check1:13 check2:14
  └── project
-      ├── columns: check1:12 check2:13 d_comp:11 column2:8!null column1:9 c_default:10!null
+      ├── columns: check1:13 check2:14 d_comp:12 column1:9 column2:10 c_default:11!null
       ├── values
-      │    ├── columns: column2:8!null c_default:10!null column1:9
+      │    ├── columns: c_default:11!null column1:9 column2:10
       │    └── tuple
-      │         ├── ARRAY[0.95,NULL,15]
       │         ├── 1.2
-      │         └── assignment-cast: DECIMAL(10)
-      │              └── 1.1
+      │         ├── assignment-cast: DECIMAL(10)
+      │         │    └── 1.1
+      │         └── assignment-cast: DECIMAL(5,1)[]
+      │              └── ARRAY[0.95,NULL,15]
       └── projections
-           ├── column1:9 = round(column1:9) [as=check1:12]
-           ├── CAST(NULL AS BOOL) [as=check2:13]
-           └── (column1:9::DECIMAL + 1.2)::DECIMAL(10,1) [as=d_comp:11]
+           ├── column1:9 = round(column1:9) [as=check1:13]
+           ├── column2:10[0] > 1 [as=check2:14]
+           └── (column1:9::DECIMAL + 1.2)::DECIMAL(10,1) [as=d_comp:12]
 
 build
 INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)

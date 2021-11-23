@@ -38,7 +38,7 @@ import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
 import { RangesMain } from "src/views/devtools/containers/raftRanges";
 import { RaftMessages } from "src/views/devtools/containers/raftMessages";
 import Raft from "src/views/devtools/containers/raft";
-import NotFound from "src/views/app/components/NotFound";
+import NotFound from "src/views/app/components/errorMessage/notFound";
 import { ProblemRanges } from "src/views/reports/containers/problemRanges";
 import { Localities } from "src/views/reports/containers/localities";
 import { Nodes } from "src/views/reports/containers/nodes";
@@ -339,12 +339,12 @@ describe("Routing to", () => {
   });
 
   describe("'/statement' path", () => {
-    it("redirected to '/sql-activity?tab=statements'", () => {
+    it("redirected to '/sql-activity?tab=Statements'", () => {
       navigateToPath("/statement");
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=statements",
+        "/sql-activity?tab=Statements",
       );
     });
   });
@@ -580,41 +580,41 @@ describe("Routing to", () => {
   });
 
   describe("'/unknown-url' path", () => {
-    it("routes to <NotFound> component", () => {
+    it("routes to <errorMessage> component", () => {
       navigateToPath("/some-random-ulr");
       assert.lengthOf(appWrapper.find(NotFound), 1);
     });
   });
 
   describe("'/statements' path", () => {
-    it("redirected to '/sql-activity?tab=statements'", () => {
+    it("redirected to '/sql-activity?tab=Statements'", () => {
       navigateToPath("/statements");
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=statements",
+        "/sql-activity?tab=Statements",
       );
     });
   });
 
   describe("'/sessions' path", () => {
-    it("redirected to '/sql-activity?tab=sessions'", () => {
+    it("redirected to '/sql-activity?tab=Sessions'", () => {
       navigateToPath("/sessions");
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=sessions",
+        "/sql-activity?tab=Sessions",
       );
     });
   });
 
   describe("'/transactions' path", () => {
-    it("redirected to '/sql-activity?tab=transactions'", () => {
+    it("redirected to '/sql-activity?tab=Transactions'", () => {
       navigateToPath("/transactions");
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=transactions",
+        "/sql-activity?tab=Transactions",
       );
     });
   });

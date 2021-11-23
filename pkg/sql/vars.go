@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -508,10 +509,10 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit), nil
+			return string(humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit)), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return humanizeutil.IBytes(settingWorkMemBytes.Get(sv))
+			return string(humanizeutil.IBytes(settingWorkMemBytes.Get(sv)))
 		},
 	},
 
@@ -1634,24 +1635,6 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	`enable_copying_partitioning_when_deinterleaving_table`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_stream_replication`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar(`enable_experimental_stream_replication`, s)
-			if err != nil {
-				return err
-			}
-			m.SetCopyPartitioningWhenDeinterleavingTable(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyPartitioningWhenDeinterleavingTable), nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(copyPartitioningWhenDeinterleavingTable.Get(sv))
-		},
-	},
-
 	`null_ordered_last`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`null_ordered_last`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -1796,6 +1779,46 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().InjectRetryErrorsEnabled), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`join_reader_ordering_strategy_batch_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			size, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if size <= 0 {
+				return errors.New("join_reader_ordering_strategy_batch_size can only be set to a positive value")
+			}
+			m.SetJoinReaderOrderingStrategyBatchSize(size)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderOrderingStrategyBatchSize)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return string(humanizeutil.IBytes(rowexec.JoinReaderOrderingStrategyBatchSize.Get(sv)))
+		},
+	},
+
+	// CockroachDB extension.
+	`parallelize_multi_key_lookup_joins_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`parallelize_multi_key_lookup_joins_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("parallelize_multi_key_lookup_joins_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetParallelizeMultiKeyLookupJoinsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return rowexec.ParallelizeMultiKeyLookupJoinsEnabled.String(sv)
+		},
 	},
 }
 

@@ -34,6 +34,7 @@ type blockingBuffer struct {
 	mu struct {
 		syncutil.Mutex
 		closed  bool             // True when buffer closed.
+		reason  error            // Reason buffer is closed.
 		drainCh chan struct{}    // Set when Drain request issued.
 		blocked bool             // Set when event is blocked, waiting to acquire quota.
 		queue   bufferEntryQueue // Queue of added events.
@@ -74,7 +75,7 @@ func (b *blockingBuffer) pop() (e *bufferEntry, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.mu.closed {
-		return nil, ErrBufferClosed
+		return nil, ErrBufferClosed{reason: b.mu.reason}
 	}
 
 	e = b.mu.queue.dequeue()
@@ -129,7 +130,6 @@ func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
 		if got != nil {
 			b.metrics.BufferEntriesOut.Inc(1)
 			e := got.e
-			e.bufferGetTimestamp = timeutil.Now()
 			bufferEntryPool.Put(got)
 			return e, nil
 		}
@@ -203,6 +203,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 		entries: 1,
 		ap:      &b.qp,
 	}
+	e.bufferAddTimestamp = timeutil.Now()
 	be := newBufferEntry(e)
 
 	if err := b.qp.Acquire(ctx, be); err != nil {
@@ -240,8 +241,8 @@ func (b *blockingBuffer) Drain(ctx context.Context) error {
 	return nil
 }
 
-// Close implements Writer interface.
-func (b *blockingBuffer) Close(ctx context.Context) error {
+// CloseWithReason implements Writer interface.
+func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) error {
 	// Close quota pool -- any requests waiting to acquire will receive an error.
 	b.qp.Close("blocking buffer closing")
 
@@ -276,6 +277,7 @@ func (b *blockingBuffer) Close(ctx context.Context) error {
 	}
 
 	b.mu.closed = true
+	b.mu.reason = reason
 	close(b.signalCh)
 
 	// Return all queued up entries to the buffer pool.

@@ -194,6 +194,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 		case *tree.AlterTableAddConstraint:
+			if skip, err := validateConstraintNameIsNotUsed(n.tableDesc, t); err != nil {
+				return err
+			} else if skip {
+				continue
+			}
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.WithoutIndex {
@@ -214,21 +219,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				if d.PrimaryKey {
-					// We only support "adding" a primary key when we are using the
-					// default rowid primary index or if a DROP PRIMARY KEY statement
-					// was processed before this statement. If a DROP PRIMARY KEY
-					// statement was processed, then n.tableDesc.HasPrimaryKey() = false.
-					if n.tableDesc.HasPrimaryKey() && !n.tableDesc.IsPrimaryIndexDefaultRowID() {
-						return pgerror.Newf(pgcode.InvalidTableDefinition,
-							"multiple primary keys for table %q are not allowed", n.tableDesc.Name)
-					}
-
 					// Translate this operation into an ALTER PRIMARY KEY command.
 					alterPK := &tree.AlterTableAlterPrimaryKey{
-						Columns:    d.Columns,
-						Sharded:    d.Sharded,
-						Interleave: d.Interleave,
-						Name:       d.Name,
+						Columns: d.Columns,
+						Sharded: d.Sharded,
+						Name:    d.Name,
 					}
 					if err := params.p.AlterPrimaryKey(
 						params.ctx,
@@ -276,11 +271,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-				}
-				// If the index is named, ensure that the name is unique.
-				// Unnamed indexes will be given a unique auto-generated name later on.
-				if d.Name != "" && n.tableDesc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
-					return pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
@@ -819,7 +809,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateCheckInTxn(
-					params.ctx, params.p.LeaseMgr(), &params.p.semaCtx, params.EvalContext(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
+					params.ctx, &params.p.semaCtx, params.EvalContext(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
 				); err != nil {
 					return err
 				}
@@ -1505,14 +1495,44 @@ func injectTableStats(
 				return err
 			}
 		}
-		var name interface{}
-		if s.Name != "" {
-			name = s.Name
+
+		if err := insertJSONStatistic(params, desc.GetID(), columnIDs, s, histogram); err != nil {
+			return errors.Wrap(err, "failed to insert stats")
 		}
-		if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-			params.ctx,
+	}
+
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (the cache would
+	// normally be updated asynchronously).
+	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.GetID())
+
+	return nil
+}
+
+func insertJSONStatistic(
+	params runParams,
+	tableID descpb.ID,
+	columnIDs *tree.DArray,
+	s *stats.JSONStatistic,
+	histogram interface{},
+) error {
+	var (
+		ctx      = params.ctx
+		ie       = params.ExecCfg().InternalExecutor
+		txn      = params.EvalContext().Txn
+		settings = params.ExecCfg().Settings
+	)
+
+	var name interface{}
+	if s.Name != "" {
+		name = s.Name
+	}
+
+	if !settings.Version.IsActive(params.ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
+		_ /* rows */, err := ie.Exec(
+			ctx,
 			"insert-stats",
-			params.EvalContext().Txn,
+			txn,
 			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -1523,25 +1543,41 @@ func injectTableStats(
 					"nullCount",
 					histogram
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			desc.GetID(),
+			tableID,
 			name,
 			columnIDs,
 			s.CreatedAt,
 			s.RowCount,
 			s.DistinctCount,
 			s.NullCount,
-			histogram,
-		); err != nil {
-			return errors.Wrapf(err, "failed to insert stats")
-		}
+			histogram)
+		return err
 	}
-
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (the cache would
-	// normally be updated asynchronously).
-	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.GetID())
-
-	return nil
+	_ /* rows */, err := ie.Exec(
+		ctx,
+		"insert-stats",
+		txn,
+		`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"avgSize",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		tableID,
+		name,
+		columnIDs,
+		s.CreatedAt,
+		s.RowCount,
+		s.DistinctCount,
+		s.NullCount,
+		s.AvgSize,
+		histogram)
+	return err
 }
 
 func (p *planner) removeColumnComment(
@@ -1558,6 +1594,82 @@ func (p *planner) removeColumnComment(
 		columnID)
 
 	return err
+}
+
+// validateConstraintNameIsNotUsed checks that the name of the constraint we're
+// trying to add isn't already used, and, if it is, whether the constraint
+// addition should be skipped:
+// - if the name is free to use, it returns false;
+// - if it's already used but IF NOT EXISTS was specified, it returns true;
+// - otherwise, it returns an error.
+func validateConstraintNameIsNotUsed(
+	tableDesc *tabledesc.Mutable, cmd *tree.AlterTableAddConstraint,
+) (skipAddConstraint bool, _ error) {
+	var name tree.Name
+	var hasIfNotExists bool
+	switch d := cmd.ConstraintDef.(type) {
+	case *tree.CheckConstraintTableDef:
+		name = d.Name
+		hasIfNotExists = d.IfNotExists
+	case *tree.ForeignKeyConstraintTableDef:
+		name = d.Name
+		hasIfNotExists = d.IfNotExists
+	case *tree.UniqueConstraintTableDef:
+		name = d.Name
+		hasIfNotExists = d.IfNotExists
+		if d.WithoutIndex {
+			break
+		}
+		// Handle edge cases specific to unique constraints with indexes.
+		if d.PrimaryKey {
+			// We only support "adding" a primary key when we are using the
+			// default rowid primary index or if a DROP PRIMARY KEY statement
+			// was processed before this statement. If a DROP PRIMARY KEY
+			// statement was processed, then n.tableDesc.HasPrimaryKey() = false.
+			if tableDesc.HasPrimaryKey() && !tableDesc.IsPrimaryIndexDefaultRowID() {
+				if d.IfNotExists {
+					return true, nil
+				}
+				return false, pgerror.Newf(pgcode.InvalidTableDefinition,
+					"multiple primary keys for table %q are not allowed", tableDesc.Name)
+			}
+		}
+		if name == "" {
+			return false, nil
+		}
+		idx, _ := tableDesc.FindIndexWithName(name.String())
+		if idx == nil {
+			return false, nil
+		}
+		if d.IfNotExists {
+			return true, nil
+		}
+		if idx.Dropped() {
+			return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists and is being dropped, try again later", name)
+		}
+		return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", name)
+
+	default:
+		return false, errors.AssertionFailedf(
+			"unsupported constraint: %T", cmd.ConstraintDef)
+	}
+
+	if name == "" {
+		return false, nil
+	}
+	info, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		// Unexpected error: table descriptor should be valid at this point.
+		return false, errors.WithAssertionFailure(err)
+	}
+	if _, isInUse := info[name.String()]; !isInUse {
+		return false, nil
+	}
+	if hasIfNotExists {
+		return true, nil
+	}
+	return false, pgerror.Newf(pgcode.DuplicateObject,
+		"duplicate constraint name: %q", name)
 }
 
 // updateFKBackReferenceName updates the name of a foreign key reference on

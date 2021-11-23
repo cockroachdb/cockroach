@@ -12,9 +12,7 @@ package scbuild_test
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	gojson "encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -35,9 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestBuilderAlterTable(t *testing.T) {
@@ -141,8 +138,8 @@ func run(
 			alter, ok := stmt.AST.(*tree.AlterTable)
 			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 
-			_, err = scbuild.Build(ctx, deps, nil, alter)
-			require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
+			_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
+			require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 		})
 		return ""
 
@@ -168,11 +165,9 @@ func indentText(input string, tab string) string {
 // marshalNodes marshals a scpb.State to YAML.
 func marshalNodes(t *testing.T, nodes scpb.State) string {
 	var sortedEntries []string
-	for _, node := range nodes {
-		var buf bytes.Buffer
-		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
-		target := make(map[string]interface{})
-		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
+	for _, node := range nodes.Nodes {
+		yaml, err := sctestutils.ProtoToYAML(node.Target.Element())
+		require.NoError(t, err)
 		entry := strings.Builder{}
 		entry.WriteString("- ")
 		entry.WriteString(node.Target.Direction.String())
@@ -181,9 +176,7 @@ func marshalNodes(t *testing.T, nodes scpb.State) string {
 		entry.WriteString("\n")
 		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))
-		out, err := yaml.Marshal(target)
-		require.NoError(t, err)
-		entry.WriteString(indentText(string(out), "    "))
+		entry.WriteString(indentText(yaml, "    "))
 		sortedEntries = append(sortedEntries, entry.String())
 	}
 	// Sort the output buffer of nodes for determinism.

@@ -210,7 +210,7 @@ export class CustomChart extends React.Component<
         history={this.props.history}
       >
         <LineGraph>
-          <Axis units={units}>
+          <Axis units={units} label={AxisUnits[units]}>
             {metrics.map((m, i) => {
               if (m.metric !== "") {
                 if (m.perNode) {

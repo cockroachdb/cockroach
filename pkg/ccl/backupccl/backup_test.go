@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -914,6 +915,9 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", collections...)
+
 	// The flavors of BACKUP and RESTORE which automatically resolve the right
 	// directory to read/write data to, have URIs with the resolved path written
 	// to the job description.
@@ -940,6 +944,10 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
 				resolvedCollectionURIs[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
+				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
+				resolvedSubdirURIs[2])},
+			// and again from LATEST IN...
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
 				resolvedSubdirURIs[2])},
@@ -1823,8 +1831,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			jobspb.RestoreDetails{
 				DescriptorRewrites: map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite{
 					backupTableDesc.GetID(): {
-						ParentID: descpb.ID(restoreDatabaseID),
-						ID:       restoreTableID,
+						ParentID:       descpb.ID(restoreDatabaseID),
+						ID:             restoreTableID,
+						ParentSchemaID: keys.PublicSchemaID,
 					},
 				},
 				URIs: []string{restoreDir},
@@ -2238,8 +2247,17 @@ INSERT INTO d.tb VALUES ('hello'), ('hello');
 	defer cleanupRestore()
 	// We should get an error when restoring the table.
 	sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM $1`, LocalFoo)
+
+	// Make sure the temp system db is not present.
 	row := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT * FROM [SHOW DATABASES] WHERE database_name = '%s'`, restoreTempSystemDB))
 	require.Equal(t, 0, len(row))
+
+	// Make sure defaultdb and postgres are recreated.
+	sqlDBRestore.CheckQueryResults(t,
+		`SELECT * FROM system.namespace WHERE name = 'defaultdb' OR name ='postgres'`, [][]string{
+			{"0", "0", "defaultdb", "70"},
+			{"0", "0", "postgres", "71"},
+		})
 }
 
 func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
@@ -3167,7 +3185,7 @@ CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 						return errors.New("expected error, found none")
 					}
 					if !testutils.IsError(err, tc.expectedError[i]) {
-						return errors.Newf("expected error %v, found %v", tc.expectedError[i], err)
+						return errors.Newf("expected error %q, found %v", tc.expectedError[i], pgerror.FullError(err))
 					}
 					return nil
 				})
@@ -6065,7 +6083,6 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 
 	var tableID int
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'bank'`).Scan(&tableID)
-	fmt.Println(tableID)
 	sqlDB.Exec(t, `BACKUP data.bank TO $1`, dest)
 
 	// Overwrite the stats file with some invalid data.
@@ -6365,48 +6382,6 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		tableID := getTableID(db, "test", "foo")
 		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
 			fmt.Sprintf("/Table/%d/{3-4}", tableID)}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	t.Run("interleaved-spans", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE grandparent (a INT PRIMARY KEY, v BYTES, INDEX gpindex (v))")
-		runner.Exec(t, "CREATE TABLE parent (a INT, b INT, v BYTES, "+
-			"PRIMARY KEY(a, b)) INTERLEAVE IN PARENT grandparent(a)")
-		runner.Exec(t, "CREATE TABLE child (a INT, b INT, c INT, v BYTES, "+
-			"PRIMARY KEY(a, b, c), INDEX childindex(c)) INTERLEAVE IN PARENT parent(a, b)")
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s' WITH include_deprecated_interleaves`, baseBackupURI+t.Name()))
-		// /Table/59/{1-2} encompasses the pk of grandparent, and the interleaved
-		// tables parent and child.
-		// /Table/59/2 - /Table/59/3 is for the gpindex
-		// /Table/61/{2-3} is for the childindex
-		grandparentID := getTableID(db, "test", "grandparent")
-		childID := getTableID(db, "test", "child")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-3}", grandparentID),
-			fmt.Sprintf("/Table/%d/{2-3}", childID)}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	// This is a regression test for a bug that was fixed in
-	// https://github.com/cockroachdb/cockroach/pull/72270 where two (or more)
-	// public indexes followed by an interleaved index would result in index keys
-	// being missed during backup.
-	// Prior to the fix in https://github.com/cockroachdb/cockroach/pull/72270,
-	// the resolved spans would be `/Table/63/{1-3}` thereby missing the span for
-	// idx2.
-	// With the change we now backup `/Table/63/{1-4}` to include pkIndex, idx1,
-	// idx2 and idx3 (since it is interleaved it produces the span
-	// `/Table/63/{1-2}`).
-	t.Run("public-and-interleaved-indexes", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT, v BYTES, INDEX idx1 (v), INDEX idx2(b))")
-		runner.Exec(t, "CREATE INDEX idx3 ON foo (a, b) INTERLEAVE IN PARENT foo (a)")
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s' WITH include_deprecated_interleaves`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6754,12 +6729,19 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		return fmt.Sprintf("%v%s", span.String(), spanStr)
 	}
 
+	// Check if export request is from a lease for a descriptor to avoid picking
+	// up on wrong export requests
+	isLeasingExportRequest := func(r *roachpb.ExportRequest) bool {
+		_, tenantID, _ := keys.DecodeTenantPrefix(r.Key)
+		codec := keys.MakeSQLCodec(tenantID)
+		return bytes.HasPrefix(r.Key, codec.DescMetadataPrefix()) &&
+			r.EndKey.Equal(r.Key.PrefixEnd())
+	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 			for _, ru := range request.Requests {
-				switch ru.GetInner().(type) {
-				case *roachpb.ExportRequest:
-					exportRequest := ru.GetInner().(*roachpb.ExportRequest)
+				if exportRequest, ok := ru.GetInner().(*roachpb.ExportRequest); ok &&
+					!isLeasingExportRequest(exportRequest) {
 					exportRequestSpans = append(
 						exportRequestSpans,
 						requestSpanStr(roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}, exportRequest.ResumeKeyTS),
@@ -6770,9 +6752,9 @@ func TestPaginatedBackupTenant(t *testing.T) {
 			return nil
 		},
 		TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for _, ru := range br.Responses {
-				switch ru.GetInner().(type) {
-				case *roachpb.ExportResponse:
+			for i, ru := range br.Responses {
+				if exportRequest, ok := ba.Requests[i].GetInner().(*roachpb.ExportRequest); ok &&
+					!isLeasingExportRequest(exportRequest) {
 					exportResponse := ru.GetInner().(*roachpb.ExportResponse)
 					// Every ExportResponse should have a single SST when running backup
 					// within a tenant.
@@ -7030,6 +7012,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 		return nil
 	})
 
+	systemDB.Exec(t, `BACKUP system.users TO 'nodelocal://1/users'`)
+	systemDB.CheckQueryResults(t, `SELECT manifest->>'tenants' FROM [SHOW BACKUP 'nodelocal://1/users' WITH as_json]`, [][]string{{"[]"}})
+
 	// Prevent a logging assertion that the server ID is initialized multiple times.
 	log.TestingClearServerIdentifiers()
 
@@ -7123,11 +7108,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{`10`, `false`, `{"id": "10", "state": "DROP"}`}},
 		)
 
-		// Make GC jobs run in 1 second.
+		// Make GC job scheduled by destroy_tenant run in 1 second.
 		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 		restoreDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
-		// Now run the GC job to delete the tenant and its data.
-		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
 		// Wait for tenant GC job to complete.
 		restoreDB.CheckQueryResultsRetry(
 			t,
@@ -7159,7 +7142,6 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
 
 		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
-		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
 		// Wait for tenant GC job to complete.
 		restoreDB.CheckQueryResultsRetry(
 			t,
@@ -8237,23 +8219,19 @@ func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
 	sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/full_cluster_backup'`)
 
 	// Before the reconciliation job runs we should be able to see the following:
-	// - 4 synthesized pg_temp sessions in defaultdb.
-	// We synthesize a new temp schema for each unique backed-up <dbID, schemaID>
-	// tuple of a temporary table descriptor.
+	// - 2 synthesized pg_temp sessions in defaultdb and 1 each in db1 and db2.
+	// We synthesize a new temp schema for each unique backed-up schemaID
+	// of a temporary table descriptor.
 	// - All temp tables remapped to belong to the associated synthesized temp
-	// schema, and in the defaultdb.
-	checkSchemasQuery := `SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%' ORDER BY
-schema_name`
-	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery,
-		[][]string{{"pg_temp_0_0"}, {"pg_temp_0_1"}, {"pg_temp_0_2"}, {"pg_temp_0_3"}})
+	// schema in the original db.
+	checkSchemasQuery := `SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'`
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"2"}})
 
-	checkTempTablesQuery := `SELECT schema_name,
-table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
-	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"pg_temp_0_0", "t"},
-		{"pg_temp_0_1", "t"}, {"pg_temp_0_2", "t"}, {"pg_temp_0_3", "t"}})
+	checkTempTablesQuery := `SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{{"t"}, {"t"}})
 
 	// Sanity check that the databases the temporary tables originally belonged to
-	// are restored and empty because of the remapping.
+	// are restored.
 	sqlDBRestore.CheckQueryResults(t,
 		`SELECT database_name FROM [SHOW DATABASES] ORDER BY database_name`,
 		[][]string{{"d1"}, {"d2"}, {"defaultdb"}, {"postgres"}, {"system"}})
@@ -8266,26 +8244,36 @@ table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
 	sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
 	require.Equal(t, commentCount, 2)
 
-	// Check that show tables in one of the restored DBs returns an empty result.
+	// Check that show tables in one of the restored DBs returns the temporary
+	// table.
 	sqlDBRestore.Exec(t, "USE d1")
-	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{
+		{"t"},
+	})
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"1"}})
 
 	sqlDBRestore.Exec(t, "USE d2")
-	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+	sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{
+		{"t"},
+	})
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"1"}})
 
 	testutils.SucceedsSoon(t, func() error {
 		ch <- timeutil.Now()
 		<-finishedCh
 
-		// Check that all the synthesized temp schemas have been wiped.
-		sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{})
+		for _, database := range []string{"defaultdb", "d1", "d2"} {
+			sqlDBRestore.Exec(t, fmt.Sprintf("USE %s", database))
+			// Check that all the synthesized temp schemas have been wiped.
+			sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{{"0"}})
 
-		// Check that all the temp tables have been wiped.
-		sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{})
+			// Check that all the temp tables have been wiped.
+			sqlDBRestore.CheckQueryResults(t, checkTempTablesQuery, [][]string{})
 
-		// Check that all the temp table comments have been wiped.
-		sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
-		require.Equal(t, commentCount, 0)
+			// Check that all the temp table comments have been wiped.
+			sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+			require.Equal(t, commentCount, 0)
+		}
 		return nil
 	})
 }
@@ -8354,6 +8342,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 func TestBackupOnlyPublicIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "likely slow under race")
 

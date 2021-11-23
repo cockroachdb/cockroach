@@ -119,7 +119,6 @@ type Index interface {
 
 	GetID() descpb.IndexID
 	GetName() string
-	IsInterleaved() bool
 	IsPartial() bool
 	IsUnique() bool
 	IsDisabled() bool
@@ -140,12 +139,6 @@ type Index interface {
 	GetPartitioning() Partitioning
 
 	ExplicitColumnStartIdx() int
-
-	NumInterleaveAncestors() int
-	GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor
-
-	NumInterleavedBy() int
-	GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference
 
 	NumKeyColumns() int
 	GetKeyColumnID(columnOrdinal int) descpb.ColumnID
@@ -172,6 +165,7 @@ type Index interface {
 
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
+	UseDeletePreservingEncoding() bool
 }
 
 // Column is an interface around the column descriptor types.
@@ -700,4 +694,14 @@ func ColumnNeedsBackfill(col Column) bool {
 		return false
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
+}
+
+// HasConcurrentSchemaChanges returns whether the table descriptor is undergoing
+// concurrent schema changes.
+func HasConcurrentSchemaChanges(table TableDescriptor) bool {
+	// TODO(ajwerner): For now we simply check for the absence of mutations. Once
+	// we start implementing schema changes with ops to be executed during
+	// statement execution, we'll have to take into account mutations that were
+	// written in this transaction.
+	return len(table.AllMutations()) > 0
 }

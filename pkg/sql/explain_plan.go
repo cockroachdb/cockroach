@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
@@ -90,9 +90,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			distSQLPlanner.finalizePlanWithRowCount(planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
 			flows := physicalPlan.GenerateFlowSpecs()
-			flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 
-			ctxSessionData := flowCtx.EvalCtx.SessionData()
+			ctxSessionData := planCtx.EvalContext().SessionData()
 			var willVectorize bool
 			if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
 				willVectorize = false
@@ -164,7 +163,7 @@ func emitExplain(
 			// manipulate locks.
 			// Note that we don't catch anything in debug builds, so that failures are
 			// more visible.
-			if ok, e := errorutil.ShouldCatch(r); ok && !util.CrdbTestBuild {
+			if ok, e := errorutil.ShouldCatch(r); ok && !buildutil.CrdbTestBuild {
 				err = e
 			} else {
 				// Other panic objects can't be considered "safe" and thus are

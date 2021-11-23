@@ -120,6 +120,12 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
 	}
+	metaCPUNowNS = metric.Metadata{
+		Name:        "sys.cpu.now.ns",
+		Help:        "Number of nanoseconds elapsed since January 1, 1970 UTC",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRSSBytes = metric.Metadata{
 		Name:        "sys.rss",
 		Help:        "Current process RSS",
@@ -283,6 +289,7 @@ type RuntimeStatSampler struct {
 	CPUSysNS               *metric.Gauge
 	CPUSysPercent          *metric.GaugeFloat64
 	CPUCombinedPercentNorm *metric.GaugeFloat64
+	CPUNowNS               *metric.Gauge
 	// Memory stats.
 	RSSBytes *metric.Gauge
 	// File descriptor stats.
@@ -360,6 +367,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 		CPUSysNS:                 metric.NewGauge(metaCPUSysNS),
 		CPUSysPercent:            metric.NewGaugeFloat64(metaCPUSysPercent),
 		CPUCombinedPercentNorm:   metric.NewGaugeFloat64(metaCPUCombinedPercentNorm),
+		CPUNowNS:                 metric.NewGauge(metaCPUNowNS),
 		RSSBytes:                 metric.NewGauge(metaRSSBytes),
 		HostDiskReadBytes:        metric.NewGauge(metaHostDiskReadBytes),
 		HostDiskReadCount:        metric.NewGauge(metaHostDiskReadCount),
@@ -526,7 +534,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	goStatsStaleness := float32(timeutil.Now().Sub(ms.Collected)) / float32(time.Second)
+	goStatsStaleness := float32(timeutil.Since(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
 
 	stats := &eventpb.RuntimeStats{
@@ -570,6 +578,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.CPUSysNS.Update(stime)
 	rsr.CPUSysPercent.Update(srate)
 	rsr.CPUCombinedPercentNorm.Update(combinedNormalizedPerc)
+	rsr.CPUNowNS.Update(now)
 	rsr.FDOpen.Update(int64(fds.Open))
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.RSSBytes.Update(int64(mem.Resident))

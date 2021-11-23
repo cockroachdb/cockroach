@@ -14,6 +14,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -183,76 +186,215 @@ type historicalDescriptor struct {
 	expiration hlc.Timestamp // ModificationTime of the next descriptor
 }
 
-// Read an older descriptor version for the particular timestamp
-// from the store. We unfortunately need to read more than one descriptor
-// version just so that we can set the expiration time on the descriptor
-// properly.
+// Retrieves historical descriptors of given id within the lower and upper bound
+// timestamp from the MVCC key range in decreasing modification time order. Any
+// descriptor versions that were modified in the range [lower, upper) will be
+// retrieved through an export request. A lower bound of an empty timestamp
+// hlc.Timestamp{} will result in an error.
 //
-// TODO(vivek): Future work:
-// 1. Read multiple versions of a descriptor through one kv call.
-// 2. Translate multiple simultaneous calls to this method into a single call
+// In the following scenario v4 is our oldest active lease
+// [v1@t1			][v2@t3			][v3@t5				][v4@t7
+// 		 [start												end]
+// getDescriptorsFromStoreForInterval(..., start, end) will get back:
+// [v3, v2] (reverse order)
+//
+// Note that this does not necessarily retrieve a descriptor version that was
+// alive at the lower bound timestamp.
+func getDescriptorsFromStoreForInterval(
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	id descpb.ID,
+	lowerBound, upperBound hlc.Timestamp,
+) ([]historicalDescriptor, error) {
+	// Ensure lower bound is not an empty timestamp (now).
+	if lowerBound.IsEmpty() {
+		return nil, errors.AssertionFailedf(
+			"getDescriptorsFromStoreForInterval: lower bound cannot be empty")
+	}
+	// TODO(ajwerner): We'll want to lift this limitation in order to allow this
+	// function to find descriptors which could not be found by leasing. This
+	// will also require some careful managing of expiration timestamps for the
+	// final descriptor.
+	if upperBound.IsEmpty() {
+		return nil, errors.AssertionFailedf(
+			"getDescriptorsFromStoreForInterval: upper bound cannot be empty")
+	}
+
+	// Create an export request (1 kv call) for all descriptors for given
+	// descriptor ID written during the interval [timestamp, endTimestamp).
+	batchRequestHeader := roachpb.Header{
+		Timestamp: upperBound.Prev(),
+	}
+	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
+	requestHeader := roachpb.RequestHeader{
+		Key:    descriptorKey,
+		EndKey: descriptorKey.PrefixEnd(),
+	}
+	req := &roachpb.ExportRequest{
+		RequestHeader: requestHeader,
+		StartTime:     lowerBound.Prev(),
+		MVCCFilter:    roachpb.MVCCFilter_All,
+		ReturnSST:     true,
+	}
+
+	// Export request returns descriptors in decreasing modification time.
+	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), batchRequestHeader, req)
+	if pErr != nil {
+		return nil, errors.Wrapf(pErr.GoError(), "error in retrieving descs between %s, %s",
+			lowerBound, upperBound)
+	}
+
+	// Unmarshal key span retrieved from export request to construct historical descs.
+	var descriptorsRead []historicalDescriptor
+	// Keep track of the most recently processed descriptor's modification time to
+	// set as the expiration for the next descriptor to process. Recall we process
+	// descriptors in decreasing modification time.
+	subsequentModificationTime := upperBound
+	for _, file := range res.(*roachpb.ExportResponse).Files {
+		if err := func() error {
+			it, err := kvstorage.NewMemSSTIterator(file.SST, false /* verify */)
+			if err != nil {
+				return err
+			}
+			defer it.Close()
+
+			// Convert each MVCC key value pair corresponding to the specified
+			// descriptor ID.
+			for it.SeekGE(kvstorage.NilKey); ; it.Next() {
+				if ok, err := it.Valid(); err != nil {
+					return err
+				} else if !ok {
+					return nil
+				}
+
+				// Decode key and value of descriptor.
+				k := it.UnsafeKey()
+				descContent := it.UnsafeValue()
+				if descContent == nil {
+					return errors.Wrapf(errors.New("unsafe value error"), "error "+
+						"extracting raw bytes of descriptor with key %s modified between "+
+						"%s, %s", k.String(), k.Timestamp, subsequentModificationTime)
+				}
+
+				// Construct a plain descriptor.
+				value := roachpb.Value{RawBytes: descContent}
+				var desc descpb.Descriptor
+				if err := value.GetProto(&desc); err != nil {
+					return err
+				}
+				descBuilder := catalogkv.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
+
+				// Construct a historical descriptor with expiration.
+				histDesc := historicalDescriptor{
+					desc:       descBuilder.BuildImmutable(),
+					expiration: subsequentModificationTime,
+				}
+				descriptorsRead = append(descriptorsRead, histDesc)
+
+				// Update the expiration time for next descriptor.
+				subsequentModificationTime = k.Timestamp
+			}
+		}(); err != nil {
+			return nil, err
+		}
+	}
+	return descriptorsRead, nil
+}
+
+// Read older descriptor versions for the particular timestamp from store
+// through an ExportRequest. The ExportRequest queries the key span for versions
+// in range [timestamp, earliest modification time in memory) or [timestamp:] if
+// there are no active leases in memory. This is followed by a call to
+// getForExpiration in case the ExportRequest doesn't grab the earliest
+// descriptor version we are interested in, resulting at most 2 KV calls.
+//
+// TODO(vivek, james): Future work:
+// 1. Translate multiple simultaneous calls to this method into a single call
 //    as is done for acquireNodeLease().
-// 3. Figure out a sane policy on when these descriptors should be purged.
+// 2. Figure out a sane policy on when these descriptors should be purged.
 //    They are currently purged in PurgeOldVersions.
 func (m *Manager) readOlderVersionForTimestamp(
 	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
 ) ([]historicalDescriptor, error) {
-	expiration, done := func() (hlc.Timestamp, bool) {
-		t := m.findDescriptorState(id, false /* create */)
+	// Retrieve the endTimestamp for our query, which will be the first
+	// modification timestamp above our query timestamp.
+	t := m.findDescriptorState(id, false /*create*/)
+	// A missing descriptor state indicates that this descriptor has been
+	// purged in the meantime. We should go back around in the acquisition
+	// loop to make the appropriate error appear.
+	if t == nil {
+		return nil, nil
+	}
+	endTimestamp, done := func() (hlc.Timestamp, bool) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		afterIdx := 0
-		// Walk back the versions to find one that is valid for the timestamp.
-		for i := len(t.mu.active.data) - 1; i >= 0; i-- {
-			// Check to see if the ModificationTime is valid.
-			if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp) {
-				if expiration := desc.getExpiration(); timestamp.Less(expiration) {
-					// Existing valid descriptor version.
-					return expiration, true
-				}
-				// We need a version after data[i], but before data[i+1].
-				// We could very well use the timestamp to read the
-				// descriptor, but unfortunately we will not be able to assign
-				// it a proper expiration time. Therefore, we read
-				// descriptor versions one by one from afterIdx back into the
-				// past until we find a valid one.
-				afterIdx = i + 1
-				break
-			}
-		}
 
-		if afterIdx == len(t.mu.active.data) {
+		// If there are no descriptors, then we won't have a valid end timestamp.
+		if len(t.mu.active.data) == 0 {
 			return hlc.Timestamp{}, true
 		}
+		// We permit gaps in historical versions. We want to find the timestamp
+		// that represents the start of the validity interval for the known version
+		// which immediately follows the timestamps we're searching for.
+		i := sort.Search(len(t.mu.active.data), func(i int) bool {
+			return timestamp.Less(t.mu.active.data[i].GetModificationTime())
+		})
 
-		// Read descriptor versions one by one into the past until we
-		// find a valid one. Every version is assigned an expiration time that
-		// is the ModificationTime of the previous one read.
-		return t.mu.active.data[afterIdx].GetModificationTime(), false
+		// If the timestamp we're searching for is somehow after the last descriptor
+		// we have in play, then either we have the right descriptor, or some other
+		// shenanigans where we've evicted the descriptor has occurred.
+		//
+		// TODO(ajwerner): When we come to modify this code to allow us to find
+		// historical descriptors which have been dropped, we'll need to rework
+		// this case and support providing no upperBound to
+		// getDescriptorFromStoreForInterval.
+		if i == len(t.mu.active.data) ||
+			// If we found a descriptor that isn't the first descriptor, go and check
+			// whether the descriptor for which we're searching actually exists. This
+			// will deal with cases where a concurrent fetch filled it in for us.
+			i > 0 && timestamp.Less(t.mu.active.data[i-1].getExpiration()) {
+			return hlc.Timestamp{}, true
+		}
+		return t.mu.active.data[i].GetModificationTime(), false
 	}()
 	if done {
 		return nil, nil
 	}
 
-	// Read descriptors from the store.
-	var versions []historicalDescriptor
-	for {
-		desc, err := m.storage.getForExpiration(ctx, expiration, id)
+	// Retrieve descriptors in range [timestamp, endTimestamp) in decreasing
+	// modification time order.
+	descs, err := getDescriptorsFromStoreForInterval(ctx, m.DB(), m.Codec(), id, timestamp, endTimestamp)
+	if err != nil {
+		return nil, err
+	}
+
+	// In the case where the descriptor we're looking for is modified before the
+	// input timestamp, we get the descriptor before the earliest descriptor we
+	// have from either in memory or from the call to
+	// getDescriptorsFromStoreForInterval.
+	var earliestModificationTime hlc.Timestamp
+	if len(descs) == 0 {
+		earliestModificationTime = endTimestamp
+	} else {
+		earliestModificationTime = descs[len(descs)-1].desc.GetModificationTime()
+	}
+
+	// Unless the timestamp is exactly at the earliest modification time from
+	// ExportRequest, we'll invoke another call to retrieve the descriptor with
+	// modification time prior to the timestamp.
+	if timestamp.Less(earliestModificationTime) {
+		desc, err := m.storage.getForExpiration(ctx, earliestModificationTime, id)
 		if err != nil {
 			return nil, err
 		}
-		versions = append(versions, historicalDescriptor{
+		descs = append(descs, historicalDescriptor{
 			desc:       desc,
-			expiration: expiration,
+			expiration: earliestModificationTime,
 		})
-		if desc.GetModificationTime().LessEq(timestamp) {
-			break
-		}
-		// Set the expiration time for the next descriptor.
-		expiration = desc.GetModificationTime()
 	}
 
-	return versions, nil
+	return descs, nil
 }
 
 // Insert descriptor versions. The versions provided are not in
@@ -330,7 +472,11 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
-		newCtx, cancel := m.stopper.WithCancelOnQuiesce(logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+		baseCtx := m.ambientCtx.AnnotateCtx(context.Background())
+		// AddTags and not WithTags, so that we combine the tags with those
+		// filled by AnnotateCtx.
+		baseCtx = logtags.AddTags(baseCtx, logtags.FromContext(ctx))
+		newCtx, cancel := m.stopper.WithCancelOnQuiesce(baseCtx)
 		defer cancel()
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
@@ -357,7 +503,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			m.names.insert(newDescVersionState)
 		}
 		if toRelease != nil {
-			releaseLease(toRelease, m)
+			releaseLease(ctx, toRelease, m)
 		}
 		return true, nil
 	})
@@ -373,8 +519,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 }
 
 // releaseLease from store.
-func releaseLease(lease *storedLease, m *Manager) {
-	ctx := context.TODO()
+func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 	if m.isDraining() {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
@@ -382,8 +527,12 @@ func releaseLease(lease *storedLease, m *Manager) {
 	}
 
 	// Release to the store asynchronously, without the descriptorState lock.
+	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	if err := m.stopper.RunAsyncTask(
-		ctx, "sql.descriptorState: releasing descriptor lease",
+		newCtx, "sql.descriptorState: releasing descriptor lease",
 		func(ctx context.Context) {
 			m.storage.release(ctx, m.stopper, lease)
 		}); err != nil {
@@ -428,7 +577,7 @@ func purgeOldVersions(
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
-			releaseLease(l, m)
+			releaseLease(ctx, l, m)
 		}
 	}
 
@@ -563,9 +712,9 @@ func NewLeaseManager(
 func NameMatchesDescriptor(
 	desc catalog.Descriptor, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) bool {
-	return desc.GetParentID() == parentID &&
-		desc.GetParentSchemaID() == parentSchemaID &&
-		desc.GetName() == name
+	return desc.GetName() == name &&
+		desc.GetParentID() == parentID &&
+		desc.GetParentSchemaID() == parentSchemaID
 }
 
 // findNewest returns the newest descriptor version state for the ID.
@@ -773,7 +922,7 @@ type LeasedDescriptor interface {
 }
 
 // Acquire acquires a read lease for the specified descriptor ID valid for
-// the timestamp. It returns the descriptor and a expiration time.
+// the timestamp. It returns the descriptor and an expiration time.
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
 // the returned descriptor.
@@ -850,7 +999,9 @@ func (m *Manager) isDraining() bool {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
+func (m *Manager) SetDraining(
+	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
+) {
 	m.draining.Store(drain)
 	if !drain {
 		return
@@ -863,7 +1014,7 @@ func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString))
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
-			releaseLease(l, m)
+			releaseLease(ctx, l, m)
 		}
 		if reporter != nil {
 			// Report progress through the Drain RPC.
@@ -1066,7 +1217,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 // DeleteOrphanedLeases releases all orphaned leases created by a prior
 // instance of this node. timeThreshold is a walltime lower than the
 // lowest hlc timestamp that the current instance of the node can use.
-func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
+func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64) {
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
@@ -1079,7 +1230,11 @@ func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
 
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
-	_ = m.stopper.RunAsyncTask(context.Background(), "del-orphaned-leases", func(ctx context.Context) {
+	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
+	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 

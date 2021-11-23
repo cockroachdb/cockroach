@@ -46,6 +46,7 @@ type Config struct {
 	Targets            jobspb.ChangefeedTargets
 	Writer             kvevent.Writer
 	Metrics            *kvevent.Metrics
+	OnBackfillCallback func() func()
 	MM                 *mon.BytesMonitor
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
@@ -98,6 +99,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Codec,
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.Knobs)
+	f.onBackfillCallback = cfg.OnBackfillCallback
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
@@ -114,7 +116,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if !errors.As(err, &scErr) {
 		// Regardless of whether we exited KV feed with or without an error, that error
 		// is not a schema change; so, close the writer and return.
-		return errors.CombineErrors(err, f.writer.Close(ctx))
+		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
 	}
 
 	log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
@@ -124,7 +126,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
-	err = errors.CombineErrors(f.writer.Drain(ctx), f.writer.Close(ctx))
+	err = errors.CombineErrors(f.writer.Drain(ctx), f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason))
 
 	if err == nil {
 		// This context is canceled by the change aggregator when it receives
@@ -155,6 +157,7 @@ type kvFeed struct {
 	writer              kvevent.Writer
 	codec               keys.SQLCodec
 
+	onBackfillCallback func() func()
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -266,6 +269,7 @@ func (f *kvFeed) scanIfShould(
 	ctx context.Context, initialScan bool, highWater hlc.Timestamp,
 ) error {
 	scanTime := highWater.Next()
+
 	events, err := f.tableFeed.Peek(ctx, scanTime)
 	if err != nil {
 		return err
@@ -317,13 +321,15 @@ func (f *kvFeed) scanIfShould(
 
 	// If we have initial checkpoint information specified, filter out
 	// spans which we no longer need to scan.
-	if initialScan {
-		spansToBackfill = filterCheckpointSpans(spansToBackfill, f.checkpoint)
-	}
+	spansToBackfill = filterCheckpointSpans(spansToBackfill, f.checkpoint)
 
 	if (!isInitialScan && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyNoBackfill) ||
 		len(spansToBackfill) == 0 {
 		return nil
+	}
+
+	if f.onBackfillCallback != nil {
+		defer f.onBackfillCallback()()
 	}
 
 	if err := f.scanner.Scan(ctx, f.writer, physicalConfig{
@@ -352,7 +358,7 @@ func (f *kvFeed) runUntilTableEvent(
 
 	memBuf := f.bufferFactory()
 	defer func() {
-		err = errors.CombineErrors(err, memBuf.Close(ctx))
+		err = errors.CombineErrors(err, memBuf.CloseWithReason(ctx, err))
 	}()
 
 	g := ctxgroup.WithContext(ctx)

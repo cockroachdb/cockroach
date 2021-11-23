@@ -386,7 +386,7 @@ const (
 	//
 	// ChildSpan has consequences on memory usage: the memory lifetime of
 	// the task's span becomes tied to the lifetime of the parent. Generally
-	// ChildSpan should be used when the parent waits for the task to
+	// ChildSpan should be used when the parent usually waits for the task to
 	// complete, and the parent is not a long-running process.
 	ChildSpan
 
@@ -619,4 +619,9 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 // When possible, prefer supplying the tracer to the ctor through WithTracer.
 func (s *Stopper) SetTracer(tr *tracing.Tracer) {
 	s.tracer = tr
+}
+
+// Tracer returns the Tracer that the Stopper will use for tasks.
+func (s *Stopper) Tracer() *tracing.Tracer {
+	return s.tracer
 }

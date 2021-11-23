@@ -77,9 +77,7 @@ func (s *descriptorVersionState) Underlying() catalog.Descriptor {
 }
 
 func (s *descriptorVersionState) Expiration() hlc.Timestamp {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.expiration
+	return s.getExpiration()
 }
 
 func (s *descriptorVersionState) SafeMessage() string {
@@ -113,15 +111,15 @@ func (s *descriptorVersionState) hasExpiredLocked(timestamp hlc.Timestamp) bool 
 	return s.mu.expiration.LessEq(timestamp)
 }
 
-func (s *descriptorVersionState) incRefCount(ctx context.Context) {
+func (s *descriptorVersionState) incRefCount(ctx context.Context, expensiveLogEnabled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.incRefCountLocked(ctx)
+	s.incRefCountLocked(ctx, expensiveLogEnabled)
 }
 
-func (s *descriptorVersionState) incRefCountLocked(ctx context.Context) {
+func (s *descriptorVersionState) incRefCountLocked(ctx context.Context, expensiveLogEnabled bool) {
 	s.mu.refcount++
-	if log.ExpensiveLogEnabled(ctx, 2) {
+	if expensiveLogEnabled {
 		log.VEventf(ctx, 2, "descriptorVersionState.incRefCount: %s", s.stringLocked())
 	}
 }

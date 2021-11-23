@@ -117,7 +117,7 @@ sort
            │         │         │    ├── stats: [rows=127.585211, distinct(16)=127.585211, null(16)=0, distinct(17)=127.585211, null(17)=0, distinct(18)=127.585211, null(18)=0, distinct(52)=127.585211, null(52)=0]
            │         │         │    ├── key: (16,17)
            │         │         │    ├── fd: (16,17)-->(18,52)
-           │         │         │    ├── group-by
+           │         │         │    ├── group-by (hash)
            │         │         │    │    ├── save-table-name: q20_group_by_9
            │         │         │    │    ├── columns: ps_partkey:16(int!null) ps_suppkey:17(int!null) ps_availqty:18(int!null) sum:52(float!null)
            │         │         │    │    ├── grouping columns: ps_partkey:16(int!null) ps_suppkey:17(int!null)

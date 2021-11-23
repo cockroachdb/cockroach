@@ -18,8 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Dependencies contains all the dependencies required by the executor.
@@ -27,9 +31,10 @@ type Dependencies interface {
 	Catalog() Catalog
 	TransactionalJobCreator() TransactionalJobCreator
 	IndexBackfiller() IndexBackfiller
+	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	JobProgressTracker() JobProgressTracker
-
+	EventLogger() EventLogger
 	// TestingKnobs returns the testing knobs for the new schema changer.
 	TestingKnobs() *NewSchemaChangerTestingKnobs
 
@@ -54,6 +59,13 @@ type Catalog interface {
 	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
 	// current kv.Txn.
 	NewCatalogChangeBatcher() CatalogChangeBatcher
+}
+
+// EventLogger encapsulates the operations for collecting
+// and emitting event log entries.
+type EventLogger interface {
+	scmutationexec.EventLogWriter
+	ProcessAndSubmitEvents(ctx context.Context) error
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
@@ -89,6 +101,41 @@ type IndexBackfiller interface {
 		_ catalog.TableDescriptor,
 		source descpb.IndexID,
 		destinations ...descpb.IndexID,
+	) error
+}
+
+// Partitioner provides an interface that implements CCL exclusive
+// callbacks.
+type Partitioner interface {
+	AddPartitioning(
+		ctx context.Context,
+		tableDesc *tabledesc.Mutable,
+		indexDesc *descpb.IndexDescriptor,
+		partitionFields []string,
+		listPartition []*scpb.ListPartition,
+		rangePartition []*scpb.RangePartitions,
+		allowedNewColumnNames []tree.Name,
+		allowImplicitPartitioning bool,
+	) (err error)
+}
+
+// IndexValidator provides interfaces that allow indexes to be validated.
+type IndexValidator interface {
+	ValidateForwardIndexes(
+		ctx context.Context,
+		tableDesc catalog.TableDescriptor,
+		indexes []catalog.Index,
+		withFirstMutationPublic bool,
+		gatherAllInvalid bool,
+		override sessiondata.InternalExecutorOverride,
+	) error
+
+	ValidateInvertedIndexes(
+		ctx context.Context,
+		tableDesc catalog.TableDescriptor,
+		indexes []catalog.Index,
+		gatherAllInvalid bool,
+		override sessiondata.InternalExecutorOverride,
 	) error
 }
 

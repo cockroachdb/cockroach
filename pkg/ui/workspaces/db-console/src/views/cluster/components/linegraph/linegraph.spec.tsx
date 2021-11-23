@@ -16,7 +16,7 @@ import * as sinon from "sinon";
 import uPlot from "uplot";
 import _ from "lodash";
 
-import { LineGraph, LineGraphProps } from "./index";
+import { fillGaps, LineGraph, LineGraphProps } from "./index";
 import * as timewindow from "src/redux/timewindow";
 import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
@@ -173,5 +173,27 @@ describe("<LineGraph>", function() {
       },
     });
     assert.isTrue(setDataSpy.called);
+  });
+});
+
+describe("fillGaps", () => {
+  it("fills gaps with missed points", () => {
+    const sampleDuration = Long.fromNumber(10000);
+    const data: uPlot.AlignedData[0] = [
+      1634735320000,
+      1634735330000,
+      1634735340000,
+      1634735350000,
+      1634735360000,
+      1634735370000,
+      1634735380000,
+      1634735390000, // missed 39 points after
+      1634735780000,
+      1634735790000,
+      1634735800000, // missed 1 data point after
+      1634735810000,
+    ];
+    const result = fillGaps(data, sampleDuration);
+    assert.equal(result.length, 50);
   });
 });

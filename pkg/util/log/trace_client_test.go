@@ -25,19 +25,18 @@ func TestTrace(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		init  func(context.Context) (context.Context, *tracing.Span)
-		check func(*testing.T, context.Context, *tracing.Span)
+		check func(*testing.T, context.Context, tracing.Recording, *tracing.Tracer)
 	}{
 		{
 			name: "verbose",
 			init: func(ctx context.Context) (context.Context, *tracing.Span) {
 				tracer := tracing.NewTracer()
-				sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-				sp.SetVerbose(true)
+				sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
 				ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 				return ctxWithSpan, sp
 			},
-			check: func(t *testing.T, _ context.Context, sp *tracing.Span) {
-				if err := tracing.CheckRecordedSpans(sp.GetRecording(), `
+			check: func(t *testing.T, _ context.Context, rec tracing.Recording, _ *tracing.Tracer) {
+				if err := tracing.CheckRecordedSpans(rec, `
 		span: s
 			tags: _verbose=1
 			event: test1
@@ -58,13 +57,13 @@ func TestTrace(t *testing.T) {
 				tr.Configure(ctx, &st.SV)
 				return tr.StartSpanCtx(context.Background(), "foo")
 			},
-			check: func(t *testing.T, ctx context.Context, sp *tracing.Span) {
+			check: func(t *testing.T, ctx context.Context, _ tracing.Recording, tr *tracing.Tracer) {
 				// This isn't quite a real end-to-end-check, but it is good enough
 				// to give us confidence that we're really passing log events to
 				// the span, and the tracing package in turn has tests that verify
 				// that a span so configured will actually log them to the external
 				// trace.
-				require.True(t, sp.Tracer().HasExternalSink())
+				require.True(t, tr.HasExternalSink())
 				require.True(t, log.HasSpanOrEvent(ctx))
 				require.True(t, log.ExpensiveLogEnabled(ctx, 0 /* level */))
 			},
@@ -84,8 +83,8 @@ func TestTrace(t *testing.T) {
 			// Events to parent context should still be no-ops.
 			log.Event(ctx, "should-not-show-up")
 
-			sp.Finish()
-			tc.check(t, ctxWithSpan, sp)
+			tr := sp.Tracer()
+			tc.check(t, ctxWithSpan, sp.FinishAndGetRecording(tracing.RecordingVerbose), tr)
 		})
 	}
 }
@@ -95,17 +94,15 @@ func TestTraceWithTags(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "tag", 1)
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
+	sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
-	sp.SetVerbose(true)
 
 	log.Event(ctxWithSpan, "test1")
 	log.VEvent(ctxWithSpan, log.NoLogV(), "test2")
 	log.VErrEvent(ctxWithSpan, log.NoLogV(), "testerr")
 	log.Info(ctxWithSpan, "log")
 
-	sp.Finish()
-	if err := tracing.CheckRecordedSpans(sp.GetRecording(), `
+	if err := tracing.CheckRecordedSpans(sp.FinishAndGetRecording(tracing.RecordingVerbose), `
 		span: s
 			tags: _verbose=1
 			event: [tag=1] test1

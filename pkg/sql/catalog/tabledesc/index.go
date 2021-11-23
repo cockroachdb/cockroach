@@ -72,11 +72,6 @@ func (w index) GetName() string {
 	return w.desc.Name
 }
 
-// IsInterleaved returns true iff the index is interleaved.
-func (w index) IsInterleaved() bool {
-	return w.desc.IsInterleaved()
-}
-
 // IsPartial returns true iff the index is a partial index.
 func (w index) IsPartial() bool {
 	return w.desc.IsPartial()
@@ -234,29 +229,6 @@ func (w index) GetEncodingType() descpb.IndexDescriptorEncodingType {
 	return w.desc.EncodingType
 }
 
-// NumInterleaveAncestors returns the number of interleave ancestors as per the
-// index descriptor.
-func (w index) NumInterleaveAncestors() int {
-	return len(w.desc.Interleave.Ancestors)
-}
-
-// GetInterleaveAncestor returns the ancestorOrdinal-th interleave ancestor.
-func (w index) GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor {
-	return w.desc.Interleave.Ancestors[ancestorOrdinal]
-}
-
-// NumInterleavedBy returns the number of tables/indexes that are interleaved
-// into this index.
-func (w index) NumInterleavedBy() int {
-	return len(w.desc.InterleavedBy)
-}
-
-// GetInterleavedBy returns the interleavedByOrdinal-th table/index that is
-// interleaved into this index.
-func (w index) GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference {
-	return w.desc.InterleavedBy[interleavedByOrdinal]
-}
-
 // NumKeyColumns returns the number of columns in the index key.
 func (w index) NumKeyColumns() int {
 	return len(w.desc.KeyColumnIDs)
@@ -332,6 +304,17 @@ func (w index) NumCompositeColumns() int {
 // composite column.
 func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID {
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
+}
+
+// UseDeletePreservingEncoding returns true if the index is to be encoded with
+// an additional bit that indicates whether or not the value has been deleted.
+// Index key-values that are deleted in this way are not actually deleted,
+// but remain in the index with a value which has the delete bit set to true.
+// This is necessary to preserve the delete history for the MVCC-compatible
+// index backfiller
+// docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+func (w index) UseDeletePreservingEncoding() bool {
+	return w.desc.UseDeletePreservingEncoding
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.

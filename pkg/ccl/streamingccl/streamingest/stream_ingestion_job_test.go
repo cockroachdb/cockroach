@@ -59,7 +59,7 @@ func TestTenantStreaming(t *testing.T) {
 	sourceSQL := sqlutils.MakeSQLRunner(tenantConn)
 
 	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultFlushFrequency(50 * time.Millisecond)
+	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 	defer resetFreq()
 	// Set required cluster settings.
 	_, err := sourceDB.Exec(`
@@ -73,7 +73,7 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
 	log.TestingClearServerIdentifiers()
 
 	// Start the destination server.
-	hDest, cleanupDest := streamingtest.NewReplicationHelper(t)
+	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.

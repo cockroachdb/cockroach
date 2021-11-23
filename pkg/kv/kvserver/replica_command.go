@@ -44,6 +44,11 @@ import (
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
+// mergeApplicationTimeout is the timeout when waiting for a merge command to be
+// applied on all range replicas. There doesn't appear to be any strong reason
+// why this value was chosen in particular, but it seems to work.
+const mergeApplicationTimeout = 5 * time.Second
+
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest, reason string,
@@ -727,9 +732,11 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err = waitForApplication(
-			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
-			rhsSnapshotRes.LeaseAppliedIndex)
+		err = contextutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
+			func(ctx context.Context) error {
+				return waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
+					rhsSnapshotRes.LeaseAppliedIndex)
+			})
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
@@ -794,25 +801,28 @@ func waitForApplication(
 	replicas []roachpb.ReplicaDescriptor,
 	leaseIndex uint64,
 ) error {
-	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
-		g := ctxgroup.WithContext(ctx)
-		for _, repl := range replicas {
-			repl := repl // copy for goroutine
-			g.GoCtx(func(ctx context.Context) error {
-				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
-				if err != nil {
-					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
-				}
-				_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
-					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
-					RangeID:            rangeID,
-					LeaseIndex:         leaseIndex,
-				})
-				return err
+	if dialer == nil && len(replicas) == 1 {
+		// This early return supports unit tests (testContext{}) that also
+		// want to perform merges.
+		return nil
+	}
+	g := ctxgroup.WithContext(ctx)
+	for _, repl := range replicas {
+		repl := repl // copy for goroutine
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+			if err != nil {
+				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+			}
+			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+				RangeID:            rangeID,
+				LeaseIndex:         leaseIndex,
 			})
-		}
-		return g.Wait()
-	})
+			return err
+		})
+	}
+	return g.Wait()
 }
 
 // waitForReplicasInit blocks until it has proof that the replicas listed in
@@ -825,6 +835,11 @@ func waitForReplicasInit(
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 ) error {
+	if dialer == nil && len(replicas) == 1 {
+		// This early return supports unit tests (testContext{}) that also
+		// want to perform merges.
+		return nil
+	}
 	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
@@ -1798,7 +1813,10 @@ func (r *Replica) tryRollbackRaftLearner(
 			})
 		return err
 	}
-	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	rollbackCtx := r.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	rollbackCtx = logtags.AddTags(rollbackCtx, logtags.FromContext(ctx))
 	if err := contextutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {

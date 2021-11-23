@@ -11,10 +11,16 @@
 import moment from "moment";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
+import { defaultFilters, Filters } from "../../queryFilter";
 
 type StatementsDateRangeState = {
   start: number;
   end: number;
+};
+
+type SortSetting = {
+  ascending: boolean;
+  columnTitle: string;
 };
 
 export type LocalStorageState = {
@@ -22,6 +28,10 @@ export type LocalStorageState = {
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
   "dateRange/StatementsPage": StatementsDateRangeState;
+  "sortSetting/StatementsPage": SortSetting;
+  "sortSetting/TransactionsPage": SortSetting;
+  "sortSetting/SessionsPage": SortSetting;
+  "filters/StatementsPage": Filters;
 };
 
 type Payload = {
@@ -37,6 +47,16 @@ const defaultDateRange: StatementsDateRangeState = {
   end: moment.utc().unix() + 60, // Add 1 minute to account for potential lag.
 };
 
+const defaultSortSetting: SortSetting = {
+  ascending: false,
+  columnTitle: "executionCount",
+};
+
+const defaultSessionsSortSetting: SortSetting = {
+  ascending: false,
+  columnTitle: "statementAge",
+};
+
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
@@ -49,6 +69,18 @@ const initialState: LocalStorageState = {
   "dateRange/StatementsPage":
     JSON.parse(localStorage.getItem("dateRange/StatementsPage")) ||
     defaultDateRange,
+  "sortSetting/StatementsPage":
+    JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
+    defaultSortSetting,
+  "sortSetting/TransactionsPage":
+    JSON.parse(localStorage.getItem("sortSetting/TransactionsPage")) ||
+    defaultSortSetting,
+  "sortSetting/SessionsPage":
+    JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
+    defaultSessionsSortSetting,
+  "filters/StatementsPage":
+    JSON.parse(localStorage.getItem("filters/StatementsPage")) ||
+    defaultFilters,
 };
 
 const localStorageSlice = createSlice({

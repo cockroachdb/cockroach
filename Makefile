@@ -387,6 +387,7 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
 		github.com/golang/mock/mockgen \
 		github.com/cockroachdb/stress \
+		github.com/cockroachdb/tools/cmd/stringer \
 		github.com/goware/modvendor \
 		github.com/go-swagger/go-swagger/cmd/swagger \
 		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
@@ -400,7 +401,6 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		golang.org/x/lint/golint \
 		golang.org/x/perf/cmd/benchstat \
 		golang.org/x/tools/cmd/goyacc \
-		golang.org/x/tools/cmd/stringer \
 		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
 		honnef.co/go/tools/cmd/staticcheck \
 		github.com/bufbuild/buf/cmd/buf
@@ -1764,7 +1764,7 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # Additional dependencies for binaries that depend on generated code.
 #
 # TODO(benesch): Derive this automatically. This is getting out of hand.
-bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/docgen bin/execgen bin/roachtest bin/roachvet $(logictest-bins): $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(PROTOBUF_TARGETS)
 bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS) | $(C_LIBS_DYNAMIC)
 

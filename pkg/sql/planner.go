@@ -184,7 +184,7 @@ type planner struct {
 
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	// isPreparing is true if this planner is currently preparing.
 	isPreparing bool
@@ -324,7 +324,7 @@ func newInternalPlanner(
 
 	p.txn = txn
 	p.stmt = Statement{}
-	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	p.cancelChecker.Reset(ctx)
 	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
@@ -592,6 +592,10 @@ func (p *planner) LookupTableByID(
 		return nil, err
 	}
 	return table, nil
+}
+
+func (p *planner) JobRegistry() interface{} {
+	return p.ExecCfg().JobRegistry
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

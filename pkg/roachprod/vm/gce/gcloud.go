@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -43,15 +44,17 @@ func DefaultProject() string {
 // projects for which a cron GC job exists.
 var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 
-// init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
-func init() {
-	var p vm.Provider = &Provider{}
+// Init registers the GCE provider into vm.Providers.
+//
+// If the gcloud tool is not available on the local path, the provider is a
+// stub.
+func Init() {
+	var p vm.Provider
 	if _, err := exec.LookPath("gcloud"); err != nil {
-		p = flagstub.New(p, "please install the gcloud CLI utilities "+
+		p = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
 	} else {
-		gceP := makeProvider()
-		p = &gceP
+		p = newProvider()
 	}
 	vm.Providers[ProviderName] = p
 }
@@ -153,6 +156,7 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		Errors:      vmErrors,
 		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
 		Lifetime:    lifetime,
+		Labels:      jsonVM.Labels,
 		PrivateIP:   privateIP,
 		Provider:    ProviderName,
 		ProviderID:  jsonVM.Name,
@@ -162,6 +166,8 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		MachineType: machineType,
 		Zone:        zone,
 		Project:     project,
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
@@ -198,15 +204,16 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	projects       []string
-	ServiceAccount string
-	MachineType    string
-	MinCPUPlatform string
-	Zones          []string
-	Image          string
-	SSDCount       int
-	PDVolumeType   string
-	PDVolumeSize   int
+	projects         []string
+	ServiceAccount   string
+	MachineType      string
+	MinCPUPlatform   string
+	Zones            []string
+	Image            string
+	SSDCount         int
+	PDVolumeType     string
+	PDVolumeSize     int
+	UseMultipleDisks bool
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -297,6 +304,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Type of the persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
+	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+		false, "Enable the use of multiple stores by creating one store directory per disk. "+
+			"Default is to raid0 stripe all disks.")
 
 	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", nil,
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
@@ -342,8 +352,8 @@ type Provider struct {
 	opts ProviderOpts
 }
 
-func makeProvider() Provider {
-	return Provider{opts: DefaultProviderOpts()}
+func newProvider() *Provider {
+	return &Provider{opts: DefaultProviderOpts()}
 }
 
 // CleanSSH TODO(peter): document
@@ -462,7 +472,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, p.opts.UseMultipleDisks)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -474,7 +484,26 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if p.opts.MinCPUPlatform != "" {
 		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
 	}
-	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
+
+	m := vm.GetDefaultLabelMap(opts)
+	// Format according to gce label naming convention requirement.
+	time := timeutil.Now().Format(time.RFC3339)
+	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
+	m[vm.TagCreated] = time
+
+	var sb strings.Builder
+	for key, value := range opts.CustomLabels {
+		_, ok := m[key]
+		if ok {
+			return fmt.Errorf("duplicate label name defined: %s", key)
+		}
+		fmt.Fprintf(&sb, "%s=%s,", key, value)
+	}
+	for key, value := range m {
+		fmt.Fprintf(&sb, "%s=%s,", key, value)
+	}
+	s := sb.String()
+	args = append(args, "--labels", s[:len(s)-1])
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
@@ -671,4 +700,14 @@ func (p *Provider) Name() string {
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
+}
+
+// ProjectActive is part of the vm.Provider interface.
+func (p *Provider) ProjectActive(project string) bool {
+	for _, p := range p.GetProjects() {
+		if p == project {
+			return true
+		}
+	}
+	return false
 }
