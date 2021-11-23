@@ -11,24 +11,26 @@
 package rttanalysis
 
 import (
-	"bufio"
-	"bytes"
+	"context"
 	"encoding/csv"
 	"flag"
-	"io"
 	"os"
 	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 type benchmarkResult struct {
@@ -49,7 +51,7 @@ const expectationsFilename = "benchmark_expectations"
 var expectationsHeader = []string{"exp", "benchmark"}
 
 var (
-	rewriteFlag = flag.String("rewrite", "",
+	rewriteFlag = flag.Bool("rewrite", false,
 		"if non-empty, a regexp of benchmarks to rewrite")
 	rewriteIterations = flag.Int("rewrite-iterations", 50,
 		"if re-writing, the number of times to execute each benchmark to "+
@@ -58,14 +60,14 @@ var (
 
 // RunBenchmarkExpectationTests runs tests to validate or rewrite the contents
 // of the benchmark expectations file.
-func RunBenchmarkExpectationTests(t *testing.T) {
-	expectations := readExpectationsFile(t)
-
-	benchmarks := getBenchmarks(t)
-	if *rewriteFlag != "" {
-		rewriteBenchmarkExpectations(t, benchmarks)
+func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
+	if util.IsMetamorphicBuild() {
+		execTestSubprocess(t)
 		return
 	}
+
+	// Only create the scope after we've checked if we need to exec the subprocess.
+	defer log.Scope(t).Close(t)
 
 	defer func() {
 		if t.Failed() {
@@ -73,176 +75,152 @@ func RunBenchmarkExpectationTests(t *testing.T) {
 		}
 	}()
 
-	for _, b := range benchmarks {
-		flags := []string{
-			"--test.run=^$",
-			"--test.bench=" + b,
-			"--test.benchtime=1x",
-		}
-		if testing.Verbose() {
-			flags = append(flags, "--test.v")
-		}
-		results := runBenchmarks(t, flags...)
-
-		for _, r := range results {
-			exp, ok := expectations.find(r.name)
-			if !ok {
-				t.Logf("no expectation for benchmark %s, got %d", r.name, r.result)
-				continue
-			}
-			if !exp.matches(r.result) {
-				t.Errorf("fail: expected %s to perform KV lookups in [%d, %d], got %d",
-					r.name, exp.min, exp.max, r.result)
-			} else {
-				t.Logf("success: expected %s to perform KV lookups in [%d, %d], got %d",
-					r.name, exp.min, exp.max, r.result)
-			}
-		}
-	}
-}
-
-func getBenchmarks(t *testing.T) (benchmarks []string) {
-	cmd := exec.Command(os.Args[0], "--test.list", "^Benchmark")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	require.NoError(t, cmd.Run())
-	sc := bufio.NewScanner(&out)
-	for sc.Scan() {
-		benchmarks = append(benchmarks, sc.Text())
-	}
-	require.NoError(t, sc.Err())
-	return benchmarks
-}
-
-func runBenchmarks(t *testing.T, flags ...string) []benchmarkResult {
-	cmd := exec.Command(os.Args[0], flags...)
-
-	// Disable metamorphic testing in the subprocesses.
-	env := os.Environ()
-	env = append(env, util.DisableMetamorphicEnvVar+"=t")
-	cmd.Env = env
-	t.Log(cmd)
-	stdout, err := cmd.StdoutPipe()
-	require.NoError(t, err)
-	cmd.Stderr = os.Stderr
-	var stdoutBuf bytes.Buffer
-	var g errgroup.Group
-	g.Go(func() error {
-		defer stdout.Close()
-		_, err := io.Copy(os.Stdout, io.TeeReader(stdout, &stdoutBuf))
-		return err
-	})
-	require.NoErrorf(t, cmd.Start(), "failed to start command %v", cmd)
-	require.NoError(t, g.Wait())
-	require.NoErrorf(t, cmd.Wait(), "failed to wait for command %v", cmd)
-	return readBenchmarkResults(t, &stdoutBuf)
-}
-
-var (
-	benchmarkResultRe = regexp.MustCompile(`^Benchmark(?P<testname>.*)-\d+\s.*\s(?P<roundtrips>\S+)\sroundtrips$`)
-	testNameIdx       = benchmarkResultRe.SubexpIndex("testname")
-	roundtripsIdx     = benchmarkResultRe.SubexpIndex("roundtrips")
-)
-
-func readBenchmarkResults(t *testing.T, benchmarkOutput io.Reader) []benchmarkResult {
-	var ret []benchmarkResult
-	sc := bufio.NewScanner(benchmarkOutput)
-	for sc.Scan() {
-		match := benchmarkResultRe.FindStringSubmatch(sc.Text())
-		if match == nil {
-			continue
-		}
-		testName := match[testNameIdx]
-		got, err := strconv.ParseFloat(match[roundtripsIdx], 64)
+	var results resultSet
+	var wg sync.WaitGroup
+	concurrency := ((system.NumCPU()*4 - 1) / r.numNodes) + 1 // arbitrary
+	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
+	isRewrite := *rewriteFlag
+	for b, cases := range r.r {
+		quota, err := limiter.Acquire(context.Background(), 1)
 		require.NoError(t, err)
-		ret = append(ret, benchmarkResult{
-			name:   testName,
-			result: int(got),
-		})
+		wg.Add(1)
+		go func(b string, cases []RoundTripBenchTestCase) {
+			defer wg.Done()
+			defer quota.Release()
+			t.Run(b, func(t *testing.T) {
+				runs := 1
+				if isRewrite {
+					runs = *rewriteIterations
+				}
+				runRoundTripBenchmarkTest(t, &results, cases, r.cc, runs, limiter)
+			})
+		}(b, cases)
 	}
-	require.NoError(t, sc.Err())
-	return ret
+	wg.Wait()
+
+	if isRewrite {
+		writeExpectationsFile(t,
+			mergeExpectations(
+				readExpectationsFile(t),
+				resultsToExpectations(t, results.toSlice()),
+			))
+	} else {
+		checkResults(t, &results, readExpectationsFile(t))
+	}
 }
 
-// rewriteBenchmarkExpectations re-runs the specified benchmarks and throws out
-// the existing values in the results file. All other values are preserved.
-func rewriteBenchmarkExpectations(t *testing.T, benchmarks []string) {
-
-	// Split off the filter so as to avoid spinning off unnecessary subprocesses.
-	slashIdx := strings.Index(*rewriteFlag, "/")
-	var afterSlash string
-	if slashIdx == -1 {
-		slashIdx = len(*rewriteFlag)
-	} else {
-		afterSlash = (*rewriteFlag)[slashIdx+1:]
-	}
-	benchmarkFilter, err := regexp.Compile((*rewriteFlag)[:slashIdx])
-	require.NoError(t, err)
-
-	var g errgroup.Group
-	resChan := make(chan []benchmarkResult)
-	run := func(b string) {
-		if !benchmarkFilter.MatchString(b) {
+func checkResults(t *testing.T, results *resultSet, expectations benchmarkExpectations) {
+	results.iterate(func(r benchmarkResult) {
+		exp, ok := expectations.find(r.name)
+		if !ok {
+			t.Logf("no expectation for benchmark %s, got %d", r.name, r.result)
 			return
 		}
-		g.Go(func() error {
-			t.Run(b, func(t *testing.T) {
-				flags := []string{
-					"--test.run", "^$",
-					"--test.benchtime", "1x",
-					"--test.bench", b + "/" + afterSlash,
-					"--rewrite", *rewriteFlag,
-					"--test.count", strconv.Itoa(*rewriteIterations),
-				}
-				if testing.Verbose() {
-					flags = append(flags, "--test.v")
-				}
-				resChan <- runBenchmarks(t, flags...)
-			})
-			return nil
-		})
-	}
-	for _, b := range benchmarks {
-		run(b)
-	}
-	go func() { _ = g.Wait(); close(resChan) }()
-	var results []benchmarkResult
-	for res := range resChan {
-		results = append(results, res...)
-	}
-
-	rewritePattern, err := regexp.Compile(*rewriteFlag)
-	require.NoError(t, err)
-	expectations := readExpectationsFile(t)
-	expectations = removeMatching(expectations, rewritePattern)
-	expectations = append(removeMatching(expectations, rewritePattern),
-		resultsToExpectations(results)...)
-	sort.Sort(expectations)
-
-	// Verify there aren't any duplicates.
-	for i := 1; i < len(expectations); i++ {
-		if expectations[i-1].name == expectations[i].name {
-			t.Fatalf("duplicate expecatations for Name %s", expectations[i].name)
+		if !exp.matches(r.result) {
+			t.Errorf("fail: expected %s to perform KV lookups in [%d, %d], got %d",
+				r.name, exp.min, exp.max, r.result)
+		} else {
+			t.Logf("success: expected %s to perform KV lookups in [%d, %d], got %d",
+				r.name, exp.min, exp.max, r.result)
 		}
-	}
-
-	writeExpectationsFile(t, expectations)
+	})
 }
 
-func removeMatching(
-	expectations benchmarkExpectations, rewritePattern *regexp.Regexp,
-) benchmarkExpectations {
-	truncated := expectations[:0]
-	for i := range expectations {
-		if rewritePattern.MatchString(expectations[i].name) {
-			continue
-		}
-		truncated = append(truncated, expectations[i])
+func mergeExpectations(existing, new benchmarkExpectations) (merged benchmarkExpectations) {
+	sort.Sort(existing)
+	sort.Sort(new)
+	pop := func(be *benchmarkExpectations) (ret benchmarkExpectation) {
+		ret = (*be)[0]
+		*be = (*be)[1:]
+		return ret
 	}
-	return truncated
+	for len(existing) > 0 && len(new) > 0 {
+		switch {
+		case existing[0].name < new[0].name:
+			merged = append(merged, pop(&existing))
+		case existing[0].name > new[0].name:
+			merged = append(merged, pop(&new))
+		default:
+			pop(&existing) // discard the existing value if they are equal
+			merged = append(merged, pop(&new))
+		}
+	}
+	// Only one of existing or new will be non-empty.
+	merged = append(append(merged, new...), existing...)
+	return merged
 }
 
-func resultsToExpectations(results []benchmarkResult) benchmarkExpectations {
+// execTestSubprocess execs the testing binary with all the same flags in order
+// to run it without metamorphic testing enabled. Metamorphic testing messes
+// with the benchmark results. It's particularly important to do this as we
+// always run with metamorphic testing enabled in CI.
+func execTestSubprocess(t *testing.T) {
+	var args []string
+	flag.CommandLine.Visit(func(f *flag.Flag) {
+		vs := f.Value.String()
+		switch f.Name {
+		case "test.run":
+			// Only run the current outermost test in the subprocess.
+			prefix := "^" + regexp.QuoteMeta(t.Name()) + "$"
+			if idx := strings.Index(vs, "/"); idx >= 0 {
+				vs = prefix + vs[idx:]
+			} else {
+				vs = prefix
+			}
+		case "test.bench":
+			// Omit the benchmark flags, we'll add a flag below to disable
+			// benchmarks. Consider the below command. We don't want to
+			// run the benchmarks again in this subprocess. We only want
+			// to run exactly this one test.
+			//
+			//   go test --run Expectations --bench .
+			//
+			return
+		}
+		args = append(args, "--"+f.Name+"="+vs)
+	})
+	args = append(args, "--test.bench=^$") // disable benchmarks
+	args = append(args, flag.CommandLine.Args()...)
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, util.DisableMetamorphicEnvVar+"=t")
+	t.Log(cmd.Args)
+	if err := cmd.Run(); err != nil {
+		t.FailNow()
+	}
+}
+
+type resultSet struct {
+	mu struct {
+		syncutil.Mutex
+		results []benchmarkResult
+	}
+}
+
+func (s *resultSet) add(result benchmarkResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.results = append(s.mu.results, result)
+}
+
+func (s *resultSet) iterate(f func(res benchmarkResult)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, res := range s.mu.results {
+		f(res)
+	}
+}
+
+func (s *resultSet) toSlice() (res []benchmarkResult) {
+	s.iterate(func(result benchmarkResult) {
+		res = append(res, result)
+	})
+	return res
+}
+
+func resultsToExpectations(t *testing.T, results []benchmarkResult) benchmarkExpectations {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].name < results[j].name
 	})
@@ -269,6 +247,13 @@ func resultsToExpectations(results []benchmarkResult) benchmarkExpectations {
 	}
 	if cur != (benchmarkExpectation{}) {
 		res = append(res, cur)
+	}
+
+	// Verify there aren't any duplicates.
+	for i := 1; i < len(res); i++ {
+		if res[i-1].name == res[i].name {
+			t.Fatalf("duplicate expectations for Name %s", res[i].name)
+		}
 	}
 	return res
 }

@@ -12,8 +12,9 @@ package rttanalysis
 
 import "testing"
 
-func BenchmarkORMQueries(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("ORMQueries", []RoundTripBenchTestCase{
 		{
 			Name:  "django table introspection 1 table",
 			Setup: `CREATE TABLE t1(a int primary key, b int);`,
@@ -179,7 +180,5 @@ WHERE
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_column_privilege('t', 'a', 'INSERT')`,
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
