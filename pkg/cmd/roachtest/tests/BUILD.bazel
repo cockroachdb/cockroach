@@ -64,6 +64,8 @@ go_library(
         "inconsistency.go",
         "indexes.go",
         "inverted_index.go",
+        "jasyncsql.go",
+        "jasyncsql_blocklist.go",
         "java_helpers.go",
         "jepsen.go",
         "jobs.go",
