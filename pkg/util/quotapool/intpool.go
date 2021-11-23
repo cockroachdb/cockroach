@@ -85,9 +85,9 @@ func (ia *IntAlloc) Merge(other *IntAlloc) {
 // negative. Imagine the case where the capacity of an IntPool is initially 10.
 // An allocation of 10 is acquired. Then, while it is held, the pool's capacity
 // is updated to be 9. Then the outstanding allocation is frozen. This would
-// make the total capacity of the IntPool negative which is not allowed and will
-// lead to a panic. In general it's a bad idea to freeze allocated quota from a
-// pool which will ever have its capacity decreased.
+// make the total capacity of the IntPool negative which is not allowed and
+// will lead to a panic. In general, it's a bad idea to freeze allocated quota
+// from a pool which will ever have its capacity decreased.
 //
 // AcquireFunc() requests will be woken up with an updated Capacity, and Alloc()
 // requests will be trimmed accordingly.
@@ -404,7 +404,7 @@ func (p *IntPool) UpdateCapacity(newCapacity uint64) {
 	// If was reordered to:
 	//   99, 99, -99, -99
 	// Then we'd effectively ignore the additions at the beginning because they
-	// would push the alloc above the capacity and then we'd make the
+	// would push the alloc above the capacity, and then we'd make the
 	// corresponding subtractions, leading to a final state of -98 even though
 	// we'd like it to be 1.
 	p.updateCapacityMu.Lock()
