@@ -29,6 +29,7 @@ type config struct {
 	withInitialScan    bool
 	withDiff           bool
 	onInitialScanError OnInitialScanError
+	onInternalError    OnInternalError
 	onCheckpoint       OnCheckpoint
 	onFrontierAdvance  OnFrontierAdvance
 }
@@ -45,6 +46,13 @@ type OnInitialScanDone func(ctx context.Context)
 // allows the caller to tell the RangeFeed to stop as opposed to retrying
 // endlessly.
 type OnInitialScanError func(ctx context.Context, err error) (shouldFail bool)
+
+// OnInternalError is called when the rangefeed exits with an internal error. One
+// example is when the rangefeed falls behind to a point where the frontier
+// timestamp precedes the GC threshold, and thus will never work. The callback
+// lets callers find out about the error, possibly to start a new rangefeed with
+// an initial scan.
+type OnInternalError func(ctx context.Context, err error)
 
 // WithInitialScan enables an initial scan of the data in the span. The rows of
 // an initial scan will be passed to the value function used to construct the
@@ -66,6 +74,14 @@ func WithInitialScan(f OnInitialScanDone) Option {
 func WithOnInitialScanError(f OnInitialScanError) Option {
 	return optionFunc(func(c *config) {
 		c.onInitialScanError = f
+	})
+}
+
+// WithOnInternalError sets up a callback to report internal errors during
+// operation.
+func WithOnInternalError(f OnInternalError) Option {
+	return optionFunc(func(c *config) {
+		c.onInternalError = f
 	})
 }
 

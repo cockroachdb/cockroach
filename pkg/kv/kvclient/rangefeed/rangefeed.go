@@ -232,13 +232,6 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 	errCh := make(chan error)
 
 	for i := 0; r.Next(); i++ {
-
-		// TODO(ajwerner): Figure out what to do if the rangefeed falls behind to
-		// a point where the frontier timestamp precedes the GC threshold and thus
-		// will never work. Perhaps an initial scan could be performed again for
-		// some users. The API currently doesn't make that easy. Perhaps a callback
-		// should be called in order to allow the client to kill the process or
-		// something like that.
 		ts := frontier.Frontier()
 		log.VEventf(ctx, 1, "starting rangefeed from %v on %v", ts, f.span)
 		start := timeutil.Now()
@@ -261,6 +254,14 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		}
 		if ctx.Err() != nil {
 			log.VEventf(ctx, 1, "exiting rangefeed")
+			return
+		}
+		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) {
+			if errCallback := f.onInternalError; errCallback != nil {
+				errCallback(ctx, err)
+			}
+
+			log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
 			return
 		}
 
