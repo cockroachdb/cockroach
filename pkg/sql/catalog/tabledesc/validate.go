@@ -684,6 +684,13 @@ func (desc *wrapper) validateColumns(
 		} else if column.IsVirtual() {
 			return errors.Newf("virtual column %q is not computed", column.GetName())
 		}
+
+		if column.IsComputed() && column.HasDefault() {
+			return pgerror.Newf(pgcode.InvalidTableDefinition,
+				"computed column %q cannot also have a DEFAULT expression",
+				column.GetName(),
+			)
+		}
 	}
 	return nil
 }
