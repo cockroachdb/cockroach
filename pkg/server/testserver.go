@@ -140,7 +140,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st.ExternalIODir = params.ExternalIODir
 	tr := params.Tracer
 	if params.Tracer == nil {
-		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
+		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
 	}
 	cfg := makeTestConfig(st, tr)
 	cfg.TestingKnobs = params.Knobs
@@ -644,12 +644,12 @@ func (ts *TestServer) StartTenant(
 	if stopper == nil {
 		// We don't share the stopper with the server because we want their Tracers
 		// to be different, to simulate them being different processes.
-		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
 		stopper = stop.NewStopper(stop.WithTracer(tr))
 		// The server's stopper stops the tenant, for convenience.
 		ts.Stopper().AddCloser(stop.CloserFn(func() { stopper.Stop(context.Background()) }))
 	} else if stopper.Tracer() == nil {
-		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
 		stopper.SetTracer(tr)
 	}
 

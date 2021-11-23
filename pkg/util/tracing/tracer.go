@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -138,6 +139,32 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 	},
 ).WithPublic()
 
+// enableTracingByDefault controls whether Tracers configured with
+// WithTracingMode(TracingModeFromEnv) generally create spans or not.
+var enableTracingByDefault = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", false) || buildutil.CrdbTestBuild
+
+// TracingMode specifies whether span creation is enabled or disabled by
+// default, when other conditions that don't explicitly turn tracing on don't
+// apply.
+type TracingMode int
+
+const (
+	// TracingModeFromEnv configures tracing according to enableTracingByDefault.
+	TracingModeFromEnv TracingMode = iota
+	// TracingModeOnDemand means that Spans will no be created unless there's a
+	// particular reason to create them (i.e. a span being created with
+	// WithForceRealSpan(), a net.Trace or OpenTelemetry tracers attached).
+	TracingModeOnDemand
+	// TracingModeActiveSpansRegistry means that Spans are always created.
+	// Currently-open spans are accessible through the active spans registry.
+	//
+	// If no net.Trace/OpenTelemetry tracer is attached, spans do not record
+	// events by default (i.e. do not accumulate log messages via Span.Record() or
+	// a history of finished child spans). In order for a span to record events,
+	// it must be started with the WithRecording() option).
+	TracingModeActiveSpansRegistry
+)
+
 // Tracer implements tracing requests. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -159,6 +186,8 @@ type Tracer struct {
 	// x/net/trace or OpenTelemetry and we are not recording.
 	noopSpan        *Span
 	sterileNoopSpan *Span
+
+	tracingDefault TracingMode
 
 	// backardsCompatibilityWith211, if set, makes the Tracer
 	// work with 21.1 remote nodes.
@@ -296,9 +325,6 @@ func (r *spanRegistry) swap(parentID tracingpb.SpanID, children []*crdbSpan) {
 type TracerTestingKnobs struct {
 	// Clock allows the time source for spans to be controlled.
 	Clock timeutil.TimeSource
-	// ForceRealSpans, if set, forces the Tracer to create spans even when tracing
-	// is otherwise disabled.
-	ForceRealSpans bool
 	// UseNetTrace, if set, forces the Traces to always create spans which record
 	// to net.Trace objects.
 	UseNetTrace bool
@@ -331,13 +357,15 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 		t.Configure(ctx, o.sv)
 	}
 	t.testing = o.knobs
+	t.tracingDefault = TracingMode(o.tracingDefault)
 	return t
 }
 
 // tracerOptions groups configuration for Tracer construction.
 type tracerOptions struct {
-	sv    *settings.Values
-	knobs TracerTestingKnobs
+	sv             *settings.Values
+	knobs          TracerTestingKnobs
+	tracingDefault tracingModeOpt
 }
 
 // TracerOption is implemented by the arguments to the Tracer constructor.
@@ -374,6 +402,19 @@ var _ TracerOption = knobsOpt{}
 // WithTestingKnobs configures the Tracer with the specified knobs.
 func WithTestingKnobs(knobs TracerTestingKnobs) TracerOption {
 	return knobsOpt{knobs: knobs}
+}
+
+type tracingModeOpt TracingMode
+
+var _ TracerOption = tracingModeOpt(TracingModeFromEnv)
+
+func (o tracingModeOpt) apply(opt *tracerOptions) {
+	opt.tracingDefault = o
+}
+
+// WithTracingMode configures the Tracer's tracing mode.
+func WithTracingMode(opt TracingMode) TracerOption {
+	return tracingModeOpt(opt)
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -587,8 +628,16 @@ func (t *Tracer) StartSpanCtx(
 // AlwaysTrace returns true if operations should be traced regardless of the
 // context.
 func (t *Tracer) AlwaysTrace() bool {
-	if t.testing.ForceRealSpans {
+	switch t.tracingDefault {
+	case TracingModeFromEnv:
+		if enableTracingByDefault {
+			return true
+		}
+	case TracingModeActiveSpansRegistry:
 		return true
+	case TracingModeOnDemand:
+	default:
+		panic(fmt.Sprintf("unrecognized tracing option: %v", t.tracingDefault))
 	}
 	otelTracer := t.getOtelTracer()
 	return t.useNetTrace() || otelTracer != nil

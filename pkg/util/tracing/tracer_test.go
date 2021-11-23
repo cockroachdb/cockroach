@@ -43,24 +43,22 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	require.False(t, sp.IsNoop())
 }
 
-func TestTracerRecording(t *testing.T) {
-	tr := NewTracer()
-
+func TestTracingOffRecording(t *testing.T) {
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	noop1 := tr.StartSpan("noop")
-	if !noop1.IsNoop() {
-		t.Error("expected noop Span")
-	}
+	require.True(t, noop1.IsNoop())
+
 	noop1.Record("hello")
 
-	// Noop span returns empty recording.
-	require.Equal(t, Recording(nil), noop1.GetRecording(RecordingVerbose))
-
 	noop2 := tr.StartSpan("noop2", WithParent(noop1), WithDetachedRecording())
-	if !noop2.IsNoop() {
-		t.Error("expected noop child Span")
-	}
-	noop2.Finish()
-	noop1.Finish()
+	require.True(t, noop2.IsNoop())
+
+	// Noop span returns empty recording.
+	require.Nil(t, noop1.GetRecording(RecordingVerbose))
+}
+
+func TestTracerRecording(t *testing.T) {
+	tr := NewTracer()
 
 	s1 := tr.StartSpan("a", WithRecording(RecordingStructured))
 	if s1.IsNoop() {
@@ -214,7 +212,7 @@ func TestStartChildSpan(t *testing.T) {
 }
 
 func TestSterileSpan(t *testing.T) {
-	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 
 	// Check that a children of sterile spans are roots.
 	// Make the span verbose so that we can use its recording below to assert that
@@ -241,9 +239,9 @@ func TestSterileSpan(t *testing.T) {
 	require.Len(t, carrier.MD, 0)
 }
 
-func TestTracerInjectExtract(t *testing.T) {
-	tr := NewTracer()
-	tr2 := NewTracer()
+func TestTracerInjectExtractNoop(t *testing.T) {
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
+	tr2 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 
 	// Verify that noop spans become noop spans on the remote side.
 
@@ -270,16 +268,21 @@ func TestTracerInjectExtract(t *testing.T) {
 	}
 	noop1.Finish()
 	noop2.Finish()
+}
+
+func TestTracerInjectExtract(t *testing.T) {
+	tr := NewTracer()
+	tr2 := NewTracer()
 
 	// Verify that verbose tracing is propagated and triggers verbosity on the
 	// remote side.
 
 	s1 := tr.StartSpan("a", WithRecording(RecordingVerbose))
 
-	carrier = metadataCarrier{metadata.MD{}}
+	carrier := metadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(s1.Meta(), carrier)
 
-	wireSpanMeta, err = tr2.ExtractMetaFrom(carrier)
+	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -543,7 +546,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 }
 
 func TestNoopSpanFinish(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	sp := tr.StartSpan("noop")
 	require.Equal(t, tr.noopSpan, sp)
 	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
@@ -554,7 +557,7 @@ func TestNoopSpanFinish(t *testing.T) {
 // Test that a span constructed with a no-op span behaves like a root span - it
 // is present in the active spans registry.
 func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	noop := tr.StartSpan("noop")
 	require.True(t, noop.IsNoop())
 	root := tr.StartSpan("foo", WithParent(noop), WithForceRealSpan())
@@ -644,7 +647,7 @@ span: a
 // roots and are inserted into the registry.
 func TestRegistryOrphanSpansBecomeRoots(t *testing.T) {
 	ctx := context.Background()
-	tr := NewTracerWithOpt(ctx, WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+	tr := NewTracerWithOpt(ctx, WithTracingMode(TracingModeActiveSpansRegistry))
 	// s1 must be recording because, otherwise, the child spans are not linked to
 	// it.
 	s1 := tr.StartSpan("parent", WithRecording(RecordingStructured))

@@ -687,12 +687,7 @@ func (cf closerFunc) Close() { cf() }
 // the ChildSpan option.
 func TestStopperRunAsyncTaskTracing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tr := tracing.NewTracerWithOpt(context.Background(), tracing.WithTestingKnobs(
-		tracing.TracerTestingKnobs{
-			// We want the tracer to generate real spans so that we can test that the
-			// RootSpan option produces a root span.
-			ForceRealSpans: true,
-		}))
+	tr := tracing.NewTracerWithOpt(context.Background(), tracing.WithTracingMode(tracing.TracingModeActiveSpansRegistry))
 	s := stop.NewStopper(stop.WithTracer(tr))
 
 	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tr, "parent")
