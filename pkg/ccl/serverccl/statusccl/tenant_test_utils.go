@@ -40,14 +40,12 @@ type testTenant struct {
 func newTestTenant(
 	t *testing.T,
 	server serverutils.TestServerInterface,
-	existing bool,
 	tenantID roachpb.TenantID,
 	knobs base.TestingKnobs,
 ) *testTenant {
 	t.Helper()
 
 	tenantParams := tests.CreateTestTenantParams(tenantID)
-	tenantParams.Existing = existing
 	tenantParams.TestingKnobs = knobs
 
 	log.TestingClearServerIdentifiers()
@@ -136,11 +134,9 @@ func newTenantCluster(
 	t.Helper()
 
 	cluster := make([]*testTenant, tenantClusterSize)
-	existing := false
 	for i := 0; i < tenantClusterSize; i++ {
 		cluster[i] =
-			newTestTenant(t, server, existing, roachpb.MakeTenantID(tenantID), knobs)
-		existing = true
+			newTestTenant(t, server, roachpb.MakeTenantID(tenantID), knobs)
 	}
 
 	return cluster

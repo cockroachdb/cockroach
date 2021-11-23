@@ -26,6 +26,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -49,12 +50,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -302,6 +305,10 @@ type TestServer struct {
 	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
 	*Server
+	// The tenants associated with this server. Currently there is only one
+	// tenant created by default, but longer term we may allow for creation
+	// of multiple tenants for more advanced testing.
+	tenants []serverutils.TestTenantInterface
 	// authClient is an http.Client that has been authenticated to access the
 	// Admin UI.
 	authClient [2]struct {
@@ -466,6 +473,69 @@ func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 	return nil
 }
 
+// maybeStartTestTenant starts a default tenant under this server.
+// This can be helpful for multi-tenant testing, where the default SQL
+// connection will be made to this default tenant as opposed to the host
+// tenant.
+func (ts *TestServer) maybeStartTestTenant(ctx context.Context) error {
+	if ts.params.DisableDefaultTenant {
+		return nil
+	}
+
+	if len(ts.tenants) == 0 {
+		ts.tenants = make([]serverutils.TestTenantInterface, 1)
+	}
+
+	// TODO(ajstorm): what to do about logic tests which require more disk space?
+	//  Need to plumb the accounting through to here.
+	// var tempStorageConfig base.TempStorageConfig
+	//	if serverArgs.tempStorageDiskLimit == 0 {
+	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
+	//	} else {
+	//		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), serverArgs.tempStorageDiskLimit)
+	//	}
+
+	//	var blobClientFactory blobs.BlobClientFactory
+	//
+	//
+	//	// FIXME: need to plum the TenantBlobClientFactory into the tenant
+	//	if ts.TestingKnobs().Server
+
+	params := base.TestTenantArgs{
+		// Currently, all the servers leverage the same tenant ID. We may
+		// want to change this down the road, for more elaborate testing.
+		TenantID:                    serverutils.TestTenantID(),
+		MemoryPoolSize:              ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:           &tempStorageConfig,
+		Locality:                    ts.params.Locality,
+		ExternalIODir:               ts.params.ExternalIODir,
+		ExternalIODirConfig:         ts.params.ExternalIODirConfig,
+		AllowSettingClusterSettings: true,
+		TestingKnobs: base.TestingKnobs{
+			// TODO(ajstorm): Since we're only running one tenant, this is
+			//  probably OK. Reconsider this before merging.
+			TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				DeterministicExplain: true,
+			},
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				AOSTClause: "AS OF SYSTEM TIME '-1us'",
+			},
+		},
+	}
+
+	// Prevent a logging assertion that the server ID is initialized multiple times.
+	log.TestingClearServerIdentifiers()
+
+	tenant, err := ts.StartTenant(ctx, params)
+	if err != nil {
+		return err
+	}
+
+	ts.tenants[0] = tenant
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -473,7 +543,11 @@ func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(ctx context.Context) error {
-	return ts.Server.Start(ctx)
+	err := ts.Server.Start(ctx)
+	if err != nil {
+		return err
+	}
+	return ts.maybeStartTestTenant(ctx)
 }
 
 type dummyProtectedTSProvider struct {
@@ -545,7 +619,17 @@ func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
-	if !params.Existing {
+	// Determine if we need to create the tenant before starting it.
+	rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+		ctx, "testserver-check-tenant-exists", nil,
+		"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+		params.TenantID.ToUint64(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if rowCount == 0 {
+		// Tenant doesn't exist. Create it.
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
 		); err != nil {
@@ -553,20 +637,6 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
-	if !params.SkipTenantCheck {
-		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-			ctx, "testserver-check-tenant-active", nil,
-			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
-			params.TenantID.ToUint64(),
-		)
-
-		if err != nil {
-			return nil, err
-		}
-		if rowCount == 0 {
-			return nil, errors.New("not found")
-		}
-	}
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
@@ -600,6 +670,18 @@ func (ts *TestServer) StartTenant(
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
 	baseCfg.Locality = params.Locality
+
+	// TODO(ajstorm): Validate that this is sane. I think it is now...
+	tk := &baseCfg.TestingKnobs
+	blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(params.ExternalIODir)
+	if serverKnobs, ok := tk.Server.(*TestingKnobs); ok {
+		serverKnobs.TenantBlobClientFactory = blobClientFactory
+	} else {
+		tk.Server = &TestingKnobs{
+			TenantBlobClientFactory: blobClientFactory,
+		}
+	}
+
 	if params.SSLCertsDir != "" {
 		baseCfg.SSLCertsDir = params.SSLCertsDir
 	}
@@ -688,8 +770,15 @@ func (ts *TestServer) ServingRPCAddr() string {
 }
 
 // ServingSQLAddr returns the server's SQL address. Should be used by clients.
+// If a tenant is started for this server, return the first tenant's SQL
+// address.
+// TODO(ajstorm): Generalize this so that it can return any of the tenant's
+//  addresses.
 func (ts *TestServer) ServingSQLAddr() string {
-	return ts.cfg.SQLAdvertiseAddr
+	if len(ts.tenants) == 0 {
+		return ts.cfg.SQLAdvertiseAddr
+	}
+	return ts.tenants[0].SQLAddr()
 }
 
 // HTTPAddr returns the server's HTTP address. Should be used by clients.

@@ -94,7 +94,6 @@ func TestTenantGRPCServices(t *testing.T) {
 	log.TestingClearServerIdentifiers()
 	tenant2, connTenant2 := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID:     tenantID,
-		Existing:     true,
 		TestingKnobs: testingKnobs,
 	})
 	defer connTenant2.Close()

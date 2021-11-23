@@ -166,6 +166,9 @@ func StartTenant(
 	)
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
+	if err != nil {
+		return nil, "", "", err
+	}
 	tenantStatusServer.sqlServer = s
 	// Also add the SQL instance tag to the tenant status server's
 	// ambient context.
@@ -177,10 +180,6 @@ func StartTenant(
 	// TODO(knz): find a way to share common logging tags between
 	// multiple AmbientContext instances.
 	tenantStatusServer.AmbientContext.AddLogTag("sqli", s.sqlIDContainer)
-
-	if err != nil {
-		return nil, "", "", err
-	}
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.

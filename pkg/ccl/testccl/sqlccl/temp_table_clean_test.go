@@ -122,7 +122,6 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	log.TestingClearServerIdentifiers()
 	_, tenantSecondDB := serverutils.StartTenant(t, tc.Server(1),
 		base.TestTenantArgs{
-			Existing: true,
 			TenantID: serverutils.TestTenantID(),
 			Settings: settings,
 			Stopper:  tenantStoppers[1],
@@ -167,7 +166,6 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	tenantStoppers[0] = stop.NewStopper()
 	_, tenantPrimaryDB = serverutils.StartTenant(t, tc.Server(0),
 		base.TestTenantArgs{
-			Existing:     true,
 			TenantID:     serverutils.TestTenantID(),
 			Settings:     settings,
 			TestingKnobs: tenantTempKnobSettings,

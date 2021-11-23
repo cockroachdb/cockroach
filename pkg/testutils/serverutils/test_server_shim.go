@@ -22,6 +22,7 @@ import (
 	gosql "database/sql"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -284,6 +286,10 @@ func StartServer(
 		t.Fatalf("%+v", err)
 	}
 	if err := server.Start(context.Background()); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			server.Stopper().Stop(context.Background())
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
@@ -352,6 +358,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 		return nil, err
 	}
 	if err := server.Start(context.Background()); err != nil {
+		server.Stopper().Stop(context.Background())
 		return nil, err
 	}
 	return server, nil

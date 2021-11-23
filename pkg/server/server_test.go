@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -72,6 +73,9 @@ func TestSelfBootstrap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatal(err)
 	}
 	defer s.Stopper().Stop(context.Background())
@@ -96,10 +100,13 @@ func TestHealthCheck(t *testing.T) {
 		},
 	})
 
+	defer s.Stopper().Stop(context.Background())
 	if err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop(context.Background())
 
 	ctx := context.Background()
 

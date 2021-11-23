@@ -491,7 +491,6 @@ func startTenant(
 	t, err := srv.StartTenant(
 		ctx,
 		base.TestTenantArgs{
-			Existing:      true,
 			TenantID:      roachpb.MakeTenantID(id),
 			ForceInsecure: true,
 			Stopper:       tenantStopper,

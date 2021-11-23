@@ -656,7 +656,6 @@ func TestSQLLivenessExemption(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		Existing:                    true,
 		TenantID:                    tenantID,
 		Settings:                    st,
 		AllowSettingClusterSettings: true,

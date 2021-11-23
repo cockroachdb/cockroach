@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -309,6 +311,19 @@ func (tc *TestCluster) Start(t testing.TB) {
 			}(i)
 		} else {
 			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
+				if strings.Contains(err.Error(), "requires a CCL binary") {
+					assert.Condition(t,
+						func() bool {
+							return i == 0
+						},
+						"failed to start server with CCL binary after previous server started successfully",
+					)
+					for j := 0; j < nodes; j++ {
+						tc.Servers[j].Stopper().Stop(context.TODO())
+					}
+					tc.Stopper().Stop(context.TODO())
+					skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+				}
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -321,6 +336,13 @@ func (tc *TestCluster) Start(t testing.TB) {
 	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
+				if strings.Contains(err.Error(), "requires a CCL binary") {
+					for j := 0; j < nodes; j++ {
+						tc.Servers[j].Stopper().Stop(context.TODO())
+					}
+					tc.Stopper().Stop(context.TODO())
+					skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+				}
 				t.Fatal(err)
 			}
 		}
@@ -409,6 +431,10 @@ func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServe
 	}
 
 	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			tc.Stopper().Stop(context.TODO())
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatal(err)
 	}
 }

@@ -1163,7 +1163,6 @@ func newDirectoryServer(
 		log.TestingClearServerIdentifiers()
 		tenantStopper := tenantdirsvr.NewSubStopper(tdsStopper)
 		ten, err := srv.StartTenant(ctx, base.TestTenantArgs{
-			Existing:      true,
 			TenantID:      roachpb.MakeTenantID(tenantID),
 			ForceInsecure: true,
 			Stopper:       tenantStopper,

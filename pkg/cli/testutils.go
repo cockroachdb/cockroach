@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -93,11 +94,20 @@ const testTempFilePrefix = "test-temp-prefix-"
 // from the uniquely generated (temp directory) file path.
 const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
 
-func (c *TestCLI) fail(err interface{}) {
+func (c *TestCLI) fail(err error) {
 	if c.t != nil {
 		defer c.logScope.Close(c.t)
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			if c.TestServer != nil {
+				c.TestServer.Stopper().Stop(context.Background())
+			}
+			skip.IgnoreLint(c.t, "skipping due to lack of CCL binary")
+		}
 		c.t.Fatal(err)
 	} else {
+		// FIXME: Not sure what to do in this case as we could be failing
+		//  because we don't have the CCL binary, and we have no t to use for
+		//  skipping.
 		panic(err)
 	}
 }

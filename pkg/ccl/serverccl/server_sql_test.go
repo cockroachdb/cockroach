@@ -183,9 +183,7 @@ func TestNonExistentTenant(t *testing.T) {
 
 	_, err := tc.Server(0).StartTenant(ctx,
 		base.TestTenantArgs{
-			TenantID:        serverutils.TestTenantID(),
-			Existing:        true,
-			SkipTenantCheck: true,
+			TenantID: serverutils.TestTenantID(),
 		})
 	require.Error(t, err)
 	require.Equal(t, "system DB uninitialized, check if tenant is non existent", err.Error())
