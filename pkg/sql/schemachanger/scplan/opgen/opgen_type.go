@@ -28,8 +28,6 @@ func init() {
 				}
 			})),
 		to(scpb.Status_DROPPED,
-			// TODO(ajwerner): The move to DELETE_ONLY should be marked
-			// non-revertible.
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.Type) scop.Op {
@@ -39,9 +37,7 @@ func init() {
 			}),
 		),
 		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): The move to DELETE_ONLY should be marked
-			// non-revertible.
-			minPhase(scop.PreCommitPhase),
+			minPhase(scop.PostCommitPhase),
 			revertible(false),
 			emit(func(this *scpb.Type) scop.Op {
 				return &scop.DrainDescriptorName{

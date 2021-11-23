@@ -39,7 +39,6 @@ func init() {
 		),
 		to(scpb.Status_ABSENT,
 			minPhase(scop.PostCommitPhase),
-			// TODO(fqazi): We need to revisit if at this phase anything is revertible.
 			revertible(false),
 			emit(func(this *scpb.Table, md *scpb.ElementMetadata) scop.Op {
 				return &scop.LogEvent{Metadata: *md,

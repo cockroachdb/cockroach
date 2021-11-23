@@ -48,6 +48,7 @@ func makeTarget(
 }
 
 func populateSpecs(status scpb.Status, specs []transitionSpec) {
+	explicitPhases := make(map[scop.Phase]bool)
 	for i := 0; i < len(specs); i++ {
 		if i == 0 {
 			specs[i].from = status
@@ -58,11 +59,17 @@ func populateSpecs(status scpb.Status, specs []transitionSpec) {
 		prevMinPhase := specs[i-1].minPhase
 		switch curMinPhase := specs[i].minPhase; curMinPhase {
 		case 0:
-			// TODO(ajwerner): Consider enforcing that the client always provide
-			// an increasing set of minPhase values as opposed to inheriting the
-			// default. It'll probably be more onerous than it's worth.
 			specs[i].minPhase = prevMinPhase
 		default:
+			// Minimum phase of each type should only be specified once for cleaner
+			// opgen rules.
+			if explicitPhases[curMinPhase] {
+				panic(errors.AssertionFailedf(
+					"minimum phase for each transition should only be specified once",
+					prevMinPhase, specs[i].minPhase, specs[i].from, specs[i].to,
+				))
+			}
+			explicitPhases[curMinPhase] = true
 			if prevMinPhase > curMinPhase {
 				panic(errors.AssertionFailedf(
 					"invalid minimum phase %s < %s for %s -> %s",

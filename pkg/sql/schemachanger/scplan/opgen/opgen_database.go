@@ -37,8 +37,8 @@ func init() {
 			}),
 		),
 		to(scpb.Status_ABSENT,
-			minPhase(scop.PreCommitPhase),
 			revertible(false),
+			minPhase(scop.PostCommitPhase),
 			emit(func(this *scpb.Database) scop.Op {
 
 				return &scop.DrainDescriptorName{

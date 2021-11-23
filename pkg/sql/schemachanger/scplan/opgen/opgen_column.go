@@ -72,6 +72,7 @@ func init() {
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			minPhase(scop.PreCommitPhase),
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeDroppedColumnDeleteAndWriteOnly{
 					TableID:  this.TableID,
@@ -96,7 +97,6 @@ func init() {
 				}
 			})),
 		to(scpb.Status_ABSENT,
-			minPhase(scop.PostCommitPhase),
 			emit(func(this *scpb.Column) scop.Op {
 				return &scop.MakeColumnAbsent{
 					TableID:  this.TableID,

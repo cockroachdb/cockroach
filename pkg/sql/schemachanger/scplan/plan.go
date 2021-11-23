@@ -95,6 +95,10 @@ func validateStages(stages []Stage) {
 			panic(errors.AssertionFailedf(
 				"invalid execution plan revertability flipped at stage (%d): %v", idx, stage))
 		}
+		if stage.Ops == nil {
+			panic(errors.AssertionFailedf(
+				"invalid execution plan stage (%d) is missing ops", idx, stage))
+		}
 	}
 }
 
@@ -107,7 +111,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	}
 	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
-	cur := init
+	cur := &init
 	fulfilled := map[*scpb.Node]struct{}{}
 	filterUnsatisfiedEdgesStep := func(edges []*scgraph.OpEdge) ([]*scgraph.OpEdge, bool) {
 		candidates := make(map[*scpb.Node]struct{})
@@ -161,7 +165,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 				return nodeRanks[edges[i].To()] > nodeRanks[edges[j].To()]
 			})
 
-		next := shallowCopy(cur)
+		next := shallowCopy(*cur)
 		isStageRevertible := true
 		var ops []scop.Op
 		for revertible := 1; revertible >= 0; revertible-- {
@@ -170,10 +174,6 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 				for i, ts := range cur.Nodes {
 					if e.From() == ts && isStageRevertible == e.Revertible() {
 						next.Nodes[i] = e.To()
-						// TODO(fqazi): MakePlan should never emit empty stages, they are harmless
-						// but a side effect of OpEdge filtering. We need to adjust the algorithm
-						// here to run multiple transitions in a stage when planning.
-
 						// If this edge has been marked as a no-op, then a state transition
 						// can happen without executing anything.
 						if !g.IsOpEdgeOptimizedOut(e) {
@@ -183,21 +183,29 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 					}
 				}
 			}
-			// If we added non-revertible stages
-			// then this stage is done
+			// If we added non-revertible stages then this stage is done.
 			if len(ops) != 0 {
 				break
 			}
 		}
+		// We will generate an incomplete stage if no ops are generated, but a state
+		// transition still occurred. These stages will never be emitted into any
+		// plan and violate validation, they are only used to relay transitions in
+		// state.
+		var opsArray scop.Ops
+		if len(ops) != 0 {
+			opsArray = scop.MakeOps(ops...)
+		}
 		return Stage{
-			Before:     cur,
+			Before:     *cur,
 			After:      next,
-			Ops:        scop.MakeOps(ops...),
+			Ops:        opsArray,
 			Revertible: isStageRevertible,
 		}, true
 	}
 
 	var stages []Stage
+	var lastGeneratedStage Stage
 	for {
 		// Note that the current nodes are fulfilled for the sake of dependency
 		// checking.
@@ -238,10 +246,22 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		if !didSomething {
 			break
 		}
-		stages = append(stages, s)
-		cur = s.After
+		// If a stage is generated without any ops, then it will only be used to
+		// transition elements to the next set of states. This may happen if the
+		// operations were transformed/optimized out. We will not emit these stages
+		// out into the plan.
+		lastGeneratedStage = s
+		if s.Ops != nil {
+			stages = append(stages, s)
+		}
+		cur = &s.After
 	}
-	// TODO(fqazi): Enforce here that only one post commit stage will be generated
+	// If the last state and current state are not the same by the end
+	// of stage generation. Then the last stage in a plan was no-op, which
+	// needs to only inherit the last set of transitions.
+	if cur != &lastGeneratedStage.After {
+		lastGeneratedStage.After = *cur
+	}
 	// Inside OpGen we will enforce that only a single transition can occur in
 	// post commit.
 	validateStages(stages)
