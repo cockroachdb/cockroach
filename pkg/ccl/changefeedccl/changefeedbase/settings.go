@@ -78,6 +78,17 @@ var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// FrontierHighwaterLagCheckpointThreshold controls the amount the high-water
+// mark is allowed to lag behind the leading edge of the frontier before we
+// begin to attempt checkpointing spans above the high-water mark
+var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.frontier_highwater_lag_checkpoint_threshold",
+	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
+	10*time.Minute,
+	settings.NonNegativeDuration,
+)
+
 // FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
 // to the checkpoint record.
 // Checkpoint record could be fairly large.

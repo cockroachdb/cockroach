@@ -1197,6 +1197,175 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	}
 }
 
+// Test checkpointing when the highwater does not move due to some issues with
+// specific spans lagging behind
+func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rnd, _ := randutil.NewPseudoRand()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// The rows are split into batches to denote spans advancing to different points in time
+		numRows := 1000
+		batchSize := int64(math.Ceil(float64(numRows) / 6))
+
+		// Initialize table
+		sqlDB.Exec(t, `CREATE TABLE foo(val INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (val) SELECT * FROM generate_series(1, %d)`, numRows))
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+		// In order to simulate a span that will lag behind, piggy-back off of the
+		// backfill MaxSpanRequestKeys to isolate some subspan of keys in the tablespan
+		var laggingSpan roachpb.Span
+		laggingSpanFound := false
+		var otherSpans []roachpb.Span
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
+			b.Header.MaxSpanRequestKeys = batchSize
+			return nil
+		}
+		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+			// Pick a single span somewhere in the middle of the tableSpan to lag behind the rest
+			if !laggingSpanFound && !r.Span.Key.Equal(tableSpan.Key) && !r.Span.EndKey.Equal(tableSpan.EndKey) {
+				laggingSpan = r.Span
+				laggingSpanFound = true
+			} else if !r.Span.Equal(tableSpan) { // Skip the post-backfill full-table resolved events
+				otherSpans = append(otherSpans, r.Span)
+			}
+			return false
+		}
+
+		// Start a changefeed with a backfill
+		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', initial_scan`)
+		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
+		jobRegistry := f.Server().JobRegistry().(*jobs.Registry)
+
+		// Ensure events are consumed for sinks that don't buffer (ex: Kafka)
+		g := ctxgroup.WithContext(context.Background())
+		g.Go(func() error {
+			for {
+				_, err := baseFeed.Next()
+				if err != nil {
+					return err
+				}
+			}
+		})
+		defer func() {
+			closeFeed(t, baseFeed)
+			_ = g.Wait()
+		}()
+
+		// Helper to read job progress
+		loadProgress := func() jobspb.Progress {
+			jobID := jobFeed.JobID()
+			job, err := jobRegistry.LoadJob(context.Background(), jobID)
+			require.NoError(t, err)
+			return job.Progress()
+		}
+
+		// Wait for backfill to complete
+		testutils.SucceedsSoon(t, func() error {
+			prog := loadProgress()
+			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
+				return nil
+			}
+			return errors.New("waiting for highwater")
+		})
+
+		// Pause job and setup overrides to force a checkpoint
+		require.NoError(t, jobFeed.Pause())
+
+		// Should have grabbed a span within the table
+		require.True(t, laggingSpan.Key.Compare(tableSpan.Key) == 1)
+		require.True(t, laggingSpan.EndKey.Compare(tableSpan.EndKey) == -1)
+
+		// Checkpoint progress frequently, allow a large enough checkpoint, and
+		// reduce the lag threshold to allow lag checkpointing to trigger
+		changefeedbase.FrontierCheckpointFrequency.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.FrontierCheckpointMaxBytes.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, 100<<20)
+		changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
+
+		// Resolve the non-lagging spans individually so that they have different
+		// frontier timestamps
+		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+			r.Span = otherSpans[rnd.Intn(len(otherSpans))]
+			return false
+		}
+
+		require.NoError(t, jobFeed.Resume())
+
+		// Should eventually checkpoint all spans around the lagging span
+		testutils.SucceedsSoon(t, func() error {
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil {
+				var checkpointedSpans roachpb.SpanGroup
+				checkpointedSpans.Add(p.Checkpoint.Spans...)
+				for _, advancedSpan := range otherSpans {
+					if !checkpointedSpans.Encloses(advancedSpan) {
+						return errors.Newf("checkpoint missing non-lagging span (%+v)", p.Checkpoint.Spans)
+					}
+				}
+				return nil
+			}
+			return errors.New("waiting for checkpoint around missing span")
+		})
+
+		// Pause the job and read and verify the latest checkpoint information.
+		require.NoError(t, jobFeed.Pause())
+		progress := loadProgress()
+		jobCheckpoint := progress.GetChangefeed().Checkpoint
+		require.True(t, progress.GetHighWater().Less(jobCheckpoint.Timestamp))
+		// The contiguous spans on either side of the middle span should've been merged together
+		require.Equal(t, 2, len(jobCheckpoint.Spans))
+
+		var checkpointSpanGroup roachpb.SpanGroup
+		checkpointSpanGroup.Add(jobCheckpoint.Spans...)
+
+		// Allow the changefeed to catch up without re-emitting checkpointed spans
+		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
+			require.False(t, checkpointSpanGroup.Encloses(r.Span) && r.Timestamp.LessEq(jobCheckpoint.Timestamp))
+			return false
+		}
+
+		require.NoError(t, jobFeed.Resume())
+
+		// Checkpoint should be cleared once the highwater starts moving again
+		testutils.SucceedsSoon(t, func() error {
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p == nil || p.Checkpoint == nil || len(p.Checkpoint.Spans) == 0 {
+				return nil
+			}
+			return errors.New("checkpoint still non-empty")
+		})
+	}
+
+	// TODO(ssd): Tenant testing disabled because of use of DB()
+	t.Run("enterprise", enterpriseTest(testFn, feedTestNoTenants))
+	t.Run("cloudstorage", cloudStorageTest(testFn, feedTestNoTenants))
+	t.Run("kafka", kafkaTest(testFn, feedTestNoTenants))
+
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
+		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
+	}
+}
+
 // Test checkpointing during schema change backfills that can be paused and
 // resumed multiple times during execution
 func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
@@ -1257,7 +1426,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			return job.Progress()
 		}
 
-		// Ensure initial backfill completes
+		// Ensure the changefeed has begun normal execution
 		testutils.SucceedsSoon(t, func() error {
 			prog := loadProgress()
 			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
@@ -1304,6 +1473,8 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			// Check if we've set a checkpoint yet
 			progress := loadProgress()
 			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+				// Checkpoint timestamp should be the timestamp of the spans from the backfill
+				require.True(t, p.Checkpoint.Timestamp.Equal(backfillTimestamp.Next()))
 				initialCheckpoint.Add(p.Checkpoint.Spans...)
 				atomic.StoreInt32(&foundCheckpoint, 1)
 			}
