@@ -43,7 +43,7 @@ func (e *EngineType) Set(s string) error {
 		*e = EngineTypePebble
 	default:
 		return fmt.Errorf("invalid storage engine: %s "+
-			"(possible values: rocksdb, pebble)", s)
+			"(possible values: pebble)", s)
 	}
 	return nil
 }
