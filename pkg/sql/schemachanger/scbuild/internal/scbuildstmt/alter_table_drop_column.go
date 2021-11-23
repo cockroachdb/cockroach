@@ -38,8 +38,8 @@ func alterTableDropColumn(b BuildCtx, table catalog.TableDescriptor, t *tree.Alt
 	}
 	// Check whether the column is being dropped.
 	found := false
-	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if col, ok := elem.(*scpb.ColumnName); ok && dir == scpb.Target_DROP {
+	scpb.ForEachColumnName(b, func(_ scpb.Status, dir scpb.Target_Direction, col *scpb.ColumnName) {
+		if dir == scpb.Target_DROP {
 			if col.TableID == table.GetID() && col.Name == string(t.Column) {
 				found = true
 			}
@@ -111,8 +111,8 @@ func addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// storing columns.
 	{
 		var latestAdded *scpb.PrimaryIndex
-		b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-			if idx, ok := elem.(*scpb.PrimaryIndex); ok && dir == scpb.Target_ADD && idx.TableID == table.GetID() {
+		scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, dir scpb.Target_Direction, idx *scpb.PrimaryIndex) {
+			if dir == scpb.Target_ADD && idx.TableID == table.GetID() {
 				latestAdded = idx
 			}
 		})
