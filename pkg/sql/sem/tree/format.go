@@ -630,6 +630,7 @@ func (ctx *FmtCtx) Close() {
 	ctx.indexedVarFormat = nil
 	ctx.tableNameFormatter = nil
 	ctx.placeholderFormat = nil
+	ctx.indexedTypeFormatter = nil
 	ctx.dataConversionConfig = sessiondatapb.DataConversionConfig{}
 	fmtCtxPool.Put(ctx)
 }
