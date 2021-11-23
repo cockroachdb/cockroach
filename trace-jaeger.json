@@ -1,0 +1,170 @@
+[
+	{
+		"annotations": [
+			{
+				"timestamp": 1637682812307661,
+				"value": "sql/plan_opt.go:339 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] query cache miss"
+			},
+			{
+				"timestamp": 1637682812307732,
+				"value": "sql/catalog/lease/descriptor_version_state.go:123 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] descriptorVersionState.incRefCount: ‹50(\"defaultdb\") ver=1:1637683117.303830783,0, refcount=1›"
+			},
+			{
+				"timestamp": 1637682812307789,
+				"value": "sql/catalog/catalogkv/namespace.go:43 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] looking up descriptor ID for name key {'2' '\\x1d' ‹\"foo\"›}"
+			},
+			{
+				"timestamp": 1637682812308434,
+				"value": "kv/txn.go:950 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] client.Txn did AutoCommit. err: \u003cnil\u003e\n"
+			},
+			{
+				"timestamp": 1637682812318635,
+				"value": "sql/catalog/lease/descriptor_version_state.go:123 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] descriptorVersionState.incRefCount: ‹52(\"foo\") ver=1:1637683099.534557492,0, refcount=1›"
+			},
+			{
+				"timestamp": 1637682812331876,
+				"value": "sql/conn_executor_exec.go:1265 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] optimizer plan failed: column ‹\"x\"› does not exist"
+			},
+			{
+				"timestamp": 1637682812331903,
+				"value": "sql/conn_executor_exec.go:700 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] planning ends"
+			},
+			{
+				"timestamp": 1637682812331929,
+				"value": "sql/conn_executor_exec.go:700 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root] planning error: column ‹\"x\"› does not exist"
+			}
+		],
+		"duration": 24355,
+		"id": "6262948142674344",
+		"localEndpoint": {
+			"serviceName": "node 2"
+		},
+		"name": "traced statement",
+		"tags": {
+			"_verbose": "1",
+			"client": "127.0.0.1:45676",
+			"hostnossl": "",
+			"node": "2",
+			"statement": "INSERT INTO foo VALUES (1235, x)",
+			"user": "root"
+		},
+		"timestamp": 1637682812307593,
+		"traceId": "2656533096704261"
+	},
+	{
+		"annotations": [
+			{
+				"timestamp": 1637682812308408,
+				"value": "kv/kvclient/kvcoord/txn_interceptor_span_refresher.go:566 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root,txn=‹1af5b352›] recording span to refresh: ‹/NamespaceTable/30/1/50/29/\"foo\"/4/1›"
+			}
+		],
+		"duration": 610,
+		"id": "7956444045735868",
+		"localEndpoint": {
+			"serviceName": "node 2"
+		},
+		"name": "txn coordinator send",
+		"parentId": "6262948142674344",
+		"tags": {
+			"_verbose": "1",
+			"client": "127.0.0.1:45676",
+			"hostnossl": "",
+			"node": "2",
+			"txnID": "1af5b352-3755-4f36-824e-168b325a30dc",
+			"user": "root"
+		},
+		"timestamp": 1637682812307800,
+		"traceId": "2656533096704261"
+	},
+	{
+		"annotations": [
+			{
+				"timestamp": 1637682812307853,
+				"value": "kv/kvclient/kvcoord/range_iter.go:175 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root,txn=‹1af5b352›] querying next range at ‹/NamespaceTable/30/1/50/29/\"foo\"/4/1›‹›"
+			},
+			{
+				"timestamp": 1637682812307911,
+				"value": "kv/kvclient/kvcoord/dist_sender.go:1945 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root,txn=‹1af5b352›] r26: sending batch ‹1 Get› to (n2,s2):2"
+			},
+			{
+				"timestamp": 1637682812307932,
+				"value": "rpc/nodedialer/nodedialer.go:160 [n=2,client=‹127.0.0.1:45676›,hostnossl,user=root,txn=‹1af5b352›] sending request to local client"
+			}
+		],
+		"duration": 565,
+		"id": "1616374866699572",
+		"localEndpoint": {
+			"serviceName": "node 2"
+		},
+		"name": "dist sender send",
+		"parentId": "7956444045735868",
+		"tags": {
+			"_verbose": "1",
+			"client": "127.0.0.1:45676",
+			"hostnossl": "",
+			"node": "2",
+			"txn": "1af5b352",
+			"user": "root"
+		},
+		"timestamp": 1637682812307812,
+		"traceId": "2656533096704261"
+	},
+	{
+		"annotations": [
+			{
+				"timestamp": 1637682812307953,
+				"value": "server/node.go:923 [n=2] node received request: ‹1 Get›"
+			},
+			{
+				"timestamp": 1637682812307988,
+				"value": "kv/kvserver/store_send.go:157 [n=2,s=2] executing Get [‹/NamespaceTable/30/1/50/29/\"foo\"/4/1›,‹/Min›), [txn: 1af5b352]"
+			},
+			{
+				"timestamp": 1637682812308013,
+				"value": "kv/kvserver/replica_send.go:153 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] read-only path"
+			},
+			{
+				"timestamp": 1637682812308037,
+				"value": "kv/kvserver/concurrency/concurrency_manager.go:187 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] sequencing request"
+			},
+			{
+				"timestamp": 1637682812308053,
+				"value": "kv/kvserver/concurrency/concurrency_manager.go:259 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] acquiring latches"
+			},
+			{
+				"timestamp": 1637682812308073,
+				"value": "kv/kvserver/concurrency/concurrency_manager.go:300 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] scanning lock table for conflicting locks"
+			},
+			{
+				"timestamp": 1637682812308096,
+				"value": "kv/kvserver/replica_read.go:243 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] executing read-only batch"
+			},
+			{
+				"timestamp": 1637682812308166,
+				"value": "‹scan stats: stepped 0 times (0 internal); seeked 2 times (2 internal)›"
+			},
+			{
+				"timestamp": 1637682812308334,
+				"value": "kv/kvserver/replica_evaluate.go:507 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] evaluated Get command ‹header:\u003ckey:\"\\246\\211\\272\\245\\022foo\\000\\001\\214\\211\" \u003e›, txn=\"unnamed\" meta={id=1af5b352 key=‹/Min› pri=100.00000000 epo=0 ts=1637682812.307537838,0 min=1637682812.307537838,0 seq=0} lock=false stat=PENDING rts=1637682812.307537838,0 wto=false gul=1637682812.307537838,0 : resp=‹header:\u003cnum_keys:1 num_bytes:6 \u003e value:\u003craw_bytes:\"\\010\\014\\322\\314\\001h\" timestamp:\u003cwall_time:1637682263272528059 \u003e \u003e›, err=\u003cnil\u003e"
+			},
+			{
+				"timestamp": 1637682812308363,
+				"value": "kv/kvserver/replica_read.go:179 [n=2,s=2,r=26/2:‹/NamespaceTable/{30-Max}›] read completed"
+			}
+		],
+		"duration": 429,
+		"id": "6732093725868854",
+		"localEndpoint": {
+			"serviceName": "node 2"
+		},
+		"name": "/cockroach.roachpb.Internal/Batch",
+		"parentId": "1616374866699572",
+		"tags": {
+			"_verbose": "1",
+			"node": "2",
+			"span.kind": "server"
+		},
+		"timestamp": 1637682812307939,
+		"traceId": "2656533096704261"
+	}
+]

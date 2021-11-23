@@ -21,8 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
+	jaegerjson2 "github.com/jaegertracing/jaeger/swagger-gen/models"
 )
 
 // RecordingType is the type of recording that a Span might be performing.
@@ -303,6 +305,99 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 	}
 
 	return mergedLogs
+}
+
+func (r Recording) ToJaegerZipkinV2(stmt, nodeStr string) (string, error) {
+	if len(r) == 0 {
+		return "", nil
+	}
+
+	toID := func(n uint64) string {
+		id := strconv.FormatUint(n, 10)
+		if len(id) > 16 {
+			id = id[:16]
+		}
+		return id
+	}
+
+	cpy := make(Recording, len(r))
+	copy(cpy, r)
+	r = cpy
+	tagsCopy := make(map[string]string)
+	for k, v := range r[0].Tags {
+		tagsCopy[k] = v
+	}
+	tagsCopy["statement"] = stmt
+	r[0].Tags = tagsCopy
+
+	getEndpoint := func(sp tracingpb.RecordedSpan) *jaegerjson2.Endpoint {
+		node := "unknown node"
+		for k, v := range sp.Tags {
+			if k == "node" {
+				node = fmt.Sprintf("node %s", v)
+				break
+			}
+		}
+		// If we have passed in an explicit nodeStr then use that as a processID.
+		if nodeStr != "" {
+			node = nodeStr
+		}
+		return &jaegerjson2.Endpoint{ServiceName: node}
+	}
+
+	var los jaegerjson2.ListOfSpans
+	for _, sp := range r {
+		var s jaegerjson2.Span
+
+		s.TraceID = proto.String(toID(uint64(sp.TraceID)))
+		s.ID = proto.String(toID(uint64(sp.SpanID)))
+		if sp.ParentSpanID != 0 {
+			s.ParentID = toID(uint64(sp.ParentSpanID))
+		}
+
+		s.Duration = sp.Duration.Microseconds()      // microseconds is intentional
+		s.Timestamp = sp.StartTime.UnixNano() / 1000 // microseconds is intentional
+		s.Name = sp.Operation
+		s.LocalEndpoint = getEndpoint(sp)
+
+		s.Tags = map[string]string{}
+		for k, v := range sp.Tags {
+			s.Tags[k] = v
+		}
+		for _, l := range sp.Logs {
+			ev := jaegerjson2.Annotation{
+				Timestamp: l.Time.UnixNano() / 1000, // microseconds is intentional
+				Value:     string(l.Msg()),
+			}
+			s.Annotations = append(s.Annotations, &ev)
+		}
+
+		// If the span was verbose at the time when each structured event was
+		// recorded, then the respective events would have been stringified and
+		// included in the Logs above. If the span was not verbose at the time, we
+		// need to produce a string now. We don't know whether the span was verbose
+		// or not at the time each event was recorded, so we make a guess based on
+		// whether the span was verbose at the moment when the Recording was
+		// produced.
+		if !sp.Verbose {
+			sp.Structured(func(sr *types.Any, t time.Time) {
+				ev := jaegerjson2.Annotation{Timestamp: t.UnixNano() / 1000}
+				jsonStr, err := MessageToJSONString(sr, true /* emitDefaults */)
+				if err != nil {
+					return
+				}
+				ev.Value = jsonStr
+				s.Annotations = append(s.Annotations, &ev)
+			})
+		}
+		los = append(los, &s)
+	}
+
+	json, err := json.MarshalIndent(los, "" /* prefix */, "\t" /* indent */)
+	if err != nil {
+		return "", err
+	}
+	return string(json), nil
 }
 
 // ToJaegerJSON returns the trace as a JSON that can be imported into Jaeger for

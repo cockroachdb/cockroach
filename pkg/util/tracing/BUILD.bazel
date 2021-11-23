@@ -35,6 +35,7 @@ go_library(
         "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//types",
         "@com_github_jaegertracing_jaeger//model/json",
+        "@com_github_jaegertracing_jaeger//swagger-gen/models",
         "@com_github_petermattis_goid//:goid",
         "@com_github_pmezard_go_difflib//difflib",
         "@io_opentelemetry_go_otel//attribute",
