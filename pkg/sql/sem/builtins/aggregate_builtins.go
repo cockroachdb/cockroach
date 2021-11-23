@@ -2157,6 +2157,10 @@ func (a *corrAggregate) Result() (tree.Datum, error) {
 
 // covarPopAggregateBase defines result method to calculate population
 // covariance.
+// todo(mneverov): In the current implementation note that we don't use anything
+//  from covarPopAggregateBase, so I think it'd be cleaner to define result (maybe
+//  call it resultLastStage or something like that) method to be on
+//  regressionAccumulatorBase directly, and then we won't need covarPopAggregateBase at all.
 type covarPopAggregateBase struct{}
 
 func (a *covarPopAggregateBase) result(base *regressionAccumulatorBase) (tree.Datum, error) {
