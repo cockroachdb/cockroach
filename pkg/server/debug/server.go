@@ -67,7 +67,9 @@ type Server struct {
 }
 
 // NewServer sets up a debug server.
-func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
+func NewServer(
+	st *cluster.Settings, hbaConfDebugFn http.HandlerFunc, profiler pprofui.Profiler,
+) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
@@ -117,32 +119,7 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
-		ctx := context.Background()
-		tBegin := timeutil.Now()
-
-		if profile != "profile" {
-			do()
-			return
-		}
-
-		if err := CPUProfileDo(st, CPUProfileOptions{WithLabels: labels}.Type(), func() error {
-			var extra string
-			if labels {
-				extra = " (enabling profiler labels)"
-			}
-			log.Infof(context.Background(), "pprofui: recording %s%s", profile, extra)
-			do()
-			return nil
-		}); err != nil {
-			// NB: we don't have good error handling here. Could be changed if we find
-			// this problematic. In practice, `do()` wraps the pprof handler which will
-			// return an error if there's already a profile going on just the same.
-			log.Warningf(ctx, "unable to start CPU profile: %s", err)
-			return
-		}
-		log.Infof(ctx, "pprofui: recorded %s in %.2fs", profile, timeutil.Since(tBegin).Seconds())
-	})
+	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), profiler)
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
 
 	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
