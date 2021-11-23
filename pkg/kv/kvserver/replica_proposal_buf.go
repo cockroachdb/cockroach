@@ -521,9 +521,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// only after performing necessary bookkeeping.
 		if filter := b.testing.submitProposalFilter; filter != nil {
 			if drop, err := filter(p); drop || err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
+				firstErr = err
 				continue
 			}
 		}
