@@ -507,11 +507,18 @@ func BenchmarkTracing(b *testing.B) {
 							name.WriteString(fmt.Sprintf("%d%%", percent))
 						}
 						b.Run(name.String(), func(b *testing.B) {
-							tr := tracing.NewTracerWithOpt(ctx,
-								tracing.WithTestingKnobs(tracing.TracerTestingKnobs{
-									ForceRealSpans: test.alwaysTrace,
-									UseNetTrace:    test.netTrace,
-								}))
+							var opts []tracing.TracerOption
+							opts = append(opts, tracing.WithTestingKnobs(tracing.TracerTestingKnobs{
+								UseNetTrace: test.netTrace,
+							}))
+							var o tracing.TracingMode
+							if !test.alwaysTrace {
+								o = tracing.TracingModeOnDemand
+							} else {
+								o = tracing.TracingModeActiveSpansRegistry
+							}
+							opts = append(opts, tracing.WithTracingMode(o))
+							tr := tracing.NewTracerWithOpt(ctx, opts...)
 							sqlRunner, stop := cluster.create(tr)
 							defer stop.Stop(ctx)
 
