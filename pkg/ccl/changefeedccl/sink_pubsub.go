@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/oauth2/google"
 	"hash/crc32"
 	"net/url"
@@ -26,7 +28,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+const googleApplicationCredentials = "GOOGLE_APPLICATION_CREDENTIALS"
 const credentialsParam = "CREDENTIALS"
+const authParam = "AUTH"
+const authSpecified = "specified"
+const authImplicit = "implicit"
+const authDefault = "default"
 const gcpScheme = "gcppubsub"
 const memScheme = "mem"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
@@ -100,19 +107,33 @@ type pubsubSink struct {
 
 // getGCPCredentials returns gcp credentials parsed out from url
 func getGCPCredentials(u sinkURL, ctx context.Context) (*google.Credentials, error) {
-	var credsBase64 string
 	var credsJSON []byte
-	var q = u.q
-	if credsBase64 = q.Get(credentialsParam); credsBase64 == "" {
-		return nil, errors.Errorf("%s missing credentials param", q)
+	var creds *google.Credentials
+	authOption := u.consumeParam(authParam)
+
+	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
+	switch authOption {
+	case authImplicit:
+		creds, err := google.FindDefaultCredentials(ctx, gcpScope)
+		if err != nil {
+			return nil, err
+		}
+		return creds, nil
+	case authSpecified:
+		fallthrough
+	case authDefault:
+		fallthrough
+	default:
+		err := u.decodeBase64(credentialsParam, &credsJSON)
+		if err != nil {
+			return nil, errors.Wrap(err, "decoding credentials json")
+		}
+		creds, err = google.CredentialsFromJSON(ctx, credsJSON, gcpScope)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating credentials")
+		}
+		return creds, nil
 	}
-	q.Del(credentialsParam)
-	err := u.decodeBase64(credsBase64, &credsJSON)
-	creds, err := google.CredentialsFromJSON(ctx, credsJSON, gcpScope)
-	if err != nil {
-		return nil, errors.Wrap(err, "decoding credentials json")
-	}
-	return creds, nil
 }
 
 // parseGCPURL returns fullpath of url if properly formatted
@@ -136,7 +157,13 @@ func createGCPURL(u sinkURL, topicName string) (string, error){
 }
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
-func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets) (Sink, error) {
+func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
+	settings *cluster.Settings) (Sink, error) {
+	log.Info(ctx, "\x1b[33m starting pubsub \x1b[0m")
+
+	sinkURL  := sinkURL{u, u.Query()}
+	pubsubTopicName := sinkURL.consumeParam(changefeedbase.SinkParamTopicName)
+
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
 	default:
@@ -156,13 +183,21 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, tar
 	//}
 
 	ctx, cancel := context.WithCancel(ctx)
-	// currently just harrdcoding numWorkers to 10, it will be a config option later down the road
+	// currently just hardcoding numWorkers to 100, it will be a config option later down the road
 	p := &pubsubSink {
-		workerCtx: ctx, url: sinkURL{u, u.Query()}, numWorkers: 10,
+		workerCtx: ctx, url: sinkURL, numWorkers: 100,
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
+
+	//creates a topic for each target
 	for id, topic := range targets {
-		p.topics[id] = &topicStruct{topicName: topic.StatementTimeName}
+		var topicName string
+		if pubsubTopicName == ""{
+			topicName = topic.StatementTimeName
+		} else {
+			topicName = pubsubTopicName
+		}
+		p.topics[id] = &topicStruct{topicName: topicName}
 	}
 	p.setupWorkers()
 
@@ -208,10 +243,11 @@ func (p *pubsubSink) emitRow(
 		Value: value,
 		Topic: p.topics[topic.GetID()].topicName,
 	}}
+	log.Info(ctx, "\x1b[33m sending message \x1b[0m")
 	// calculate index by hashing key
 	i := p.workerIndex(key)
 	select {
-	// check the webhook sink context in case workers have been terminated
+	// check the sink context in case workers have been terminated
 	case <-p.workerCtx.Done():
 		// check again for error in case it triggered since last check
 		// will return more verbose error instead of "context canceled"
@@ -245,6 +281,7 @@ func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder,
 
 // Flush blocks until all messages in the event channels are sent
 func (p *pubsubSink) flush(ctx context.Context) error {
+	log.Info(p.workerCtx, "\x1b[33m flush mes \x1b[0m")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -256,7 +293,7 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 			return err
 		}
 	}
-
+	log.Info(p.workerCtx, "\x1b[33m flush mes 2 \x1b[0m")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -270,14 +307,16 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 
 // Close closes all the channels and shutdowns the topic
 func (p *pubsubSink) close() error {
-	for _, topic := range p.topics {
-		err := topic.topicClient.Shutdown(p.getWorkerCtx())
-		if err != nil {
-			return errors.Wrap(err, "closing pubsub topic")
-		}
-	}
 	p.exitWorkers()
 	_ = p.workerGroup.Wait()
+	for _, topic := range p.topics {
+		if topic.topicClient != nil {
+			err := topic.topicClient.Shutdown(p.getWorkerCtx())
+			if err != nil {
+				return errors.Wrap(err, "closing pubsub topic")
+			}
+		}
+	}
 	close(p.errChan)
 	close(p.flushDone)
 	for i := 0; i < p.numWorkers; i++ {
@@ -333,8 +372,10 @@ func (p *pubsubSink) setupWorkers() {
 // workerLoop consumes any message sent to the channel corresponding to the worker index
 func (p *pubsubSink) workerLoop(workerIndex int) {
 	for {
+		log.Info(p.workerCtx, "\x1b[33m workerselect \x1b[0m")
 		select {
 		case <-p.workerCtx.Done():
+			log.Info(p.workerCtx, "\x1b[33m workerselect DONE\x1b[0m")
 			return
 		case msg := <-p.eventsChans[workerIndex]:
 			if msg.isFlush {
@@ -365,10 +406,12 @@ func (p *pubsubSink) exitWorkersWithError(err error) {
 		p.exitWorkers()
 	default:
 	}
+	log.Info(p.workerCtx, "\x1b[33m exiting workers \x1b[0m")
 }
 
 // sinkError checks if there is an error in the error channel
 func (p *pubsubSink) sinkError() error {
+	log.Info(p.workerCtx, "\x1b[33m select sinkError \x1b[0m")
 	select {
 	case err := <-p.errChan:
 		return err
@@ -386,12 +429,14 @@ func (p *pubsubSink) workerIndex(key []byte) uint32 {
 func (p *pubsubSink) flushWorkers() error {
 	for i := 0; i < p.numWorkers; i++ {
 		//flush message will be blocked until all the messages in the channel are processed
+		log.Info(p.workerCtx, "\x1b[33m flush \x1b[0m")
 		select {
 		case <-p.workerCtx.Done():
 			return p.workerCtx.Err()
 		case p.eventsChans[i] <- pubsubMessage{isFlush: true}:
 		}
 	}
+	log.Info(p.workerCtx, "\x1b[33m flush2 \x1b[0m")
 	select {
 	// signals sink that flush is complete
 	case <-p.workerCtx.Done():
@@ -475,6 +520,7 @@ func (p *gcpPubsubSink) Flush(ctx context.Context) error {
 
 // Close calls the pubsubDesc Close and closes the client and connection
 func (p *gcpPubsubSink) Close() error {
+	log.Info(p.pubsubSink.workerCtx, "\x1b[33m closing pubsub \x1b[0m")
 	if p.pubsubSink != nil {
 		err := p.pubsubSink.close()
 		if err != nil {
