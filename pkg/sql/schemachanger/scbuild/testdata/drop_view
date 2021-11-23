@@ -30,12 +30,23 @@ DROP VIEW defaultdb.v1
   details:
     dependedOn: 53
     tableId: 52
-- DROP UserPrivileges:{DescID: 53}
+- DROP UserPrivileges:{DescID: 53, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 53
     privileges: 2
     username: admin
+- DROP UserPrivileges:{DescID: 53, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    username: public
+- DROP UserPrivileges:{DescID: 53, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    privileges: 2
+    username: root
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:
@@ -174,36 +185,91 @@ DROP VIEW defaultdb.v1 CASCADE
   details:
     dependedOn: 59
     tableId: 56
-- DROP UserPrivileges:{DescID: 53}
+- DROP UserPrivileges:{DescID: 53, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 53
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 54}
+- DROP UserPrivileges:{DescID: 53, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    username: public
+- DROP UserPrivileges:{DescID: 53, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 54, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 54
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 55}
+- DROP UserPrivileges:{DescID: 54, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+    username: public
+- DROP UserPrivileges:{DescID: 54, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 55, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 55
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 56}
+- DROP UserPrivileges:{DescID: 55, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+    username: public
+- DROP UserPrivileges:{DescID: 55, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 56, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 56
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 59}
+- DROP UserPrivileges:{DescID: 56, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+    username: public
+- DROP UserPrivileges:{DescID: 56, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 59, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 59
     privileges: 2
     username: admin
+- DROP UserPrivileges:{DescID: 59, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    username: public
+- DROP UserPrivileges:{DescID: 59, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    privileges: 2
+    username: root
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:

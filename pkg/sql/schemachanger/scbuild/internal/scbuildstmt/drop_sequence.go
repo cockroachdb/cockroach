@@ -41,7 +41,9 @@ func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBeha
 	// Add a node to drop the sequence
 	decomposeTableDescToElements(b, seq, scpb.Target_DROP)
 	// Check if there are dependencies.
-	scpb.ForEachRelationDependedOnBy(b, func(dep *scpb.RelationDependedOnBy) {
+	scpb.ForEachRelationDependedOnBy(b, func(_ scpb.Status,
+		_ scpb.Target_Direction,
+		dep *scpb.RelationDependedOnBy) {
 		if dep.TableID != seq.GetID() {
 			return
 		}
