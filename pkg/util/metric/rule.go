@@ -41,8 +41,11 @@ type Rule interface {
 // for one or more metrics. The alert `expr` is
 // specified using the PromQL syntax.
 type AlertingRule struct {
-	name        string
-	expr        string
+	name string
+	expr string
+	// annotations can be used to provide
+	// additional information about the alert
+	// such as runbook links etc.
 	annotations []LabelPair
 	labels      []LabelPair
 	// This will be the recommended hold duration
