@@ -46,7 +46,8 @@ const DebugRowFetch = false
 // part of the output.
 const noOutputColumn = -1
 
-type kvBatchFetcher interface {
+// KVBatchFetcher abstracts the logic of fetching KVs in batches.
+type KVBatchFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
@@ -117,7 +118,7 @@ type tableInfo struct {
 	oidOutputIdx int
 
 	// rowIsDeleted is true when the row has been deleted. This is only
-	// meaningful when kv deletion tombstones are returned by the kvBatchFetcher,
+	// meaningful when kv deletion tombstones are returned by the KVBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
 	// changefeeds use this by providing raw kvs with tombstones unfiltered via
 	// `StartScanFrom`.
@@ -205,7 +206,7 @@ type Fetcher struct {
 	reverse bool
 
 	// numKeysPerRow is the number of keys per row of the table used to
-	// calculate the kvBatchFetcher's firstBatchLimit.
+	// calculate the KVBatchFetcher's firstBatchLimit.
 	numKeysPerRow int
 
 	// True if the index key must be decoded. This is only false if there are no
@@ -485,7 +486,6 @@ func (rf *Fetcher) StartScan(
 		return errors.AssertionFailedf("no spans")
 	}
 
-	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
 		ctx,
 		makeKVBatchFetcherDefaultSendFunc(txn),
@@ -504,7 +504,7 @@ func (rf *Fetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, &f, traceKV)
 }
 
 // TestingInconsistentScanSleep introduces a sleep inside the fetcher after
@@ -586,7 +586,6 @@ func (rf *Fetcher) StartInconsistentScan(
 	// TODO(radu): we should commit the last txn. Right now the commit is a no-op
 	// on read transactions, but perhaps one day it will release some resources.
 
-	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
 		ctx,
 		sendFunc(sendFn),
@@ -605,7 +604,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, &f, traceKV)
 }
 
 func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {
@@ -623,9 +622,10 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.K
 	return rowinfra.KeyLimit(int64(rowLimitHint)*int64(rf.numKeysPerRow) + 1)
 }
 
-// StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be
+// StartScanFrom initializes and starts a scan from the given KVBatchFetcher. Can be
 // used multiple times.
-func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
+func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher, traceKV bool) error {
+	rf.traceKV = traceKV
 	rf.indexKey = nil
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
@@ -1197,7 +1197,7 @@ func (rf *Fetcher) RowLastModified() hlc.Timestamp {
 
 // RowIsDeleted may only be called after NextRow has returned a non-nil row and
 // returns true if that row was most recently deleted. This method is only
-// meaningful when the configured kvBatchFetcher returns deletion tombstones, which
+// meaningful when the configured KVBatchFetcher returns deletion tombstones, which
 // the normal one (via `StartScan`) does not.
 func (rf *Fetcher) RowIsDeleted() bool {
 	return rf.table.rowIsDeleted
