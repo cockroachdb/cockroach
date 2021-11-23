@@ -412,12 +412,22 @@ type statusServer struct {
 // StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
 // used by AdminUI endpoints.
 type StmtDiagnosticsRequester interface {
-
 	// InsertRequest adds an entry to system.statement_diagnostics_requests for
 	// tracing a query with the given fingerprint. Once this returns, calling
-	// shouldCollectDiagnostics() on the current node will return true for the given
-	// fingerprint.
-	InsertRequest(ctx context.Context, fprint string) error
+	// stmtdiagnostics.ShouldCollectDiagnostics() on the current node will
+	// return true for the given fingerprint.
+	// - minExecutionLatency, if non-zero, determines the minimum execution
+	// latency of a query that satisfies the request. In other words, queries
+	// that ran faster than minExecutionLatency do not satisfy the condition
+	// and the bundle is not generated for them.
+	// - expiresAfter, if non-zero, indicates for how long the request should
+	// stay active.
+	InsertRequest(
+		ctx context.Context,
+		fprint string,
+		minExecutionLatency time.Duration,
+		expiresAfter time.Duration,
+	) error
 }
 
 // newStatusServer allocates and returns a statusServer.
