@@ -396,6 +396,7 @@ go_test(
         "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_opentelemetry_go_otel//attribute",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",

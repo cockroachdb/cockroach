@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 func TestListSessionsV2(t *testing.T) {
@@ -150,5 +152,34 @@ func TestHealthV2(t *testing.T) {
 	// Check if an unmarshal into the (empty) HealthResponse struct works.
 	var hr serverpb.HealthResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
+	require.NoError(t, resp.Body.Close())
+}
+
+// TestRulesV2 tests the /api/v2/rules endpoint to ensure it
+// returns valid YAML.
+func TestRulesV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts := testCluster.Server(0)
+	client, err := ts.GetHTTPClient()
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"rules/", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Check if the response was a http.StatusOK.
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Check that the response was valid YAML.
+	ruleGroups := make(map[string]metric.PrometheusRuleGroup)
+	require.NoError(t, yaml.NewDecoder(resp.Body).Decode(&ruleGroups))
 	require.NoError(t, resp.Body.Close())
 }
