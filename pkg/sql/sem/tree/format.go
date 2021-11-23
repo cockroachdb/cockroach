@@ -451,10 +451,9 @@ var fmtCtxPool = sync.Pool{
 // recommended for performance-sensitive paths.
 func (ctx *FmtCtx) Close() {
 	ctx.Buffer.Reset()
-	ctx.flags = 0
-	ctx.indexedVarFormat = nil
-	ctx.tableNameFormatter = nil
-	ctx.placeholderFormat = nil
+	*ctx = FmtCtx{
+		Buffer: ctx.Buffer,
+	}
 	fmtCtxPool.Put(ctx)
 }
 
