@@ -62,8 +62,8 @@ type InboundStreamInfo struct {
 		// or we don't want this stream to connect anymore due to flow
 		// cancellation.
 		canceled bool
-		// finished is set if we have signaled that the stream is done
-		// transferring rows (to the flow's wait group).
+		// finished is set when onFinish has already been called (which signaled
+		// that the stream is done transferring rows to the flow's wait group).
 		finished bool
 	}
 	// receiver is the entity that will receive rows from another host, which is
@@ -73,8 +73,8 @@ type InboundStreamInfo struct {
 	// During a FlowStream RPC, the stream is handed off to this strategy to
 	// process.
 	receiver InboundStreamHandler
-	// waitGroup to signal on when finished.
-	waitGroup *sync.WaitGroup
+	// onFinish will be called when the corresponding inbound stream is done.
+	onFinish func()
 }
 
 // NewInboundStreamInfo returns a new InboundStreamInfo.
@@ -82,8 +82,10 @@ func NewInboundStreamInfo(
 	receiver InboundStreamHandler, waitGroup *sync.WaitGroup,
 ) *InboundStreamInfo {
 	return &InboundStreamInfo{
-		receiver:  receiver,
-		waitGroup: waitGroup,
+		receiver: receiver,
+		// Do not hold onto the whole wait group to limit the coupling of the
+		// InboundStreamInfo with the FlowBase.
+		onFinish: waitGroup.Done,
 	}
 }
 
@@ -112,8 +114,8 @@ func (s *InboundStreamInfo) disconnect() {
 	s.mu.Unlock()
 }
 
-// finishLocked marks s as finished and notifies the wait group that one stream
-// is done. The mutex of s must be held when calling this method.
+// finishLocked marks s as finished and calls onFinish. The mutex of s must be
+// held when calling this method.
 func (s *InboundStreamInfo) finishLocked() {
 	if !s.mu.connected && !s.mu.canceled {
 		panic("finishing inbound stream that didn't connect or time out")
@@ -123,7 +125,7 @@ func (s *InboundStreamInfo) finishLocked() {
 	}
 
 	s.mu.finished = true
-	s.waitGroup.Done()
+	s.onFinish()
 }
 
 // cancelLocked marks s as canceled and finishes it. The mutex of s must be held
@@ -250,9 +252,10 @@ func IsFlowRetryableError(e error) bool {
 // flow. If any of them is not connected within timeout, errors are propagated.
 // The inboundStreams are expected to have been initialized with their
 // WaitGroups (the group should have been incremented). RegisterFlow takes
-// responsibility for calling Done() on that WaitGroup; this responsibility will
-// be forwarded forward by ConnectInboundStream. In case this method returns an
-// error, the WaitGroup will be decremented.
+// responsibility for finishing the inboundStreams (which will call Done() on
+// that WaitGroup); this responsibility will be forwarded forward by
+// ConnectInboundStream. In case this method returns an error, the
+// inboundStreams are finished here.
 func (fr *FlowRegistry) RegisterFlow(
 	ctx context.Context,
 	id execinfrapb.FlowID,
@@ -265,7 +268,7 @@ func (fr *FlowRegistry) RegisterFlow(
 	defer func() {
 		if retErr != nil {
 			for _, stream := range inboundStreams {
-				stream.waitGroup.Done()
+				stream.onFinish()
 			}
 		}
 	}()
