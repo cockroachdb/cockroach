@@ -295,4 +295,5 @@ Please add new entries at the top.
     consumer's status. The messages would cause a server running the previous
     version to erroneously think that the consumer has sent a drain signal,
     therefore MinAcceptedVersion was increased.
+
 */

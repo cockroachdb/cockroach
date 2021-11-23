@@ -177,7 +177,7 @@ var aggregates = map[string]builtinDefinition{
 
 	"final_covar_pop": makePrivate(makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.FloatArray}, types.Float, newFinalCovarPopAggregate,
-			"Calculates the population covariance of the selected values in final stage",
+			"Calculates the population covariance of the selected values in final stage.",
 			tree.VolatilityImmutable,
 		),
 	)),
@@ -705,7 +705,7 @@ func makeRegressionAggregateBuiltin(
 func makeTransitionRegressionAggregateBuiltin() builtinDefinition {
 	return makeRegressionAggregate(
 		newRegressionAccumulatorBase,
-		"Calculates transition values for regression functions in local stage",
+		"Calculates transition values for regression functions in local stage.",
 		types.FloatArray,
 	)
 }
@@ -1877,6 +1877,9 @@ func newRegressionAccumulatorBase([]*types.T, *tree.EvalContext, tree.Datums) tr
 
 // Result returns an array datum that contains calculated transition values in
 // the following order: DArray[n, sx, sxx, sy, syy, sxy].
+// It is only used for the local stage when computing regression functions in a
+// distributed fashion. Both the final stage of the distributed execution, and
+// the only stage of the local execution override this.
 func (a *regressionAccumulatorBase) Result() (tree.Datum, error) {
 	res := tree.NewDArray(types.Float)
 	vals := []float64{a.n, a.sx, a.sxx, a.sy, a.syy, a.sxy}
@@ -2033,6 +2036,9 @@ func (a *finalRegressionAccumulatorBase) Add(
 	return a.combine(regrVals)
 }
 
+// combine is used in a final stage of distributed calculation, it combines two
+// arrays of transition values, calculated in a local stage.
+// See https://github.com/postgres/postgres/blob/49407dc32a2931550e4ff1dea314b6a25afdfc35/src/backend/utils/adt/float.c#L3401.
 func (a *finalRegressionAccumulatorBase) combine(array []float64) error {
 	var n, sx, sxx, sy, syy, sxy float64
 
