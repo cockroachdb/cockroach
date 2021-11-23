@@ -731,3 +731,12 @@ define Export {
     FileFormat string
     Options []exec.KVOption
 }
+
+# AlterTableRelocate implements ALTER RANGE RELOCATE.
+define AlterRangeRelocate {
+    input exec.Node
+    relocateLease bool
+    relocateNonVoters bool
+    toStoreID int64
+    fromStoreID int64
+}

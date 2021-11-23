@@ -91,16 +91,9 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			nodeID, ok := n.run.storeMap[storeID]
 			if !ok {
 				// Lookup the store in gossip.
-				var storeDesc roachpb.StoreDescriptor
-				gossipStoreKey := gossip.MakeStoreKey(storeID)
-				g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
+				storeDesc, err := lookupStoreDesc(storeID, params)
 				if err != nil {
 					return false, err
-				}
-				if err := g.GetInfoProto(
-					gossipStoreKey, &storeDesc,
-				); err != nil {
-					return false, errors.Wrapf(err, "error looking up store %d", storeID)
 				}
 				nodeID = storeDesc.Node.NodeID
 				n.run.storeMap[storeID] = nodeID
@@ -159,6 +152,21 @@ func (n *relocateNode) Values() tree.Datums {
 
 func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
+}
+
+func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
+	var storeDesc roachpb.StoreDescriptor
+	gossipStoreKey := gossip.MakeStoreKey(storeID)
+	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
+	if err != nil {
+		return nil, err
+	}
+	if err := g.GetInfoProto(
+		gossipStoreKey, &storeDesc,
+	); err != nil {
+		return nil, errors.Wrapf(err, "error looking up store %d", storeID)
+	}
+	return &storeDesc, nil
 }
 
 func lookupRangeDescriptor(

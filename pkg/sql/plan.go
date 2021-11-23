@@ -195,6 +195,7 @@ var _ planNode = &reassignOwnedByNode{}
 var _ planNode = &refreshMaterializedViewNode{}
 var _ planNode = &recursiveCTENode{}
 var _ planNode = &relocateNode{}
+var _ planNode = &relocateRange{}
 var _ planNode = &renameColumnNode{}
 var _ planNode = &renameDatabaseNode{}
 var _ planNode = &renameIndexNode{}
