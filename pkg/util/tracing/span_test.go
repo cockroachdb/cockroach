@@ -31,7 +31,7 @@ import (
 )
 
 func TestStartSpan(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	sp := tr.StartSpan("test")
 	defer sp.Finish()
 	require.Equal(t, "noop", sp.OperationName())
@@ -487,7 +487,7 @@ func TestStructureRecording(t *testing.T) {
 		t.Run(fmt.Sprintf("finish1=%t", finishCh1), func(t *testing.T) {
 			for _, finishCh2 := range []bool{true, false} {
 				t.Run(fmt.Sprintf("finish2=%t", finishCh2), func(t *testing.T) {
-					tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+					tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 					sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 					ch1 := tr.StartSpan("child", WithParent(sp))
 					ch2 := tr.StartSpan("grandchild", WithParent(ch1))
