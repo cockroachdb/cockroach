@@ -1,10 +1,11 @@
 # FYI: You can run `./dev builder` to run this Docker image. :)
 # `dev` depends on this variable! Don't change the name or format unless you
 # also update `dev` accordingly.
-BAZEL_IMAGE=cockroachdb/bazel:20211008-130456
+BAZEL_IMAGE=cockroachdb/bazel:20211109-174337
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
+# BAZEL_SUPPORT_EXTRA_DOCKER_ARGS will be passed on to `docker run` unchanged.
 run_bazel() {
     if [ -z "${root:-}" ]
     then
@@ -28,6 +29,7 @@ run_bazel() {
     docker run -i ${tty-} --rm --init \
         -u "$(id -u):$(id -g)" \
         --workdir="/go/src/github.com/cockroachdb/cockroach" \
+	${BAZEL_SUPPORT_EXTRA_DOCKER_ARGS:+$BAZEL_SUPPORT_EXTRA_DOCKER_ARGS} \
         ${vols} \
         $BAZEL_IMAGE "$@"
 }

@@ -4,7 +4,7 @@ go_library(
     name = "acceptance",
     srcs = [
         "flags.go",
-        "test_main.go",
+        "test_acceptance.go",  # keep
         "util_cluster.go",
         "util_docker.go",
     ],
@@ -13,9 +13,15 @@ go_library(
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/security",
+        "//pkg/security/securitytest",  #keep
+        "//pkg/server",  # keep
         "//pkg/testutils",
+        "//pkg/testutils/serverutils",  # keep
+        "//pkg/testutils/testcluster",  # keep
         "//pkg/util/log",
+        "//pkg/util/randutil",  # keep
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_containerd_containerd//platforms",
@@ -34,11 +40,24 @@ go_test(
         "debug_remote_test.go",
         "main_test.go",
     ],
-    data = glob(["testdata/**"]),
+    args = [
+        "-e",
+        "/cockroach/cockroach",
+        "-b",
+        "../../../../../../cmd/cockroach/cockroach_/cockroach",
+    ],
+    data = glob([
+        "testdata/**",
+        "compose/**",
+    ]) + [
+        "//pkg/cli:interactive_tests",
+        "//pkg/cmd/cockroach:cockroach",
+    ],
     embed = [":acceptance"],
-    tags = ["broken_in_bazel"],
+    gotags = ["acceptance"],
     deps = [
         "//pkg/acceptance/cluster",
+        "//pkg/build/bazel",
         "//pkg/security",
         "//pkg/testutils/skip",
         "//pkg/util/log",

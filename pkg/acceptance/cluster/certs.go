@@ -23,13 +23,27 @@ import (
 
 const certsDir = ".localcluster.certs"
 
+var absCertsDir string
+
 // keyLen is the length (in bits) of the generated CA and node certs.
 const keyLen = 2048
+
+// AbsCertsDir returns the absolute path to the certificate directory.
+func AbsCertsDir() string {
+	return absCertsDir
+}
 
 // GenerateCerts generates CA and client certificates and private keys to be
 // used with a cluster. It returns a function that will clean up the generated
 // files.
 func GenerateCerts(ctx context.Context) func() {
+	var err error
+	// docker-compose tests change their working directory,
+	// so they need to know the absolute path to the certificate directory.
+	absCertsDir, err = filepath.Abs(certsDir)
+	if err != nil {
+		panic(err)
+	}
 	maybePanic(os.RemoveAll(certsDir))
 
 	maybePanic(security.CreateCAPair(
