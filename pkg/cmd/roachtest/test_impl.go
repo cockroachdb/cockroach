@@ -482,6 +482,10 @@ type loggingOpt struct {
 	// artifactsDir is that path to the dir that will contain the artifacts for
 	// all the tests.
 	artifactsDir string
+	// path to the literal on-agent directory where artifacts are stored. May
+	// be different from artifactsDir since the roachtest may be running in
+	// a container.
+	literalArtifactsDir string
 	// runnerLogPath is that path to the runner's log file.
 	runnerLogPath string
 }
