@@ -184,6 +184,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     ascending: false,
     columnTitle: "executionCount",
   },
+  search: "",
   filters: {
     app: "",
     timeNumber: "0",
