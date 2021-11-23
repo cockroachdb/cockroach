@@ -122,7 +122,7 @@ type txnKVFetcher struct {
 	responseAdmissionQ     *admission.WorkQueue
 }
 
-var _ kvBatchFetcher = &txnKVFetcher{}
+var _ KVBatchFetcher = &txnKVFetcher{}
 
 // getBatchKeyLimit returns the max size of the next batch. The size is
 // expressed in number of result keys (i.e. this size will be used for
@@ -187,7 +187,7 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 	}
 }
 
-// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
+// makeKVBatchFetcher initializes a KVBatchFetcher for the given spans. If
 // useBatchLimit is true, the number of result keys per batch is limited; the
 // limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
 // 0) to ProductionKVBatchSize.
