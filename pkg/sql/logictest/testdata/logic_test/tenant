@@ -46,18 +46,9 @@ id  active  crdb_internal.pb_to_json
 5   false   {"id": "5", "state": "DROP"}
 10  true    {"id": "10", "state": "ACTIVE"}
 
+
 # Try to recreate an existing tenant.
-
-query error pgcode 42710 tenant "5" already exists
-SELECT crdb_internal.create_tenant(5)
-
-query I
-SELECT crdb_internal.gc_tenant(5)
-----
-5
-
-# GC job has not run yet.
-
+# GC job for tenant 5 has not run yet.
 query error pgcode 42710 tenant "5" already exists
 SELECT crdb_internal.create_tenant(5)
 
@@ -142,7 +133,7 @@ SELECT status FROM [
 succeeded
 
 query error pgcode 42704 tenant "5" does not exist
-SELECT crdb_internal.gc_tenant(5)
+SELECT crdb_internal.destroy_tenant(5)
 
 query IBT colnames
 SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
