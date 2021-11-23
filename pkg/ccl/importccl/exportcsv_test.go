@@ -59,9 +59,11 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tc := testcluster.StartTestCluster(t, nodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				ExternalIODir:      dir,
-				UseDatabase:        "test",
-				DisableSpanConfigs: true,
+				// Disabled due to underlying tests' use of SCATTER.
+				DisableDefaultSQLServer: true,
+				ExternalIODir:           dir,
+				UseDatabase:             "test",
+				DisableSpanConfigs:      true,
 			},
 		},
 	)
@@ -419,8 +421,11 @@ func TestRandomParquetExports(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
+			// Test fails when run in the SQL server. More investigation is
+			// required. Tracked with #76378.
+			DisableDefaultSQLServer: true,
+			UseDatabase:             dbName,
+			ExternalIODir:           dir,
 		},
 	}
 	ctx := context.Background()
@@ -484,8 +489,11 @@ func TestBasicParquetTypes(t *testing.T) {
 	dbName := "baz"
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
+			// Test fails when run in the SQL server. More investigation is
+			// required. Tracked with #76378.
+			DisableDefaultSQLServer: true,
+			UseDatabase:             dbName,
+			ExternalIODir:           dir,
 		},
 	}
 	ctx := context.Background()

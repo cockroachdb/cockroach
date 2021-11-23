@@ -501,6 +501,8 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
+	// Disable the default SQL server in the test server
+	disableDefaultSQLServer bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -583,6 +585,10 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
+		// Need to disable the default SQL server due because of interactions
+		// with tenant_usage and privileged_zone_test. More investigation is
+		// required here.
+		disableDefaultSQLServer: true,
 	},
 	{
 		name:                     "local-declarative-schema",
@@ -660,6 +666,11 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
+		// Have to disable the default SQL server here as there are test run in
+		// this mode which try to modify zone configurations and we're more
+		// restrictive in the way we allow zone configs to be modified by
+		// secondary tenants. See #75569 for more info.
+		disableDefaultSQLServer: true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -752,6 +763,9 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:          9,
 		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
+		// Need to disable the default SQL server here until we have the
+		// locality optimized search working in multi-tenant configurations.
+		disableDefaultSQLServer: true,
 	},
 	{
 		name:              "multiregion-9node-3region-3azs-tenant",
@@ -1439,8 +1453,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			SQLMemoryPoolSize: serverArgs.maxSQLMemoryLimit,
-			TempStorageConfig: tempStorageConfig,
+			SQLMemoryPoolSize:       serverArgs.maxSQLMemoryLimit,
+			TempStorageConfig:       tempStorageConfig,
+			DisableDefaultSQLServer: t.cfg.useTenant || t.cfg.disableDefaultSQLServer,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -1577,7 +1592,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
 				Locality:          paramsPerNode[i].Locality,
-				Existing:          i > 0,
 				TracingDefault:    params.ServerArgs.TracingDefault,
 			}
 

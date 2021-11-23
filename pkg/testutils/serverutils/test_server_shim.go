@@ -20,7 +20,9 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"math/rand"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -224,7 +227,21 @@ func StartServer(
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+
+	// Determine if we should probabilistically start tenants for the cluster.
+	const probabilityOfStartingTestTenant = 0.5
+	// If we haven't been asked to explicitly disable the test tenant, but we
+	// determine that we shouldn't be probabilistically starting the test
+	// tenant, then disable it explicitly here.
+	if !params.DisableDefaultSQLServer && rand.Float32() > probabilityOfStartingTestTenant {
+		params.DisableDefaultSQLServer = true
+	}
+
 	if err := server.Start(context.Background()); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			server.Stopper().Stop(context.Background())
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
@@ -293,6 +310,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 		return nil, err
 	}
 	if err := server.Start(context.Background()); err != nil {
+		server.Stopper().Stop(context.Background())
 		return nil, err
 	}
 	return server, nil

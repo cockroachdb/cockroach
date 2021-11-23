@@ -174,7 +174,12 @@ func TestImportFixture(t *testing.T) {
 	stats.DefaultRefreshInterval = time.Millisecond
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t,
+		// Need to disable the SQL server until we have a fix for #75449.
+		base.TestServerArgs{
+			DisableDefaultSQLServer: true,
+		},
+	)
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -214,7 +219,13 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	ts := httptest.NewServer(workload.CSVMux(workload.Registered()))
 	defer ts.Close()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `d`})
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			UseDatabase: `d`,
+			// Test fails with SQL server due to #75449.
+			DisableDefaultSQLServer: true,
+		},
+	)
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
