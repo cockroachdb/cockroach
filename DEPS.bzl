@@ -4189,6 +4189,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_jaegertracing_jaeger_idl",
+        build_file_proto_mode = "package",
+        importpath = "github.com/jaegertracing/jaeger-idl",
+        sha256 = "d31eca5bb5264875c879a2d0f5eecbfeaca06b2fe37df7d6406db59bb1cf319f",
+        strip_prefix = "github.com/jaegertracing/jaeger-idl@v0.0.0-20210804094653-b9acaab7b20f",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jaegertracing/jaeger-idl/com_github_jaegertracing_jaeger_idl-v0.0.0-20210804094653-b9acaab7b20f.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_jcmturner_aescts_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jcmturner/aescts/v2",

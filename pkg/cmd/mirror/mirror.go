@@ -380,7 +380,7 @@ func dumpPatchArgsForRepo(repoName string) error {
 }
 
 func buildFileProtoModeForRepo(repoName string) string {
-	if repoName == "com_github_prometheus_client_model" {
+	if repoName == "com_github_prometheus_client_model" || repoName == "com_github_jaegertracing_jaeger_idl" {
 		return "package"
 	}
 	return "disable_global"
