@@ -35,9 +35,8 @@ message ChangeAggregatorSpec {
 
   // Checkpoint enables change aggregators to resume faster on restart.
   message Checkpoint {
-    // The checkpoint is currently applicable only to the spans which have
-    // already been backfilled.
     repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
 
   // Change aggregator checkpoint

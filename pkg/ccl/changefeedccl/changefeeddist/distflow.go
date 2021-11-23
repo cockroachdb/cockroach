@@ -66,16 +66,24 @@ func StartDistChangefeed(
 	// spans that are assigned to it.
 	// We could compute per-aggregator checkpoint, but that's probably an overkill.
 	aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
-		Spans: checkpoint.Spans,
+		Spans:     checkpoint.Spans,
+		Timestamp: checkpoint.Timestamp,
 	}
+
+	var checkpointSpanGroup roachpb.SpanGroup
+	checkpointSpanGroup.Add(checkpoint.Spans...)
 
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 		for watchIdx, nodeSpan := range sp.Spans {
+			initialResolved := initialHighWater
+			if checkpointSpanGroup.Encloses(nodeSpan) {
+				initialResolved = checkpoint.Timestamp
+			}
 			watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
 				Span:            nodeSpan,
-				InitialResolved: initialHighWater,
+				InitialResolved: initialResolved,
 			}
 		}
 
