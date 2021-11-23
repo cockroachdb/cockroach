@@ -274,7 +274,6 @@ func decomposeViewDescToElements(
 			TypeID:  typeRef,
 		}
 		addIfDuplicateDoesNotExistForDir(b, dir, typeDep)
-
 	}
 }
 
