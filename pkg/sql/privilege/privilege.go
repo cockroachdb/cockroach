@@ -42,6 +42,7 @@ const (
 	USAGE      Kind = 9
 	ZONECONFIG Kind = 10
 	CONNECT    Kind = 11
+	RULE       Kind = 12
 )
 
 // ObjectType represents objects that can have privileges.
