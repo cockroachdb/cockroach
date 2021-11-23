@@ -131,7 +131,11 @@ type TestServerArgs struct {
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
 
+	// Tracer, if set, will be used by the Server for creating Spans.
 	Tracer *tracing.Tracer
+	// TracingDefault kicks in if Tracer is not set. It is passed to the Tracer
+	// that will be created for the server.
+	TracingDefault tracing.TracingMode
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 
@@ -297,4 +301,7 @@ type TestTenantArgs struct {
 	// StartingHTTPPort, if it is non-zero, is added to the tenant ID in order to
 	// determine the tenant's HTTP port.
 	StartingHTTPPort int
+
+	// TracingDefault controls whether the tracing will be on or off by default.
+	TracingDefault tracing.TracingMode
 }
