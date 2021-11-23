@@ -491,6 +491,54 @@ func TestDefaultExprNil(t *testing.T) {
 	})
 }
 
+// TestRemoveDefaultExprFromComputedColumn tests that default expressions are
+// correctly removed from descriptors of computed columns as part of the
+// RunPostDeserializationChanges suite.
+func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
+	// Create a table with a computed column.
+	tdb.Exec(t, `CREATE DATABASE t`)
+	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
+
+	// Get the descriptor for the table.
+	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+
+	// Setting a default value on the computed column should fail.
+	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)
+
+	// Copy the descriptor proto for the table and modify it by setting a default
+	// expression.
+	var desc *descpb.TableDescriptor
+	{
+		desc = NewBuilder(tbl.TableDesc()).BuildImmutableTable().TableDesc()
+		defaultExpr := "2"
+		desc.Columns[1].DefaultExpr = &defaultExpr
+	}
+
+	// This modified table descriptor should fail validation.
+	{
+		broken := NewBuilder(desc).BuildImmutableTable()
+		require.Error(t, catalog.ValidateSelf(broken))
+	}
+
+	// This modified table descriptor should be fixed by removing the default
+	// expression.
+	{
+		b := NewBuilder(desc)
+		require.NoError(t, b.RunPostDeserializationChanges(context.Background(), nil /* dg */))
+		fixed := b.BuildImmutableTable()
+		require.NoError(t, catalog.ValidateSelf(fixed))
+		changes, err := GetPostDeserializationChanges(fixed)
+		require.NoError(t, err)
+		require.True(t, changes.RemovedDefaultExprFromComputedColumn)
+		require.False(t, fixed.PublicColumns()[1].HasDefault())
+	}
+}
+
 func TestLogicalColumnID(t *testing.T) {
 	tests := []struct {
 		desc     descpb.TableDescriptor
