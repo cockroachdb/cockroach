@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/sstable"
 )
 
 // pebbleIterator is a wrapper around a pebble.Iterator that implements the
@@ -152,6 +153,14 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 				p.timeBoundNumSSTables++
 			}
 			return used
+		}
+		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
+		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
+		// [min, max), i.e., exclusive on the upper bound.
+		p.options.BlockPropertyFilters = []pebble.BlockPropertyFilter{
+			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
+				uint64(opts.MinTimestampHint.WallTime),
+				uint64(opts.MaxTimestampHint.WallTime)+1),
 		}
 	} else if !opts.MinTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
