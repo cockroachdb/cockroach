@@ -313,6 +313,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.AlterTableRelocateExpr:
 		ep, err = b.buildAlterTableRelocate(t)
 
+	case *memo.AlterRangeRelocateExpr:
+		ep, err = b.buildAlterRangeRelocate(t)
+
 	case *memo.ControlJobsExpr:
 		ep, err = b.buildControlJobs(t)
 
