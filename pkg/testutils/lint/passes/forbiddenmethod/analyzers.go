@@ -79,6 +79,11 @@ var GRPCStatusWithDetailsAnalyzer = Analyzer(grpcStatusWithDetailsOptions)
 
 // Analyzers are all of the Analyzers defined in this package.
 var Analyzers = []*analysis.Analyzer{
+	// NOTE(ricky): The analyzers in this list each have a corresponding
+	// wrapper package (for example, DescriptorMarshalAnalyzer is exposed as
+	// pkg/testutils/lint/passes/descriptormarshal.Analyzer). This is done
+	// for compatibility w/ the Bazel build -- the wrapper packages are
+	// consumed in :crdb_nogo in the top-level BUILD.bazel.
 	DescriptorMarshalAnalyzer,
 	GRPCClientConnCloseAnalyzer,
 	GRPCStatusWithDetailsAnalyzer,

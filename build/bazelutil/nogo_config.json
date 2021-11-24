@@ -1,0 +1,145 @@
+{
+    "assign": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        }
+    },
+    "composites": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "copylocks": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "deepequalerrors": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        },
+        "exclude_files": {
+            "_test\\.go$": "tests"
+        }
+    },
+    "errcmp": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/roachpb/errors\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/constraint_name\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/util/contextutil/timeout_error\\.go$": "invalid direct cast on error object",
+            "github.com/cockroachdb/cockroach/pkg/util/sysutil/sysutil_.*": "type can change by system"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "fmtsafe": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger/log\\.go$": "format argument is not a constant expression",
+            "github.com/cockroachdb/cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "grpcconnclose": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "hash": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "lostcancel": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "nilness": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code",
+            "/_cgo_gotypes.go$": "cgo generated code",
+            "_test\\.go$": "tests"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "returnerrcheck": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "stdmethods": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "stringintconv": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "structtag": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        }
+    },
+    "testinggoroutine": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        },
+        "exclude_files": {
+            "_test\\.go$": "tests"
+        }
+    },
+    "unconvert": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "unreachable": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "unsafeptr": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash/hash\\.go$": "re-implements runtime.noescape for efficient hashing"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    }
+}

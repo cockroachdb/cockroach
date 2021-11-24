@@ -2561,7 +2561,7 @@ func (t *logicTest) verifyError(
 
 		errString := pgerror.FullError(err)
 		newErr := errors.Errorf("%s: %s\nexpected:\n%s\n\ngot:\n%s", pos, sql, expectErr, errString)
-		if err != nil && strings.Contains(errString, expectErr) {
+		if strings.Contains(errString, expectErr) {
 			t.t().Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
 				"query error %s", regexp.QuoteMeta(errString))
 		}
@@ -2572,7 +2572,7 @@ func (t *logicTest) verifyError(
 			r = strings.ReplaceAll(r, "\n", "\\n")
 			t.t().Logf("Error regexp: %s\n", r)
 		}
-		return (err == nil) == (expectErr == ""), newErr
+		return expectErr != "", newErr
 	}
 	if err != nil {
 		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) &&

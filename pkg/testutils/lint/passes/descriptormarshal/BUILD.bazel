@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "descriptormarshal",
+    srcs = ["descriptormarshal.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/testutils/lint/passes/forbiddenmethod"],
+)
