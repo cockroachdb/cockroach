@@ -102,10 +102,7 @@ SET tracing = off;
 				}
 			}
 		}
-		// TODO(obs-inf): when traces are properly redactable, `visibleString` should make
-		// it into the recording.
-		// require.True(t, found, "trace for tenant missing trace message '%q':\n%s",
-		// 	visibleString, sqlutils.MatrixToStr(results))
-		_ = found
+		require.True(t, found, "trace for tenant missing trace message '%q':\n%s",
+			visibleString, sqlutils.MatrixToStr(results))
 	})
 }

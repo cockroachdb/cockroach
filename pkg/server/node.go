@@ -1083,26 +1083,12 @@ func (n *Node) setupSpanForIncomingRPC(
 			return
 		}
 		if grpcSpan != nil {
-			tenID, ok := roachpb.TenantFromContext(ctx)
 			// If our local span descends from a parent on the other
 			// end of the RPC (i.e. the !isLocalRequest) case,
 			// attach the span recording to the batch response.
-			//
-			// However, don't do this for tenants, as trace data
-			// may, in theory, contain sensitive information that
-			// the tenant is not privy to.
-			rec := grpcSpan.GetRecording()
-			// This should be `if !ok || tenID != ...` but apparently not everyone
-			// correctly populates the context. See TestFollowerReadsWithStaleDescriptor
-			// for an example (and since this test uses the regular SQL connection, it
-			// is likely a general problem).
-			if ok && tenID != roachpb.SystemTenantID {
-				for i := range rec {
-					sp := &rec[i]
-					sp.Tags, sp.Logs = nil, nil
-				}
+			if rec := grpcSpan.GetRecording(); rec != nil {
+				br.CollectedSpans = append(br.CollectedSpans, rec...)
 			}
-			br.CollectedSpans = append(br.CollectedSpans, rec...)
 		}
 	}
 	return ctx, finishSpan
