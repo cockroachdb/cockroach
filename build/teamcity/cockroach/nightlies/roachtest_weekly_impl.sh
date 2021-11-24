@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Note that when this script is called, the cockroach binary to be tested
-# already exists in the current directory.
-
 set -euo pipefail
 
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
@@ -21,18 +18,12 @@ git checkout master
 git pull origin master
 
 git rev-parse HEAD
-build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest bin/roachprod
 
-# release-2.0 names the cockroach binary differently.
-if [[ -f cockroach-linux-2.6.32-gnu-amd64 ]]; then
-  mv cockroach-linux-2.6.32-gnu-amd64 cockroach.linux-2.6.32-gnu-amd64
-fi
+source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh
 
-chmod +x cockroach.linux-2.6.32-gnu-amd64
-
-artifacts=$PWD/artifacts/$(date +"%Y%m%d")-${TC_BUILD_ID}
+artifacts_subdir=bazel-$(date +"%Y%m%d")-${TC_BUILD_ID}
+artifacts=$PWD/artifacts/$artifacts_subdir
 mkdir -p "$artifacts"
-# See https://github.com/cockroachdb/cockroach/issues/54570#issuecomment-706324593
 chmod o+rwx "${artifacts}"
 
 # NB: Teamcity has a 7920 minute timeout that, when reached,
@@ -46,17 +37,18 @@ chmod o+rwx "${artifacts}"
 # by manually created clusters.
 #
 # NB(3): If you make changes here, you should probably make the same change in
-# build/teamcity/cockroach/nightlies/roachtest_weekly_impl.sh.
+# build/teamcity-weekly-roachtest.sh
 exit_status=0
 timeout -s INT $((7800*60)) bin/roachtest run \
   tag:weekly \
   --build-tag "${build_tag}" \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
-  --cockroach "$PWD/cockroach.linux-2.6.32-gnu-amd64" \
+  --cockroach "$PWD/bin/cockroach" \
   --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \
-  --artifacts "$artifacts" \
+  --artifacts "/artifacts/${artifacts_subdir}" \
+  --artifacts-literal="${artifacts}" \
   --parallelism 5 \
   --encrypt=random \
   --teamcity || exit_status=$?
@@ -69,7 +61,6 @@ if [[ ${exit_status} -eq 10 ]]; then
   # problems that prevent tests from being invoked in the first place.
   exit_status=0
 fi
-
 
 # Upload any stats.json files to the cockroach-nightly bucket.
 for file in $(find ${artifacts#${PWD}/} -name stats.json); do
