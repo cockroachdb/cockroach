@@ -645,7 +645,7 @@ func processEntryFiles(
 	}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, startTime, endTime, debugBackupArgs.withRevisions)
 
-	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
+	if err := rf.StartScanFrom(ctx, &kvFetcher, false /* traceKV */); err != nil {
 		return errors.Wrapf(err, "row fetcher starts scan")
 	}
 

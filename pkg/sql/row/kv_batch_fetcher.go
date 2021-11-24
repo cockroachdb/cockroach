@@ -90,10 +90,10 @@ type txnKVFetcher struct {
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
-	lockStrength descpb.ScanLockingStrength
+	lockStrength lock.Strength
 	// lockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
-	lockWaitPolicy descpb.ScanLockingWaitPolicy
+	lockWaitPolicy lock.WaitPolicy
 	// lockTimeout specifies the maximum amount of time that the fetcher will
 	// wait while attempting to acquire a lock on a key or while blocking on an
 	// existing lock in order to perform a non-locking read on a key.
@@ -122,7 +122,7 @@ type txnKVFetcher struct {
 	responseAdmissionQ     *admission.WorkQueue
 }
 
-var _ kvBatchFetcher = &txnKVFetcher{}
+var _ KVBatchFetcher = &txnKVFetcher{}
 
 // getBatchKeyLimit returns the max size of the next batch. The size is
 // expressed in number of result keys (i.e. this size will be used for
@@ -174,53 +174,6 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 	}
 }
 
-// getKeyLockingStrength returns the configured per-key locking strength to use
-// for key-value scans.
-func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
-	switch f.lockStrength {
-	case descpb.ScanLockingStrength_FOR_NONE:
-		return lock.None
-
-	case descpb.ScanLockingStrength_FOR_KEY_SHARE:
-		// Promote to FOR_SHARE.
-		fallthrough
-	case descpb.ScanLockingStrength_FOR_SHARE:
-		// We currently perform no per-key locking when FOR_SHARE is used
-		// because Shared locks have not yet been implemented.
-		return lock.None
-
-	case descpb.ScanLockingStrength_FOR_NO_KEY_UPDATE:
-		// Promote to FOR_UPDATE.
-		fallthrough
-	case descpb.ScanLockingStrength_FOR_UPDATE:
-		// We currently perform exclusive per-key locking when FOR_UPDATE is
-		// used because Upgrade locks have not yet been implemented.
-		return lock.Exclusive
-
-	default:
-		panic(errors.AssertionFailedf("unknown locking strength %s", f.lockStrength))
-	}
-}
-
-// getWaitPolicy returns the configured lock wait policy to use for key-value
-// scans.
-func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
-	switch f.lockWaitPolicy {
-	case descpb.ScanLockingWaitPolicy_BLOCK:
-		return lock.WaitPolicy_Block
-
-	case descpb.ScanLockingWaitPolicy_SKIP:
-		// Should not get here. Query should be rejected during planning.
-		panic(errors.AssertionFailedf("unsupported wait policy %s", f.lockWaitPolicy))
-
-	case descpb.ScanLockingWaitPolicy_ERROR:
-		return lock.WaitPolicy_Error
-
-	default:
-		panic(errors.AssertionFailedf("unknown wait policy %s", f.lockWaitPolicy))
-	}
-}
-
 func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 	return func(
 		ctx context.Context,
@@ -234,7 +187,7 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 	}
 }
 
-// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
+// makeKVBatchFetcher initializes a KVBatchFetcher for the given spans. If
 // useBatchLimit is true, the number of result keys per batch is limited; the
 // limit grows between subsequent batches, starting at firstBatchKeyLimit (if not
 // 0) to ProductionKVBatchSize.
@@ -317,8 +270,8 @@ func makeKVBatchFetcher(
 		reverse:                    reverse,
 		batchBytesLimit:            batchBytesLimit,
 		firstBatchKeyLimit:         firstBatchKeyLimit,
-		lockStrength:               lockStrength,
-		lockWaitPolicy:             lockWaitPolicy,
+		lockStrength:               getKeyLockingStrength(lockStrength),
+		lockWaitPolicy:             GetWaitPolicy(lockWaitPolicy),
 		lockTimeout:                lockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
@@ -359,13 +312,13 @@ func makeKVBatchFetcher(
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
-	ba.Header.WaitPolicy = f.getWaitPolicy()
+	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
-	keyLocking := f.getKeyLockingStrength()
+	keyLocking := f.lockStrength
 
 	// Detect the number of gets vs scans, so we can batch allocate all of the
 	// requests precisely.

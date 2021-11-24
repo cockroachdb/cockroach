@@ -12,6 +12,7 @@ go_library(
         "inserter.go",
         "kv_batch_fetcher.go",
         "kv_fetcher.go",
+        "locking.go",
         "metrics.go",
         "partial_index.go",
         "row_converter.go",
