@@ -66,6 +66,7 @@ Dev is the general-purpose dev tool for working on cockroachdb/cockroach. With d
 		makeBuilderCmd(ret.builder),
 		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),
+		makeGoCmd(ret.gocmd),
 		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
