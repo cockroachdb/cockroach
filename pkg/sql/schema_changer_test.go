@@ -2252,7 +2252,7 @@ func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
@@ -2311,6 +2311,28 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 )`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
+	}
+
+	// Regression test for issue #71552.
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (x)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-swapNotification
+	// Let the schema change process continue.
+	waitBeforeContinuing <- struct{}{}
+	// Wait for the primary key swap to happen.
+	wg.Wait()
+
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	for _, idx := range desc.PublicNonPrimaryIndexes() {
+		if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
+			t.Fatalf("expected SecondaryIndexEncoding for index %q, found %d", idx.GetName(), idx.GetEncodingType())
+		}
 	}
 }
 

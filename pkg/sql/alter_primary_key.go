@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -401,6 +402,15 @@ func (p *planner) AlterPrimaryKey(
 		// Make the copy of the old primary index not-interleaved. This decision
 		// can be revisited based on user experience.
 		oldPrimaryIndexCopy.Interleave = descpb.InterleaveDescriptor{}
+		// Set correct encoding type and format version (issue #71552).
+		oldPrimaryIndexCopy.EncodingType = descpb.SecondaryIndexEncoding
+		oldPrimaryIndexCopy.Version = descpb.SecondaryIndexFamilyFormatVersion
+		if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.EmptyArraysInInvertedIndexes) {
+			// descpb.StrictIndexColumnIDGuaranteesVersion is like
+			// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level of
+			// descriptor validation checks.
+			oldPrimaryIndexCopy.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+		}
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
 			return err
 		}
