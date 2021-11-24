@@ -225,9 +225,7 @@ func (*CreateRoleNode) Close(context.Context) {}
 func retrievePasswordFromRoleOptions(
 	params runParams, roleOptions roleoption.List,
 ) (hasPasswordOpt bool, hashedPassword []byte, err error) {
-	pwAlreadyHashed := roleOptions.Contains(roleoption.HASHEDPASSWORD)
-	if !(pwAlreadyHashed ||
-		roleOptions.Contains(roleoption.PASSWORD)) {
+	if !roleOptions.Contains(roleoption.PASSWORD) {
 		return false, nil, nil
 	}
 	isNull, password, err := roleOptions.GetPassword()
@@ -247,14 +245,8 @@ func retrievePasswordFromRoleOptions(
 	}
 
 	if !isNull {
-		if pwAlreadyHashed {
-			if hashedPassword, err = security.CheckPasswordHashValidity(params.ctx, password); err != nil {
-				return true, nil, err
-			}
-		} else {
-			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
-				return true, nil, err
-			}
+		if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+			return true, nil, err
 		}
 	}
 
@@ -268,9 +260,16 @@ func (p *planner) checkPasswordAndGetHash(
 		return hashedPassword, security.ErrEmptyPassword
 	}
 
+	var isPreHashed bool
+	hashedPassword = []byte(password)
+	isPreHashed, err = security.CheckPasswordHashValidity(ctx, hashedPassword)
+	if isPreHashed || err != nil {
+		return hashedPassword, err
+	}
+
 	st := p.ExecCfg().Settings
 	if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
-		return hashedPassword, errors.WithHintf(security.ErrPasswordTooShort,
+		return nil, errors.WithHintf(security.ErrPasswordTooShort,
 			"Passwords must be %d characters or longer.", minLength)
 	}
 

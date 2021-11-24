@@ -122,7 +122,6 @@ func (p *planner) checkPasswordOptionConstraints(
 	if roleOptions.Contains(roleoption.CREATELOGIN) ||
 		roleOptions.Contains(roleoption.NOCREATELOGIN) ||
 		roleOptions.Contains(roleoption.PASSWORD) ||
-		roleOptions.Contains(roleoption.HASHEDPASSWORD) ||
 		roleOptions.Contains(roleoption.VALIDUNTIL) ||
 		roleOptions.Contains(roleoption.LOGIN) ||
 		// CREATE ROLE NOLOGIN is valid without CREATELOGIN.

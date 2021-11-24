@@ -38,7 +38,6 @@ const (
 	CREATEROLE
 	NOCREATEROLE
 	PASSWORD
-	HASHEDPASSWORD
 	LOGIN
 	NOLOGIN
 	VALIDUNTIL
@@ -93,7 +92,6 @@ var ByName = map[string]Option{
 	"CREATEROLE":             CREATEROLE,
 	"NOCREATEROLE":           NOCREATEROLE,
 	"PASSWORD":               PASSWORD,
-	"HASHED PASSWORD":        HASHEDPASSWORD,
 	"LOGIN":                  LOGIN,
 	"NOLOGIN":                NOLOGIN,
 	"VALID UNTIL":            VALIDUNTIL,
@@ -151,7 +149,7 @@ func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error),
 		// outside of this set stmt.
 		// DEFAULTSETTINGS is stored in system.database_role_settings.
 		// TODO(richardjcai): migrate password to system.role_options
-		if ro.Option == HASHEDPASSWORD || ro.Option == PASSWORD || ro.Option == DEFAULTSETTINGS {
+		if ro.Option == PASSWORD || ro.Option == DEFAULTSETTINGS {
 			continue
 		}
 
@@ -210,8 +208,6 @@ func (rol List) CheckRoleOptionConflicts() error {
 			roleOptionBits&NOCREATEDB.Mask() != 0) ||
 		(roleOptionBits&CREATELOGIN.Mask() != 0 &&
 			roleOptionBits&NOCREATELOGIN.Mask() != 0) ||
-		(roleOptionBits&PASSWORD.Mask() != 0 &&
-			roleOptionBits&HASHEDPASSWORD.Mask() != 0) ||
 		(roleOptionBits&VIEWACTIVITY.Mask() != 0 &&
 			roleOptionBits&NOVIEWACTIVITY.Mask() != 0) ||
 		(roleOptionBits&CANCELQUERY.Mask() != 0 &&
@@ -228,7 +224,7 @@ func (rol List) CheckRoleOptionConflicts() error {
 // or if no password option is found.
 func (rol List) GetPassword() (isNull bool, password string, err error) {
 	for _, ro := range rol {
-		if ro.Option == PASSWORD || ro.Option == HASHEDPASSWORD {
+		if ro.Option == PASSWORD {
 			return ro.Value()
 		}
 	}
