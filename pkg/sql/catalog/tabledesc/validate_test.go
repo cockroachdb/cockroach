@@ -1292,6 +1292,22 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
+		{`computed column "bar" cannot also have an ON UPDATE expression`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:           1,
+						Name:         "bar",
+						ComputeExpr:  &computedExpr,
+						OnUpdateExpr: &computedExpr,
+					},
+				},
+				NextColumnID: 2,
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
