@@ -12,7 +12,6 @@ package rangefeed_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -445,4 +445,64 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		require.False(t, v.PrevValue.IsPresent())
 		require.True(t, v.PrevValue.Timestamp.IsEmpty())
 	}
+}
+
+// TestUnrecoverableErrors verifies that unrecoverable internal errors are surfaced
+// to callers.
+func TestUnrecoverableErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).DB()
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+
+	sp := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+	{
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+		require.NoError(t, err)
+	}
+	{
+		// Lower the closed timestamp target duration to speed up the test.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+		require.NoError(t, err)
+	}
+
+	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	require.NoError(t, err)
+
+	preGCThresholdTS := hlc.Timestamp{WallTime: 1}
+	mu := struct {
+		syncutil.Mutex
+		internalErr error
+	}{}
+	r, err := f.RangeFeed(ctx, "test", sp, preGCThresholdTS,
+		func(context.Context, *roachpb.RangeFeedValue) {},
+		rangefeed.WithDiff(),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+
+			mu.internalErr = err
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if !errors.HasType(mu.internalErr, &roachpb.BatchTimestampBeforeGCError{}) {
+			return errors.New("expected internal error")
+		}
+		return nil
+	})
 }

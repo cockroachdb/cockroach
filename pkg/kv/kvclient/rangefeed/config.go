@@ -24,13 +24,14 @@ type Option interface {
 }
 
 type config struct {
-	retryOptions       retry.Options
-	onInitialScanDone  OnInitialScanDone
-	withInitialScan    bool
-	withDiff           bool
-	onInitialScanError OnInitialScanError
-	onCheckpoint       OnCheckpoint
-	onFrontierAdvance  OnFrontierAdvance
+	retryOptions         retry.Options
+	onInitialScanDone    OnInitialScanDone
+	withInitialScan      bool
+	withDiff             bool
+	onInitialScanError   OnInitialScanError
+	onUnrecoverableError OnUnrecoverableError
+	onCheckpoint         OnCheckpoint
+	onFrontierAdvance    OnFrontierAdvance
 }
 
 type optionFunc func(*config)
@@ -45,6 +46,13 @@ type OnInitialScanDone func(ctx context.Context)
 // allows the caller to tell the RangeFeed to stop as opposed to retrying
 // endlessly.
 type OnInitialScanError func(ctx context.Context, err error) (shouldFail bool)
+
+// OnUnrecoverableError is called when the rangefeed exits with an unrecoverable
+// error (preventing internal retries). One example is when the rangefeed falls
+// behind to a point where the frontier timestamp precedes the GC threshold, and
+// thus will never work. The callback lets callers find out about such errors
+// (possibly, in our example, to start a new rangefeed with an initial scan).
+type OnUnrecoverableError func(ctx context.Context, err error)
 
 // WithInitialScan enables an initial scan of the data in the span. The rows of
 // an initial scan will be passed to the value function used to construct the
@@ -66,6 +74,14 @@ func WithInitialScan(f OnInitialScanDone) Option {
 func WithOnInitialScanError(f OnInitialScanError) Option {
 	return optionFunc(func(c *config) {
 		c.onInitialScanError = f
+	})
+}
+
+// WithOnInternalError sets up a callback to report unrecoverable errors during
+// operation.
+func WithOnInternalError(f OnUnrecoverableError) Option {
+	return optionFunc(func(c *config) {
+		c.onUnrecoverableError = f
 	})
 }
 
