@@ -116,7 +116,7 @@
 /pkg/acceptance/             @cockroachdb/sql-experience
 /pkg/base/                   @cockroachdb/server-prs
 /pkg/bench/                  @cockroachdb/sql-queries
-/pkg/bench/rttanalysis       @cockroachdb/sql-experience
+/pkg/bench/rttanalysis       @cockroachdb/sql-schema
 /pkg/blobs/                  @cockroachdb/bulk-prs
 /pkg/build/                  @cockroachdb/dev-inf
 /pkg/ccl/baseccl/            @cockroachdb/cli-prs
