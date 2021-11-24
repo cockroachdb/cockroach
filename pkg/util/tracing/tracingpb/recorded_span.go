@@ -55,7 +55,7 @@ func (l LogRecord) Msg() string {
 	for _, f := range l.Fields {
 		key := f.Key
 		if key == LogMessageField {
-			return f.Value
+			return f.Value.StripMarkers()
 		}
 		if key == "error" {
 			return fmt.Sprint("error:", f.Value)

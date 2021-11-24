@@ -458,7 +458,7 @@ func TestLimitScans(t *testing.T) {
 		}
 		for _, l := range span.Logs {
 			for _, f := range l.Fields {
-				match := re.FindStringSubmatch(f.Value)
+				match := re.FindStringSubmatch(f.Value.StripMarkers())
 				if match == nil {
 					continue
 				}
