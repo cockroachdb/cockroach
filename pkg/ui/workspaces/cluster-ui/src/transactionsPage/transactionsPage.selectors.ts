@@ -50,3 +50,8 @@ export const selectFilters = createSelector(
   localStorageSelector,
   localStorage => localStorage["filters/TransactionsPage"],
 );
+
+export const selectSearch = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["search/TransactionsPage"],
+);

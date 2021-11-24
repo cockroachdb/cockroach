@@ -78,6 +78,12 @@ export const filtersLocalSetting = new LocalSetting(
   defaultFilters,
 );
 
+export const searchLocalSetting = new LocalSetting(
+  "search/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
 export const transactionColumnsLocalSetting = new LocalSetting(
   "showColumns/TransactionPage",
   (state: AdminUIState) => state.localSettings,
@@ -87,15 +93,16 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 const TransactionsPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({
-      data: selectData(state),
-      statementsError: state.cachedData.statements.lastError,
-      dateRange: selectDateRange(state),
-      lastReset: selectLastReset(state),
-      error: selectLastError(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
       columns: transactionColumnsLocalSetting.selectorToArray(state),
-      sortSetting: sortSettingLocalSetting.selector(state),
+      data: selectData(state),
+      dateRange: selectDateRange(state),
+      error: selectLastError(state),
       filters: filtersLocalSetting.selector(state),
+      lastReset: selectLastReset(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
+      search: searchLocalSetting.selector(state),
+      sortSetting: sortSettingLocalSetting.selector(state),
+      statementsError: state.cachedData.statements.lastError,
     }),
     {
       refreshData: refreshStatements,
@@ -119,6 +126,7 @@ const TransactionsPageConnected = withRouter(
           columnTitle: columnName,
         }),
       onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
+      onSearchComplete: (query: string) => searchLocalSetting.set(query),
     },
   )(TransactionsPage),
 );

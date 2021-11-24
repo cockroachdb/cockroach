@@ -15,7 +15,9 @@ type Page =
   | "Statements"
   | "Statement Details"
   | "Sessions"
-  | "Sessions Details";
+  | "Sessions Details"
+  | "Transactions"
+  | "Transaction Details";
 
 type SearchEvent = {
   name: "Keyword Searched";
