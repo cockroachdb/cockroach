@@ -712,7 +712,8 @@ func makeTransitionRegressionAggregateBuiltin() builtinDefinition {
 
 func makeRegressionAggregate(
 	aggregateFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	info string, ret *types.T,
+	info string,
+	ret *types.T,
 ) builtinDefinition {
 	return makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Float, types.Float}, ret, aggregateFunc,
