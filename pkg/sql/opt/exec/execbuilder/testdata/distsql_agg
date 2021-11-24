@@ -46,7 +46,8 @@ EXPLAIN (DISTSQL) SELECT
   xor_agg(_bytes),
   count(*), -- count_rows
   bit_and(_bit),
-  bit_or(_bit)
+  bit_or(_bit),
+  covar_pop(a, b)
 FROM data GROUP BY b
 ----
 distribution: full
