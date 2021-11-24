@@ -13,6 +13,7 @@ package security
 import (
 	"context"
 	"crypto/sha256"
+	"regexp"
 	"runtime"
 	"sync"
 
@@ -80,16 +81,25 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
 }
 
-// CheckPasswordHashValidity checks that a (user-provided) password
-// hash is recognized as a valid hash.
-func CheckPasswordHashValidity(ctx context.Context, hashedPassword string) ([]byte, error) {
-	res := []byte(hashedPassword)
-	// The Cost function parses the hash and checks its syntax.
-	_, err := bcrypt.Cost(res)
-	if err != nil {
-		return nil, err
+// bcryptHashRe matches the lexical structure of the bcrypt hash
+// format supported by CockroachDB. The base64 encoding of the hash
+// uses the alphabet used by the bcrypt package.
+var bcryptHashRe = regexp.MustCompile(`^\$\d[a-z]?\$\d+\$[0-9A-Za-z\./]+$`)
+
+// CheckPasswordHashValidity determines whether a (user-provided)
+// password is already hashed, and if already hashed, verifies whether
+// the hash is recognized as a valid hash.
+func CheckPasswordHashValidity(
+	ctx context.Context, hashedPassword []byte,
+) (isPreHashed bool, err error) {
+	if !bcryptHashRe.Match(hashedPassword) {
+		// Password is not yet in hash form.
+		return false, nil
 	}
-	return res, nil
+
+	// The bcrypt.Cost() function parses the hash and checks its syntax.
+	_, err = bcrypt.Cost(hashedPassword)
+	return true, err
 }
 
 // MinPasswordLength is the cluster setting that configures the

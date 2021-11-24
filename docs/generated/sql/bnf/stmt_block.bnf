@@ -947,7 +947,6 @@ unreserved_keyword ::=
 	| 'GRANTS'
 	| 'GROUPS'
 	| 'HASH'
-	| 'HASHED'
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOUR'
@@ -2691,8 +2690,7 @@ sequence_option_elem ::=
 	| 'VIRTUAL'
 
 password_clause ::=
-	'HASHED' 'PASSWORD' string_or_placeholder
-	| 'PASSWORD' string_or_placeholder
+	'PASSWORD' string_or_placeholder
 	| 'PASSWORD' 'NULL'
 
 valid_until_clause ::=

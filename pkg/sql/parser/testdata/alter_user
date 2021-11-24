@@ -26,15 +26,6 @@ ALTER USER _ WITH PASSWORD '*****' -- identifiers removed
 ALTER USER foo WITH PASSWORD 'bar' -- passwords exposed
 
 parse
-ALTER USER foo WITH HASHED PASSWORD bar
-----
-ALTER USER foo WITH HASHED PASSWORD '*****' -- normalized!
-ALTER USER foo WITH HASHED PASSWORD '*****' -- fully parenthesized
-ALTER USER foo WITH HASHED PASSWORD '*****' -- literals removed
-ALTER USER _ WITH HASHED PASSWORD '*****' -- identifiers removed
-ALTER USER foo WITH HASHED PASSWORD 'bar' -- passwords exposed
-
-parse
 ALTER USER foo WITH PASSWORD NULL
 ----
 ALTER USER foo WITH PASSWORD '*****' -- normalized!

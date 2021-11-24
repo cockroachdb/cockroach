@@ -3056,3 +3056,23 @@ query B
 SELECT 'ACTIVE'::text ~ similar_to_escape(NULL::text)
 ----
 NULL
+
+subtest password_hash
+
+# Need to escapes the dollar signs since the testlogic language gives them special meaning.
+
+query error bcrypt algorithm version .3. requested is newer than current version .2.
+SELECT crdb_internal.check_password_hash(('$'||'3a'||'$'||'10'||'$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+
+
+query error too short to be a bcrypted password
+SELECT crdb_internal.check_password_hash(('$'||'2a'||'$'||'10'||'$'||'vcmoIBvgeHjgScVHWRMWI.Z3v0')::bytes)
+
+
+query error cost 1 is outside allowed range \(4,31\)
+SELECT crdb_internal.check_password_hash(('$'||'2a'||'$'||'01'||'$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+
+query B
+SELECT crdb_internal.check_password_hash(('$'||'2a'||'$'||10||'$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+----
+true

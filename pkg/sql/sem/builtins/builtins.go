@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -6093,6 +6094,30 @@ table's zone configuration this will return NULL.`,
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
 			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.check_password_hash": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"password", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := []byte(tree.MustBeDBytes(args[0]))
+				ctx := evalCtx.Ctx()
+				isHashed, err := security.CheckPasswordHashValidity(ctx, arg)
+				if err != nil {
+					return tree.DNull, err
+				}
+				if !isHashed {
+					return tree.DNull, errors.New("hash format not recognized")
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function checks whether a string is a recognized precomputed password hash.",
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
