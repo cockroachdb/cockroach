@@ -662,21 +662,19 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 		return lai, hlc.Timestamp{}, nil
 	}
 
-	// Sanity check that this command is not violating the closed timestamp. It
-	// must be writing at a timestamp above assignedClosedTimestamp
-	// (assignedClosedTimestamp represents the promise that this replica made
-	// through previous commands to not evaluate requests with lower
-	// timestamps); in other words, assignedClosedTimestamp was not supposed to
-	// have been incremented while requests with lower timestamps were
-	// evaluating (instead, assignedClosedTimestamp was supposed to have bumped
-	// the write timestamp of any request the began evaluating after it was
-	// set).
-	if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.IsIntentWrite() {
-		log.Fatalf(ctx, "%v", errorutil.UnexpectedWithIssueErrorf(72428,
-			"attempting to propose command writing below closed timestamp. "+
-				"wts: %s < assigned closed: %s; ba: %s; lease: %s.",
-			p.Request.WriteTimestamp(), b.assignedClosedTimestamp, p.Request, b.p.leaseDebugRLocked()))
-	}
+	// Note that under a steady lease, for requests that leave intents we must
+	// have WriteTimestamp.Less(b.assignedClosedTimestamp) and we used to assert
+	// that here. However, this does not have to be true for proposals that
+	// evaluated under an old lease and which are only entering the proposal
+	// buffer after the lease has returned and in the process of doing so
+	// incremented b.assignedClosedTimestamp. These proposals have no effect (as
+	// they apply as a no-op) but the proposal tracker has no knowledge of the
+	// lease changes and would therefore witness what looks like a violation of
+	// the invariant above. We have an authoritative assertion in
+	// (*replicaAppBatch).assertNoWriteBelowClosedTimestamp that is not
+	// susceptible to the above false positive.
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/72428#issuecomment-976428551.
 
 	lb := b.evalTracker.LowerBound(ctx)
 	if !lb.IsEmpty() {
