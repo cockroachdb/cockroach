@@ -290,14 +290,14 @@ func TestSpanRecordLimit(t *testing.T) {
 	msg := func(i int) string { return fmt.Sprintf("msg: %10d", i) }
 
 	// Determine the size of a log record by actually recording once.
-	sp.Record(msg(42))
+	sp.Recordf("%s", msg(42))
 	logSize := sp.GetRecording()[0].Logs[0].Size()
 	sp.ResetRecording()
 
 	numLogs := maxLogBytesPerSpan / logSize
 	const extra = 10
 	for i := 1; i <= numLogs+extra; i++ {
-		sp.Record(msg(i))
+		sp.Recordf("%s", msg(i))
 	}
 
 	rec := sp.GetRecording()
@@ -345,7 +345,7 @@ func TestSpanReset(t *testing.T) {
 		if i%2 == 0 {
 			sp.RecordStructured(newTestStructured(i))
 		} else {
-			sp.Record(fmt.Sprintf("%d", i))
+			sp.Recordf("%d", i)
 		}
 	}
 
