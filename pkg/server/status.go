@@ -670,7 +670,7 @@ func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.Trac
 				Time: entry.Time,
 			}
 			if len(entry.Fields) == 1 {
-				event.Message = entry.Fields[0].Value
+				event.Message = entry.Fields[0].Value.StripMarkers()
 			} else {
 				buf.Reset()
 				for i, f := range entry.Fields {

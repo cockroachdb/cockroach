@@ -228,7 +228,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			for _, rec := range getRec() {
 				for _, l := range rec.Logs {
 					for _, line := range l.Fields {
-						if strings.Contains(line.Value, "SSTable cannot be added spanning range bounds") {
+						if strings.Contains(line.Value.StripMarkers(), "SSTable cannot be added spanning range bounds") {
 							splitRetries++
 						}
 					}
