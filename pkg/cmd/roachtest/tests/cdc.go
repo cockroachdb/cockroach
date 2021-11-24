@@ -531,32 +531,41 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	output, err := c.RunWithBuffer(ctx, t.L(), kafkaNode,
-		kafka.makeCommand("kafka-avro-console-consumer",
-			"--from-beginning",
-			"--topic=foo",
-			"--max-messages=14",
-			"--bootstrap-server=localhost:9092"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.L().Printf("\n%s\n", output)
-
-	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
-	updatedMap := make(map[string]struct{})
-	var resolved []string
-	for _, line := range strings.Split(string(output), "\n") {
-		if strings.Contains(line, `"updated"`) {
-			line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
-			updatedMap[line] = struct{}{}
-		} else if strings.Contains(line, `"resolved"`) {
-			resolved = append(resolved, line)
-		}
-	}
 	// There are various internal races and retries in changefeeds that can
 	// produce duplicates. This test is really only to verify that the confluent
 	// schema registry works end-to-end, so do the simplest thing and sort +
-	// unique the output.
+	// unique the output, pulling more messages if we get a lot of duplicates
+	// or resolved messages.
+	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
+	updatedMap := make(map[string]struct{})
+	var resolved []string
+	pagesFetched := 0
+	pageSize := 14
+
+	for len(updatedMap) < 10 && pagesFetched < 5 {
+		output, err := c.RunWithBuffer(ctx, t.L(), kafkaNode,
+			kafka.makeCommand("kafka-avro-console-consumer",
+				fmt.Sprintf("--offset=%d", pagesFetched*pageSize),
+				"--partition=0",
+				"--topic=foo",
+				fmt.Sprintf("--max-messages=%d", pageSize),
+				"--bootstrap-server=localhost:9092"))
+		t.L().Printf("\n%s\n", output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pagesFetched++
+
+		for _, line := range strings.Split(string(output), "\n") {
+			if strings.Contains(line, `"updated"`) {
+				line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
+				updatedMap[line] = struct{}{}
+			} else if strings.Contains(line, `"resolved"`) {
+				resolved = append(resolved, line)
+			}
+		}
+	}
+
 	updated := make([]string, 0, len(updatedMap))
 	for u := range updatedMap {
 		updated = append(updated, u)
