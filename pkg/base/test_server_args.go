@@ -289,4 +289,12 @@ type TestTenantArgs struct {
 	// SSLCertsDir is a path to a custom certs dir. If empty, will use the default
 	// embedded certs.
 	SSLCertsDir string
+
+	// StartingSQLPort, if it is non-zero, is added to the tenant ID in order to
+	// determine the tenant's SQL port.
+	StartingSQLPort int
+
+	// StartingHTTPPort, if it is non-zero, is added to the tenant ID in order to
+	// determine the tenant's HTTP port.
+	StartingHTTPPort int
 }
