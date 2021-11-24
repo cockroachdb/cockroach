@@ -51,10 +51,6 @@ type tenantNode struct {
 	binary string // the binary last passed to start()
 	errCh  chan error
 	node   int
-
-	// When starting a <=21.1 tenant, this needs to be set
-	// to avoid passing unsupported flags during start().
-	doesNotSupportStoreFlag bool
 }
 
 func createTenantNode(kvAddrs []string, tenantID, node, httpPort, sqlPort int) *tenantNode {
@@ -90,10 +86,7 @@ func (tn *tenantNode) storeDir() string {
 
 func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster, binary string) {
 	tn.binary = binary
-	extraArgs := []string{"--log-dir=" + tn.logDir()}
-	if !tn.doesNotSupportStoreFlag {
-		extraArgs = append(extraArgs, "--store="+tn.storeDir())
-	}
+	extraArgs := []string{"--log-dir=" + tn.logDir(), "--store=" + tn.storeDir()}
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), binary, tn.kvAddrs, tn.tenantID,
 		tn.httpPort, tn.sqlPort,
@@ -188,7 +181,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	const tenantNode = 2
 	tenant11 := createTenantNode(kvAddrs, tenant11ID, tenantNode, tenant11HTTPPort, tenant11SQLPort)
-	tenant11.doesNotSupportStoreFlag = true // can be removed when predecessorBinary is 21.2
 	tenant11.start(ctx, t, c, predecessorBinary)
 	defer tenant11.stop(ctx, t, c)
 
@@ -199,33 +191,10 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}))
 
-	var needsWorkaround bool
-	if v, err := version.Parse("v" + predecessor); err != nil {
-		t.Fatal(err)
-	} else if !v.AtLeast(version.MustParse("v21.1.2")) {
-		// Tenant upgrades are only fully functional when starting out at version
-		// v21.1.2, which includes #64488. That PR is responsible for giving tenants
-		// the initial cluster version, which is thus absent here.
-		//
-		// Without this workaround, the tenant would report a cluster version of
-		// 20.2 which is going to trip up the test by making the read/write of the
-		// cluster setting fail (after a time out), and also leading to an
-		// ill-advised 20.2 cluster version reported for the tenant (once we run the
-		// current binary). We won't actually upgrade tenants in production in
-		// scenarios in which this branch is active (the host cluster will be at the
-		// latest patch release before attempting an upgrade, which is going to be
-		// at least 21.1.2).
-		//
-		// This can be deleted once PredecessorVersion(21.2) is >= 21.1.2.
-		needsWorkaround = true
-	}
-
-	if !needsWorkaround {
-		verifySQL(t, tenant11.pgURL,
-			mkStmt("SHOW CLUSTER SETTING version").
-				withResults([][]string{{initialVersion}}),
-		)
-	}
+	verifySQL(t, tenant11.pgURL,
+		mkStmt("SHOW CLUSTER SETTING version").
+			withResults([][]string{{initialVersion}}),
+	)
 
 	t.Status("preserving downgrade option on host server")
 	{
@@ -255,7 +224,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("starting tenant 12 server with older binary")
 	tenant12 := createTenantNode(kvAddrs, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
-	tenant12.doesNotSupportStoreFlag = true // can be removed when predecessorBinary is 21.2
 	tenant12.start(ctx, t, c, predecessorBinary)
 	defer tenant12.stop(ctx, t, c)
 
@@ -296,14 +264,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	tenant11.stop(ctx, t, c)
 
 	t.Status("starting the tenant 11 server with the current binary")
-	tenant11.doesNotSupportStoreFlag = false
 	tenant11.start(ctx, t, c, currentBinary)
-
-	if needsWorkaround {
-		// NB: we can't do this earlier, as the tenant would not be able to write
-		// its cluster version under the binary that needed the workaround.
-		verifySQL(t, tenant11.pgURL, mkStmt(`SET CLUSTER SETTING version = $1`, initialVersion))
-	}
 
 	t.Status("verify tenant 11 server works with the new binary")
 	{
@@ -338,7 +299,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	tenant12.stop(ctx, t, c)
 
 	t.Status("starting the tenant 12 server with the current binary")
-	tenant12.doesNotSupportStoreFlag = false
 	tenant12.start(ctx, t, c, currentBinary)
 
 	t.Status("verify tenant 12 server works with the new binary")
