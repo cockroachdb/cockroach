@@ -122,17 +122,19 @@ export const searchTransactionsData = (
   statements: Statement[],
 ): Transaction[] => {
   return transactions.filter((t: Transaction) =>
-    search.split(" ").every(val =>
-      collectStatementsText(
-        getStatementsByFingerprintIdAndTime(
-          t.stats_data.statement_fingerprint_ids,
-          t.stats_data.aggregated_ts,
-          statements,
-        ),
-      )
-        .toLowerCase()
-        .includes(val.toLowerCase()),
-    ),
+    search
+      ? search.split(" ").every(val =>
+          collectStatementsText(
+            getStatementsByFingerprintIdAndTime(
+              t.stats_data.statement_fingerprint_ids,
+              t.stats_data.aggregated_ts,
+              statements,
+            ),
+          )
+            .toLowerCase()
+            .includes(val.toLowerCase()),
+        )
+      : true,
   );
 };
 
