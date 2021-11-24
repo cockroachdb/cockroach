@@ -276,3 +276,46 @@ memo (optimized, ~8KB, required=[presentation: k:13,u:14,v:15,w:16])
       └── []
            ├── best: (scan kuvw,cols=(7-10))
            └── cost: 1104.82
+
+# Regression test for #73084. Ensure that we do not create empty streaming set
+# op orderings.
+exec-ddl
+CREATE TABLE table1 (
+	id INT64 PRIMARY KEY,
+	date TIMESTAMP DEFAULT now()
+)
+----
+
+opt expect-not=GenerateStreamingSetOp
+(SELECT id FROM table1 ORDER BY date ASC LIMIT 1)
+UNION
+(SELECT id FROM table1 ORDER BY date DESC LIMIT 1)
+----
+union
+ ├── columns: id:9!null
+ ├── left columns: table1.id:1
+ ├── right columns: table1.id:5
+ ├── cardinality: [0 - 2]
+ ├── key: (9)
+ ├── top-k
+ │    ├── columns: table1.id:1!null date:2
+ │    ├── internal-ordering: +2
+ │    ├── k: 1
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── scan table1
+ │         ├── columns: table1.id:1!null date:2
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── top-k
+      ├── columns: table1.id:5!null date:6
+      ├── internal-ordering: -6
+      ├── k: 1
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      └── scan table1
+           ├── columns: table1.id:5!null date:6
+           ├── key: (5)
+           └── fd: (5)-->(6)

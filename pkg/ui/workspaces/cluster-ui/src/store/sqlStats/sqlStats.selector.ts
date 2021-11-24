@@ -8,5 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./transactions.reducer";
-export * from "./transactions.sagas";
+import { createSelector } from "reselect";
+import { AppState } from "../reducers";
+
+const adminUISelector = createSelector(
+  (state: AppState) => state.adminUI,
+  adminUiState => adminUiState,
+);
+
+export const sqlStatsSelector = createSelector(
+  adminUISelector,
+  adminUiState => adminUiState.sqlStats,
+);

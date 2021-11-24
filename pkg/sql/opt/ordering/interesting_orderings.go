@@ -192,9 +192,16 @@ func interestingOrderingsForSetOp(rel memo.RelExpr) props.OrderingSet {
 		// LocalityOptimizedSearchOp does not support passing through orderings.
 		return nil
 	}
-	ordLeft := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
-	ordRight := DeriveInterestingOrderings(rel.Child(1).(memo.RelExpr))
+	leftChild := rel.Child(0).(memo.RelExpr)
+	rightChild := rel.Child(1).(memo.RelExpr)
+	ordLeft := DeriveInterestingOrderings(leftChild)
+	ordRight := DeriveInterestingOrderings(rightChild)
 	private := rel.Private().(*memo.SetPrivate)
+
+	// We can only keep orderings on output columns.
+	ordLeft.RestrictToCols(private.LeftCols.ToSet(), &leftChild.Relational().FuncDeps)
+	ordRight.RestrictToCols(private.RightCols.ToSet(), &rightChild.Relational().FuncDeps)
+
 	ordLeft = ordLeft.RemapColumns(private.LeftCols, private.OutCols)
 	ordRight = ordRight.RemapColumns(private.RightCols, private.OutCols)
 

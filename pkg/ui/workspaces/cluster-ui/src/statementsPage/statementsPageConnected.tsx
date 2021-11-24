@@ -14,11 +14,10 @@ import { Dispatch } from "redux";
 import { Moment } from "moment";
 
 import { AppState } from "src/store";
-import { actions as statementsActions } from "src/store/statements";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { actions as resetSQLStatsActions } from "src/store/sqlStats";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   StatementsPage,
   StatementsPageDispatchProps,
@@ -64,10 +63,10 @@ export const ConnectedStatementsPage = withRouter(
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>
-        dispatch(statementsActions.refresh(req)),
+        dispatch(sqlStatsActions.refresh(req)),
       onDateRangeChange: (start: Moment, end: Moment) => {
         dispatch(
-          statementsActions.updateDateRange({
+          sqlStatsActions.updateDateRange({
             start: start.unix(),
             end: end.unix(),
           }),
@@ -75,7 +74,7 @@ export const ConnectedStatementsPage = withRouter(
       },
       refreshStatementDiagnosticsRequests: () =>
         dispatch(statementDiagnosticsActions.refresh()),
-      resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       dismissAlertMessage: () =>
         dispatch(
           localStorageActions.update({
@@ -122,7 +121,7 @@ export const ConnectedStatementsPage = withRouter(
         dispatch(
           localStorageActions.update({
             key: "filters/StatementsPage",
-            value: { filters: value },
+            value: value,
           }),
         );
       },

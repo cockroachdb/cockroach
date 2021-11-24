@@ -14,9 +14,7 @@ import { Dispatch } from "redux";
 import { Moment } from "moment";
 
 import { AppState } from "src/store";
-import { actions as transactionsActions } from "src/store/transactions";
-import { actions as resetSQLStatsActions } from "src/store/sqlStats";
-import { actions as statementsActions } from "src/store/statements";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { TransactionsPage } from "./transactionsPage";
 import {
   TransactionsPageStateProps,
@@ -30,10 +28,13 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectDateRange,
+  selectFilters,
+} from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
-import { actions as analyticsActions } from "../store/analytics";
+import { Filters } from "../queryFilter";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -49,14 +50,15 @@ export const TransactionsPageConnected = withRouter(
       dateRange: selectDateRange(state),
       columns: selectTxnColumns(state),
       sortSetting: selectSortSetting(state),
+      filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req?: StatementsRequest) =>
-        dispatch(transactionsActions.refresh(req)),
-      resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
+        dispatch(sqlStatsActions.refresh(req)),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       onDateRangeChange: (start: Moment, end: Moment) => {
         dispatch(
-          statementsActions.updateDateRange({
+          sqlStatsActions.updateDateRange({
             start: start.unix(),
             end: end.unix(),
           }),
@@ -83,6 +85,14 @@ export const TransactionsPageConnected = withRouter(
           localStorageActions.update({
             key: "sortSetting/TransactionsPage",
             value: { columnTitle: columnName, ascending: ascending },
+          }),
+        );
+      },
+      onFilterChange: (value: Filters) => {
+        dispatch(
+          localStorageActions.update({
+            key: "filters/TransactionsPage",
+            value: value,
           }),
         );
       },

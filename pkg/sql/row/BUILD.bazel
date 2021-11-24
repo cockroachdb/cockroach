@@ -100,7 +100,6 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowinfra",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlutil",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
