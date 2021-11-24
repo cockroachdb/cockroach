@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 )
 
 // spanRe matches strings of the form "[start, end)", capturing both the "start"
@@ -135,6 +136,37 @@ func ParseKVAccessorUpdateArguments(
 		}
 	}
 	return toDelete, toUpsert
+}
+
+// ParseStoreApplyArguments is a helper function that parses datadriven
+// store update arguments. The input is of the following form:
+//
+//      delete [c,e)
+//      set [c,d):C
+//      set [d,e):D
+//
+func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.Update) {
+	for _, line := range strings.Split(input, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		const setPrefix, deletePrefix = "set ", "delete "
+		switch {
+		case strings.HasPrefix(line, deletePrefix):
+			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
+			updates = append(updates, spanconfig.Update{Span: ParseSpan(t, line)})
+		case strings.HasPrefix(line, setPrefix):
+			line = strings.TrimPrefix(line, line[:len(setPrefix)])
+			entry := ParseSpanConfigEntry(t, line)
+			updates = append(updates, spanconfig.Update{Span: entry.Span, Config: entry.Config})
+		default:
+			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
+				line, setPrefix, deletePrefix)
+		}
+	}
+	return updates
 }
 
 // PrintSpan is a helper function that transforms roachpb.Span into a string of

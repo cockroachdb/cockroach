@@ -1,0 +1,55 @@
+# Ensure we get an error if updates overlap.
+
+apply
+set [a,c):A
+set [a,c):B
+----
+err: found overlapping updates {a-c} and {a-c}
+
+apply
+set [a,c):A
+set [b,c):B
+----
+err: found overlapping updates {a-c} and {b-c}
+
+apply
+set [a,c):A
+set [b,d):B
+----
+err: found overlapping updates {a-c} and {b-d}
+
+apply
+delete [a,c)
+delete [a,c)
+----
+err: found overlapping updates {a-c} and {a-c}
+
+apply
+delete [a,c)
+delete [b,c)
+----
+err: found overlapping updates {a-c} and {b-c}
+
+apply
+delete [a,c)
+delete [b,d)
+----
+err: found overlapping updates {a-c} and {b-d}
+
+apply
+set [a,c):A
+delete [a,c)
+----
+err: found overlapping updates {a-c} and {a-c}
+
+apply
+delete [a,c)
+set [b,c):A
+----
+err: found overlapping updates {a-c} and {b-c}
+
+apply
+set [a,c):A
+delete [b,d)
+----
+err: found overlapping updates {a-c} and {b-d}
