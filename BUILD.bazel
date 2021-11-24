@@ -7,6 +7,7 @@ exports_files([
 
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@io_bazel_rules_go//go:def.bzl", "nogo")
+load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 
 # The following directives inform gazelle how to auto-generate BUILD.bazel
 # files throughout the repo. By including them here, we can run gazelle using
@@ -250,6 +251,6 @@ nogo(
             "//pkg/testutils/lint/passes/returnerrcheck",
             "//pkg/testutils/lint/passes/timer",
             "//pkg/testutils/lint/passes/unconvert",
-        ],
+        ] + STATICCHECK_CHECKS,
     }),
 )
