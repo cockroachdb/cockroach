@@ -31,7 +31,7 @@ import (
 
 // Resource is an interface that represents a quantity which is being
 // pooled and allocated. The Resource will be modified by a Request or
-// an a call to Update.
+// a call to Update.
 type Resource interface{}
 
 // Request is an interface used to acquire quota from the pool.
@@ -76,7 +76,7 @@ type AbstractPool struct {
 	config
 
 	// name is used for logging purposes and is passed to functions used to report
-	// acquistions or slow acqusitions.
+	// acquisitions or slow acquisitions.
 	name string
 
 	// Ongoing acquisitions listen on done which is closed when the quota
@@ -92,15 +92,15 @@ type AbstractPool struct {
 		// quota stores the current quantity of quota available in the pool.
 		quota Resource
 
-		// We service quota acquisitions in a first come, first serve basis. This
-		// is done in order to prevent starvations of large acquisitions by a
+		// We service quota acquisitions in a first come, first served basis. This
+		// is done in order to prevent starvation of large acquisitions by a
 		// continuous stream of smaller ones. Acquisitions 'register' themselves
 		// for a notification that indicates they're now first in line. This is
 		// done by appending to the queue the channel they will then wait
 		// on. If a goroutine no longer needs to be notified, i.e. their
 		// acquisition context has been canceled, the goroutine is responsible for
-		// blocking subsequent notifications to the channel by filling up the
-		// channel buffer.
+		// blocking subsequent notifications to the channel by setting the notifyee
+		// channel to nil. See cleanupOnCancel.
 		q notifyQueue
 
 		// numCanceled is the number of members of q which have been canceled.
