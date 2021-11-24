@@ -23,6 +23,7 @@ import classNames from "classnames/bind";
 import { sessionsTable } from "src/util/docs";
 
 import emptyTableResultsIcon from "../assets/emptyState/empty-table-results.svg";
+import SQLActivityError from "../sqlActivity/errorComponent";
 
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { SortSetting, ISortedTablePagination } from "src/sortedtable";
@@ -211,6 +212,11 @@ export class SessionsPage extends React.Component<
           loading={isNil(this.props.sessions)}
           error={this.props.sessionsError}
           render={this.renderSessions}
+          renderError={() =>
+            SQLActivityError({
+              statsType: "sessions",
+            })
+          }
         />
         <TerminateSessionModal
           ref={this.terminateSessionRef}
