@@ -42,7 +42,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func TestPlanAlterTable(t *testing.T) {
+func TestPlanDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
