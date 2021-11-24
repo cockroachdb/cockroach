@@ -8,11 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package observedts contains logic and documentation related to the observed
+// Package uncertainty contains logic and documentation related to transaction
+// uncertainty intervals, which are time windows following readers' timestamps
+// within which a reading transaction cannot make real-time ordering guarantees.
+// The use of uncertainty intervals allows CockroachDB to guarantee single-key
+// linearizability even with only loose (but bounded) clock synchronization.
+//
+// The package also contains logic and documentation related to the observed
 // timestamp system, which allows transactions to track causality between
 // themselves and other, possibly-concurrent, transactions in order to avoid
 // uncertainty related restarts.
-package observedts
+package uncertainty
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 

@@ -48,7 +48,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
-        "//pkg/kv/kvserver/observedts",
+        "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
