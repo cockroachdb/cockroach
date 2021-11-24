@@ -25,9 +25,9 @@ http_archive(
 # Like the above, but for nodeJS.
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "b32a4713b45095e9e1921a7fcb1adf584bc05959f3336e7351bcf77f015a2d7c",
+    sha256 = "cfc289523cf1594598215901154a6c2515e8bf3671fd708264a6f6aefe02bf39",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-4.1.0.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-4.4.6.tar.gz",
     ],
 )
 
@@ -165,7 +165,7 @@ node_repositories(
     node_urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",
     ],
-    node_version = "14.17.5",
+    node_version = "16.13.0",
     package_json = ["//pkg/ui:package.json"],
     yarn_urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/js/yarn/v{version}/{filename}",
