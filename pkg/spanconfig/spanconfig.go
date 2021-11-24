@@ -255,7 +255,7 @@ type StoreWriter interface {
 	//      against a StoreWriter (populated using KVAccessor contents) using
 	//      the descriptor's span config entry would return empty lists,
 	//      indicating a no-op.
-	Apply(ctx context.Context, update Update, dryrun bool) (
+	Apply(ctx context.Context, dryrun bool, updates ...Update) (
 		deleted []roachpb.Span, added []roachpb.SpanConfigEntry,
 	)
 }

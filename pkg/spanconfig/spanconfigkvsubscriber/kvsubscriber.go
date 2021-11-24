@@ -335,7 +335,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			events := buffer.Flush(ctx, frontierTS)
 			s.mu.Lock()
 			for _, ev := range events {
-				s.mu.internal.Apply(ctx, ev.(*bufferEvent).Update, false /* dryrun */)
+				s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 			}
 			handlers := s.mu.handlers
 			s.mu.Unlock()
@@ -353,7 +353,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			events := buffer.Flush(ctx, initialScanTS)
 			freshStore := spanconfigstore.New(s.fallback)
 			for _, ev := range events {
-				freshStore.Apply(ctx, ev.(*bufferEvent).Update, false /* dryrun */)
+				freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 			}
 
 			s.mu.Lock()
