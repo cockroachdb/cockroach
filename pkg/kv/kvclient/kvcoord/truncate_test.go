@@ -164,24 +164,24 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: intersection failure: %v", i, err)
 			continue
 		}
-		ba, pos, err := truncate(original, rs)
+		reqs, pos, err := truncate(original.Requests, rs)
 		if err != nil || test.err != "" {
 			if !testutils.IsError(err, test.err) {
 				t.Errorf("%d: %v (expected: %q)", i, err, test.err)
 			}
 			continue
 		}
-		var reqs int
-		for j, arg := range ba.Requests {
+		var numReqs int
+		for j, arg := range reqs {
 			req := arg.GetInner()
 			if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
 				t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
 					h.Key, h.EndKey, test.expKeys[j][0], test.expKeys[j][1])
 			} else if len(h.Key) != 0 {
-				reqs++
+				numReqs++
 			}
 		}
-		if num := len(pos); reqs != num {
+		if num := len(pos); numReqs != num {
 			t.Errorf("%d: counted %d requests, but truncation indicated %d", i, reqs, num)
 		}
 		if !reflect.DeepEqual(original, goldenOriginal) {
