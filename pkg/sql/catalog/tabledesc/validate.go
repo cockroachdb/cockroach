@@ -834,19 +834,38 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 
 		var validateIndexDup catalog.TableColSet
 		for i, name := range idx.IndexDesc().KeyColumnNames {
+			inIndexColID := idx.IndexDesc().KeyColumnIDs[i]
 			colID, ok := columnNames[name]
 			if !ok {
 				return errors.Newf("index %q contains unknown column %q", idx.GetName(), name)
 			}
-			if colID != idx.IndexDesc().KeyColumnIDs[i] {
+			if colID != inIndexColID {
 				return errors.Newf("index %q column %q should have ID %d, but found ID %d",
-					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
+					idx.GetName(), name, colID, inIndexColID)
 			}
 			if validateIndexDup.Contains(colID) {
 				return pgerror.Newf(pgcode.FeatureNotSupported, "index %q contains duplicate column %q", idx.GetName(), name)
 			}
 			validateIndexDup.Add(colID)
 		}
+		for i, colID := range idx.IndexDesc().StoreColumnIDs {
+			inIndexColName := idx.IndexDesc().StoreColumnNames[i]
+			col, exists := columnsByID[colID]
+			if !exists {
+				return errors.Newf("index %q contains stored column %q with unknown ID %d", idx.GetName(), inIndexColName, colID)
+			}
+			if col.GetName() != inIndexColName {
+				return errors.Newf("index %q stored column ID %d should have name %q, but found name %q",
+					idx.GetName(), colID, col.ColName(), inIndexColName)
+			}
+		}
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if _, exists := columnsByID[colID]; !exists {
+				return errors.Newf("index %q key suffix column ID %d is invalid",
+					idx.GetName(), colID)
+			}
+		}
+
 		if idx.IsSharded() {
 			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
