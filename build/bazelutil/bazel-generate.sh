@@ -9,6 +9,7 @@ set -euo pipefail
 
 CONTENTS=$(bazel run //pkg/cmd/mirror)
 echo "$CONTENTS" > DEPS.bzl
+bazel run pkg/cmd/generate-staticcheck --run_under="cd $PWD && "
 bazel run //:gazelle
 CONTENTS=$(bazel run //pkg/cmd/generate-test-suites --run_under="cd $PWD && ")
 echo "$CONTENTS" > pkg/BUILD.bazel

@@ -84,6 +84,7 @@ var buildTargetMapping = map[string]string{
 	"roachprod-stress": "//pkg/cmd/roachprod-stress:roachprod-stress",
 	"roachtest":        "//pkg/cmd/roachtest:roachtest",
 	"short":            "//pkg/cmd/cockroach-short:cockroach-short",
+	"staticcheck":      "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"stress":           stressTarget,
 	"workload":         "//pkg/cmd/workload:workload",
 }
