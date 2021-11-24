@@ -3142,6 +3142,7 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 // to the zone configs.
 func TestStrictGCEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 73123, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// The unfortunate thing about this test is that the gcttl is in seconds and
