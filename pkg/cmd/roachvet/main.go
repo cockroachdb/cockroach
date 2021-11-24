@@ -64,7 +64,7 @@ func main() {
 		unconvert.Analyzer,
 		fmtsafe.Analyzer,
 		errcmp.Analyzer,
-		nilness.CRDBAnalyzer,
+		nilness.Analyzer,
 	)
 
 	// Standard go vet analyzers:

@@ -51,7 +51,6 @@ def lint_binary(name, test):
             "//c-deps:libgeos_files",
             "//c-deps:libproj_files",
             "//pkg/cmd/returncheck",
-            "//pkg/cmd/roachvet",
             "//pkg/sql/opt/optgen/cmd/optfmt",
             "@co_honnef_go_tools//cmd/staticcheck",
             "@com_github_client9_misspell//cmd/misspell:misspell",
