@@ -753,7 +753,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 	// Reuse kvs to save allocations.
 	c.kvFetcher.KVs = c.kvFetcher.KVs[:0]
 	c.kvFetcher.KVs = append(c.kvFetcher.KVs, event.KV())
-	if err := rf.StartScanFrom(ctx, &c.kvFetcher); err != nil {
+	if err := rf.StartScanFrom(ctx, &c.kvFetcher, false /* traceKV */); err != nil {
 		return r, err
 	}
 
@@ -804,7 +804,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		// Reuse kvs to save allocations.
 		c.kvFetcher.KVs = c.kvFetcher.KVs[:0]
 		c.kvFetcher.KVs = append(c.kvFetcher.KVs, prevKV)
-		if err := prevRF.StartScanFrom(ctx, &c.kvFetcher); err != nil {
+		if err := prevRF.StartScanFrom(ctx, &c.kvFetcher, false /* traceKV */); err != nil {
 			return r, err
 		}
 		r.prevDatums, r.prevTableDesc, _, err = prevRF.NextRow(ctx)
