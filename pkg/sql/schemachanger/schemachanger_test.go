@@ -14,10 +14,12 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,12 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,11 +91,11 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					return nil
 				},
 			},
-			SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-				BeforeStage: func(_ scop.Ops, m scexec.TestingKnobMetadata) error {
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
-					if m.Phase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase != scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -190,17 +194,17 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		// Closed when job 2 starts waiting for concurrent schema changes to finish.
 		job2WaitNotification := make(chan struct{})
 
-		stmt1 := `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`
-		stmt2 := `ALTER TABLE db.t ADD COLUMN c INT DEFAULT 2`
+		stmt1 := `ALTER TABLE db.t ADD COLUMN b INT8 DEFAULT 1`
+		stmt2 := `ALTER TABLE db.t ADD COLUMN c INT8 DEFAULT 2`
 
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-				BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
-					if m.Phase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase != scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -220,20 +224,23 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					// mutation IDs, so the first schema change is expected to have
 					// mutation IDs 1 and 2, and the second one 3 and 4.
 					lowestID, highestID := idsSeen[0], idsSeen[len(idsSeen)-1]
-					if m.Statements[0] == stmt1 {
+					stmt := p.Initial.Statements[0].Statement
+					switch stmt {
+					case stmt1:
 						assert.Truef(t, highestID <= 2, "unexpected mutation IDs %v", idsSeen)
-					} else if m.Statements[0] == stmt2 {
+					case stmt2:
 						assert.Truef(t, lowestID >= 3 && highestID <= 4, "unexpected mutation IDs %v", idsSeen)
-					} else {
-						t.Errorf("unexpected statements %v", m.Statements)
+					default:
+						t.Errorf("unexpected statements %v", p.Initial.Statements)
 						return errors.Errorf("test failure")
 					}
 
 					// Block job 1 during the backfill.
-					if m.Statements[0] != stmt1 || ops.Type() != scop.BackfillType {
+					s := p.Stages[idx]
+					if stmt != stmt1 || s.Ops.Type() != scop.BackfillType {
 						return nil
 					}
-					for _, op := range ops.Slice() {
+					for _, op := range s.Ops.Slice() {
 						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
@@ -329,11 +336,11 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				return nil
 			},
 		},
-		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, idx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if m.Phase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase != scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -341,11 +348,11 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-
-				if ops.Type() != scop.BackfillType {
+				s := p.Stages[idx]
+				if s.Ops.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range ops.Slice() {
+				for _, op := range s.Ops.Slice() {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
@@ -435,11 +442,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				return nil
 			},
 		},
-		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if m.Phase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase != scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -447,11 +454,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-
-				if ops.Type() != scop.BackfillType {
+				s := p.Stages[stageIdx]
+				if s.Ops.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range ops.Slice() {
+				for _, op := range s.Ops.Slice() {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
@@ -623,5 +630,141 @@ WHERE
 			blockSchemaChange.Done()
 			finishedSchemaChange.Wait()
 		})
+	}
+}
+
+func TestRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// We want to write a test that allows the injection of failure at every phase.
+	// This should be straightforward to do. Then, we'll want to ensure that the state
+	// of the schema is unchanged relative to what it was beforehand.
+	type test struct {
+		setup             []string
+		during            []string
+		expRollbackStages int
+	}
+	testCases := []test{
+		{
+			setup: []string{
+				"CREATE TABLE foo (i INT PRIMARY KEY)",
+			},
+			during: []string{
+				"ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42",
+			},
+			expRollbackStages: 4,
+		},
+		{
+			setup: []string{
+				"CREATE TABLE foo (i INT PRIMARY KEY)",
+				"CREATE VIEW v AS SELECT i FROM foo",
+				"CREATE SCHEMA sc",
+				"CREATE TABLE sc.bar (i INT PRIMARY KEY)",
+			},
+			during: []string{
+				"DROP SCHEMA sc CASCADE",
+			},
+			expRollbackStages: 0,
+		},
+		{
+			setup: []string{
+				"CREATE TABLE foo (i INT PRIMARY KEY)",
+			},
+			during: []string{
+				"DROP TABLE foo CASCADE",
+			},
+			expRollbackStages: 0,
+		},
+	}
+
+	ctx := context.Background()
+	setup := func(t *testing.T, i int) (db *gosql.DB, injectedFailure func() bool, restart, cleanup func()) {
+		var returnedError atomic.Value
+		returnedError.Store(false)
+		injectedFailure = func() bool { return returnedError.Load().(bool) }
+		restart = func() {
+			returnedError.Store(false)
+		}
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+						BeforeStage: func(p scplan.Plan, stageIdx int) error {
+							if p.Params.ExecutionPhase != scop.PostCommitPhase ||
+								!p.Stages[stageIdx].Revertible {
+								return nil
+							}
+							if !injectedFailure() && stageIdx == i {
+								returnedError.Store(true)
+								return errors.Errorf("boom %d", i)
+							}
+							return nil
+						},
+					},
+				},
+			},
+		})
+		return tc.ServerConn(0), injectedFailure, restart, func() {
+			tc.Stopper().Stop(ctx)
+		}
+	}
+	fetchDescriptorState := func(t *testing.T, tdb *sqlutils.SQLRunner) [][]string {
+		return tdb.QueryStr(t, `
+  SELECT create_statement
+    FROM (
+            SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
+            UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
+           UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
+         )
+ORDER BY create_statement;`)
+	}
+
+	runSubtest := func(t *testing.T, testCase test, i int) (done bool) {
+		db, injectedError, restart, cleanup := setup(t, i)
+		defer cleanup()
+		tdb := sqlutils.MakeSQLRunner(db)
+		for _, stmt := range testCase.setup {
+			tdb.Exec(t, stmt)
+		}
+		before := fetchDescriptorState(t, tdb)
+		tdb.Exec(t, "SET experimental_use_new_schema_changer = 'unsafe_always'")
+		err := crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			restart()
+			for _, stmt := range testCase.during {
+				if _, err := tx.Exec(stmt); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if injectedError() {
+			require.Regexp(t, fmt.Sprintf("boom %d", i), err)
+			require.Equal(t, before, fetchDescriptorState(t, tdb))
+		} else {
+			require.NoError(t, err)
+		}
+		return !injectedError()
+	}
+	runTest := func(testCase test) (string, func(t *testing.T)) {
+		return strings.Join(testCase.during, ";"), func(t *testing.T) {
+			for i := 0; ; i++ {
+				var done bool
+				if !t.Run("", func(t *testing.T) {
+					done = runSubtest(t, testCase, i)
+					if !done {
+						require.Less(t, i, testCase.expRollbackStages)
+					}
+				}) || done {
+					if done {
+						require.Equal(t, i, testCase.expRollbackStages)
+					}
+					return
+				}
+			}
+		}
+	}
+	for _, testCase := range testCases {
+		t.Run(runTest(testCase))
 	}
 }
