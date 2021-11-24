@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -86,7 +86,7 @@ func (r *Replica) executeWriteBatch(
 
 	// Compute the transaction's local uncertainty limit using observed
 	// timestamps, which can help avoid uncertainty restarts.
-	localUncertaintyLimit := observedts.ComputeLocalUncertaintyLimit(ba.Txn, st)
+	localUncertaintyLimit := uncertainty.ComputeLocalUncertaintyLimit(ba.Txn, st)
 
 	// Start tracking this request if it is an MVCC write (i.e. if it's the kind
 	// of request that needs to obey the closed timestamp). The act of tracking

@@ -17,7 +17,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -351,7 +351,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 // REQUIRES: p.uncertaintyCheck == true
 // REQUIRES: p.ts < ts
 func (p *pebbleMVCCScanner) isUncertainValue(ts hlc.Timestamp) bool {
-	return observedts.IsUncertain(p.localUncertaintyLimit, p.globalUncertaintyLimit, ts)
+	return uncertainty.IsUncertain(p.localUncertaintyLimit, p.globalUncertaintyLimit, ts)
 }
 
 // Returns an uncertainty error with the specified timestamp and p.txn.

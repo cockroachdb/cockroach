@@ -800,7 +800,7 @@ type MVCCGetOptions struct {
 	// uncertainty, because observed timestamps do not apply to values with
 	// synthetic timestamps.
 	//
-	// See pkg/kv/kvserver/observedts for more details.
+	// See pkg/kv/kvserver/uncertainty for more details.
 	//
 	// The field is only set if Txn is also set.
 	LocalUncertaintyLimit hlc.Timestamp
@@ -2585,7 +2585,7 @@ type MVCCScanOptions struct {
 	// uncertainty, because observed timestamps do not apply to values with
 	// synthetic timestamps.
 	//
-	// See pkg/kv/kvserver/observedts for more details.
+	// See pkg/kv/kvserver/uncertainty for more details.
 	//
 	// The field is only set if Txn is also set.
 	LocalUncertaintyLimit hlc.Timestamp
