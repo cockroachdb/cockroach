@@ -253,7 +253,7 @@ func makeKVBatchFetcher(
 				// Current span's start key is greater than or equal to the last span's
 				// end key - we're good.
 				continue
-			} else if curEndKey.Compare(spans[i-1].Key) < 0 {
+			} else if curEndKey.Compare(spans[i-1].Key) <= 0 {
 				// Current span's end key is less than or equal to the last span's start
 				// key - also good.
 				continue

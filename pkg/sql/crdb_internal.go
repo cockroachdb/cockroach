@@ -5083,7 +5083,7 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					tree.NewDString(rfCtx.CtxTags),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rfCtx.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rfCtx.Span.EndKey)),
-					tree.NewDString(rfCtx.TS.AsOfSystemTime()),
+					tree.NewDString(rfCtx.StartFrom.AsOfSystemTime()),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
 					tree.NewDInt(tree.DInt(rf.NodeID)),
 					tree.NewDInt(tree.DInt(rf.RangeID)),
