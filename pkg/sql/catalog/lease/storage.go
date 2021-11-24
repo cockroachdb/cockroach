@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -85,6 +86,7 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 func (s storage) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
 ) (desc catalog.Descriptor, expiration hlc.Timestamp, _ error) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		// Run the descriptor read as high-priority, thereby pushing any intents out
 		// of its way. We don't want schema changes to prevent lease acquisitions;
@@ -156,6 +158,7 @@ func (s storage) acquire(
 // descriptor through a schema change before the schema change has committed
 // that can result in a deadlock.
 func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *storedLease) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 	firstAttempt := true
