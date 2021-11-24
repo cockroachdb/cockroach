@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,11 +67,9 @@ type InternalExecutor struct {
 	// by the executor will run on copies of the top element of this data.
 	sessionDataStack *sessiondata.Stack
 
-	// syntheticDescriptors stores the synthetic descriptors to be injected into
-	// each query/statement's descs.Collection upon initialization.
-	//
-	// Warning: Not safe for concurrent use from multiple goroutines.
-	syntheticDescriptors []catalog.Descriptor
+	// descsCollection, if not nil, represents the DescCollection used by
+	// statements executed on this internalExecutor.
+	descCollection *descs.Collection
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -87,9 +86,13 @@ type InternalExecutor struct {
 func (ie *InternalExecutor) WithSyntheticDescriptors(
 	descs []catalog.Descriptor, run func() error,
 ) error {
-	ie.syntheticDescriptors = descs
+	if ie.descCollection == nil {
+		return errors.AssertionFailedf("a desc collection must be set")
+	}
+	ie.descCollection.SetSyntheticDescriptors(descs)
 	defer func() {
-		ie.syntheticDescriptors = nil
+		// This should set old.
+		ie.descCollection.SetSyntheticDescriptors(nil)
 	}()
 	return run()
 }
@@ -198,7 +201,7 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			txn,
-			ie.syntheticDescriptors,
+			ie.descCollection,
 			applicationStats,
 		)
 	}

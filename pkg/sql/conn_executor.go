@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -889,7 +888,7 @@ func (s *Server) newConnExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	txn *kv.Txn,
-	syntheticDescs []catalog.Descriptor,
+	descCollection *descs.Collection,
 	applicationStats sqlstats.ApplicationStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(
@@ -930,10 +929,9 @@ func (s *Server) newConnExecutorWithTxn(
 		txn,
 		ex.transitionCtx)
 
-	// Modify the Collection to match the parent executor's Collection.
-	// This allows the InternalExecutor to see schema changes made by the
-	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
+	if descCollection != nil {
+		ex.extraTxnState.descCollection = *descCollection
+	}
 	return ex
 }
 
@@ -2461,6 +2459,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		ex.server.cfg.Settings,
 	)
 	ie.SetSessionDataStack(ex.sessionDataStack)
+	ie.descCollection = &ex.extraTxnState.descCollection
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
