@@ -122,7 +122,7 @@ export const searchTransactionsData = (
   statements: Statement[],
 ): Transaction[] => {
   return transactions.filter((t: Transaction) =>
-    search.split(" ").every(val =>
+    search?.split(" ").every(val =>
       collectStatementsText(
         getStatementsByFingerprintIdAndTime(
           t.stats_data.statement_fingerprint_ids,
