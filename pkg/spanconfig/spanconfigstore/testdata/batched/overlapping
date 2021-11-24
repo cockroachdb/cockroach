@@ -1,0 +1,206 @@
+# Test semantics of batched updates that partially overlap with what's already
+# present.
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state
+# set        [-----X--------)
+# ====================================
+# result     [-----X--------)
+apply
+set [b,g):X
+----
+added [b,g):X
+
+overlapping span=[a,z)
+----
+[b,g):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)
+# ====================================
+# result  [--A--)[-----X----)
+apply dryrun
+set [a,c):A
+----
+deleted [b,g)
+added [a,c):A
+added [c,g):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)              [--B--)
+# ====================================
+# result  [--A--)[-----X----)  [--B--)
+apply dryrun
+set [a,c):A
+set [h,j):B
+----
+deleted [b,g)
+added [a,c):A
+added [c,g):X
+added [h,j):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)        [--B--)
+# ====================================
+# result  [--A--)[-X-----|--B--)
+apply dryrun
+set [a,c):A
+set [f,h):B
+----
+deleted [b,g)
+added [a,c):A
+added [c,f):X
+added [f,h):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)     [--B--)
+# ====================================
+# result  [--A--)[-X--|--B--)
+apply dryrun
+set [a,c):A
+set [e,g):B
+----
+deleted [b,g)
+added [a,c):A
+added [c,e):X
+added [e,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [--B--)
+# ====================================
+# result  [--A--)[X|--B--|-X)
+apply dryrun
+set [a,c):A
+set [d,f):B
+----
+deleted [b,g)
+added [a,c):A
+added [c,d):X
+added [d,f):B
+added [f,g):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set           [--A--|--B--)
+# ====================================
+# result     [-X|--A--|--B--)
+apply dryrun
+set [c,e):A
+set [e,g):B
+----
+deleted [b,g)
+added [b,c):X
+added [c,e):A
+added [e,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B)  [--D--)
+# ====================================
+# set     [--A--|-X|-B|-X|--D--)
+apply dryrun
+set [a,c):A
+set [d,e):B
+set [f,h):D
+----
+deleted [b,g)
+added [a,c):A
+added [c,d):X
+added [d,e):B
+added [e,f):X
+added [f,h):D
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B)  [-D)
+# ====================================
+# set     [--A--|-X|-B|-X|-D)
+apply dryrun
+set [a,c):A
+set [d,e):B
+set [f,g):D
+----
+deleted [b,g)
+added [a,c):A
+added [c,d):X
+added [d,e):B
+added [e,f):X
+added [f,g):D
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [-B|-C|--D--)
+# ====================================
+# set     [--A--|-X|-B|-C|--D--)
+apply dryrun
+set [a,c):A
+set [d,e):B
+set [e,f):C
+set [f,h):D
+----
+deleted [b,g)
+added [a,c):A
+added [c,d):X
+added [d,e):B
+added [e,f):C
+added [f,h):D
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)              [xxxxx)
+# ====================================
+# result  [--A--)[-----X----)
+apply dryrun
+set [a,c):A
+delete [h,j)
+----
+deleted [b,g)
+added [a,c):A
+added [c,g):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)        [xxxxx)
+# ====================================
+# result  [--A--)[-X-----)
+apply dryrun
+set [a,c):A
+delete [f,h)
+----
+deleted [b,g)
+added [a,c):A
+added [c,f):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [xxxxx)     [--B--)
+# ====================================
+# result         [-X--|--B--)
+apply dryrun
+delete [a,c)
+set [e,g):B
+----
+deleted [b,g)
+added [c,e):X
+added [e,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-----X--------)
+# set     [--A--)  [xx)  [--D--)
+# ====================================
+# set     [--A--|-X)  [-X|--D--)
+apply dryrun
+set [a,c):A
+delete [d,e)
+set [f,h):D
+----
+deleted [b,g)
+added [a,c):A
+added [c,d):X
+added [e,f):X
+added [f,h):D
