@@ -2334,6 +2334,17 @@ func (a Spans) MemUsage() int64 {
 	return size
 }
 
+func (a Spans) String() string {
+	var buf bytes.Buffer
+	for i, span := range a {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(span.String())
+	}
+	return buf.String()
+}
+
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {
 	Key, EndKey RKey
