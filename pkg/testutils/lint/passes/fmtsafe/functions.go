@@ -49,6 +49,8 @@ var requireConstMsg = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/log.VEvent":    true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEvent": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing/Span).Record": true,
+
 	"(*github.com/cockroachdb/cockroach/pkg/sql.optPlanningCtx).log": true,
 }
 
@@ -85,7 +87,8 @@ var requireConstFmt = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
 
-	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf":      true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.spanInner).Recordf": true,
 
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Debugf": true,
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,
