@@ -308,8 +308,8 @@ func TestSpanRecordLimit(t *testing.T) {
 	first := rec[0].Logs[0]
 	last := rec[0].Logs[len(rec[0].Logs)-1]
 
-	require.Equal(t, first.Fields[0].Value, msg(extra+1))
-	require.Equal(t, last.Fields[0].Value, msg(numLogs+extra))
+	require.Equal(t, first.Fields[0].Value.StripMarkers(), msg(extra+1))
+	require.Equal(t, last.Fields[0].Value.StripMarkers(), msg(numLogs+extra))
 }
 
 // testStructuredImpl is a testing implementation of Structured event.

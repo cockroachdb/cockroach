@@ -12,16 +12,13 @@ package log
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"golang.org/x/net/trace"
 )
 
@@ -103,66 +100,33 @@ func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) 
 	return nil, nil, false
 }
 
-// eventInternal is the common code for logging an event. If no args are given,
-// the format is treated as a pre-formatted string.
-//
-// Note that when called from a logging function, this is taking the log
-// message as input after introduction of redaction markers.  This
-// means the message may or may not contain markers already depending
-// of the configuration of --redactable-logs.
-func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry logpb.Entry) {
-	var msg string
-	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
-		// Shortcut.
-		msg = entry.Message
-	} else {
-		var buf strings.Builder
-		if len(entry.File) != 0 {
-			buf.WriteString(entry.File)
-			buf.WriteByte(':')
-			// TODO(knz): The "canonical" way to represent a file/line prefix
-			// is: <file>:<line>: msg
-			// with a colon between the line number and the message.
-			// However, some location filter deep inside SQL doesn't
-			// understand a colon after the line number.
-			buf.WriteString(strconv.FormatInt(entry.Line, 10))
-			buf.WriteByte(' ')
-		}
-		if len(entry.Tags) > 0 {
-			buf.WriteByte('[')
-			buf.WriteString(entry.Tags)
-			buf.WriteString("] ")
-		}
-		buf.WriteString(entry.Message)
-		msg = buf.String()
-
-		if entry.Redactable {
-			// This is true when eventInternal is called from logfDepth(),
-			// ie. a regular log call. In this case, the tags and message may contain
-			// redaction markers. We remove them here.
-			msg = redact.RedactableString(msg).StripMarkers()
-		}
+// eventInternal is the common code for logging an event to trace and/or event
+// logs. All entries passed to this method should be redactable.
+func eventInternal(sp *tracing.Span, el *ctxEventLog, isErr bool, entry *logEntry) {
+	if sp != nil {
+		sp.Recordf("%s", entry)
+		// TODO(obs-inf): figure out a way to signal that this is an error. We could
+		// use a different "error" key (provided it shows up in LightStep). Things
+		// like NetTraceIntegrator would need to be modified to understand the
+		// difference. We could also set a special Tag or Baggage on the span. See
+		// #8827 for more discussion.
+		_ = isErr
+		return
 	}
 
-	if sp != nil {
-		sp.Record(msg)
-		// if isErr {
-		// 	// TODO(radu): figure out a way to signal that this is an error. We
-		// 	// could use a different "error" key (provided it shows up in
-		// 	// LightStep). Things like NetTraceIntegrator would need to be modified
-		// 	// to understand the difference. We could also set a special Tag or
-		// 	// Baggage on the span. See #8827 for more discussion.
-		// }
-	} else {
-		el.Lock()
-		if el.eventLog != nil {
-			if isErr {
-				el.eventLog.Errorf("%s", msg)
-			} else {
-				el.eventLog.Printf("%s", msg)
-			}
+	// No span, record to event log instead.
+	//
+	// TODO(obs-inf): making this either/or doesn't seem useful, but it
+	// is the status quo, and the callers only pass one of the two even
+	// if they have both.
+	el.Lock()
+	defer el.Unlock()
+	if el.eventLog != nil {
+		if isErr {
+			el.eventLog.Errorf("%s", entry)
+		} else {
+			el.eventLog.Printf("%s", entry)
 		}
-		el.Unlock()
 	}
 }
 
@@ -194,16 +158,13 @@ func Event(ctx context.Context, msg string) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeLegacyEntry(ctx,
+	entry := makeUnstructuredEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
-		// redactable is false because we want to flatten the data in traces
-		// -- we don't have infrastructure yet for trace redaction.
-		false, /* redactable */
-		"")
-	entry.Message = msg
-	eventInternal(sp, el, false /* isErr */, entry)
+		true,          /* redactable */
+		msg)
+	eventInternal(sp, el, false /* isErr */, &entry)
 }
 
 // Eventf looks for an opentracing.Trace in the context and formats and logs
@@ -217,15 +178,13 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeLegacyEntry(ctx,
+	entry := makeUnstructuredEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
-		// redactable is false because we want to flatten the data in traces
-		// -- we don't have infrastructure yet for trace redaction.
-		false, /* redactable */
+		true,          /* redactable */
 		format, args...)
-	eventInternal(sp, el, false /* isErr */, entry)
+	eventInternal(sp, el, false /* isErr */, &entry)
 }
 
 func vEventf(
@@ -244,15 +203,13 @@ func vEventf(
 			// Nothing to log. Skip the work.
 			return
 		}
-		entry := MakeLegacyEntry(ctx,
+		entry := makeUnstructuredEntry(ctx,
 			severity.INFO, /* unused for trace events */
 			channel.DEV,   /* unused for trace events */
 			depth+1,
-			// redactable is false because we want to flatten the data in traces
-			// -- we don't have infrastructure yet for trace redaction.
-			false, /* redactable */
+			true, /* redactable */
 			format, args...)
-		eventInternal(sp, el, isErr, entry)
+		eventInternal(sp, el, isErr, &entry)
 	}
 }
 
