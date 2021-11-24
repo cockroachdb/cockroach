@@ -754,7 +754,7 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) (jobspb.J
 }
 
 // TestingKnobs implements the scexec.Dependencies interface.
-func (s *TestState) TestingKnobs() *scexec.NewSchemaChangerTestingKnobs {
+func (s *TestState) TestingKnobs() *scrun.TestingKnobs {
 	return s.testingKnobs
 }
 
@@ -770,12 +770,11 @@ func (s *TestState) User() security.SQLUsername {
 	return security.RootUserName()
 }
 
-var _ scrun.SchemaChangeJobExecutionDependencies = (*TestState)(nil)
+var _ scrun.JobRunDependencies = (*TestState)(nil)
 
-// WithTxnInJob implements the scrun.SchemaChangeJobExecutionDependencies interface.
+// WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (s *TestState) WithTxnInJob(
-	ctx context.Context,
-	fn func(ctx context.Context, txndeps scrun.SchemaChangeJobTxnDependencies) error,
+	ctx context.Context, fn func(ctx context.Context, txndeps scrun.JobTxnRunDependencies) error,
 ) (err error) {
 	s.WithTxn(func(s *TestState) {
 		err = fn(ctx, s)
@@ -783,9 +782,9 @@ func (s *TestState) WithTxnInJob(
 	return err
 }
 
-var _ scrun.SchemaChangeJobTxnDependencies = (*TestState)(nil)
+var _ scrun.JobTxnRunDependencies = (*TestState)(nil)
 
-// UpdateSchemaChangeJob implements the scrun.SchemaChangeJobTxnDependencies interface.
+// UpdateSchemaChangeJob implements the scrun.JobTxnRunDependencies interface.
 func (s *TestState) UpdateSchemaChangeJob(
 	ctx context.Context, fn func(md jobs.JobMetadata, ju scrun.JobProgressUpdater) error,
 ) error {
@@ -851,7 +850,7 @@ func (ju *testJobUpdater) UpdateProgress(progress *jobspb.Progress) {
 	ju.md.Progress = progress
 }
 
-// ExecutorDependencies implements the scrun.SchemaChangeJobTxnDependencies interface.
+// ExecutorDependencies implements the scrun.JobTxnRunDependencies interface.
 func (s *TestState) ExecutorDependencies() scexec.Dependencies {
 	return s
 }

@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -55,7 +55,7 @@ type TestState struct {
 	phase                             scop.Phase
 	sessionData                       sessiondata.SessionData
 	statements                        []string
-	testingKnobs                      *scexec.NewSchemaChangerTestingKnobs
+	testingKnobs                      *scrun.TestingKnobs
 	jobs                              []jobs.Record
 	txnCounter                        int
 	sideEffectLogBuffer               strings.Builder
@@ -67,7 +67,7 @@ func NewTestDependencies(
 	ctx context.Context,
 	t *testing.T,
 	tdb *sqlutils.SQLRunner,
-	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
+	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 ) *TestState {
 

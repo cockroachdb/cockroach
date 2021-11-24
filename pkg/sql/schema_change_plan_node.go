@@ -79,7 +79,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 	ctx context.Context, descID descpb.ID, scs SchemaChangerState,
 ) error {
 
-	if knobs := p.ExecCfg().NewSchemaChangerTestingKnobs; knobs != nil &&
+	if knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs; knobs != nil &&
 		knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
 		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
 	}
@@ -132,27 +132,43 @@ type schemaChangePlanNode struct {
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
-	deps := scdeps.NewExecutorDependencies(
-		p.EvalContext().Codec,
-		p.Txn(),
-		p.Descriptors(),
-		p.ExecCfg().JobRegistry,
-		p.ExecCfg().IndexBackfiller,
-		p.ExecCfg().IndexValidator,
-		scsqldeps.NewCCLCallbacks(p.ExecCfg().Settings, p.EvalContext()),
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return LogEventForSchemaChanger(ctx, p.ExecCfg(), txn, depth+1, descID, metadata, event)
-		},
-		p.ExecCfg().NewSchemaChangerTestingKnobs,
-		scs.stmts,
-		scop.StatementPhase,
+	runDeps := newSchemaChangerTxnRunDependencies(
+		p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(),
+		scs, scop.StatementPhase,
 	)
-	after, err := scrun.RunSchemaChangesInTxn(params.ctx, deps, s.plannedState)
+	after, err := scrun.RunSchemaChangesInTxn(params.ctx, runDeps, s.plannedState)
 	if err != nil {
 		return err
 	}
 	scs.state = after
 	return nil
+}
+
+func newSchemaChangerTxnRunDependencies(
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	descriptors *descs.Collection,
+	evalContext *tree.EvalContext,
+	scs *SchemaChangerState,
+	phase scop.Phase,
+) scrun.TxnRunDependencies {
+	execDeps := scdeps.NewExecutorDependencies(
+		execCfg.Codec,
+		txn,
+		descriptors,
+		execCfg.JobRegistry,
+		execCfg.IndexBackfiller,
+		execCfg.IndexValidator,
+		scsqldeps.NewCCLCallbacks(execCfg.Settings, evalContext),
+		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
+			return LogEventForSchemaChanger(ctx, execCfg, txn, depth+1, descID, metadata, event)
+		},
+		scs.stmts,
+	)
+	runDeps := scdeps.NewTxnRunDependencies(
+		execDeps, phase, execCfg.DeclarativeSchemaChangerTestingKnobs,
+	)
+	return runDeps
 }
 
 func (s schemaChangePlanNode) Next(params runParams) (bool, error) { return false, nil }

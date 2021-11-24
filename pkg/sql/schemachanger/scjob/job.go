@@ -30,20 +30,27 @@ func init() {
 	jobs.RegisterConstructor(jobspb.TypeNewSchemaChange, func(
 		job *jobs.Job, settings *cluster.Settings,
 	) jobs.Resumer {
-		pl := job.Payload()
 		return &newSchemaChangeResumer{
-			job:     job,
-			targets: pl.GetNewSchemaChange().Targets,
+			job: job,
 		}
 	})
 }
 
 type newSchemaChangeResumer struct {
-	job     *jobs.Job
-	targets []*scpb.Target
+	job      *jobs.Job
+	rollback bool
 }
 
 func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{}) (err error) {
+	return n.run(ctx, execCtxI)
+}
+
+func (n *newSchemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	n.rollback = true
+	return n.run(ctx, execCtx)
+}
+
+func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
 	if err := n.job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -60,7 +67,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	progress := n.job.Progress()
 	newSchemaChangeProgress := progress.GetNewSchemaChange()
 	newSchemaChangeDetails := payload.GetNewSchemaChange()
-	deps := scdeps.NewJobExecutionDependencies(
+	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
 		execCfg.InternalExecutor,
@@ -74,12 +81,11 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		execCfg.Settings,
 		execCfg.IndexValidator,
 		scsqldeps.NewCCLCallbacks(execCfg.Settings, nil),
-		execCfg.NewSchemaChangerTestingKnobs,
+		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 	)
-	return scrun.RunSchemaChangesInJob(ctx, deps, n.job.ID(), payload.DescriptorIDs, *newSchemaChangeDetails, *newSchemaChangeProgress)
-}
 
-func (n *newSchemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	panic("unimplemented")
+	return scrun.RunSchemaChangesInJob(
+		ctx, deps, n.job.ID(), payload.DescriptorIDs, *newSchemaChangeDetails, *newSchemaChangeProgress, n.rollback,
+	)
 }

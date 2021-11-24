@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
 // SchemaChangeJobCreationDependencies contains the dependencies required for
@@ -33,29 +34,45 @@ type SchemaChangeJobCreationDependencies interface {
 	Statements() []string
 }
 
-// SchemaChangeJobExecutionDependencies contains the dependencies required for
+// TxnRunDependencies are dependencies used to plan and execute a stage of a
+// schema change job.
+type TxnRunDependencies interface {
+
+	// ExecutorDependencies constructs the executor dependencies for use within
+	// this transaction.
+	ExecutorDependencies() scexec.Dependencies
+
+	// Phase returns the phase in which operations are to be executed.
+	Phase() scop.Phase
+
+	// TestingKnobs returns the testing knobs for the new schema changer.
+	TestingKnobs() *TestingKnobs
+}
+
+// JobTxnFunc is used to run a transactional stage of a schema change on
+// behalf of a job. See JobRunDependencies.WithTxnInJob().
+type JobTxnFunc = func(ctx context.Context, txnDeps JobTxnRunDependencies) error
+
+// JobRunDependencies contains the dependencies required for
 // executing the schema change job, i.e. for the logic in its Resume() method.
-type SchemaChangeJobExecutionDependencies interface {
+type JobRunDependencies interface {
 	// WithTxnInJob is a wrapper for opening and committing a transaction around
 	// the execution of the callback. After committing the transaction, the job
 	// registry should be notified to adopt jobs.
-	WithTxnInJob(ctx context.Context, fn func(ctx context.Context, txndeps SchemaChangeJobTxnDependencies) error) error
+	WithTxnInJob(ctx context.Context, fn JobTxnFunc) error
 
 	// ClusterSettings returns the current cluster settings.
 	ClusterSettings() *cluster.Settings
 }
 
-// SchemaChangeJobTxnDependencies contains the dependencies required for
+// JobTxnRunDependencies contains the dependencies required for
 // executing a specific transaction in the schema change job execution.
-type SchemaChangeJobTxnDependencies interface {
+type JobTxnRunDependencies interface {
+	TxnRunDependencies
 
 	// UpdateSchemaChangeJob triggers the update of the current schema change job
 	// via the supplied callback.
 	UpdateSchemaChangeJob(ctx context.Context, fn func(md jobs.JobMetadata, ju JobProgressUpdater) error) error
-
-	// ExecutorDependencies constructs the executor dependencies for use within
-	// this transaction.
-	ExecutorDependencies() scexec.Dependencies
 }
 
 // JobProgressUpdater is for updating the progress of the schema change job.

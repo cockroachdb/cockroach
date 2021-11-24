@@ -41,9 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -60,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -2950,30 +2947,23 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
-	execDeps := scdeps.NewExecutorDependencies(
-		ex.server.cfg.Codec,
+	deps := newSchemaChangerTxnRunDependencies(
+		ex.server.cfg,
 		ex.planner.txn,
 		&ex.extraTxnState.descCollection,
-		ex.server.cfg.JobRegistry,
-		ex.server.cfg.IndexBackfiller,
-		ex.server.cfg.IndexValidator,
-		scsqldeps.NewCCLCallbacks(ex.server.cfg.Settings, ex.planner.EvalContext()),
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return LogEventForSchemaChanger(ctx, ex.planner.execCfg, txn, depth+1, descID, metadata, event)
-		},
-		ex.server.cfg.NewSchemaChangerTestingKnobs,
-		scs.stmts,
+		ex.planner.EvalContext(),
+		scs,
 		scop.PreCommitPhase,
 	)
 	{
-		after, err := scrun.RunSchemaChangesInTxn(ctx, execDeps, scs.state)
+		after, err := scrun.RunSchemaChangesInTxn(ctx, deps, scs.state)
 		if err != nil {
 			return err
 		}
 		scs.state = after
 	}
 	{
-		jobDeps := scdeps.NewJobCreationDependencies(execDeps, ex.planner.User())
+		jobDeps := scdeps.NewJobCreationDependencies(deps.ExecutorDependencies(), ex.planner.User())
 		jobID, err := scrun.CreateSchemaChangeJob(ctx, jobDeps, scs.state)
 		if jobID != jobspb.InvalidJobID {
 			ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)

@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -83,11 +83,14 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 
 				var deps *sctestdeps.TestState
 				stageCounters := make(map[scop.Phase]int)
-				testingKnobs := &scexec.NewSchemaChangerTestingKnobs{
-					BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
-						stage := stageCounters[m.Phase] + 1
-						stageCounters[m.Phase] = stage
-						deps.LogSideEffectf("## stage %d in %s: %d %s ops", stage, m.Phase, len(ops.Slice()), ops.Type())
+				testingKnobs := &scrun.TestingKnobs{
+					BeforeStage: func(p scplan.Plan, stageIdx int) error {
+						phase := p.Params.ExecutionPhase
+						stage := p.Stages[stageIdx]
+						phaseStageCount := stageCounters[phase] + 1
+						stageCounters[phase] = phaseStageCount
+						deps.LogSideEffectf("## stage %d in %s: %d %s ops",
+							phaseStageCount, phase, len(stage.Ops.Slice()), stage.Ops.Type())
 						return nil
 					},
 				}
@@ -138,7 +141,10 @@ func execStatementWithTestDeps(
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		details := job.Details.(jobspb.NewSchemaChangeDetails)
 		progress := job.Progress.(jobspb.NewSchemaChangeProgress)
-		err = scrun.RunSchemaChangesInJob(ctx, deps, jobID, job.DescriptorIDs, details, progress)
+		const rollback = false
+		err = scrun.RunSchemaChangesInJob(
+			ctx, deps, jobID, job.DescriptorIDs, details, progress, rollback,
+		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())
 	}
