@@ -167,7 +167,7 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 			// We need to re-create the evalCtx since the txn may retry.
 			ie := createSchemaChangeEvalCtx(
 				ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors,
-			).InternalExecutor.(sqlutil.InternalExecutor)
+			).SchemaChangeInternalExecutor
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -710,21 +710,21 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr,
+						ctx, &semaCtx, evalCtx.SchemaChangeInternalExecutor, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+					if err := validateFkInTxn(ctx, sc.leaseMgr, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.GetName(), evalCtx.Codec); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr,
+						ctx, &semaCtx, evalCtx.SchemaChangeInternalExecutor, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2055,7 +2055,7 @@ func runSchemaChangesInTxn(
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
+					ctx, &planner.semaCtx, planner.ExecCfg().InternalExecutor, planner.SessionData(), tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2079,7 +2079,7 @@ func runSchemaChangesInTxn(
 			uwi := &c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint
 			if uwi.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.EvalContext(), tableDesc, planner.txn, c.GetName(),
+					ctx, planner.ExecCfg().InternalExecutor, tableDesc, planner.txn, c.GetName(),
 				); err != nil {
 					return err
 				}
@@ -2152,18 +2152,18 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	ie *InternalExecutor,
+	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	checkExpr string,
 ) error {
-	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateCheckExpr(ctx, semaCtx, evalCtx.SessionData(), checkExpr, tableDesc, ie, txn)
+		return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
 	})
 }
 
@@ -2182,12 +2182,12 @@ func validateCheckInTxn(
 func validateFkInTxn(
 	ctx context.Context,
 	leaseMgr *lease.Manager,
-	evalCtx *tree.EvalContext,
+	ie *InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	fkName string,
+	codec keys.SQLCodec,
 ) error {
-	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
@@ -2206,7 +2206,7 @@ func validateFkInTxn(
 	}
 
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateForeignKey(ctx, tableDesc, fk, ie, txn, evalCtx.Codec)
+		return validateForeignKey(ctx, tableDesc, fk, ie, txn, codec)
 	})
 }
 
@@ -2224,12 +2224,11 @@ func validateFkInTxn(
 // reuse an existing kv.Txn safely.
 func validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	ie *InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	constraintName string,
 ) error {
-	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)

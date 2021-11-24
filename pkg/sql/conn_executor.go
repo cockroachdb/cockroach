@@ -841,6 +841,7 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
+
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]PreparedPortal),
@@ -2455,14 +2456,6 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
-	ie := MakeInternalExecutor(
-		ctx,
-		ex.server,
-		ex.memMetrics,
-		ex.server.cfg.Settings,
-	)
-	ie.SetSessionDataStack(ex.sessionDataStack)
-
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:                   p,
@@ -2485,7 +2478,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Locality:                  ex.server.cfg.Locality,
 			Tracer:                    ex.server.cfg.AmbientCtx.Tracer,
 			ReCache:                   ex.server.reCache,
-			InternalExecutor:          &ie,
 			DB:                        ex.server.cfg.DB,
 			SQLLivenessReader:         ex.server.cfg.SQLLiveness,
 			SQLStatsController:        ex.server.sqlStatsController,

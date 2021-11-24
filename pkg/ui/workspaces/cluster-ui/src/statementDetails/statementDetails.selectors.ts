@@ -142,16 +142,15 @@ function filterByRouterParamsPredicate(
 }
 
 export const selectStatement = createSelector(
-  (state: AppState) => state.adminUI.statements,
+  (state: AppState) => state.adminUI.sqlStats,
   (_state: AppState, props: RouteComponentProps) => props,
-  (statementsState, props) => {
-    const statements = statementsState.data?.statements;
+  (sqlStatsState, props) => {
+    const statements = sqlStatsState.data?.statements;
     if (!statements) {
       return null;
     }
 
-    const internalAppNamePrefix =
-      statementsState.data?.internal_app_name_prefix;
+    const internalAppNamePrefix = sqlStatsState.data?.internal_app_name_prefix;
     const flattened = flattenStatementStats(statements);
     const results = _.filter(
       flattened,

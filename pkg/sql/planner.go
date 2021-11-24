@@ -99,6 +99,8 @@ type extendedEvalContext struct {
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
+
+	SchemaChangeInternalExecutor *InternalExecutor
 }
 
 // copy returns a deep copy of ctx.
@@ -448,7 +450,6 @@ func internalExtendedEvalCtx(
 			TestingKnobs:              evalContextTestingKnobs,
 			StmtTimestamp:             stmtTimestamp,
 			TxnTimestamp:              txnTimestamp,
-			InternalExecutor:          execCfg.InternalExecutor,
 			SQLStatsController:        sqlStatsController,
 			IndexUsageStatsController: indexUsageStatsController,
 		},
@@ -809,4 +810,40 @@ type txnModesSetter interface {
 func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Descriptor) error {
 	bdg := catalogkv.NewOneLevelUncachedDescGetter(p.Txn(), p.ExecCfg().Codec)
 	return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descriptor)
+}
+
+// QueryRowEx executes the supplied SQL statement and returns a single row, or
+// nil if no row is found, or an error if more that one row is returned.
+//
+// The fields set in session that are set override the respective fields if
+// they have previously been set through SetSessionData().
+func (p *planner) QueryRowEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	override sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
+}
+
+// QueryIteratorEx executes the query, returning an iterator that can be used
+// to get the results. If the call is successful, the returned iterator
+// *must* be closed.
+//
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) QueryIteratorEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	override sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.InternalRows, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+	return rows.(tree.InternalRows), err
 }

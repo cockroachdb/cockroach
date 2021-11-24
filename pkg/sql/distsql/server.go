@@ -326,11 +326,6 @@ func (ds *ServerImpl) setupFlow(
 		if err != nil {
 			return ctx, nil, nil, err
 		}
-		ie := &lazyInternalExecutor{
-			newInternalExecutor: func() sqlutil.InternalExecutor {
-				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
-			},
-		}
 
 		// It's important to populate evalCtx.Txn early. We'll write it again in the
 		// f.SetTxn() call below, but by then it will already have been captured by
@@ -360,7 +355,6 @@ func (ds *ServerImpl) setupFlow(
 			Sequence:                  &faketreeeval.DummySequenceOperators{},
 			Tenant:                    &faketreeeval.DummyTenantOperator{},
 			Regions:                   &faketreeeval.DummyRegionOperator{},
-			InternalExecutor:          ie,
 			Txn:                       leafTxn,
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
