@@ -110,7 +110,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 var (
@@ -293,8 +293,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// bootstrapped; otherwise a new one is allocated in Node.
 	nodeIDContainer := &base.NodeIDContainer{}
 	cfg.AmbientCtx.AddLogTag("n", nodeIDContainer)
-	const sqlInstanceID = base.SQLInstanceID(0)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, nodeIDContainer)
+	idContainer := base.NewSQLIDContainerForNode(nodeIDContainer)
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
