@@ -122,7 +122,8 @@ func NewLocalIndexUsageStatsFromExistingStats(
 	cfg *Config, stats []roachpb.CollectedIndexUsageStatistics,
 ) *LocalIndexUsageStats {
 	s := NewLocalIndexUsageStats(cfg)
-	s.batchInsertUnsafe(stats)
+	// No need to hold lock here since we are in the constructor.
+	s.batchInsertLocked(stats)
 	return s
 }
 
@@ -170,20 +171,20 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	}
 
 	s.mu.RLock()
-	var tableIDLists []roachpb.TableID
+	tableIDLists := make([]roachpb.TableID, 0, len(s.mu.usageStats))
 	for tableID := range s.mu.usageStats {
 		tableIDLists = append(tableIDLists, tableID)
 	}
+	s.mu.RUnlock()
+
 	if options.SortedTableID {
 		sort.Slice(tableIDLists, func(i, j int) bool {
 			return tableIDLists[i] < tableIDLists[j]
 		})
 	}
 
-	s.mu.RUnlock()
-
 	for _, tableID := range tableIDLists {
-		tableIdxStats := s.getStatsForTableID(tableID, false /* createIfNotExists */, false /* unsafe */)
+		tableIdxStats := s.getStatsForTableID(tableID, false /* createIfNotExists */)
 
 		// This means the data s being cleared before we can fetch it. It's not an
 		// error, so we simply just skip over it.
@@ -205,16 +206,14 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	return nil
 }
 
-// batchInsertUnsafe inserts otherStats into s without taking on write lock.
-// This should only be called during initialization when we can be sure there's
-// no other users of s. This avoids the locking overhead when it's not
-// necessary.
-func (s *LocalIndexUsageStats) batchInsertUnsafe(
+// batchInsertLocked batch inserts otherStats into LocalIndexUsageStats. The
+// responsibility of locking is delegated to the caller.
+func (s *LocalIndexUsageStats) batchInsertLocked(
 	otherStats []roachpb.CollectedIndexUsageStatistics,
 ) {
 	for _, newStats := range otherStats {
-		tableIndexStats := s.getStatsForTableID(newStats.Key.TableID, true /* createIfNotExists */, true /* unsafe */)
-		stats := tableIndexStats.getStatsForIndexID(newStats.Key.IndexID, true /* createIfNotExists */, true /* unsafe */)
+		tableIndexStats := s.getStatsForTableIDLocked(newStats.Key.TableID, true /* createIfNotExists */)
+		stats := tableIndexStats.getStatsForIndexIDLocked(newStats.Key.IndexID, true /* createIfNotExists */)
 		stats.Add(&newStats.Stats)
 	}
 }
@@ -241,8 +240,8 @@ func (s *LocalIndexUsageStats) insertIndexUsage(key roachpb.IndexUsageKey, usage
 		return
 	}
 
-	tableStats := s.getStatsForTableID(key.TableID, true /* createIfNotExists */, false /* unsafe */)
-	indexStats := tableStats.getStatsForIndexID(key.IndexID, true /* createIfNotExists */, false /* unsafe */)
+	tableStats := s.getStatsForTableID(key.TableID, true /* createIfNotExists */)
+	indexStats := tableStats.getStatsForIndexID(key.IndexID, true /* createIfNotExists */)
 	indexStats.Lock()
 	defer indexStats.Unlock()
 	switch usageTyp {
@@ -260,22 +259,41 @@ func (s *LocalIndexUsageStats) insertIndexUsage(key roachpb.IndexUsageKey, usage
 }
 
 // getStatsForTableID returns the tableIndexStats for the given roachpb.TableID.
-// If unsafe is set to true, then the lookup is performed without locking to the
-// internal RWMutex lock. This can be used when LocalIndexUsageStats is not
-// being concurrently accessed.
+// This method performs optimistic locking, that is: it will assume no write
+// operation will happen and only hold a read lock. If this method realizes
+// later that a write-operation is required, then it will abort and retry
+// with a write-lock. This results in a slow initial write, but a faster
+// subsequent updates.
 func (s *LocalIndexUsageStats) getStatsForTableID(
-	id roachpb.TableID, createIfNotExists bool, unsafe bool,
+	id roachpb.TableID, createIfNotExists bool,
 ) *tableIndexStats {
-	if !unsafe {
-		if createIfNotExists {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-		} else {
-			s.mu.RLock()
-			defer s.mu.RUnlock()
-		}
+	// We take the read lock first, and immediately return the stats object
+	// if we have already created it.
+	s.mu.RLock()
+
+	// We are handling two cases here:
+	// 1. if we have already created the stats object, we can simply return
+	// 2. if we are only doing a simple lookup, we can return regardless
+	//    the stats object has been found.
+	if tableIndexStats, ok := s.mu.usageStats[id]; ok || !createIfNotExists {
+		defer s.mu.RUnlock()
+		return tableIndexStats
 	}
 
+	// Upgrading the lock from a read-lock to a write-lock. Then subsequently we
+	// call s.getStatsForTableIDLocked(). That function will check again whether
+	// the given roachpb.TableID exists in our map. This is necessary to prevent
+	// race condition.
+	s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.getStatsForTableIDLocked(id, createIfNotExists)
+}
+
+func (s *LocalIndexUsageStats) getStatsForTableIDLocked(
+	id roachpb.TableID, createIfNotExists bool,
+) *tableIndexStats {
 	if tableIndexStats, ok := s.mu.usageStats[id]; ok {
 		return tableIndexStats
 	}
@@ -293,23 +311,27 @@ func (s *LocalIndexUsageStats) getStatsForTableID(
 }
 
 // getStatsForIndexID returns the indexStats for the given roachpb.IndexID.
-// If unsafe is set to true, then the lookup is performed without locking to the
-// internal RWMutex lock. This can be used when tableIndexStats is not being
-// concurrently accessed.
+// This method also performs optimistic locking similar to getStatsForTableID().
 func (t *tableIndexStats) getStatsForIndexID(
-	id roachpb.IndexID, createIfNotExists bool, unsafe bool,
+	id roachpb.IndexID, createIfNotExists bool,
 ) *indexStats {
-	if !unsafe {
-		if createIfNotExists {
-			t.Lock()
-			defer t.Unlock()
-		} else {
-			t.RLock()
-			defer t.RUnlock()
-		}
+	t.RLock()
 
+	if stats, ok := t.stats[id]; ok || !createIfNotExists {
+		t.RUnlock()
+		return stats
 	}
 
+	t.RUnlock()
+	t.Lock()
+	defer t.Unlock()
+
+	return t.getStatsForIndexIDLocked(id, createIfNotExists)
+}
+
+func (t *tableIndexStats) getStatsForIndexIDLocked(
+	id roachpb.IndexID, createIfNotExists bool,
+) *indexStats {
 	if stats, ok := t.stats[id]; ok {
 		return stats
 	}
@@ -331,8 +353,8 @@ func (s *LocalIndexUsageStats) GetLastReset() time.Time {
 func (t *tableIndexStats) iterateIndexStats(
 	orderedIndexID bool, iterLimit uint64, visitor StatsVisitor,
 ) (newIterLimit uint64, err error) {
-	var indexIDs []roachpb.IndexID
 	t.RLock()
+	indexIDs := make([]roachpb.IndexID, 0, len(t.stats))
 	for indexID := range t.stats {
 		if iterLimit == 0 {
 			break
@@ -349,7 +371,7 @@ func (t *tableIndexStats) iterateIndexStats(
 	}
 
 	for _, indexID := range indexIDs {
-		indexStats := t.getStatsForIndexID(indexID, false /* createIfNotExists */, false /* unsafe */)
+		indexStats := t.getStatsForIndexID(indexID, false /* createIfNotExists */)
 
 		// This means the data is being cleared  before we can fetch it. It's not an
 		// error, so we simply just skip over it.
@@ -376,5 +398,10 @@ func (t *tableIndexStats) clear() {
 	t.Lock()
 	defer t.Unlock()
 
-	t.stats = make(map[roachpb.IndexID]*indexStats, len(t.stats)/2)
+	// Instead of reallocating a new map, range-loop with delete can trigger
+	// golang compiler's optimization to use `memclr`.
+	// See: https://github.com/golang/go/issues/20138.
+	for k := range t.stats {
+		delete(t.stats, k)
+	}
 }
