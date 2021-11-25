@@ -75,8 +75,9 @@ RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip"
  rm -rf aws awscliv2.zip
 
 # Install Bazelisk as Bazel.
-# NOTE: you should keep this in sync with build/packer/teamcity-agent.sh -- if
-# an update is necessary here, it's probably necessary in the agent as well.
+# NOTE: you should keep this in sync with build/packer/teamcity-agent.sh and
+# build/bootstrap/bootstrap-debian.sh -- if an update is necessary here, it's probably
+# necessary in the agent as well.
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64 > /tmp/bazelisk \
  && echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk' | sha256sum -c - \
  && chmod +x /tmp/bazelisk \
