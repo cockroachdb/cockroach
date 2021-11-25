@@ -142,7 +142,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 			assert.NoError(t, err)
 			_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
 			assert.NoError(t, err)
@@ -278,7 +278,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 			assert.NoError(t, err)
 			_, err = conn.ExecContext(ctx, stmt1)
 			assert.NoError(t, err)
@@ -292,7 +292,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 			assert.NoError(t, err)
 			_, err = conn.ExecContext(ctx, stmt2)
 			assert.NoError(t, err)
@@ -382,7 +382,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 		assert.NoError(t, err)
 		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
 		assert.NoError(t, err)
@@ -488,7 +488,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 		assert.NoError(t, err)
 		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 100`)
 		assert.NoError(t, err)

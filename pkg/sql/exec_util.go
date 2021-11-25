@@ -433,6 +433,7 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	map[int64]string{
 		int64(sessiondatapb.UseNewSchemaChangerOff):          "off",
 		int64(sessiondatapb.UseNewSchemaChangerOn):           "on",
+		int64(sessiondatapb.UseNewSchemaChangerUnsafe):       "unsafe",
 		int64(sessiondatapb.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
 	},
 ).WithPublic()
