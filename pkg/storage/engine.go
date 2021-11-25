@@ -176,14 +176,6 @@ type MVCCIterator interface {
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
-	// CheckForKeyCollisions checks whether any keys collide between the iterator
-	// and the encoded SST data specified, within the provided key range.
-	// maxIntents specifies the number of intents to collect and return in a
-	// WriteIntentError (0 disables batching, pass math.MaxInt64 to collect all).
-	// Returns stats on skipped KVs, or an error if a collision is found.
-	CheckForKeyCollisions(
-		sstData []byte, start, end roachpb.Key, maxIntents int64,
-	) (enginepb.MVCCStats, error)
 	// SetUpperBound installs a new upper bound for this iterator. The caller
 	// can modify the parameter after this function returns. This must not be a
 	// nil key. When Reader.ConsistentIterators is true, prefer creating a new
@@ -972,16 +964,15 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 	return kvs, err
 }
 
-// ScanSeparatedIntents scans intents using only the separated intents lock
-// table. It does not take interleaved intents into account at all.
-//
-// TODO(erikgrinaker): When we are fully migrated to separated intents, this
-// should be renamed ScanIntents.
-func ScanSeparatedIntents(
-	reader Reader, start, end roachpb.Key, max int64, targetBytes int64,
+// ScanIntents scans intents using only the separated intents lock table. It
+// does not take interleaved intents into account at all.
+func ScanIntents(
+	ctx context.Context, reader Reader, start, end roachpb.Key, maxIntents int64, targetBytes int64,
 ) ([]roachpb.Intent, error) {
+	intents := []roachpb.Intent{}
+
 	if bytes.Compare(start, end) >= 0 {
-		return []roachpb.Intent{}, nil
+		return intents, nil
 	}
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
@@ -989,14 +980,18 @@ func ScanSeparatedIntents(
 	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
 	defer iter.Close()
 
-	var (
-		intents     = []roachpb.Intent{}
-		intentBytes int64
-		meta        enginepb.MVCCMetadata
-	)
-	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: ltStart})
-	for ; valid; valid, err = iter.NextEngineKey() {
-		if max != 0 && int64(len(intents)) >= max {
+	var meta enginepb.MVCCMetadata
+	var intentBytes int64
+	var ok bool
+	var err error
+	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if maxIntents != 0 && int64(len(intents)) >= maxIntents {
+			break
+		}
+		if targetBytes != 0 && intentBytes >= targetBytes {
 			break
 		}
 		key, err := iter.EngineKey()
@@ -1012,11 +1007,11 @@ func ScanSeparatedIntents(
 		}
 		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
 		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
-		if (max > 0 && int64(len(intents)) >= max) || (targetBytes > 0 && intentBytes >= targetBytes) {
-			break
-		}
 	}
-	return intents, err
+	if err != nil {
+		return nil, err
+	}
+	return intents, nil
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
