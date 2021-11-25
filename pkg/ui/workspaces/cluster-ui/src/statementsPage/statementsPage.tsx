@@ -86,7 +86,7 @@ export interface StatementsPageDispatchProps {
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (statement: string) => void;
   onDiagnosticsModalOpen?: (statement: string) => void;
-  onSearchComplete?: (results: AggregateStatistics[]) => void;
+  onSearchComplete?: (query: string) => void;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
     name: string,
@@ -112,11 +112,11 @@ export interface StatementsPageStateProps {
   nodeRegions: { [key: string]: string };
   sortSetting: SortSetting;
   filters: Filters;
+  search: string;
   isTenant?: UIConfigState["isTenant"];
 }
 
 export interface StatementsPageState {
-  search?: string;
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
@@ -148,7 +148,6 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
-      search: "",
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -156,29 +155,39 @@ export class StatementsPage extends React.Component<
   }
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
-    const { history, sortSetting, filters } = this.props;
+    const {
+      history,
+      search,
+      sortSetting,
+      filters,
+      onSearchComplete,
+      onFilterChange,
+      onSortingChange,
+    } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
+    if (onSearchComplete && searchQuery && search != searchQuery) {
+      onSearchComplete(searchQuery);
+    }
 
     // Sort Settings.
     handleSortSettingFromQueryString(
       "Statements",
       history.location.search,
       sortSetting,
-      this.props.onSortingChange,
+      onSortingChange,
     );
 
     // Filters.
     const latestFilter = handleFiltersFromQueryString(
       history,
       filters,
-      this.props.onFilterChange,
+      onFilterChange,
     );
 
     return {
-      search: searchQuery,
       filters: latestFilter,
       activeFilters: calculateActiveFilters(latestFilter),
     };
@@ -235,31 +244,39 @@ export class StatementsPage extends React.Component<
   }
 
   updateQueryParams(): void {
-    updateFiltersQueryParamsOnTab(
-      "Statements",
-      this.state.filters,
-      this.props.history,
-    );
+    const { history, search, sortSetting } = this.props;
+    const tab = "Statements";
 
+    // Search.
+    const searchParams = new URLSearchParams(history.location.search);
+    const currentTab = searchParams.get("tab") || "";
+    const searchQueryString = searchParams.get("q") || "";
+    if (currentTab === tab && search && search != searchQueryString) {
+      syncHistory(
+        {
+          q: search,
+        },
+        history,
+      );
+    }
+
+    // Filters.
+    updateFiltersQueryParamsOnTab(tab, this.state.filters, history);
+
+    // Sort Setting.
     updateSortSettingQueryParamsOnTab(
-      "Statements",
-      this.props.sortSetting,
+      tab,
+      sortSetting,
       {
         ascending: false,
         columnTitle: "executionCount",
       },
-      this.props.history,
+      history,
     );
   }
 
-  componentDidUpdate = (
-    __: StatementsPageProps,
-    prevState: StatementsPageState,
-  ): void => {
+  componentDidUpdate = (): void => {
     this.updateQueryParams();
-    if (this.state.search && this.state.search !== prevState.search) {
-      this.props.onSearchComplete(this.filteredStatementsData());
-    }
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -277,7 +294,9 @@ export class StatementsPage extends React.Component<
   };
 
   onSubmitSearchField = (search: string): void => {
-    this.setState({ search });
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete(search);
+    }
     this.resetPagination();
     syncHistory(
       {
@@ -314,7 +333,9 @@ export class StatementsPage extends React.Component<
   };
 
   onClearSearchField = (): void => {
-    this.setState({ search: "" });
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete("");
+    }
     syncHistory(
       {
         q: undefined,
@@ -339,6 +360,7 @@ export class StatementsPage extends React.Component<
         app: undefined,
         timeNumber: undefined,
         timeUnit: undefined,
+        fullScan: undefined,
         sqlType: undefined,
         database: undefined,
         regions: undefined,
@@ -349,8 +371,8 @@ export class StatementsPage extends React.Component<
   };
 
   filteredStatementsData = (): AggregateStatistics[] => {
-    const { search, filters } = this.state;
-    const { statements, nodeRegions, isTenant } = this.props;
+    const { filters } = this.state;
+    const { search, statements, nodeRegions, isTenant } = this.props;
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
@@ -382,10 +404,12 @@ export class StatementsPage extends React.Component<
       .filter(statement => (filters.fullScan ? statement.fullScan : true))
       .filter(statement =>
         search
-          .split(" ")
-          .every(val =>
-            statement.label.toLowerCase().includes(val.toLowerCase()),
-          ),
+          ? search
+              .split(" ")
+              .every(val =>
+                statement.label.toLowerCase().includes(val.toLowerCase()),
+              )
+          : true,
       )
       .filter(
         statement =>
@@ -430,7 +454,7 @@ export class StatementsPage extends React.Component<
   };
 
   renderStatements = (): React.ReactElement => {
-    const { pagination, search, filters, activeFilters } = this.state;
+    const { pagination, filters, activeFilters } = this.state;
     const {
       statements,
       apps,
@@ -443,6 +467,7 @@ export class StatementsPage extends React.Component<
       nodeRegions,
       isTenant,
       sortSetting,
+      search,
     } = this.props;
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);
