@@ -361,7 +361,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
-			Knobs:       cfg.IndexUsageStatsTestingKnobs,
 		}),
 	}
 
@@ -455,7 +454,6 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.indexUsageStats.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
 
 	// reportedStats is periodically cleared to prevent too many SQL Stats
