@@ -207,7 +207,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 	if mgr == nil {
 		var c base.NodeIDContainer
 		c.Set(context.Background(), roachpb.NodeID(nodeID))
-		nc := base.NewSQLIDContainer(0, &c)
+		nc := base.NewSQLIDContainerForNode(&c)
 		// Hack the ExecutorConfig that we pass to the Manager to have a
 		// different node id.
 		cfgCpy := t.server.ExecutorConfig().(sql.ExecutorConfig)

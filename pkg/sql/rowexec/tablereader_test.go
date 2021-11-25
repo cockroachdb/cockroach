@@ -191,6 +191,8 @@ func TestTableReader(t *testing.T) {
 // Test that a TableReader outputs metadata about non-local ranges that it read.
 func TestMisplannedRangesMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
@@ -222,6 +224,10 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	st := tc.Server(0).ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+
+	// Ensure the evalCtx is connected to the server's ID container, so they
+	// are consistent with each other.
+	evalCtx.NodeID = base.NewSQLIDContainerForNode(&tc.Server(0).RPCContext().NodeID)
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
