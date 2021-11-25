@@ -222,6 +222,14 @@ func newEncodeError(c rune, enc string) error {
 		"character %q has no representation in encoding %q", c, enc)
 }
 
+func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
+	tenID := tree.MustBeDInt(e)
+	if int64(tenID) <= 0 {
+		return 0, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+	}
+	return tenID, nil
+}
+
 // builtins contains the built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
@@ -4426,9 +4434,9 @@ value if you rely on the HLC for accuracy.`,
 				if err := requireNonNull(args[0]); err != nil {
 					return nil, err
 				}
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID)); err != nil {
 					return nil, err
@@ -4468,9 +4476,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				if err := ctx.Tenant.DestroyTenant(ctx.Context, uint64(sTenID)); err != nil {
 					return nil, err
@@ -5580,9 +5588,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				if err := ctx.Tenant.GCTenant(ctx.Context, uint64(sTenID)); err != nil {
 					return nil, err
@@ -5611,9 +5619,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				availableRU := float64(tree.MustBeDFloat(args[1]))
 				refillRate := float64(tree.MustBeDFloat(args[2]))
@@ -5869,8 +5877,8 @@ the locality flag on node startup. Returns an error if no region is set.`,
 				}
 				return tree.MakeDBool(true), nil
 			},
-			Info: `Resets the zone configuration for a multi-region table to 
-match its original state. No-ops if the given table ID is not a multi-region 
+			Info: `Resets the zone configuration for a multi-region table to
+match its original state. No-ops if the given table ID is not a multi-region
 table.`,
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -5891,8 +5899,8 @@ table.`,
 				}
 				return tree.MakeDBool(true), nil
 			},
-			Info: `Resets the zone configuration for a multi-region database to 
-match its original state. No-ops if the given database ID is not multi-region 
+			Info: `Resets the zone configuration for a multi-region database to
+match its original state. No-ops if the given database ID is not multi-region
 enabled.`,
 			Volatility: tree.VolatilityVolatile,
 		},
