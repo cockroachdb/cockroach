@@ -50,7 +50,6 @@ import {
 import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
-  trackStatementsSearchAction,
 } from "src/redux/analyticsActions";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
@@ -251,20 +250,27 @@ export const filtersLocalSetting = new LocalSetting(
   defaultFilters,
 );
 
+export const searchLocalSetting = new LocalSetting(
+  "search/StatementsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
 export default withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
+      apps: selectApps(state),
+      columns: statementColumnsLocalSetting.selectorToArray(state),
+      databases: selectDatabases(state),
+      dateRange: selectDateRange(state),
+      filters: filtersLocalSetting.selector(state),
+      lastReset: selectLastReset(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
+      search: searchLocalSetting.selector(state),
+      sortSetting: sortSettingLocalSetting.selector(state),
       statements: selectStatements(state, props),
       statementsError: state.cachedData.statements.lastError,
-      apps: selectApps(state),
-      databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
-      lastReset: selectLastReset(state),
-      columns: statementColumnsLocalSetting.selectorToArray(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
-      dateRange: selectDateRange(state),
-      sortSetting: sortSettingLocalSetting.selector(state),
-      filters: filtersLocalSetting.selector(state),
     }),
     {
       refreshStatements: refreshStatements,
@@ -275,8 +281,7 @@ export default withRouter(
         createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
       onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
       onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
-      onSearchComplete: (results: AggregateStatistics[]) =>
-        trackStatementsSearchAction(results.length),
+      onSearchComplete: (query: string) => searchLocalSetting.set(query),
       onPageChanged: trackStatementsPaginationAction,
       onSortingChange: (
         _tableName: string,

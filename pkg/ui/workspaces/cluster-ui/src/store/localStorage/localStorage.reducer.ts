@@ -33,6 +33,7 @@ export type LocalStorageState = {
   "sortSetting/SessionsPage": SortSetting;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
+  "search/StatementsPage": string;
 };
 
 type Payload = {
@@ -85,6 +86,8 @@ const initialState: LocalStorageState = {
   "filters/TransactionsPage":
     JSON.parse(localStorage.getItem("filters/TransactionsPage")) ||
     defaultFilters,
+  "search/StatementsPage":
+    JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
 };
 
 const localStorageSlice = createSlice({
