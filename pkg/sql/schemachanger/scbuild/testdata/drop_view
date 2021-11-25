@@ -9,17 +9,47 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
+- DROP Locality:{DescID: 53}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+- DROP Namespace:{DescID: 53, Name: v1}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 53
+    name: v1
+    schemaId: 50
+- DROP Owner:{DescID: 53}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    owner: root
 - DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
   state: PUBLIC
   details:
     dependedOn: 53
     tableId: 52
+- DROP UserPrivileges:{DescID: 53, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 53, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    username: public
+- DROP UserPrivileges:{DescID: 53, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    privileges: 2
+    username: root
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 52
     tableId: 53
 
 create-view
@@ -45,6 +75,86 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
+- DROP Locality:{DescID: 53}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+- DROP Locality:{DescID: 54}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+- DROP Locality:{DescID: 55}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+- DROP Locality:{DescID: 56}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+- DROP Locality:{DescID: 59}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+- DROP Namespace:{DescID: 53, Name: v1}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 53
+    name: v1
+    schemaId: 50
+- DROP Namespace:{DescID: 54, Name: v2}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 54
+    name: v2
+    schemaId: 50
+- DROP Namespace:{DescID: 55, Name: v3}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 55
+    name: v3
+    schemaId: 50
+- DROP Namespace:{DescID: 56, Name: v4}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 56
+    name: v4
+    schemaId: 50
+- DROP Namespace:{DescID: 59, Name: v5}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 59
+    name: v5
+    schemaId: 50
+- DROP Owner:{DescID: 53}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    owner: root
+- DROP Owner:{DescID: 54}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+    owner: root
+- DROP Owner:{DescID: 55}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+    owner: root
+- DROP Owner:{DescID: 56}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+    owner: root
+- DROP Owner:{DescID: 59}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    owner: root
 - DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
   state: PUBLIC
   details:
@@ -75,54 +185,118 @@ DROP VIEW defaultdb.v1 CASCADE
   details:
     dependedOn: 59
     tableId: 56
-- DROP TypeReference:{DescID: 59, ReferencedDescID: 57}
+- DROP UserPrivileges:{DescID: 53, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 53, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    username: public
+- DROP UserPrivileges:{DescID: 53, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 53
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 54, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 54, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+    username: public
+- DROP UserPrivileges:{DescID: 54, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 55, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 55, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+    username: public
+- DROP UserPrivileges:{DescID: 55, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 56, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 56, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+    username: public
+- DROP UserPrivileges:{DescID: 56, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 59, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 59
-    typeId: 57
-- DROP TypeReference:{DescID: 59, ReferencedDescID: 58}
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 59, Username: public}
   state: PUBLIC
   details:
     descriptorId: 59
-    typeId: 58
+    username: public
+- DROP UserPrivileges:{DescID: 59, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    privileges: 2
+    username: root
 - DROP View:{DescID: 53}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 54
-    - 55
-    dependsOn:
-    - 52
     tableId: 53
 - DROP View:{DescID: 54}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 55
-    - 56
-    dependsOn:
-    - 53
     tableId: 54
 - DROP View:{DescID: 55}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 53
-    - 54
     tableId: 55
 - DROP View:{DescID: 56}
   state: PUBLIC
   details:
-    dependedOnBy:
-    - 59
-    dependsOn:
-    - 54
     tableId: 56
 - DROP View:{DescID: 59}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 56
     tableId: 59
+- DROP ViewDependsOnType:{DescID: 59, ReferencedDescID: 57}
+  state: PUBLIC
+  details:
+    tableId: 59
+    typeId: 57
+- DROP ViewDependsOnType:{DescID: 59, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    tableId: 59
+    typeId: 58

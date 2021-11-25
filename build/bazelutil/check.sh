@@ -28,6 +28,7 @@ pkg/sql/schemachanger/scop/backfill.go://go:generate go run ./generate_visitor.g
 pkg/sql/schemachanger/scop/mutation.go://go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
 pkg/sql/schemachanger/scop/validation.go://go:generate go run ./generate_visitor.go scop Validation validation.go validation_visitor_generated.go
 pkg/sql/schemachanger/scpb/node.go://go:generate go run element_generator.go --in scpb.proto --out elements_generated.go
+pkg/sql/schemachanger/scpb/node.go://go:generate go run element_uml_generator.go --out uml/table.puml
 pkg/util/interval/generic/doc.go:  //go:generate ../../util/interval/generic/gen.sh *latch spanlatch
 pkg/util/interval/generic/example_t.go://go:generate ./gen.sh *example generic
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto channel.go channel/channel_generated.go

@@ -65,7 +65,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 
 	// Setup an secondary index node.
 	secondaryIndex := &scpb.SecondaryIndex{TableID: rel.GetID(),
-		IndexName:          n.Name.Normalize(),
 		Unique:             n.Unique,
 		KeyColumnIDs:       make([]descpb.ColumnID, 0, len(n.Columns)),
 		StoringColumnIDs:   make([]descpb.ColumnID, 0, len(n.Storing)),
@@ -82,8 +81,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			if status != scpb.Status_ABSENT {
 				return false
 			}
-			if col, ok := elem.(*scpb.Column); ok {
-				return col.TableID == rel.GetID() && col.Column.Name == columnNode.Column.String()
+			if col, ok := elem.(*scpb.ColumnName); ok {
+				return col.TableID == rel.GetID() && col.Name == columnNode.Column.String()
 			}
 			return false
 		}) {
@@ -130,10 +129,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 
 			// Add a new column element
 			alterTableAddColumn(b, rel, addCol, &n.Table)
-			var addColumn *scpb.Column
-			b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-				if col, ok := elem.(*scpb.Column); ok && dir == scpb.Target_ADD {
-					if col.TableID == rel.GetID() && col.Column.Name == colName {
+			var addColumn *scpb.ColumnName
+			scpb.ForEachColumnName(b, func(_ scpb.Status, dir scpb.Target_Direction, col *scpb.ColumnName) {
+				if dir == scpb.Target_ADD {
+					if col.TableID == rel.GetID() && col.Name == colName {
 						addColumn = col
 					}
 				}
@@ -141,7 +140,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 
 			// Set up the index based on the new column.
 			colNames = append(colNames, colName)
-			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.Column.ID)
+			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.ColumnID)
 		}
 		if columnNode.Expr == nil {
 			column, err := rel.FindColumnWithName(columnNode.Column)
@@ -195,6 +194,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Assign the ID here, since we may have added columns
 	// and made a new primary key above.
 	secondaryIndex.IndexID = b.NextIndexID(rel)
+	secondaryIndexName := &scpb.IndexName{
+		TableID: secondaryIndex.TableID,
+		IndexID: secondaryIndex.IndexID,
+		Name:    n.Name.String(),
+	}
 	// Convert partitioning information for the execution
 	// side of things.
 	if n.PartitionByIndex.ContainsPartitions() {
@@ -256,8 +260,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			colIDs.Add(primaryColID)
 		}
 	}
-
 	b.EnqueueAdd(secondaryIndex)
+	b.EnqueueAdd(secondaryIndexName)
 }
 
 // maybeCreateAndAddShardCol adds a new hidden computed shard column (or its mutation) to
@@ -293,20 +297,19 @@ func maybeCreateAndAddShardCol(
 			//desc.AddColumn(shardColDesc)
 		} else {
 			shardColDesc.ID = b.NextColumnID(desc)
-			column := &scpb.Column{
-				Column:     *shardColDesc,
-				TableID:    desc.GetID(),
-				FamilyID:   desc.GetFamilies()[0].ID,
-				FamilyName: desc.GetFamilies()[0].Name,
-			}
+			column := columnDescToElement(desc,
+				*shardColDesc,
+				&desc.GetFamilies()[0].Name,
+				&desc.GetFamilies()[0].ID)
 			b.EnqueueAdd(column)
 		}
 		if !shardColDesc.Virtual {
 			// Replace the primary index
-			oldPrimaryIndex := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
-			newPrimaryIndex := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
+			oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
+			newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
 			newPrimaryIndex.IndexID = b.NextIndexID(desc)
-			newPrimaryIndex.IndexName = tabledesc.GenerateUniqueName(
+			newPrimaryIndexName.IndexID = newPrimaryIndex.IndexID
+			newPrimaryIndexName.Name = tabledesc.GenerateUniqueName(
 				"new_primary_key",
 				func(name string) bool {
 					// TODO (lucy): Also check the new indexes specified in the targets.
@@ -316,7 +319,9 @@ func maybeCreateAndAddShardCol(
 			)
 			newPrimaryIndex.StoringColumnIDs = append(newPrimaryIndex.StoringColumnIDs, shardColDesc.ID)
 			b.EnqueueDrop(oldPrimaryIndex)
+			b.EnqueueDrop(oldPrimaryIndexName)
 			b.EnqueueAdd(newPrimaryIndex)
+			b.EnqueueAdd(newPrimaryIndexName)
 		}
 		created = true
 	}

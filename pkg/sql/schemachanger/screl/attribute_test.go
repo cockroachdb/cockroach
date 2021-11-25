@@ -38,11 +38,11 @@ func TestGetAttribute(t *testing.T) {
 
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
-	typeBackRef := &scpb.TypeReference{DescID: 1, TypeID: 3}
-	expectedStr = `TypeReference:{DescID: 1, ReferencedDescID: 3}`
-	require.Equal(t, expectedStr, ElementString(typeBackRef), "Attribute string conversion is broken.")
-	require.False(t, EqualElements(seqElem, typeBackRef))
-	require.False(t, EqualElements(typeBackRef, seqElem))
+	viewDependsOnType := &scpb.ViewDependsOnType{TableID: 1, TypeID: 3}
+	expectedStr = `ViewDependsOnType:{DescID: 1, ReferencedDescID: 3}`
+	require.Equal(t, expectedStr, ElementString(viewDependsOnType), "Attribute string conversion is broken.")
+	require.False(t, EqualElements(seqElem, viewDependsOnType))
+	require.False(t, EqualElements(viewDependsOnType, seqElem))
 }
 
 func BenchmarkCompareElements(b *testing.B) {
@@ -55,11 +55,14 @@ func BenchmarkCompareElements(b *testing.B) {
 		&scpb.CheckConstraint{},
 		&scpb.Sequence{},
 		&scpb.DefaultExpression{},
+		&scpb.DefaultExprTypeReference{},
+		&scpb.ComputedExprTypeReference{},
+		&scpb.OnUpdateExprTypeReference{},
 		&scpb.View{},
-		&scpb.TypeReference{},
+		&scpb.ViewDependsOnType{},
 		&scpb.Table{},
-		&scpb.OutboundForeignKey{},
-		&scpb.InboundForeignKey{},
+		&scpb.ForeignKey{},
+		&scpb.ForeignKeyBackReference{},
 		&scpb.RelationDependedOnBy{},
 		&scpb.SequenceOwnedBy{},
 	}

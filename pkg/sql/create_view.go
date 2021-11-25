@@ -239,14 +239,18 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 
 		// Collect all the tables/views this view depends on.
+		orderedDependsOn := catalog.DescriptorIDSet{}
 		for backrefID := range n.planDeps {
-			desc.DependsOn = append(desc.DependsOn, backrefID)
+			orderedDependsOn.Add(backrefID)
 		}
+		desc.DependsOn = append(desc.DependsOn, orderedDependsOn.Ordered()...)
 
 		// Collect all types this view depends on.
+		orderedTypeDeps := catalog.DescriptorIDSet{}
 		for backrefID := range n.typeDeps {
-			desc.DependsOnTypes = append(desc.DependsOnTypes, backrefID)
+			orderedTypeDeps.Add(backrefID)
 		}
+		desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
 
 		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 		// do some basic string formatting (not accurate in the general case).

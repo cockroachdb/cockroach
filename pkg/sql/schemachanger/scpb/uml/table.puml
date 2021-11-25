@@ -1,0 +1,264 @@
+@startuml
+object Column
+
+Column :  TableID
+Column :  ColumnID
+Column :  FamilyID
+Column :  FamilyName
+Column :  Type
+Column :  Nullable
+Column :  DefaultExpr
+Column :  OnUpdateExpr
+Column :  Hidden
+Column :  Inaccessible
+Column :  GeneratedAsIdentityType
+Column :  GeneratedAsIdentitySequenceOption
+Column : []UsesSequenceIds
+Column :  ComputerExpr
+Column :  PgAttributeNum
+Column :  SystemColumnKind
+Column :  Virtual
+
+object PrimaryIndex
+
+PrimaryIndex :  TableID
+PrimaryIndex :  IndexID
+PrimaryIndex :  Unique
+PrimaryIndex : []KeyColumnIDs
+PrimaryIndex : []KeyColumnDirections
+PrimaryIndex : []KeySuffixColumnIDs
+PrimaryIndex :  ShardedDescriptor
+PrimaryIndex : []StoringColumnIDs
+PrimaryIndex : []CompositeColumnIDs
+PrimaryIndex :  Inverted
+PrimaryIndex :  Concurrently
+
+object SecondaryIndex
+
+SecondaryIndex :  TableID
+SecondaryIndex :  IndexID
+SecondaryIndex :  Unique
+SecondaryIndex : []KeyColumnIDs
+SecondaryIndex : []KeyColumnDirections
+SecondaryIndex : []KeySuffixColumnIDs
+SecondaryIndex :  ShardedDescriptor
+SecondaryIndex : []StoringColumnIDs
+SecondaryIndex : []CompositeColumnIDs
+SecondaryIndex :  Inverted
+SecondaryIndex :  Concurrently
+
+object SequenceDependency
+
+SequenceDependency :  TableID
+SequenceDependency :  ColumnID
+SequenceDependency :  SequenceID
+SequenceDependency :  Type
+
+object UniqueConstraint
+
+UniqueConstraint :  ConstraintID
+UniqueConstraint :  TableID
+UniqueConstraint :  IndexID
+UniqueConstraint : []ColumnIDs
+
+object CheckConstraint
+
+CheckConstraint :  Id
+CheckConstraint :  TableID
+CheckConstraint :  Name
+CheckConstraint :  Expr
+CheckConstraint : []ColumnIDs
+CheckConstraint :  Validated
+
+object Sequence
+
+Sequence :  SequenceID
+
+object DefaultExpression
+
+DefaultExpression :  TableID
+DefaultExpression :  ColumnID
+DefaultExpression : []UsesSequenceIDs
+DefaultExpression :  DefaultExpr
+
+object View
+
+View :  TableID
+
+object Table
+
+Table :  TableID
+
+object ForeignKey
+
+ForeignKey :  OriginID
+ForeignKey : []OriginColumns
+ForeignKey :  ReferenceID
+ForeignKey : []ReferenceColumns
+ForeignKey :  OnUpdate
+ForeignKey :  OnDelete
+ForeignKey :  Name
+
+object ForeignKeyBackReference
+
+ForeignKeyBackReference :  OriginID
+ForeignKeyBackReference : []OriginColumns
+ForeignKeyBackReference :  ReferenceID
+ForeignKeyBackReference : []ReferenceColumns
+ForeignKeyBackReference :  OnUpdate
+ForeignKeyBackReference :  OnDelete
+ForeignKeyBackReference :  Name
+
+object RelationDependedOnBy
+
+RelationDependedOnBy :  TableID
+RelationDependedOnBy :  DependedOnBy
+RelationDependedOnBy :  ColumnID
+
+object SequenceOwnedBy
+
+SequenceOwnedBy :  SequenceID
+SequenceOwnedBy :  OwnerTableID
+
+object Type
+
+Type :  TypeID
+
+object Schema
+
+Schema :  SchemaID
+Schema : []DependentObjects
+
+object Database
+
+Database :  DatabaseID
+Database : []DependentObjects
+
+object Partitioning
+
+Partitioning :  TableID
+Partitioning :  IndexID
+Partitioning : []Fields
+Partitioning : []ListPartitions
+Partitioning : []RangePartitions
+
+object Namespace
+
+Namespace :  DatabaseID
+Namespace :  SchemaID
+Namespace :  DescriptorID
+Namespace :  Name
+
+object Owner
+
+Owner :  DescriptorID
+Owner :  Owner
+
+object UserPrivileges
+
+UserPrivileges :  DescriptorID
+UserPrivileges :  Username
+UserPrivileges :  Privileges
+
+object ColumnName
+
+ColumnName :  TableID
+ColumnName :  ColumnID
+ColumnName :  Name
+
+object Locality
+
+Locality :  DescriptorID
+Locality :  Locality
+
+object IndexName
+
+IndexName :  TableID
+IndexName :  IndexID
+IndexName :  Name
+
+object ConstraintName
+
+ConstraintName :  TableID
+ConstraintName :  ConstraintID
+ConstraintName :  Name
+
+object DefaultExprTypeReference
+
+DefaultExprTypeReference :  TableID
+DefaultExprTypeReference :  ColumnID
+DefaultExprTypeReference :  TypeID
+
+object OnUpdateExprTypeReference
+
+OnUpdateExprTypeReference :  TableID
+OnUpdateExprTypeReference :  ColumnID
+OnUpdateExprTypeReference :  TypeID
+
+object ComputedExprTypeReference
+
+ComputedExprTypeReference :  TableID
+ComputedExprTypeReference :  ColumnID
+ComputedExprTypeReference :  TypeID
+
+object ViewDependsOnType
+
+ViewDependsOnType :  TableID
+ViewDependsOnType :  TypeID
+
+object ColumnTypeReference
+
+ColumnTypeReference :  TableID
+ColumnTypeReference :  ColumnID
+ColumnTypeReference :  TypeID
+
+Table <|-- Column
+Table <|-- PrimaryIndex
+Table <|-- SecondaryIndex
+Column <|-- SequenceDependency
+Table <|-- SequenceDependency
+SecondaryIndex <|-- UniqueConstraint
+Table <|-- UniqueConstraint
+Table <|-- CheckConstraint
+Column <|-- DefaultExpression
+Table <|-- ForeignKey
+Table <|-- ForeignKeyBackReference
+Table <|-- RelationDependedOnBy
+View <|-- RelationDependedOnBy
+Column <|-- SequenceOwnedBy
+Sequence <|-- SequenceOwnedBy
+PrimaryIndex <|-- Partitioning
+SecondaryIndex <|-- Partitioning
+Table <|-- Namespace
+View <|-- Namespace
+Sequence <|-- Namespace
+Database <|-- Namespace
+Schema <|-- Namespace
+Type <|-- Namespace
+Table <|-- Owner
+View <|-- Owner
+Sequence <|-- Owner
+Database <|-- Owner
+Schema <|-- Owner
+Table <|-- UserPrivileges
+View <|-- UserPrivileges
+Sequence <|-- UserPrivileges
+Database <|-- UserPrivileges
+Schema <|-- UserPrivileges
+Column <|-- ColumnName
+Table <|-- Locality
+PrimaryIndex <|-- IndexName
+SecondaryIndex <|-- IndexName
+UniqueConstraint <|-- ConstraintName
+CheckConstraint <|-- ConstraintName
+Column <|-- DefaultExprTypeReference
+Type <|-- DefaultExprTypeReference
+Column <|-- OnUpdateExprTypeReference
+Type <|-- OnUpdateExprTypeReference
+Column <|-- ComputedExprTypeReference
+Type <|-- ComputedExprTypeReference
+View <|-- ViewDependsOnType
+Type <|-- ViewDependsOnType
+Column <|-- ColumnTypeReference
+Type <|-- ColumnTypeReference
+@enduml

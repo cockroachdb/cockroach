@@ -5,11 +5,16 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
-- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
+- ADD IndexName:{DescID: 52, IndexID: 2, Name: id1}
   state: ABSENT
   details:
     indexId: 2
-    indexName: id1
+    name: id1
+    tableId: 52
+- ADD SecondaryIndex:{DescID: 52, IndexID: 2}
+  state: ABSENT
+  details:
+    indexId: 2
     keyColumnDirection:
     - ASC
     - ASC
@@ -24,12 +29,17 @@ build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name) STORING (money)
 ----
-- ADD SecondaryIndex:{DescID: 52, Name: id2, IndexID: 2}
+- ADD IndexName:{DescID: 52, IndexID: 2, Name: id2}
+  state: ABSENT
+  details:
+    indexId: 2
+    name: id2
+    tableId: 52
+- ADD SecondaryIndex:{DescID: 52, IndexID: 2}
   state: ABSENT
   details:
     concurrently: true
     indexId: 2
-    indexName: id2
     inverted: true
     keyColumnDirection:
     - ASC
@@ -47,6 +57,12 @@ CREATE INDEX id3
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
+- ADD IndexName:{DescID: 52, IndexID: 2, Name: id3}
+  state: ABSENT
+  details:
+    indexId: 2
+    name: id3
+    tableId: 52
 - ADD Partitioning:{DescID: 52, IndexID: 2}
   state: ABSENT
   details:
@@ -59,11 +75,10 @@ CREATE INDEX id3
       name: p1
     rangePartitions: []
     tableId: 52
-- ADD SecondaryIndex:{DescID: 52, Name: id3, IndexID: 2}
+- ADD SecondaryIndex:{DescID: 52, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
-    indexName: id3
     keyColumnDirection:
     - ASC
     - ASC
@@ -78,25 +93,35 @@ build
 CREATE INDEX id4
 	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
 ----
-- ADD Column:{DescID: 52, ColumnID: 4, Name: crdb_internal_id_name_shard_8}
+- ADD Column:{DescID: 52, ColumnID: 4}
   state: ABSENT
   details:
-    column:
-      computeExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
-      hidden: true
-      id: 4
-      name: crdb_internal_id_name_shard_8
-      type:
-        family: IntFamily
-        oid: 23
-        width: 32
+    columnId: 4
+    computerExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
     familyName: primary
+    hidden: true
+    pgAttributeNum: 4
     tableId: 52
-- ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
+    type:
+      family: IntFamily
+      oid: 23
+      width: 32
+- ADD IndexName:{DescID: 52, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
-    indexName: new_primary_key
+    name: new_primary_key
+    tableId: 52
+- ADD IndexName:{DescID: 52, IndexID: 3, Name: id4}
+  state: ABSENT
+  details:
+    indexId: 3
+    name: id4
+    tableId: 52
+- ADD PrimaryIndex:{DescID: 52, IndexID: 2}
+  state: ABSENT
+  details:
+    indexId: 2
     keyColumnDirection:
     - ASC
     keyColumnIds:
@@ -108,11 +133,10 @@ CREATE INDEX id4
     - 4
     tableId: 52
     unique: true
-- ADD SecondaryIndex:{DescID: 52, Name: id4, IndexID: 3}
+- ADD SecondaryIndex:{DescID: 52, IndexID: 3}
   state: ABSENT
   details:
     indexId: 3
-    indexName: id4
     keyColumnDirection:
     - ASC
     - ASC
@@ -129,11 +153,16 @@ CREATE INDEX id4
     storingColumnIds:
     - 3
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, Name: t1_pkey, IndexID: 1}
+- DROP IndexName:{DescID: 52, IndexID: 1, Name: t1_pkey}
   state: PUBLIC
   details:
     indexId: 1
-    indexName: t1_pkey
+    name: t1_pkey
+    tableId: 52
+- DROP PrimaryIndex:{DescID: 52, IndexID: 1}
+  state: PUBLIC
+  details:
+    indexId: 1
     keyColumnDirection:
     - ASC
     keyColumnIds:

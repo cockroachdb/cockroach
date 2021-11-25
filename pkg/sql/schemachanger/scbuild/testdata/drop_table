@@ -43,27 +43,129 @@ CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
 build
 DROP TABLE defaultdb.shipments CASCADE;
 ----
+- DROP Column:{DescID: 57, ColumnID: 1}
+  state: PUBLIC
+  details:
+    columnId: 1
+    defaultExpr: gen_random_uuid()
+    familyName: primary
+    pgAttributeNum: 1
+    tableId: 57
+    type:
+      family: UuidFamily
+      oid: 2950
+- DROP Column:{DescID: 57, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    familyName: primary
+    nullable: true
+    pgAttributeNum: 2
+    tableId: 57
+    type:
+      family: StringFamily
+      oid: 25
+- DROP Column:{DescID: 57, ColumnID: 3}
+  state: PUBLIC
+  details:
+    columnId: 3
+    familyName: primary
+    nullable: true
+    pgAttributeNum: 3
+    tableId: 57
+    type:
+      family: StringFamily
+      oid: 25
+- DROP Column:{DescID: 57, ColumnID: 4}
+  state: PUBLIC
+  details:
+    columnId: 4
+    familyName: primary
+    nullable: true
+    pgAttributeNum: 4
+    tableId: 57
+    type:
+      family: IntFamily
+      oid: 20
+      width: 64
+- DROP Column:{DescID: 57, ColumnID: 5}
+  state: PUBLIC
+  details:
+    columnId: 5
+    defaultExpr: nextval(54:::REGCLASS)
+    familyName: primary
+    nullable: true
+    pgAttributeNum: 5
+    tableId: 57
+    type:
+      family: IntFamily
+      oid: 20
+      width: 64
+    usesSequenceIds:
+    - 54
+- DROP Column:{DescID: 57, ColumnID: 6}
+  state: PUBLIC
+  details:
+    columnId: 6
+    computerExpr: x'80':::@100055
+    familyName: primary
+    nullable: true
+    pgAttributeNum: 6
+    tableId: 57
+    type:
+      family: EnumFamily
+      oid: 100055
+      udtMetadata:
+        arrayTypeOid: 100056
+- DROP ColumnName:{DescID: 57, ColumnID: 1, Name: tracking_number}
+  state: PUBLIC
+  details:
+    columnId: 1
+    name: tracking_number
+    tableId: 57
+- DROP ColumnName:{DescID: 57, ColumnID: 2, Name: carrier}
+  state: PUBLIC
+  details:
+    columnId: 2
+    name: carrier
+    tableId: 57
+- DROP ColumnName:{DescID: 57, ColumnID: 3, Name: status}
+  state: PUBLIC
+  details:
+    columnId: 3
+    name: status
+    tableId: 57
+- DROP ColumnName:{DescID: 57, ColumnID: 4, Name: customer_id}
+  state: PUBLIC
+  details:
+    columnId: 4
+    name: customer_id
+    tableId: 57
+- DROP ColumnName:{DescID: 57, ColumnID: 5, Name: randcol}
+  state: PUBLIC
+  details:
+    columnId: 5
+    name: randcol
+    tableId: 57
+- DROP ColumnName:{DescID: 57, ColumnID: 6, Name: val}
+  state: PUBLIC
+  details:
+    columnId: 6
+    name: val
+    tableId: 57
+- DROP ComputedExprTypeReference:{DescID: 57, ColumnID: 6, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    columnId: 6
+    tableId: 57
+    typeId: 55
 - DROP DefaultExpression:{DescID: 57, ColumnID: 1}
   state: PUBLIC
   details:
     columnId: 1
     defaultExpr: gen_random_uuid()
     tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
-    tableId: 57
-- DROP DefaultExpression:{DescID: 57, ColumnID: 4}
-  state: PUBLIC
-  details:
-    columnId: 4
-    tableId: 57
+    usesSequenceIDs: []
 - DROP DefaultExpression:{DescID: 57, ColumnID: 5}
   state: PUBLIC
   details:
@@ -72,32 +174,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     tableId: 57
     usesSequenceIDs:
     - 54
-- DROP DefaultExpression:{DescID: 57, ColumnID: 6}
-  state: PUBLIC
-  details:
-    columnId: 6
-    tableId: 57
-- DROP InboundForeignKey:{DescID: 52, Name: fk_customers, ReferencedDescID: 57}
-  state: PUBLIC
-  details:
-    name: fk_customers
-    originColumns:
-    - 1
-    originId: 52
-    referenceColumns:
-    - 4
-    referenceId: 57
-- DROP InboundForeignKey:{DescID: 53, Name: fk_orders, ReferencedDescID: 57}
-  state: PUBLIC
-  details:
-    name: fk_orders
-    originColumns:
-    - 2
-    originId: 53
-    referenceColumns:
-    - 4
-    referenceId: 57
-- DROP OutboundForeignKey:{DescID: 57, Name: fk_customers, ReferencedDescID: 52}
+- DROP ForeignKey:{DescID: 57, ReferencedDescID: 52, Name: fk_customers}
   state: PUBLIC
   details:
     name: fk_customers
@@ -107,7 +184,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 1
     referenceId: 52
-- DROP OutboundForeignKey:{DescID: 57, Name: fk_orders, ReferencedDescID: 53}
+- DROP ForeignKey:{DescID: 57, ReferencedDescID: 53, Name: fk_orders}
   state: PUBLIC
   details:
     name: fk_orders
@@ -117,9 +194,65 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 2
     referenceId: 53
+- DROP IndexName:{DescID: 57, IndexID: 1, Name: shipments_pkey}
+  state: PUBLIC
+  details:
+    indexId: 1
+    name: shipments_pkey
+    tableId: 57
+- DROP Locality:{DescID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+- DROP Locality:{DescID: 59}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+- DROP Namespace:{DescID: 57, Name: shipments}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 57
+    name: shipments
+    schemaId: 50
+- DROP Namespace:{DescID: 59, Name: v1}
+  state: PUBLIC
+  details:
+    databaseId: 29
+    descriptorId: 59
+    name: v1
+    schemaId: 50
+- DROP Owner:{DescID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+    owner: root
+- DROP Owner:{DescID: 59}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    owner: root
+- DROP PrimaryIndex:{DescID: 57, IndexID: 1}
+  state: PUBLIC
+  details:
+    indexId: 1
+    keyColumnDirection:
+    - ASC
+    keyColumnIds:
+    - 1
+    shardedDescriptor: {}
+    storingColumnIds:
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    tableId: 57
+    unique: true
 - DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}
   state: PUBLIC
   details:
+    columnID: 5
     dependedOn: 57
     tableId: 54
 - DROP RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}
@@ -127,10 +260,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   details:
     dependedOn: 59
     tableId: 57
-- DROP Sequence:{DescID: 58}
-  state: PUBLIC
-  details:
-    sequenceId: 58
 - DROP SequenceOwnedBy:{DescID: 58, ReferencedDescID: 57}
   state: PUBLIC
   details:
@@ -140,20 +269,41 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     tableId: 57
-- DROP TypeReference:{DescID: 57, ReferencedDescID: 55}
+- DROP UserPrivileges:{DescID: 57, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 57
-    typeId: 55
-- DROP TypeReference:{DescID: 57, ReferencedDescID: 56}
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 57, Username: public}
   state: PUBLIC
   details:
     descriptorId: 57
-    typeId: 56
+    username: public
+- DROP UserPrivileges:{DescID: 57, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 59, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 59, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    username: public
+- DROP UserPrivileges:{DescID: 59, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+    privileges: 2
+    username: root
 - DROP View:{DescID: 59}
   state: PUBLIC
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 57
     tableId: 59

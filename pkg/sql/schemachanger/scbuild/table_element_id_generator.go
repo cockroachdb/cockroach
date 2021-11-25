@@ -23,12 +23,12 @@ var _ scbuildstmt.TableElementIDGenerator = buildCtx{}
 // NextColumnID implements the scbuildstmt.TableElementIDGenerator interface.
 func (b buildCtx) NextColumnID(tbl catalog.TableDescriptor) descpb.ColumnID {
 	var maxAddedColID descpb.ColumnID
-	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if dir != scpb.Target_ADD || screl.GetDescID(elem) != tbl.GetID() {
+	scpb.ForEachColumn(b, func(_ scpb.Status, dir scpb.Target_Direction, column *scpb.Column) {
+		if dir != scpb.Target_ADD || column.TableID != tbl.GetID() {
 			return
 		}
-		if ac, ok := elem.(*scpb.Column); ok && ac.Column.ID > maxAddedColID {
-			maxAddedColID = ac.Column.ID
+		if column.ColumnID > maxAddedColID {
+			maxAddedColID = column.ColumnID
 		}
 	})
 	if maxAddedColID != 0 {
@@ -41,12 +41,12 @@ func (b buildCtx) NextColumnID(tbl catalog.TableDescriptor) descpb.ColumnID {
 // interface.
 func (b buildCtx) NextColumnFamilyID(tbl catalog.TableDescriptor) descpb.FamilyID {
 	nextFamilyID := tbl.GetNextFamilyID()
-	b.ForEachNode(func(_ scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if dir != scpb.Target_ADD || screl.GetDescID(elem) != tbl.GetID() {
+	scpb.ForEachColumn(b, func(status scpb.Status, dir scpb.Target_Direction, column *scpb.Column) {
+		if dir != scpb.Target_ADD || column.TableID != tbl.GetID() {
 			return
 		}
-		if ac, ok := elem.(*scpb.Column); ok && ac.FamilyID > nextFamilyID {
-			nextFamilyID = ac.FamilyID
+		if column.FamilyID > nextFamilyID {
+			nextFamilyID = column.FamilyID
 		}
 	})
 	return nextFamilyID

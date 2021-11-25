@@ -262,19 +262,36 @@ func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) er
 func (m *visitor) RemoveRelationDependedOnBy(
 	ctx context.Context, op scop.RemoveRelationDependedOnBy,
 ) error {
-	// Remove the descriptors namespaces as the last stage
+	// Clean up dependencies for the relationship.
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	for depIdx, dependedOnBy := range tbl.DependedOnBy {
-		if dependedOnBy.ID == op.DependedOnBy {
+	depDesc, err := m.checkOutTable(ctx, op.DependedOnBy)
+	if err != nil {
+		return err
+	}
+	for depIdx, dependsOnBy := range tbl.DependedOnBy {
+		if dependsOnBy.ID == op.DependedOnBy {
 			tbl.DependedOnBy = append(tbl.DependedOnBy[:depIdx], tbl.DependedOnBy[depIdx+1:]...)
 			break
 		}
 	}
+	// Intentionally set empty slices to nil, so that for our data driven tests
+	// these fields are omitted in the output.
 	if len(tbl.DependedOnBy) == 0 {
 		tbl.DependedOnBy = nil
+	}
+	for depIdx, dependsOn := range depDesc.DependsOn {
+		if dependsOn == op.TableID {
+			depDesc.DependsOn = append(depDesc.DependsOn[:depIdx], depDesc.DependsOn[depIdx+1:]...)
+			break
+		}
+	}
+	// Intentionally set empty slices to nil, so that for our data driven tests
+	// these fields are omitted in the output.
+	if len(depDesc.DependsOn) == 0 {
+		depDesc.DependsOn = nil
 	}
 	return nil
 }
@@ -474,36 +491,66 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 	)
 }
 
+func (m *visitor) SetColumnName(ctx context.Context, op scop.SetColumnName) error {
+	table, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	mutations := table.GetMutations()
+	var columnMutation *descpb.ColumnDescriptor
+	for _, mutation := range mutations {
+		columnMutation = mutation.GetColumn()
+		if columnMutation != nil {
+			if columnMutation.ID == op.ColumnID {
+				break
+			}
+		}
+	}
+	// Update the name inside the entry.
+	columnMutation.Name = op.Name
+	// Update the name inside the column families for
+	// this column ID.
+	for _, family := range table.GetFamilies() {
+		for columnIdx, columnID := range family.ColumnIDs {
+			if columnID == op.ColumnID {
+				family.ColumnNames[columnIdx] = op.Name
+			}
+		}
+	}
+	return nil
+}
+
 func (m *visitor) MakeAddedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
 ) error {
+	emptyStrToNil := func(v string) *string {
+		if v == "" {
+			return nil
+		}
+		return &v
+	}
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
-	// or what-not.
-	if op.Column.ID >= tbl.NextColumnID {
-		tbl.NextColumnID = op.Column.ID + 1
-	}
-	if !op.Column.IsComputed() ||
-		!op.Column.Virtual {
-		var foundFamily bool
+
+	if op.ComputerExpr == "" ||
+		!op.Virtual {
+		foundFamily := false
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
 			if foundFamily = fam.ID == op.FamilyID; foundFamily {
-				fam.ColumnIDs = append(fam.ColumnIDs, op.Column.ID)
-				fam.ColumnNames = append(fam.ColumnNames, op.Column.Name)
+				fam.ColumnIDs = append(fam.ColumnIDs, op.ColumnID)
+				fam.ColumnNames = append(fam.ColumnNames, "")
 				break
 			}
 		}
-		// Only create column families for non-computed columns
 		if !foundFamily {
 			tbl.Families = append(tbl.Families, descpb.ColumnFamilyDescriptor{
 				Name:        op.FamilyName,
 				ID:          op.FamilyID,
-				ColumnNames: []string{op.Column.Name},
-				ColumnIDs:   []descpb.ColumnID{op.Column.ID},
+				ColumnNames: []string{""},
+				ColumnIDs:   []descpb.ColumnID{op.ColumnID},
 			})
 			sort.Slice(tbl.Families, func(i, j int) bool {
 				return tbl.Families[i].ID < tbl.Families[j].ID
@@ -513,7 +560,29 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 			}
 		}
 	}
-	tbl.AddColumnMutation(&op.Column, descpb.DescriptorMutation_ADD)
+
+	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
+	// or what-not.
+	if op.ColumnID >= tbl.NextColumnID {
+		tbl.NextColumnID = op.ColumnID + 1
+	}
+
+	tbl.AddColumnMutation(&descpb.ColumnDescriptor{
+		ID:                                op.ColumnID,
+		Type:                              op.ColumnType,
+		Nullable:                          op.Nullable,
+		DefaultExpr:                       emptyStrToNil(op.DefaultExpr),
+		OnUpdateExpr:                      emptyStrToNil(op.OnUpdateExpr),
+		Hidden:                            op.Hidden,
+		Inaccessible:                      op.Inaccessible,
+		GeneratedAsIdentityType:           op.GeneratedAsIdentityType,
+		GeneratedAsIdentitySequenceOption: emptyStrToNil(op.GeneratedAsIdentitySequenceOption),
+		UsesSequenceIds:                   op.UsesSequenceIds,
+		ComputeExpr:                       emptyStrToNil(op.ComputerExpr),
+		PGAttributeNum:                    op.PgAttributeNum,
+		SystemColumnKind:                  op.SystemColumnKind,
+		Virtual:                           op.Virtual,
+	}, descpb.DescriptorMutation_ADD)
 	return nil
 }
 
@@ -568,19 +637,19 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	if err != nil {
 		return err
 	}
-	// Setup the index descriptor type.
+	// Set up the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
 	if op.Inverted {
 		indexType = descpb.IndexDescriptor_INVERTED
 	}
-	// Setup the encoding type.
+	// Set up the encoding type.
 	encodingType := descpb.PrimaryIndexEncoding
 	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
 	if op.SecondaryIndex {
 		encodingType = descpb.SecondaryIndexEncoding
 		indexVersion = descpb.StrictIndexColumnIDGuaranteesVersion
 	}
-	// Create an index descriptor from the the operation.
+	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
 		Name:                op.IndexName,
 		ID:                  op.IndexID,
@@ -780,7 +849,7 @@ func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
 				return err
 			}
 			mutation, err := descriptorutils.FindMutation(table,
-				descriptorutils.MakeColumnIDMutationSelector(element.Column.ID))
+				descriptorutils.MakeColumnIDMutationSelector(element.ColumnID))
 			if err != nil {
 				return err
 			}
@@ -806,6 +875,19 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 		return err
 	}
 	return m.cr.AddPartitioning(tbl, index.IndexDesc(), op.PartitionFields, op.ListPartitions, op.RangePartitions, nil, true)
+}
+
+func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	index, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	index.IndexDesc().Name = op.Name
+	return nil
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)
