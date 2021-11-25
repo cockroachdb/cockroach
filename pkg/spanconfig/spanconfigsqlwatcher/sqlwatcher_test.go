@@ -121,12 +121,14 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
+	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
+		noopCheckpointDuration,
 		nil, /* knobs */
 	)
 
@@ -138,22 +140,19 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	mu.receivedIDs = make(map[descpb.ID]struct{})
 
 	var wg sync.WaitGroup
+	watcherStartTS := ts.Clock().Now()
+
 	watcherCtx, watcherCancel := context.WithCancel(context.Background())
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
-		startTS := ts.Clock().Now()
-		mu.Lock()
-		mu.lastCheckpoint = startTS
-		mu.Unlock()
-
-		_ = sqlWatcher.WatchForSQLUpdates(watcherCtx, startTS,
+		_ = sqlWatcher.WatchForSQLUpdates(watcherCtx, watcherStartTS,
 			func(ctx context.Context, updates []spanconfig.DescriptorUpdate, checkpointTS hlc.Timestamp) error {
 				mu.Lock()
 				defer mu.Unlock()
 
-				require.True(t, mu.lastCheckpoint.Less(checkpointTS))
+				require.True(t, mu.lastCheckpoint.LessEq(checkpointTS))
 				mu.lastCheckpoint = checkpointTS
 
 				for _, update := range updates {
@@ -216,12 +215,14 @@ func TestSQLWatcherMultiple(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
+	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
+		noopCheckpointDuration,
 		nil, /* knobs */
 	)
 
@@ -315,9 +316,8 @@ func TestSQLWatcherMultiple(t *testing.T) {
 
 		watcher2Cancel()
 		watcher3Cancel()
+		wg.Wait()
 	}
-
-	wg.Wait()
 }
 
 // TestSQLWatcherOnEventError ensures that if there is an error processing a
@@ -343,12 +343,14 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
+	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
+		noopCheckpointDuration,
 		&spanconfig.TestingKnobs{
 			SQLWatcherOnEventInterceptor: func() error {
 				return errors.New("boom")
@@ -389,12 +391,14 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
+	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
+		noopCheckpointDuration,
 		nil, /* knobs */
 	)
 
@@ -440,4 +444,96 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 
 	// Ensure that the handler was called only once.
 	require.Equal(t, int32(1), atomic.LoadInt32(&numCalled))
+}
+
+func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // disable the automatic job creation.
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0 /* idx */)
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+	noopCheckpointDuration := 25 * time.Millisecond
+	sqlWatcher := spanconfigsqlwatcher.New(
+		keys.SystemSQLCodec,
+		ts.ClusterSettings(),
+		ts.RangeFeedFactory().(*rangefeed.Factory),
+		1<<20, /* 1 MB, bufferMemLimit */
+		ts.Stopper(),
+		noopCheckpointDuration,
+		nil, /* knobs */
+	)
+
+	beforeStmtTS := ts.Clock().Now()
+	tdb.Exec(t, "CREATE TABLE t()")
+	afterStmtTS := ts.Clock().Now()
+	const expDescID descpb.ID = 52
+
+	var wg sync.WaitGroup
+	mu := struct {
+		syncutil.Mutex
+		numCheckpoints int
+		lastCheckpoint hlc.Timestamp
+	}{}
+
+	watch := func(ctx context.Context, onExit func(), onCheckpoint func(hlc.Timestamp)) {
+		defer wg.Done()
+
+		receivedIDs := make(map[descpb.ID]struct{})
+		err := sqlWatcher.WatchForSQLUpdates(ctx, beforeStmtTS,
+			func(_ context.Context, updates []spanconfig.DescriptorUpdate, checkpointTS hlc.Timestamp) error {
+				onCheckpoint(checkpointTS)
+
+				for _, update := range updates {
+					receivedIDs[update.ID] = struct{}{}
+				}
+				return nil
+			})
+		require.True(t, testutils.IsError(err, "context canceled"))
+		require.Equal(t, 1, len(receivedIDs))
+		_, seen := receivedIDs[expDescID]
+		require.True(t, seen)
+	}
+
+	{
+		// Run the first watcher; wait for it to observe the update before
+		// tearing it down.
+
+		watcherCtx, watcherCancel := context.WithCancel(ctx)
+		wg.Add(1)
+		go watch(watcherCtx, func() { wg.Done() }, func(ts hlc.Timestamp) {
+			mu.Lock()
+			mu.lastCheckpoint = ts
+			mu.numCheckpoints++
+			mu.Unlock()
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			if mu.lastCheckpoint.Less(afterStmtTS) {
+				return errors.New("last checkpoint precedes statement timestamp")
+			}
+			if mu.numCheckpoints < 3 {
+				return errors.New("didn't receive no-op checkpoints")
+			}
+			return nil
+		})
+		watcherCancel()
+		wg.Wait()
+	}
 }
