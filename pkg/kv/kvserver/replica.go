@@ -932,12 +932,10 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 func (r *Replica) getImpliedGCThresholdRLocked(
 	st kvserverpb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
-	threshold := *r.mu.state.GCThreshold
-
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
 		r.isSystemRangeRLocked() {
-		return threshold
+		return *r.mu.state.GCThreshold
 	}
 
 	// In order to make this check inexpensive, we keep a copy of the reading of
@@ -950,16 +948,16 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
 	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
-		return threshold
+		return *r.mu.state.GCThreshold
 	}
 
-	impliedThreshold := gc.CalculateThreshold(st.Now.ToTimestamp(), r.mu.conf.TTL())
-	threshold.Forward(impliedThreshold)
+	threshold := gc.CalculateThreshold(st.Now.ToTimestamp(), r.mu.conf.TTL())
+	threshold.Forward(*r.mu.state.GCThreshold)
 
 	// If we have a protected timestamp record which precedes the implied
 	// threshold, use the threshold it implies instead.
 	if c.earliestRecord != nil && c.earliestRecord.Timestamp.Less(threshold) {
-		threshold = c.earliestRecord.Timestamp.Prev()
+		return c.earliestRecord.Timestamp.Prev()
 	}
 	return threshold
 }
