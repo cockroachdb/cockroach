@@ -41,6 +41,10 @@ type hypotheticalIndex struct {
 	// columns are columns that are in the table's primary key but are not already
 	// in the index columns.
 	suffixKeyColsOrdList []int
+
+	// storedColsOrdSet contains all the table's column ordinals that are not key
+	// columns (neither index columns nor suffix key columns).
+	storedColsOrdSet util.FastIntSet
 }
 
 var _ cat.Index = &hypotheticalIndex{}
@@ -67,6 +71,14 @@ func (hi *hypotheticalIndex) init(
 	// Build the suffix key column list.
 	suffixKeyColsSet := hi.tab.primaryKeyColsOrdSet.Difference(colsOrdSet)
 	hi.suffixKeyColsOrdList = suffixKeyColsSet.Ordered()
+
+	// Build the stored cols set.
+	keyColsOrds := colsOrdSet.Union(suffixKeyColsSet)
+	var tableOrdinalSet util.FastIntSet
+	for i := 0; i < tab.ColumnCount(); i++ {
+		tableOrdinalSet.Add(i)
+	}
+	hi.storedColsOrdSet = tableOrdinalSet.Difference(keyColsOrds)
 }
 
 // ID is part of the cat.Index interface.
@@ -95,9 +107,7 @@ func (hi *hypotheticalIndex) IsInverted() bool {
 
 // ColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) ColumnCount() int {
-	// For now, this is the same as the KeyColumnCount, because there are no
-	// stored columns.
-	return len(hi.cols) + len(hi.suffixKeyColsOrdList)
+	return len(hi.cols) + len(hi.suffixKeyColsOrdList) + hi.storedColsOrdSet.Len()
 }
 
 // ExplicitColumnCount is part of the cat.Index interface.
@@ -128,11 +138,18 @@ func (hi *hypotheticalIndex) NonInvertedPrefixColumnCount() int {
 // Column is part of the cat.Index interface.
 func (hi *hypotheticalIndex) Column(i int) cat.IndexColumn {
 	if i >= len(hi.cols) {
-		// The column is an added suffix primary key column. Construct the
-		// corresponding cat.Column.
-		suffixColOrd := hi.suffixKeyColsOrdList[i-len(hi.cols)]
-		return cat.IndexColumn{Column: hi.tab.Column(suffixColOrd)}
+		numKeyCols := len(hi.cols) + len(hi.suffixKeyColsOrdList)
+		if i < numKeyCols {
+			// The column is an added suffix primary key column.
+			suffixColOrd := hi.suffixKeyColsOrdList[i-len(hi.cols)]
+			return cat.IndexColumn{Column: hi.tab.Column(suffixColOrd)}
+		}
+		// The column is a stored column.
+		storedColsList := hi.storedColsOrdSet.Ordered()
+		storedColOrd := storedColsList[i-numKeyCols]
+		return cat.IndexColumn{Column: hi.tab.Column(storedColOrd)}
 	}
+	// The column is an index column.
 	return hi.cols[i]
 }
 
