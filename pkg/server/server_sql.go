@@ -855,7 +855,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
-		sqlWatcherFactory := spanconfigsqlwatcher.NewFactory(
+		sqlWatcher := spanconfigsqlwatcher.New(
 			codec,
 			cfg.Settings,
 			cfg.rangeFeedFactory,
@@ -870,7 +870,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			cfg.Settings,
 			cfg.spanConfigAccessor,
-			sqlWatcherFactory,
+			sqlWatcher,
 			sqlTranslator,
 			spanConfigKnobs,
 		)
