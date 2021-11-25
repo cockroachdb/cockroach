@@ -458,7 +458,7 @@ DROP TABLE defaultdb.shipments;
 statement ok
 CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
 
-statement error pq: cannot drop table "shipments" because view "v1" depends on it
+statement error pq: cannot drop table "defaultdb.public.shipments" because view "defaultdb.public.v1" depends on it
 DROP TABLE defaultdb.shipments;
 
 statement ok

@@ -11,6 +11,7 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/deprules",
         "//pkg/sql/schemachanger/scplan/opgen",
+        "//pkg/sql/schemachanger/scplan/scopt",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

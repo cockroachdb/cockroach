@@ -38,8 +38,15 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 // dropSequence builds targets and transformations using a descriptor.
 func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBehavior) {
 	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(b, seq, privilege.DROP))
+	// Add a node to drop the sequence
+	decomposeTableDescToElements(b, seq, scpb.Target_DROP)
 	// Check if there are dependencies.
-	_ = seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+	scpb.ForEachRelationDependedOnBy(b, func(_ scpb.Status,
+		_ scpb.Target_Direction,
+		dep *scpb.RelationDependedOnBy) {
+		if dep.TableID != seq.GetID() {
+			return
+		}
 		if cascade != tree.DropCascade {
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
@@ -47,30 +54,13 @@ func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBeha
 				seq.GetName(),
 			))
 		}
-		desc := b.MustReadTable(dep.ID)
+		desc := b.MustReadTable(dep.TableID)
 		for _, col := range desc.PublicColumns() {
-			for _, id := range dep.ColumnIDs {
-				if col.GetID() != id {
-					continue
-				}
-				b.EnqueueDropIfNotExists(&scpb.DefaultExpression{
-					TableID:         dep.ID,
-					ColumnID:        col.GetID(),
-					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-					DefaultExpr:     "",
-				})
-				removeColumnTypeBackRefs(b, desc, col.GetID())
+			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) && col.GetID() != dep.ColumnID {
+				continue
 			}
+			// Convert the default expression into elements.
+			decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
 		}
-		return nil
 	})
-
-	// Add a node to drop the sequence
-	b.EnqueueDropIfNotExists(&scpb.Sequence{SequenceID: seq.GetID()})
-	if seq.GetSequenceOpts().SequenceOwner.OwnerTableID != descpb.InvalidID {
-		b.EnqueueDropIfNotExists(&scpb.SequenceOwnedBy{
-			SequenceID:   seq.GetID(),
-			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID,
-		})
-	}
 }

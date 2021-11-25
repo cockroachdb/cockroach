@@ -51,6 +51,8 @@ type MutationVisitor interface {
 	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
 	LogEvent(context.Context, LogEvent) error
+	SetColumnName(context.Context, SetColumnName) error
+	SetIndexName(context.Context, SetIndexName) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -196,4 +198,14 @@ func (op AddIndexPartitionInfo) Visit(ctx context.Context, v MutationVisitor) er
 // Visit is part of the MutationOp interface.
 func (op LogEvent) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.LogEvent(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetColumnName(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetIndexName) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetIndexName(ctx, op)
 }

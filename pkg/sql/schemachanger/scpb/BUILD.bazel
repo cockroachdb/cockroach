@@ -26,6 +26,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
@@ -37,6 +38,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -59,5 +61,26 @@ genrule(
        """,
     exec_tools = [
         ":element-generator",
+    ],
+)
+
+go_binary(
+    name = "element-uml-generator",
+    srcs = ["element_uml_generator.go"],
+    gotags = ["generator"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/sql/schemachanger/scpb",
+    ],
+)
+
+genrule(
+    name = "gen-elements-uml",
+    outs = ["uml/table.puml"],
+    cmd = """
+        $(location :element-uml-generator) --out $(location uml/table.puml)
+       """,
+    exec_tools = [
+        ":element-uml-generator",
     ],
 )
