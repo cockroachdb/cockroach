@@ -199,6 +199,9 @@ ORDER BY id`)
 			t.Fatal(err)
 		}
 		s.sessionData = *sessionData
+		// For setting up a builder inside tests we will ensure that the new schema
+		// changer will allow non-fully implemented operations.
+		s.sessionData.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	}
 
 	return s
