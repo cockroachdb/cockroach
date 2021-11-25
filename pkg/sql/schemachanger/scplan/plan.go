@@ -93,7 +93,8 @@ func validateStages(stages []Stage) {
 		}
 		if stage.Revertible && !revertibleAllowed {
 			panic(errors.AssertionFailedf(
-				"invalid execution plan revertability flipped at stage (%d): %v", idx, stage))
+				"invalid execution plan: stage %d of %d is unexpectedly marked as revertible: %v",
+				idx+1, len(stages), stage))
 		}
 	}
 }

@@ -1,0 +1,283 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY)
+----
+...
++database {0 0 db} -> 52
++object {52 29 tbl} -> 53
+
+test
+ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
+----
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## stage 1 in PreCommitPhase: 5 MutationType ops
+upsert descriptor #53
+  ...
+     - columnIds:
+       - 1
+  +    - 2
+       columnNames:
+       - i
+  +    - j
+       name: primary
+     formatVersion: 3
+     id: 53
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      defaultExpr: 42:::INT8
+  +      id: 2
+  +      name: j
+  +      pgAttributeNum: 2
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: new_primary_key
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - j
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+  -  nextColumnId: 2
+  +  nextColumnId: 3
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  -  nextMutationId: 1
+  +  nextIndexId: 3
+  +  nextMutationId: 2
+     parentId: 52
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "1"
+  +  version: "2"
+create job #1: "Schema change job"
+  descriptor IDs: [53]
+upsert descriptor #53
+  ...
+       state: DELETE_ONLY
+     name: tbl
+  +  newSchemaChangeJobId: "1"
+     nextColumnId: 3
+     nextFamilyId: 1
+  ...
+# end PreCommitPhase
+commit transaction #1
+# begin PostCommitPhase
+begin transaction #2
+## stage 1 in PostCommitPhase: 2 MutationType ops
+upsert descriptor #53
+  ...
+       direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: DELETE_AND_WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: DELETE_AND_WRITE_ONLY
+     name: tbl
+     newSchemaChangeJobId: "1"
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "2"
+  +  version: "3"
+update progress of schema change job #1
+commit transaction #2
+begin transaction #3
+## stage 2 in PostCommitPhase: 1 BackfillType ops
+update progress of schema change job #1
+commit transaction #3
+begin transaction #4
+## stage 3 in PostCommitPhase: 1 ValidationType ops
+update progress of schema change job #1
+commit transaction #4
+begin transaction #5
+## stage 4 in PostCommitPhase: 3 MutationType ops
+upsert descriptor #53
+  ...
+         oid: 20
+         width: 64
+  +  - defaultExpr: 42:::INT8
+  +    id: 2
+  +    name: j
+  +    pgAttributeNum: 2
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+     createAsOfTime:
+       wallTime: "1"
+  ...
+     modificationTime: {}
+     mutations:
+  -  - column:
+  -      defaultExpr: 42:::INT8
+  -      id: 2
+  -      name: j
+  -      pgAttributeNum: 2
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+  -      createdExplicitly: true
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 2
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: new_primary_key
+  +      name: tbl_pkey
+         partitioning: {}
+         sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - j
+         unique: true
+         version: 4
+  -    mutationId: 1
+  +    mutationId: 2
+       state: DELETE_AND_WRITE_ONLY
+     name: tbl
+  ...
+     nextFamilyId: 1
+     nextIndexId: 3
+  -  nextMutationId: 2
+  +  nextMutationId: 3
+     parentId: 52
+     primaryIndex:
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 2
+       interleave: {}
+       keyColumnDirections:
+  ...
+       keyColumnNames:
+       - i
+  -    name: tbl_pkey
+  +    name: new_primary_key
+       partitioning: {}
+       sharded: {}
+  +    storeColumnIds:
+  +    - 2
+  +    storeColumnNames:
+  +    - j
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "3"
+  +  version: "4"
+update progress of schema change job #1
+commit transaction #5
+begin transaction #6
+## stage 5 in PostCommitPhase: 1 MutationType ops
+upsert descriptor #53
+  ...
+         version: 4
+       mutationId: 2
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     newSchemaChangeJobId: "1"
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "4"
+  +  version: "5"
+update progress of schema change job #1
+commit transaction #6
+begin transaction #7
+## stage 6 in PostCommitPhase: 1 MutationType ops
+upsert descriptor #53
+  ...
+     id: 53
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: tbl_pkey
+  -      partitioning: {}
+  -      sharded: {}
+  -      unique: true
+  -      version: 4
+  -    mutationId: 2
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: tbl
+     newSchemaChangeJobId: "1"
+  ...
+       time: {}
+     unexposedParentSchemaId: 29
+  -  version: "5"
+  +  version: "6"
+update progress of schema change job #1
+upsert descriptor #53
+  ...
+     mutations: []
+     name: tbl
+  -  newSchemaChangeJobId: "1"
+     nextColumnId: 3
+     nextFamilyId: 1
+  ...
+commit transaction #7
+# end PostCommitPhase
