@@ -307,7 +307,6 @@ type Context struct {
 	stats StatsHandler
 
 	ClusterID base.ClusterIDContainer
-	NodeID    base.NodeIDContainer
 
 	metrics Metrics
 
@@ -361,6 +360,12 @@ type ContextOptions struct {
 	// error.
 	OnOutgoingPing func(*PingRequest) error
 	Knobs          ContextTestingKnobs
+
+	// NodeID is the node ID / SQL instance ID container shared
+	// with the remainder of the server. If unset in the options,
+	// the RPC context will instantiate its own separate container
+	// (this is useful in tests).
+	NodeID *base.NodeIDContainer
 }
 
 func (c ContextOptions) validate() error {
@@ -391,6 +396,12 @@ func (c ContextOptions) validate() error {
 func NewContext(opts ContextOptions) *Context {
 	if err := opts.validate(); err != nil {
 		panic(err)
+	}
+
+	if opts.NodeID == nil {
+		// Tests rely on NewContext to generate its own ID container.
+		var c base.NodeIDContainer
+		opts.NodeID = &c
 	}
 
 	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
@@ -1331,7 +1342,7 @@ func (ctx *Context) NewHeartbeatService() *HeartbeatService {
 		clusterName:                           ctx.ClusterName(),
 		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
 		clusterID:                             &ctx.ClusterID,
-		nodeID:                                &ctx.NodeID,
+		nodeID:                                ctx.NodeID,
 		settings:                              ctx.Settings,
 		onHandlePing:                          ctx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
