@@ -131,7 +131,7 @@ func TestHeartbeatCB(t *testing.T) {
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          &serverCtx.ClusterID,
-			nodeID:             &serverCtx.NodeID,
+			nodeID:             serverCtx.NodeID,
 			settings:           serverCtx.Settings,
 		})
 
@@ -334,7 +334,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		settings:           serverCtx.Settings,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -595,7 +595,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
 
@@ -776,7 +776,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		clock:              serverClock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
 
@@ -849,7 +849,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		ready:              make(chan error),
 		stopper:            stopper,
 		settings:           serverCtx.Settings,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -956,7 +956,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			clock:              clock,
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 			clusterID:          &nodeCtxs[i].ctx.ClusterID,
-			nodeID:             &nodeCtxs[i].ctx.NodeID,
+			nodeID:             nodeCtxs[i].ctx.NodeID,
 			settings:           nodeCtxs[i].ctx.Settings,
 		})
 		ln, err := netutil.ListenAndServeGRPC(nodeCtxs[i].ctx.Stopper, s, util.TestAddr)
@@ -1150,7 +1150,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          &serverCtx.ClusterID,
-			nodeID:             &serverCtx.NodeID,
+			nodeID:             serverCtx.NodeID,
 			settings:           serverCtx.Settings,
 		},
 		interval: msgInterval,
@@ -1346,7 +1346,7 @@ func TestClusterIDMismatch(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
 
@@ -1419,7 +1419,7 @@ func TestClusterNameMismatch(t *testing.T) {
 				clock:                          clock,
 				remoteClockMonitor:             serverCtx.RemoteClocks,
 				clusterID:                      &serverCtx.ClusterID,
-				nodeID:                         &serverCtx.NodeID,
+				nodeID:                         serverCtx.NodeID,
 				settings:                       serverCtx.Settings,
 				clusterName:                    serverCtx.Config.ClusterName,
 				disableClusterNameVerification: serverCtx.Config.DisableClusterNameVerification,
@@ -1469,7 +1469,7 @@ func TestNodeIDMismatch(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
 
@@ -1542,7 +1542,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				clock:              clock,
 				remoteClockMonitor: serverCtx.RemoteClocks,
 				clusterID:          &serverCtx.ClusterID,
-				nodeID:             &serverCtx.NodeID,
+				nodeID:             serverCtx.NodeID,
 				settings:           serverCtx.Settings,
 			})
 
@@ -1588,7 +1588,7 @@ func TestGRPCDialClass(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
 
@@ -1646,7 +1646,7 @@ func TestTestingKnobs(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
 

@@ -262,13 +262,6 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	// This is necessary so the grpc server doesn't error out on heartbeat
-	// ping when we make pod-to-pod calls, we pass the InstanceID with the
-	// request to ensure we're dialing the pod we think we are.
-	//
-	// The InstanceID subsystem is not available until `preStart`.
-	args.rpcContext.NodeID.Set(ctx, roachpb.NodeID(s.SQLInstanceID()))
-
 	if knobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); !ok || !knobs.DisableLogTags {
 		// Register the server's identifiers so that log events are
 		// decorated with the server's identity. This helps when gathering
@@ -379,6 +372,7 @@ func makeTenantSQLServerArgs(
 	}
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   sqlCfg.TenantID,
+		NodeID:     baseCfg.IDContainer,
 		AmbientCtx: baseCfg.AmbientCtx,
 		Config:     baseCfg.Config,
 		Clock:      clock,
