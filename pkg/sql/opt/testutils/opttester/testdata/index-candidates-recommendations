@@ -54,31 +54,25 @@ SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3
 ----
 index recommendation: create 1 index
 1. table: t1
-   columns: [k] ASC, [i] ASC
-   SQL command: CREATE INDEX ON t1 (k, i);
+   columns: [i] ASC
+   storing: k
+   SQL command: CREATE INDEX ON t1 (i) STORING (k);
 --
 Optimal Plan:
 project
  ├── columns: k:1(int!null)
- └── inner-join (merge)
+ └── inner-join (hash)
       ├── columns: t1.k:1(int!null) t1.i:2(int!null) t2.k:8(int!null)
-      ├── left ordering: +8
-      ├── right ordering: +1
       ├── fd: (1)==(8), (8)==(1)
       ├── scan t2@existing_t2_k
-      │    ├── columns: t2.k:8(int)
-      │    └── ordering: +8
-      ├── select
+      │    └── columns: t2.k:8(int)
+      ├── scan t1@_hyp_3
       │    ├── columns: t1.k:1(int) t1.i:2(int!null)
-      │    ├── ordering: +1
-      │    ├── scan t1@_hyp_4
-      │    │    ├── columns: t1.k:1(int) t1.i:2(int)
-      │    │    └── ordering: +1
-      │    └── filters
-      │         └── gt [type=bool, outer=(2), constraints=(/2: [/4 - ]; tight)]
-      │              ├── variable: t1.i:2 [type=int]
-      │              └── const: 3 [type=int]
-      └── filters (true)
+      │    └── constraint: /2/5: [/4 - ]
+      └── filters
+           └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+                ├── variable: t1.k:1 [type=int]
+                └── variable: t2.k:8 [type=int]
 
 exec-ddl
 DROP INDEX t1@existing_t1_k
@@ -92,41 +86,43 @@ DROP INDEX t2@existing_t2_k
 # group by candidates.
 
 index-candidates
-SELECT i FROM t1 WHERE i >= 3
+SELECT * FROM t1 WHERE i >= 3
 ----
 t1:
  (i)
 
 index-recommendations
-SELECT i FROM t1 WHERE i >= 3
+SELECT * FROM t1 WHERE i >= 3
 ----
 index recommendation: create 1 index
 1. table: t1
    columns: [i] ASC
-   SQL command: CREATE INDEX ON t1 (i);
+   storing: k, f, s
+   SQL command: CREATE INDEX ON t1 (i) STORING (k, f, s);
 --
 Optimal Plan:
 scan t1@_hyp_1
- ├── columns: i:2(int!null)
+ ├── columns: k:1(int) i:2(int!null) f:3(float) s:4(string)
  └── constraint: /2/5: [/3 - ]
 
 index-candidates
-SELECT f FROM t1 WHERE f > 2 AND f < 8
+SELECT f, k FROM t1 WHERE f > 2 AND f < 8
 ----
 t1:
  (f)
 
 index-recommendations
-SELECT f FROM t1 WHERE f > 2 AND f < 8
+SELECT f, k FROM t1 WHERE f > 2 AND f < 8
 ----
 index recommendation: create 1 index
 1. table: t1
    columns: [f] ASC
-   SQL command: CREATE INDEX ON t1 (f);
+   storing: k
+   SQL command: CREATE INDEX ON t1 (f) STORING (k);
 --
 Optimal Plan:
 scan t1@_hyp_1
- ├── columns: f:3(float!null)
+ ├── columns: f:3(float!null) k:1(int)
  └── constraint: /3/5: [/2.0000000000000004 - /7.999999999999999]
 
 index-candidates
@@ -196,22 +192,15 @@ t2:
 index-recommendations
 SELECT t2.s FROM t1 RIGHT JOIN t2 ON t1.s LIKE t2.s
 ----
-index recommendation: create 2 indexes
-1. table: t1
-   columns: [s] ASC
-   SQL command: CREATE INDEX ON t1 (s);
-2. table: t2
-   columns: [s] ASC
-   SQL command: CREATE INDEX ON t2 (s);
---
+No index recommendations.
 Optimal Plan:
 project
  ├── columns: s:10(string)
  └── left-join (cross)
       ├── columns: t1.s:4(string) t2.s:10(string)
-      ├── scan t2@_hyp_1
+      ├── scan t2
       │    └── columns: t2.s:10(string)
-      ├── scan t1@_hyp_1
+      ├── scan t1
       │    └── columns: t1.s:4(string)
       └── filters
            └── like [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
@@ -337,21 +326,14 @@ FROM t1 FULL JOIN t2
 ON t2.k IS NULL
 AND t1.f::STRING NOT LIKE t2.i::STRING
 ----
-index recommendation: create 2 indexes
-1. table: t1
-   columns: [f] ASC
-   SQL command: CREATE INDEX ON t1 (f);
-2. table: t2
-   columns: [k] ASC, [i] ASC
-   SQL command: CREATE INDEX ON t2 (k, i);
---
+No index recommendations.
 Optimal Plan:
 full-join (cross)
  ├── columns: f:3(float) k:8(int) i:9(int)
  ├── stable
- ├── scan t1@_hyp_1
+ ├── scan t1
  │    └── columns: f:3(float)
- ├── scan t2@_hyp_3
+ ├── scan t2
  │    └── columns: t2.k:8(int) t2.i:9(int)
  └── filters
       ├── is [type=bool, outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
@@ -386,22 +368,20 @@ ON t1.k != t2.k
 AND t1.s IS NOT NULL
 AND t2.i IS NULL
 ----
-index recommendation: create 2 indexes
-1. table: t1
-   columns: [k] ASC, [s] ASC
-   SQL command: CREATE INDEX ON t1 (k, s);
-2. table: t2
-   columns: [i] ASC, [k] ASC
-   SQL command: CREATE INDEX ON t2 (i, k);
+index recommendation: create 1 index
+1. table: t2
+   columns: [i] ASC
+   storing: k
+   SQL command: CREATE INDEX ON t2 (i) STORING (k);
 --
 Optimal Plan:
 left-join (cross)
  ├── columns: k:1(int) s:4(string) k:8(int) i:9(int)
- ├── scan t1@_hyp_3
+ ├── scan t1
  │    └── columns: t1.k:1(int) t1.s:4(string)
- ├── scan t2@_hyp_3
+ ├── scan t2@_hyp_1
  │    ├── columns: t2.k:8(int) t2.i:9(int)
- │    ├── constraint: /9/8/11: [/NULL - /NULL]
+ │    ├── constraint: /9/11: [/NULL - /NULL]
  │    └── fd: ()-->(9)
  └── filters
       ├── ne [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
@@ -410,6 +390,96 @@ left-join (cross)
       └── is-not [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
            ├── variable: t1.s:4 [type=string]
            └── null [type=unknown]
+
+index-candidates
+SELECT i FROM t1 WHERE k < 3 AND i > 5
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT i FROM t1 WHERE k < 3 AND i > 5
+----
+index recommendation: create 1 index
+1. table: t1
+   columns: [k] ASC
+   storing: i
+   SQL command: CREATE INDEX ON t1 (k) STORING (i);
+--
+Optimal Plan:
+project
+ ├── columns: i:2(int!null)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── scan t1@_hyp_1
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    └── constraint: /1/5: (/NULL - /2]
+      └── filters
+           └── gt [type=bool, outer=(2), constraints=(/2: [/6 - ]; tight)]
+                ├── variable: i:2 [type=int]
+                └── const: 5 [type=int]
+
+index-candidates
+SELECT i FROM t1 WHERE k < 3 AND i > 5 OR f < 7
+----
+t1:
+ (f)
+ (i)
+ (k)
+
+index-recommendations
+SELECT i FROM t1 WHERE k < 3 AND i > 5 OR f < 7
+----
+index recommendation: create 2 indexes
+1. table: t1
+   columns: [k] ASC
+   storing: i, f
+   SQL command: CREATE INDEX ON t1 (k) STORING (i, f);
+2. table: t1
+   columns: [f] ASC
+   storing: k, i
+   SQL command: CREATE INDEX ON t1 (f) STORING (k, i);
+--
+Optimal Plan:
+project
+ ├── columns: i:2(int)
+ └── project
+      ├── columns: k:1(int) i:2(int) f:3(float)
+      └── distinct-on
+           ├── columns: k:1(int) i:2(int) f:3(float) rowid:5(int!null)
+           ├── grouping columns: rowid:5(int!null)
+           ├── key: (5)
+           ├── fd: (5)-->(1-3)
+           ├── union-all
+           │    ├── columns: k:1(int) i:2(int) f:3(float) rowid:5(int!null)
+           │    ├── left columns: k:8(int) i:9(int) f:10(float) rowid:12(int)
+           │    ├── right columns: k:15(int) i:16(int) f:17(float) rowid:19(int)
+           │    ├── select
+           │    │    ├── columns: k:8(int!null) i:9(int!null) f:10(float) rowid:12(int!null)
+           │    │    ├── key: (12)
+           │    │    ├── fd: (12)-->(8-10)
+           │    │    ├── scan t1@_hyp_1
+           │    │    │    ├── columns: k:8(int!null) i:9(int) f:10(float) rowid:12(int!null)
+           │    │    │    ├── constraint: /8/12: (/NULL - /2]
+           │    │    │    ├── key: (12)
+           │    │    │    └── fd: (12)-->(8-10)
+           │    │    └── filters
+           │    │         └── gt [type=bool, outer=(9), constraints=(/9: [/6 - ]; tight)]
+           │    │              ├── variable: i:9 [type=int]
+           │    │              └── const: 5 [type=int]
+           │    └── scan t1@_hyp_3
+           │         ├── columns: k:15(int) i:16(int) f:17(float!null) rowid:19(int!null)
+           │         ├── constraint: /17/19: (/NULL - /6.999999999999999]
+           │         ├── key: (19)
+           │         └── fd: (19)-->(15-17)
+           └── aggregations
+                ├── const-agg [as=k:1, type=int, outer=(1)]
+                │    └── variable: k:1 [type=int]
+                ├── const-agg [as=i:2, type=int, outer=(2)]
+                │    └── variable: i:2 [type=int]
+                └── const-agg [as=f:3, type=float, outer=(3)]
+                     └── variable: f:3 [type=float]
 
 # Test more complex queries. See rule 5 in indexrec.FindIndexCandidates. The
 # aspects of rule 5 that are demonstrated by each test are highlighted the
@@ -430,10 +500,12 @@ SELECT k, i FROM t1 WHERE k = 1 AND i = 2
 index recommendation: create 2 indexes
 1. table: t1
    columns: [k] ASC
-   SQL command: CREATE INDEX ON t1 (k);
+   storing: i
+   SQL command: CREATE INDEX ON t1 (k) STORING (i);
 2. table: t1
    columns: [i] ASC
-   SQL command: CREATE INDEX ON t1 (i);
+   storing: k
+   SQL command: CREATE INDEX ON t1 (i) STORING (k);
 --
 Optimal Plan:
 inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
@@ -465,17 +537,14 @@ SELECT * FROM t1 WHERE k = 1 AND f > 0
 index recommendation: create 1 index
 1. table: t1
    columns: [k] ASC, [f] ASC
-   SQL command: CREATE INDEX ON t1 (k, f);
+   storing: i, s
+   SQL command: CREATE INDEX ON t1 (k, f) STORING (i, s);
 --
 Optimal Plan:
-index-join t1
+scan t1@_hyp_3
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string)
- ├── fd: ()-->(1)
- └── scan t1@_hyp_3
-      ├── columns: k:1(int!null) f:3(float!null) rowid:5(int!null)
-      ├── constraint: /1/3/5: [/1/5e-324 - /1]
-      ├── key: (5)
-      └── fd: ()-->(1), (5)-->(3)
+ ├── constraint: /1/3/5: [/1/5e-324 - /1]
+ └── fd: ()-->(1)
 
 # Multi-column combinations used: EQ, EQ + R.
 index-candidates
@@ -491,16 +560,33 @@ t1:
 index-recommendations
 SELECT k, i, f FROM t1 WHERE k = 1 AND i = 2 AND f > 0
 ----
-index recommendation: create 1 index
+index recommendation: create 2 indexes
 1. table: t1
-   columns: [k] ASC, [i] ASC, [f] ASC
-   SQL command: CREATE INDEX ON t1 (k, i, f);
+   columns: [k] ASC
+   storing: i, f
+   SQL command: CREATE INDEX ON t1 (k) STORING (i, f);
+2. table: t1
+   columns: [i] ASC
+   storing: k, f
+   SQL command: CREATE INDEX ON t1 (i) STORING (k, f);
 --
 Optimal Plan:
-scan t1@_hyp_5
+inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null)
- ├── constraint: /1/2/3/5: [/1/2/5e-324 - /1/2]
- └── fd: ()-->(1,2)
+ ├── eq columns: [5] = [5]
+ ├── left fixed columns: [1] = [1]
+ ├── right fixed columns: [2] = [2]
+ ├── fd: ()-->(1,2)
+ └── filters
+      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      │    ├── variable: k:1 [type=int]
+      │    └── const: 1 [type=int]
+      ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      │    ├── variable: i:2 [type=int]
+      │    └── const: 2 [type=int]
+      └── gt [type=bool, outer=(3), constraints=(/3: [/5e-324 - ]; tight)]
+           ├── variable: f:3 [type=float]
+           └── const: 0.0 [type=float]
 
 # Multi-column combinations used: J + R.
 index-candidates
@@ -516,29 +602,22 @@ t2:
 index-recommendations
 SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
 ----
-index recommendation: create 2 indexes
+index recommendation: create 1 index
 1. table: t1
-   columns: [k] ASC, [f] ASC
-   SQL command: CREATE INDEX ON t1 (k, f);
-2. table: t2
-   columns: [k] ASC
-   SQL command: CREATE INDEX ON t2 (k);
+   columns: [f] ASC
+   storing: k
+   SQL command: CREATE INDEX ON t1 (f) STORING (k);
 --
 Optimal Plan:
 project
  ├── columns: k:1(int!null) f:3(float!null)
  └── inner-join (cross)
       ├── columns: t1.k:1(int!null) f:3(float!null) t2.k:8(int!null)
-      ├── scan t2@_hyp_1
+      ├── scan t2
       │    └── columns: t2.k:8(int)
-      ├── select
+      ├── scan t1@_hyp_1
       │    ├── columns: t1.k:1(int) f:3(float!null)
-      │    ├── scan t1@_hyp_3
-      │    │    └── columns: t1.k:1(int) f:3(float)
-      │    └── filters
-      │         └── gt [type=bool, outer=(3), constraints=(/3: [/5e-324 - ]; tight)]
-      │              ├── variable: f:3 [type=float]
-      │              └── const: 0.0 [type=float]
+      │    └── constraint: /3/5: [/5e-324 - ]
       └── filters
            └── ne [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
                 ├── variable: t1.k:1 [type=int]
@@ -562,11 +641,13 @@ SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
 ----
 index recommendation: create 2 indexes
 1. table: t1
-   columns: [i] ASC, [s] ASC, [k] ASC
-   SQL command: CREATE INDEX ON t1 (i, s, k);
-2. table: t2
-   columns: [k] ASC
-   SQL command: CREATE INDEX ON t2 (k);
+   columns: [i] ASC
+   storing: k, s
+   SQL command: CREATE INDEX ON t1 (i) STORING (k, s);
+2. table: t1
+   columns: [s] ASC
+   storing: k, i
+   SQL command: CREATE INDEX ON t1 (s) STORING (k, i);
 --
 Optimal Plan:
 project
@@ -575,12 +656,21 @@ project
  └── inner-join (cross)
       ├── columns: t1.k:1(int!null) t1.i:2(int!null) t1.s:4(string!null) t2.k:8(int!null)
       ├── fd: ()-->(2,4)
-      ├── scan t2@_hyp_1
+      ├── scan t2
       │    └── columns: t2.k:8(int)
-      ├── scan t1@_hyp_5
+      ├── inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
       │    ├── columns: t1.k:1(int) t1.i:2(int!null) t1.s:4(string!null)
-      │    ├── constraint: /2/4/1/5: [/2/'NG' - /2/'NG']
-      │    └── fd: ()-->(2,4)
+      │    ├── eq columns: [5] = [5]
+      │    ├── left fixed columns: [2] = [2]
+      │    ├── right fixed columns: [4] = ['NG']
+      │    ├── fd: ()-->(2,4)
+      │    └── filters
+      │         ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      │         │    ├── variable: t1.i:2 [type=int]
+      │         │    └── const: 2 [type=int]
+      │         └── eq [type=bool, outer=(4), constraints=(/4: [/'NG' - /'NG']; tight), fd=()-->(4)]
+      │              ├── variable: t1.s:4 [type=string]
+      │              └── const: 'NG' [type=string]
       └── filters
            └── ne [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
                 ├── variable: t1.k:1 [type=int]
@@ -631,13 +721,11 @@ FROM (
   AND t1.s = 'NG'
 )
 ----
-index recommendation: create 2 indexes
+index recommendation: create 1 index
 1. table: t1
-   columns: [s] ASC
-   SQL command: CREATE INDEX ON t1 (s);
-2. table: t1
-   columns: [k] ASC
-   SQL command: CREATE INDEX ON t1 (k);
+   columns: [s] ASC, [f] ASC
+   storing: i
+   SQL command: CREATE INDEX ON t1 (s, f) STORING (i);
 --
 Optimal Plan:
 union-all
@@ -654,7 +742,7 @@ union-all
  │         ├── fd: (9,10)-->(14)
  │         ├── left-join (cross)
  │         │    ├── columns: t1.k:1(int) t2.k:8(int) t2.i:9(int) t2.s:10(string)
- │         │    ├── scan t1@_hyp_4
+ │         │    ├── scan t1
  │         │    │    └── columns: t1.k:1(int)
  │         │    ├── scan t2
  │         │    │    └── columns: t2.k:8(int) t2.i:9(int) t2.s:10(string)
@@ -672,14 +760,10 @@ union-all
       ├── select
       │    ├── columns: t1.i:16(int!null) f:17(float!null) t1.s:18(string!null)
       │    ├── fd: ()-->(18)
-      │    ├── index-join t1
-      │    │    ├── columns: t1.i:16(int) f:17(float) t1.s:18(string)
-      │    │    ├── fd: ()-->(18)
-      │    │    └── scan t1@_hyp_1
-      │    │         ├── columns: t1.s:18(string!null) t1.rowid:19(int!null)
-      │    │         ├── constraint: /18/19: [/'NG' - /'NG']
-      │    │         ├── key: (19)
-      │    │         └── fd: ()-->(18)
+      │    ├── scan t1@_hyp_5
+      │    │    ├── columns: t1.i:16(int) f:17(float!null) t1.s:18(string!null)
+      │    │    ├── constraint: /18/17/19: (/'NG'/NULL - /'NG']
+      │    │    └── fd: ()-->(18)
       │    └── filters
       │         └── gt [type=bool, outer=(16,17), constraints=(/16: (/NULL - ]; /17: (/NULL - ])]
       │              ├── variable: f:17 [type=float]
@@ -712,10 +796,18 @@ ON t1.k = t2.k
 WHERE EXISTS (SELECT * FROM t3 WHERE t3.f > t3.k)
 ORDER BY t1.k, t2.i, t1.i DESC
 ----
-index recommendation: create 1 index
+index recommendation: create 3 indexes
 1. table: t1
    columns: [k] ASC, [i] DESC
    SQL command: CREATE INDEX ON t1 (k, i DESC);
+2. table: t2
+   columns: [k] ASC
+   storing: i
+   SQL command: CREATE INDEX ON t2 (k) STORING (i);
+3. table: t3
+   columns: [f] ASC
+   storing: k, i
+   SQL command: CREATE INDEX ON t3 (f) STORING (k, i);
 --
 Optimal Plan:
 sort (segmented)
@@ -745,37 +837,38 @@ sort (segmented)
            │                   ├── select
            │                   │    ├── columns: t3.k:14(int!null) t3.i:15(int) t3.f:16(float!null)
            │                   │    ├── limit hint: 1.00
-           │                   │    ├── scan t3
-           │                   │    │    ├── columns: t3.k:14(int) t3.i:15(int) t3.f:16(float)
-           │                   │    │    └── limit hint: 3.03
+           │                   │    ├── scan t3@_hyp_1
+           │                   │    │    ├── columns: t3.k:14(int) t3.i:15(int) t3.f:16(float!null)
+           │                   │    │    ├── constraint: /16/17: (/NULL - ]
+           │                   │    │    └── limit hint: 3.00
            │                   │    └── filters
            │                   │         └── gt [type=bool, outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │                   │              ├── variable: t3.f:16 [type=float]
            │                   │              └── variable: t3.k:14 [type=int]
            │                   └── const: 1 [type=int]
-           ├── sort
+           ├── select
            │    ├── columns: t2.k:8(int) t2.i:9(int)
            │    ├── ordering: +8
-           │    └── select
-           │         ├── columns: t2.k:8(int) t2.i:9(int)
-           │         ├── scan t2
-           │         │    └── columns: t2.k:8(int) t2.i:9(int)
-           │         └── filters
-           │              └── exists [type=bool, subquery]
-           │                   └── limit
-           │                        ├── columns: t3.k:14(int!null) t3.i:15(int) t3.f:16(float!null)
-           │                        ├── cardinality: [0 - 1]
-           │                        ├── key: ()
-           │                        ├── fd: ()-->(14-16)
-           │                        ├── select
-           │                        │    ├── columns: t3.k:14(int!null) t3.i:15(int) t3.f:16(float!null)
-           │                        │    ├── limit hint: 1.00
-           │                        │    ├── scan t3
-           │                        │    │    ├── columns: t3.k:14(int) t3.i:15(int) t3.f:16(float)
-           │                        │    │    └── limit hint: 3.03
-           │                        │    └── filters
-           │                        │         └── gt [type=bool, outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
-           │                        │              ├── variable: t3.f:16 [type=float]
-           │                        │              └── variable: t3.k:14 [type=int]
-           │                        └── const: 1 [type=int]
+           │    ├── scan t2@_hyp_2
+           │    │    ├── columns: t2.k:8(int) t2.i:9(int)
+           │    │    └── ordering: +8
+           │    └── filters
+           │         └── exists [type=bool, subquery]
+           │              └── limit
+           │                   ├── columns: t3.k:14(int!null) t3.i:15(int) t3.f:16(float!null)
+           │                   ├── cardinality: [0 - 1]
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(14-16)
+           │                   ├── select
+           │                   │    ├── columns: t3.k:14(int!null) t3.i:15(int) t3.f:16(float!null)
+           │                   │    ├── limit hint: 1.00
+           │                   │    ├── scan t3@_hyp_1
+           │                   │    │    ├── columns: t3.k:14(int) t3.i:15(int) t3.f:16(float!null)
+           │                   │    │    ├── constraint: /16/17: (/NULL - ]
+           │                   │    │    └── limit hint: 3.00
+           │                   │    └── filters
+           │                   │         └── gt [type=bool, outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
+           │                   │              ├── variable: t3.f:16 [type=float]
+           │                   │              └── variable: t3.k:14 [type=int]
+           │                   └── const: 1 [type=int]
            └── filters (true)

@@ -98,9 +98,6 @@ func (ics *indexCandidateSet) combineIndexCandidates() {
 
 // categorizeIndexCandidates finds potential index candidates for a given
 // query. See FindIndexCandidateSet for the list of candidate creation rules.
-//
-// TODO(nehageorge): Add information about potential STORING columns to add for
-// indexes where including them could avoid index-joins.
 func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	switch expr := expr.(type) {
 	case *memo.SortExpr:
