@@ -281,13 +281,15 @@ import (
 //  - user <username>
 //    Changes the user for subsequent statements or queries.
 //
-//  - skipif <mysql/mssql/postgresql/cockroachdb>
-//    Skips the following `statement` or `query` if the argument is postgresql
-//    or cockroachdb.
+//  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
+//    Skips the following `statement` or `query` if the argument is
+//    postgresql, cockroachdb, or a config matching the currently
+//    running configuration.
 //
-//  - onlyif <mysql/mssql/postgresql/cockroachdb>
-//    Skips the following `statement` or query if the argument is not postgresql
-//    or cockroachdb.
+//  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
+//    Skips the following `statement` or `query` if the argument is not
+//    postgresql, cockroachdb, or a config matching the currently
+//    running configuration.
 //
 //  - traceon <file>
 //    Enables tracing to the given file.
@@ -819,8 +821,22 @@ func findLogicTestConfig(name string) (logicTestConfigIdx, bool) {
 // lineScanner handles reading from input test files.
 type lineScanner struct {
 	*bufio.Scanner
-	line int
-	skip bool
+	line       int
+	skip       bool
+	skipReason string
+}
+
+func (l *lineScanner) SetSkip(reason string) {
+	l.skip = true
+	l.skipReason = reason
+}
+
+func (l *lineScanner) LogAndResetSkip(t *logicTest) {
+	if l.skipReason != "" {
+		t.t().Logf("statement/query skipped with reason: %s", l.skipReason)
+	}
+	l.skipReason = ""
+	l.skip = false
 }
 
 func newLineScanner(r io.Reader) *lineScanner {
@@ -2113,7 +2129,7 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 					}
 				}
 			} else {
-				s.skip = false
+				s.LogAndResetSkip(t)
 			}
 			repeat = 1
 			t.success(path)
@@ -2402,7 +2418,7 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 					}
 				}
 			} else {
-				s.skip = false
+				s.LogAndResetSkip(t)
 			}
 			repeat = 1
 			t.success(path)
@@ -2469,7 +2485,20 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 				return errors.Errorf("skipif command requires a non-blank argument")
 			case "mysql", "mssql":
 			case "postgresql", "cockroachdb":
-				s.skip = true
+				s.SetSkip("")
+				continue
+			case "config":
+				if len(fields) < 3 {
+					return errors.New("skipif config CONFIG [ISSUE] command requires configuration parameter")
+				}
+				configName := fields[2]
+				if t.cfg.name == configName {
+					issue := "no issue given"
+					if len(fields) > 3 {
+						issue = fields[3]
+					}
+					s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
+				}
 				continue
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())
@@ -2483,11 +2512,21 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 			case "":
 				return errors.New("onlyif command requires a non-blank argument")
 			case "cockroachdb":
-			case "mysql":
-				s.skip = true
+			case "mysql", "mssql":
+				s.SetSkip("")
 				continue
-			case "mssql":
-				s.skip = true
+			case "config":
+				if len(fields) < 3 {
+					return errors.New("onlyif config CONFIG [ISSUE] command requires configuration parameter")
+				}
+				configName := fields[2]
+				if t.cfg.name != configName {
+					issue := "no issue given"
+					if len(fields) > 3 {
+						issue = fields[3]
+					}
+					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)", t.cfg.name, configName, issue))
+				}
 				continue
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())

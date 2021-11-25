@@ -1,4 +1,4 @@
-# LogicTest: local !3node-tenant(52567)
+# LogicTest: local
 
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
@@ -1072,6 +1072,7 @@ t6_expr_idx1       0       (m = 'foo'::public.mytype)  m = 'foo'::public.mytype
 statement ok
 SET DATABASE = system
 
+skipif config 3node-tenant
 query OOIBBBBBBBBBBTTTTTTI colnames
 SELECT *
 FROM pg_catalog.pg_index
@@ -1129,6 +1130,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
 
 # From #26504
+skipif config 3node-tenant
 query OOI colnames
 SELECT indexrelid,
        (information_schema._pg_expandarray(indclass)).x AS operator_argument_type_oid,
@@ -4011,6 +4013,7 @@ SET DATABASE = test
 
 # We filter here because 'optimizer' will be different depending on which
 # configuration this logic test is running in, and session ID will vary.
+skipif config 3node-tenant
 query TTTTTT colnames
 SELECT
   name, setting, category, short_desc, extra_desc, vartype
@@ -4116,6 +4119,7 @@ transaction_rows_written_log                          0                   NULL  
 transaction_status                                    NoTxn               NULL      NULL        NULL        string
 vectorize                                             on                  NULL      NULL        NULL        string
 
+skipif config 3node-tenant
 query TTTTTTT colnames
 SELECT
   name, setting, unit, context, enumvals, boot_val, reset_val
