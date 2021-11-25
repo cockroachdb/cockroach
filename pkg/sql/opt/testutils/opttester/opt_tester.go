@@ -2102,7 +2102,9 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 
 // optimizeExpr calls the optimizer's Optimize function. The tables argument, if
 // not nil, allows the caller to update the table metadata before optimizing.
-func (ot *OptTester) optimizeExpr(o *xform.Optimizer, tables map[cat.StableID]cat.Table) (opt.Expr, error) {
+func (ot *OptTester) optimizeExpr(
+	o *xform.Optimizer, tables map[cat.StableID]cat.Table,
+) (opt.Expr, error) {
 	err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return nil, err
