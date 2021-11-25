@@ -166,9 +166,29 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 	}
 
 	// These interceptors will be called in the order in which they appear, i.e.
-	// The last element will wrap the actual handler.
+	// The last element will wrap the actual handler. The first interceptor
+	// guards RPC endpoints for use after Stopper.Drain() by handling the RPC
+	// inside a stopper task.
 	var unaryInterceptor []grpc.UnaryServerInterceptor
 	var streamInterceptor []grpc.StreamServerInterceptor
+	unaryInterceptor = append(unaryInterceptor, func(
+		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		var resp interface{}
+		if err := rpcCtx.Stopper.RunTaskWithErr(ctx, info.FullMethod, func(ctx context.Context) error {
+			var err error
+			resp, err = handler(ctx, req)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	})
+	streamInterceptor = append(streamInterceptor, func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		return rpcCtx.Stopper.RunTaskWithErr(ss.Context(), info.FullMethod, func(ctx context.Context) error {
+			return handler(srv, ss)
+		})
+	})
 
 	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
