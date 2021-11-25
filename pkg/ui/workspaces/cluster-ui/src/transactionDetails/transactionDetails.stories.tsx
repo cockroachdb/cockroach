@@ -11,7 +11,12 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
-import { transactionDetails } from "./transactionDetails.fixture";
+import { noop } from "lodash";
+import {
+  transactionDetails,
+  routeProps,
+  dateRange,
+} from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
 
@@ -24,37 +29,41 @@ storiesOf("Transactions Details", module)
   ))
   .add("with data", () => (
     <TransactionDetails
-      transactionText={data.statements
-        .map(s => s.key.key_data.query)
-        .join("\n")}
+      {...routeProps}
+      aggregatedTs={data.aggregatedTs}
+      dateRange={dateRange}
+      transactionFingerprintId={data.transactionFingerprintId}
+      transaction={data.transaction}
       statements={data.statements as any}
       nodeRegions={nodeRegions}
-      lastReset={Date().toString()}
-      handleDetails={() => {}}
-      resetSQLStats={() => {}}
       isTenant={false}
+      refreshData={noop}
     />
   ))
   .add("with loading indicator", () => (
     <TransactionDetails
-      transactionText={""}
+      {...routeProps}
+      aggregatedTs={data.aggregatedTs}
+      dateRange={dateRange}
+      transactionFingerprintId={data.transactionFingerprintId}
+      transaction={data.transaction}
       statements={undefined}
       nodeRegions={nodeRegions}
-      lastReset={Date().toString()}
-      handleDetails={() => {}}
-      resetSQLStats={() => {}}
       isTenant={false}
+      refreshData={noop}
     />
   ))
   .add("with error alert", () => (
     <TransactionDetails
-      transactionText={""}
+      {...routeProps}
+      aggregatedTs={undefined}
+      dateRange={undefined}
+      transactionFingerprintId={undefined}
+      transaction={undefined}
       statements={undefined}
       nodeRegions={nodeRegions}
       error={error}
-      lastReset={Date().toString()}
-      handleDetails={() => {}}
-      resetSQLStats={() => {}}
       isTenant={false}
+      refreshData={noop}
     />
   ));
