@@ -73,25 +73,25 @@ type Timestamp = protos.google.protobuf.ITimestamp;
 const cx = classNames.bind(styles);
 
 interface TState {
-  pagination: ISortedTablePagination;
-  search?: string;
-  filters?: Filters;
-  statementFingerprintIds: Long[] | null;
   aggregatedTs: Timestamp | null;
-  transactionStats: TransactionStats | null;
+  filters?: Filters;
+  pagination: ISortedTablePagination;
+  statementFingerprintIds: Long[] | null;
   transactionFingerprintId: Long | null;
+  transactionStats: TransactionStats | null;
 }
 
 export interface TransactionsPageStateProps {
+  columns: string[];
   data: IStatementsResponse;
   dateRange: [Moment, Moment];
-  nodeRegions: { [nodeId: string]: string };
   error?: Error | null;
-  pageSize?: number;
-  isTenant?: UIConfigState["isTenant"];
-  columns: string[];
-  sortSetting: SortSetting;
   filters: Filters;
+  isTenant?: UIConfigState["isTenant"];
+  nodeRegions: { [nodeId: string]: string };
+  pageSize?: number;
+  search: string;
+  sortSetting: SortSetting;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -100,6 +100,7 @@ export interface TransactionsPageDispatchProps {
   onDateRangeChange?: (start: Moment, end: Moment) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
+  onSearchComplete?: (query: string) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -131,7 +132,6 @@ export class TransactionsPage extends React.Component<
         pageSize: this.props.pageSize || 20,
         current: 1,
       },
-      search: "",
       aggregatedTs: null,
       statementFingerprintIds: null,
       transactionStats: null,
@@ -142,29 +142,39 @@ export class TransactionsPage extends React.Component<
   }
 
   getStateFromHistory = (): Partial<TState> => {
-    const { history, sortSetting, filters } = this.props;
+    const {
+      history,
+      search,
+      sortSetting,
+      filters,
+      onSearchComplete,
+      onSortingChange,
+      onFilterChange,
+    } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
+    if (onSearchComplete && searchQuery && search != searchQuery) {
+      onSearchComplete(searchQuery);
+    }
 
     // Sort Settings.
     handleSortSettingFromQueryString(
       "Transactions",
       history.location.search,
       sortSetting,
-      this.props.onSortingChange,
+      onSortingChange,
     );
 
     // Filters.
     const latestFilter = handleFiltersFromQueryString(
       history,
       filters,
-      this.props.onFilterChange,
+      onFilterChange,
     );
 
     return {
-      search: searchQuery,
       filters: latestFilter,
     };
   };
@@ -179,20 +189,34 @@ export class TransactionsPage extends React.Component<
   }
 
   updateQueryParams(): void {
-    updateFiltersQueryParamsOnTab(
-      "Transactions",
-      this.state.filters,
-      this.props.history,
-    );
+    const { history, search, sortSetting } = this.props;
+    const tab = "Transactions";
 
+    // Search.
+    const searchParams = new URLSearchParams(history.location.search);
+    const currentTab = searchParams.get("tab") || "";
+    const searchQueryString = searchParams.get("q") || "";
+    if (currentTab === tab && search && search != searchQueryString) {
+      syncHistory(
+        {
+          q: search,
+        },
+        history,
+      );
+    }
+
+    // Filters.
+    updateFiltersQueryParamsOnTab(tab, this.state.filters, history);
+
+    // Sort Setting.
     updateSortSettingQueryParamsOnTab(
-      "Transactions",
-      this.props.sortSetting,
+      tab,
+      sortSetting,
       {
         ascending: false,
         columnTitle: "executionCount",
       },
-      this.props.history,
+      history,
     );
   }
 
@@ -231,7 +255,9 @@ export class TransactionsPage extends React.Component<
   };
 
   onClearSearchField = (): void => {
-    this.setState({ search: "" });
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete("");
+    }
     syncHistory(
       {
         q: undefined,
@@ -241,7 +267,9 @@ export class TransactionsPage extends React.Component<
   };
 
   onSubmitSearchField = (search: string): void => {
-    this.setState({ search });
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete(search);
+    }
     this.resetPagination();
     syncHistory(
       {
@@ -339,8 +367,9 @@ export class TransactionsPage extends React.Component<
               onColumnsChange,
               columns: userSelectedColumnsToShow,
               sortSetting,
+              search,
             } = this.props;
-            const { pagination, search, filters } = this.state;
+            const { pagination, filters } = this.state;
             const { statements, internal_app_name_prefix } = data;
             const appNames = getTrxAppFilterOptions(
               data.transactions,

@@ -798,6 +798,8 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 	return resp, nil
 }
 
+// ResetIndexUsageStats is the gRPC handler for resetting index usage stats.
+// This endpoint resets index usage statistics for all tables.
 func (t *tenantStatusServer) ResetIndexUsageStats(
 	ctx context.Context, req *serverpb.ResetIndexUsageStatsRequest,
 ) (*serverpb.ResetIndexUsageStatsResponse, error) {
@@ -860,4 +862,25 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 	}
 
 	return resp, nil
+}
+
+// TableIndexStats is the gRPC handler for retrieving index usage statistics
+// by table. This function reads index usage statistics directly from the
+// database and is meant for external usage.
+func (t *tenantStatusServer) TableIndexStats(
+	ctx context.Context, req *serverpb.TableIndexStatsRequest,
+) (*serverpb.TableIndexStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
+		t.sqlServer.internalExecutor)
 }

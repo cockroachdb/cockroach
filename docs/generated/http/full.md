@@ -4012,6 +4012,67 @@ Response object returned by ResetIndexUsageStatsRequest.
 
 
 
+## TableIndexStats
+
+`GET /_status/databases/{database}/tables/{table}/indexstats`
+
+TableIndexStats retrieves index stats for a table.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing TableIndexStatsRequest request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| database | [string](#cockroach.server.serverpb.TableIndexStatsRequest-string) |  | database is the name of the database that contains the table we're interested in. | [reserved](#support-status) |
+| table | [string](#cockroach.server.serverpb.TableIndexStatsRequest-string) |  | table is the name of the table that we're querying. Table may be schema-qualified (schema.table) and each name component that contains sql unsafe characters such as . or uppercase letters must be surrounded in double quotes like "naughty schema".table. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object returned by TableIndexStatsResponse.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statistics | [TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.server.serverpb.TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics) | repeated |  | [reserved](#support-status) |
+| last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | Timestamp of the last index usage stats reset. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TableIndexStatsResponse-cockroach.server.serverpb.TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics"></a>
+#### TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statistics | [cockroach.sql.CollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.sql.CollectedIndexUsageStatistics) |  |  | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | IndexName is the name of the index. | [reserved](#support-status) |
+| index_type | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | IndexType is the type of the index i.e. primary, secondary. | [reserved](#support-status) |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
@@ -4308,7 +4369,7 @@ TableDetailsRequest is a request for detailed information about a table.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| database | [string](#cockroach.server.serverpb.TableDetailsRequest-string) |  | database is the database that contains the table we're interested in. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.TableDetailsRequest-string) |  | database is the name of the database that contains the table we're interested in. | [reserved](#support-status) |
 | table | [string](#cockroach.server.serverpb.TableDetailsRequest-string) |  | table is the name of the table that we're querying. Table may be schema-qualified (schema.table) and each name component that contains sql unsafe characters such as . or uppercase letters must be surrounded in double quotes like "naughty schema".table. | [reserved](#support-status) |
 
 
@@ -4414,7 +4475,7 @@ information about a table.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| database | [string](#cockroach.server.serverpb.TableStatsRequest-string) |  | database is the database that contains the table we're interested in. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.TableStatsRequest-string) |  | database is the name of the database that contains the table we're interested in. | [reserved](#support-status) |
 | table | [string](#cockroach.server.serverpb.TableStatsRequest-string) |  | table is the name of the table that we're querying. Table may be schema-qualified (schema.table) and each name component that contains sql unsafe characters such as . or uppercase letters must be surrounded in double quotes like "naughty schema".table. | [reserved](#support-status) |
 
 

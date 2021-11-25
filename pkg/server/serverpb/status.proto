@@ -1345,6 +1345,33 @@ message IndexUsageStatisticsResponse {
   google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
+// Request object for issuing TableIndexStatsRequest request.
+message TableIndexStatsRequest {
+  // database is the name of the database that contains the table we're
+  // interested in.
+  string database = 1;
+  // table is the name of the table that we're querying. Table may be
+  // schema-qualified (schema.table) and each name component that contains
+  // sql unsafe characters such as . or uppercase letters must be surrounded
+  // in double quotes like "naughty schema".table.
+  string table = 2;
+}
+
+// Response object returned by TableIndexStatsResponse.
+message TableIndexStatsResponse {
+  message ExtendedCollectedIndexUsageStatistics {
+    cockroach.sql.CollectedIndexUsageStatistics statistics = 1;
+    // IndexName is the name of the index.
+    string index_name = 2;
+    // IndexType is the type of the index i.e. primary, secondary.
+    string index_type = 3;
+  }
+
+  repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
+  // Timestamp of the last index usage stats reset.
+  google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
+}
+
 // Request object for issuing a index usage stats reset request.
 message ResetIndexUsageStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
@@ -1717,6 +1744,13 @@ service Status {
     option (google.api.http) = {
       post: "/_status/resetindexusagestats"
       body: "*"
+    };
+  }
+
+  // TableIndexStats retrieves index stats for a table.
+  rpc TableIndexStats(TableIndexStatsRequest) returns (TableIndexStatsResponse) {
+    option (google.api.http) = {
+      get: "/_status/databases/{database}/tables/{table}/indexstats"
     };
   }
 }
