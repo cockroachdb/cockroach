@@ -14,12 +14,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -630,141 +627,5 @@ WHERE
 			blockSchemaChange.Done()
 			finishedSchemaChange.Wait()
 		})
-	}
-}
-
-func TestRollback(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// We want to write a test that allows the injection of failure at every phase.
-	// This should be straightforward to do. Then, we'll want to ensure that the state
-	// of the schema is unchanged relative to what it was beforehand.
-	type test struct {
-		setup             []string
-		during            []string
-		expRollbackStages int
-	}
-	testCases := []test{
-		{
-			setup: []string{
-				"CREATE TABLE foo (i INT PRIMARY KEY)",
-			},
-			during: []string{
-				"ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42",
-			},
-			expRollbackStages: 4,
-		},
-		{
-			setup: []string{
-				"CREATE TABLE foo (i INT PRIMARY KEY)",
-				"CREATE VIEW v AS SELECT i FROM foo",
-				"CREATE SCHEMA sc",
-				"CREATE TABLE sc.bar (i INT PRIMARY KEY)",
-			},
-			during: []string{
-				"DROP SCHEMA sc CASCADE",
-			},
-			expRollbackStages: 0,
-		},
-		{
-			setup: []string{
-				"CREATE TABLE foo (i INT PRIMARY KEY)",
-			},
-			during: []string{
-				"DROP TABLE foo CASCADE",
-			},
-			expRollbackStages: 0,
-		},
-	}
-
-	ctx := context.Background()
-	setup := func(t *testing.T, i int) (db *gosql.DB, injectedFailure func() bool, restart, cleanup func()) {
-		var returnedError atomic.Value
-		returnedError.Store(false)
-		injectedFailure = func() bool { return returnedError.Load().(bool) }
-		restart = func() {
-			returnedError.Store(false)
-		}
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
-						BeforeStage: func(p scplan.Plan, stageIdx int) error {
-							if p.Params.ExecutionPhase != scop.PostCommitPhase ||
-								!p.Stages[stageIdx].Revertible {
-								return nil
-							}
-							if !injectedFailure() && stageIdx == i {
-								returnedError.Store(true)
-								return errors.Errorf("boom %d", i)
-							}
-							return nil
-						},
-					},
-				},
-			},
-		})
-		return tc.ServerConn(0), injectedFailure, restart, func() {
-			tc.Stopper().Stop(ctx)
-		}
-	}
-	fetchDescriptorState := func(t *testing.T, tdb *sqlutils.SQLRunner) [][]string {
-		return tdb.QueryStr(t, `
-  SELECT create_statement
-    FROM (
-            SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
-            UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
-           UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
-         )
-ORDER BY create_statement;`)
-	}
-
-	runSubtest := func(t *testing.T, testCase test, i int) (done bool) {
-		db, injectedError, restart, cleanup := setup(t, i)
-		defer cleanup()
-		tdb := sqlutils.MakeSQLRunner(db)
-		for _, stmt := range testCase.setup {
-			tdb.Exec(t, stmt)
-		}
-		before := fetchDescriptorState(t, tdb)
-		tdb.Exec(t, "SET experimental_use_new_schema_changer = 'unsafe_always'")
-		err := crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
-			restart()
-			for _, stmt := range testCase.during {
-				if _, err := tx.Exec(stmt); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if injectedError() {
-			require.Regexp(t, fmt.Sprintf("boom %d", i), err)
-			require.Equal(t, before, fetchDescriptorState(t, tdb))
-		} else {
-			require.NoError(t, err)
-		}
-		return !injectedError()
-	}
-	runTest := func(testCase test) (string, func(t *testing.T)) {
-		return strings.Join(testCase.during, ";"), func(t *testing.T) {
-			for i := 0; ; i++ {
-				var done bool
-				if !t.Run("", func(t *testing.T) {
-					done = runSubtest(t, testCase, i)
-					if !done {
-						require.Less(t, i, testCase.expRollbackStages)
-					}
-				}) || done {
-					if done {
-						require.Equal(t, i, testCase.expRollbackStages)
-					}
-					return
-				}
-			}
-		}
-	}
-	for _, testCase := range testCases {
-		t.Run(runTest(testCase))
 	}
 }
