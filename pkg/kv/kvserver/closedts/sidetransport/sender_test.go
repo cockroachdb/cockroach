@@ -515,7 +515,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 			// n1 doesn't expect any streams, since the only active sender will be on
 			// n1 and it's not supposed to connect to the local receiver.
 			incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, _ error) {
-				t.Errorf("unexpected receive error on node n%d", nid)
+				t.Errorf("unexpected receive error on node n%s", nid)
 			}
 		case 2:
 			// n2 gets a special handler.
