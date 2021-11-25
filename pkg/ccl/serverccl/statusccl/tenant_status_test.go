@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -48,11 +47,7 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	ctx := context.Background()
 
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
 	knobs := tests.CreateTestingKnobs()
-	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
-		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
-	}
 
 	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
 	defer testHelper.cleanup(ctx, t)
@@ -62,7 +57,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("reset_index_usage_stats", func(t *testing.T) {
-		testResetIndexUsageStatsRPCForTenant(ctx, t, testHelper, statsIngestionNotifier)
+		testResetIndexUsageStatsRPCForTenant(ctx, t, testHelper)
 	})
 
 	t.Run("tenant_contention_event", func(t *testing.T) {
@@ -78,7 +73,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("index_usage_stats", func(t *testing.T) {
-		testIndexUsageForTenants(t, testHelper, statsIngestionNotifier)
+		testIndexUsageForTenants(t, testHelper)
 	})
 }
 
@@ -345,10 +340,7 @@ func testResetSQLStatsRPCForTenant(
 }
 
 func testResetIndexUsageStatsRPCForTenant(
-	ctx context.Context,
-	t *testing.T,
-	testHelper *tenantTestHelper,
-	ingestedNotifier chan roachpb.IndexUsageKey,
+	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
 ) {
 	testCases := []struct {
 		name    string
@@ -404,8 +396,6 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 					Exec(t, "SELECT * FROM test@test_a_idx")
 				testTableIDStr := cluster.tenantConn(randomServer).
 					QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
-				testTableID, err := strconv.Atoi(testTableIDStr)
-				require.NoError(t, err)
 
 				// Set table ID outside of loop.
 				if i == 0 {
@@ -413,20 +403,6 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 				} else {
 					controlTableID = testTableIDStr
 				}
-
-				// Wait for the stats to be ingested.
-				require.NoError(t,
-					idxusage.WaitForIndexStatsIngestionForTest(ingestedNotifier, map[roachpb.IndexUsageKey]struct{}{
-						{
-							TableID: roachpb.TableID(testTableID),
-							IndexID: 1,
-						}: {},
-						{
-							TableID: roachpb.TableID(testTableID),
-							IndexID: 2,
-						}: {},
-					}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-				)
 
 				query := `
 SELECT
@@ -590,9 +566,7 @@ SET TRACING=off;
 	}
 }
 
-func testIndexUsageForTenants(
-	t *testing.T, testHelper *tenantTestHelper, ingestNotifier chan roachpb.IndexUsageKey,
-) {
+func testIndexUsageForTenants(t *testing.T, testHelper *tenantTestHelper) {
 	testingCluster := testHelper.testCluster()
 	controlledCluster := testHelper.controlCluster()
 
@@ -627,20 +601,6 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'idx_test.test'::regclass::oid")[0][0]
 	testTableID, err := strconv.Atoi(testTableIDStr)
 	require.NoError(t, err)
-
-	// Wait for the stats to be ingested.
-	require.NoError(t,
-		idxusage.WaitForIndexStatsIngestionForTest(ingestNotifier, map[roachpb.IndexUsageKey]struct{}{
-			{
-				TableID: roachpb.TableID(testTableID),
-				IndexID: 1,
-			}: {},
-			{
-				TableID: roachpb.TableID(testTableID),
-				IndexID: 2,
-			}: {},
-		}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-	)
 
 	query := `
 SELECT
