@@ -121,7 +121,7 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
-func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
+func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -147,10 +147,10 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 		grpc.KeepaliveParams(serverKeepalive),
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
 		// A stats handler to measure server network stats.
-		grpc.StatsHandler(&ctx.stats),
+		grpc.StatsHandler(&rpcCtx.stats),
 	}
-	if !ctx.Config.Insecure {
-		tlsConfig, err := ctx.GetServerTLSConfig()
+	if !rpcCtx.Config.Insecure {
+		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -162,10 +162,10 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	var unaryInterceptor []grpc.UnaryServerInterceptor
 	var streamInterceptor []grpc.StreamServerInterceptor
 
-	if !ctx.Config.Insecure {
+	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
 			tenant: tenantAuthorizer{
-				tenantID: ctx.tenID,
+				tenantID: rpcCtx.tenID,
 			},
 		}
 
@@ -193,7 +193,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 		})
 	}
 
-	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
+	if tracer := rpcCtx.AmbientCtx.Tracer; tracer != nil {
 		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer))
 		streamInterceptor = append(streamInterceptor, tracing.StreamServerInterceptor(tracer))
 	}
@@ -202,7 +202,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s := grpc.NewServer(grpcOpts...)
-	RegisterHeartbeatServer(s, ctx.NewHeartbeatService())
+	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
 	return s
 }
 
