@@ -62,19 +62,19 @@ import (
 // instead which automates the address resolution.
 //
 // TODO(knz): remove this altogether. Use the dialer in all cases.
-func (ctx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) error {
-	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+func (rpcCtx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) error {
+	if rpcCtx.GetLocalInternalClientForAddr(target, nodeID) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}
-	conn := ctx.GRPCDialNode(target, nodeID, DefaultClass)
+	conn := rpcCtx.GRPCDialNode(target, nodeID, DefaultClass)
 	return conn.Health()
 }
 
 // AddTestingDialOpts adds extra dialing options to the rpc Context. This should
 // be done before GRPCDial is called.
-func (ctx *Context) AddTestingDialOpts(opts ...grpc.DialOption) {
-	ctx.testingDialOpts = append(ctx.testingDialOpts, opts...)
+func (rpcCtx *Context) AddTestingDialOpts(opts ...grpc.DialOption) {
+	rpcCtx.testingDialOpts = append(rpcCtx.testingDialOpts, opts...)
 }
 
 func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *grpc.Server {
