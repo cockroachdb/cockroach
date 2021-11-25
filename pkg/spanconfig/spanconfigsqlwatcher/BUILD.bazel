@@ -22,11 +22,13 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

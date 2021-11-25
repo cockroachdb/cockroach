@@ -12,6 +12,7 @@ package spanconfigsqlwatcher
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,12 +39,13 @@ var _ spanconfig.SQLWatcher = &SQLWatcher{}
 // establishes rangefeeds over system.zones and system.descriptors to
 // incrementally watch for SQL updates.
 type SQLWatcher struct {
-	codec            keys.SQLCodec
-	settings         *cluster.Settings
-	stopper          *stop.Stopper
-	knobs            *spanconfig.TestingKnobs
-	rangeFeedFactory *rangefeed.Factory
-	bufferMemLimit   int64
+	codec                keys.SQLCodec
+	settings             *cluster.Settings
+	stopper              *stop.Stopper
+	knobs                *spanconfig.TestingKnobs
+	rangeFeedFactory     *rangefeed.Factory
+	bufferMemLimit       int64
+	checkpointNoopsEvery time.Duration
 }
 
 // New constructs a new SQLWatcher.
@@ -51,18 +55,20 @@ func New(
 	rangeFeedFactory *rangefeed.Factory,
 	bufferMemLimit int64,
 	stopper *stop.Stopper,
+	checkpointNoopsEvery time.Duration,
 	knobs *spanconfig.TestingKnobs,
 ) *SQLWatcher {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &SQLWatcher{
-		codec:            codec,
-		settings:         settings,
-		rangeFeedFactory: rangeFeedFactory,
-		stopper:          stopper,
-		bufferMemLimit:   bufferMemLimit,
-		knobs:            knobs,
+		codec:                codec,
+		settings:             settings,
+		rangeFeedFactory:     rangeFeedFactory,
+		stopper:              stopper,
+		bufferMemLimit:       bufferMemLimit,
+		checkpointNoopsEvery: checkpointNoopsEvery,
+		knobs:                knobs,
 	}
 }
 
@@ -73,15 +79,15 @@ const sqlWatcherBufferEntrySize = int64(unsafe.Sizeof(event{}) + unsafe.Sizeof(r
 // WatchForSQLUpdates is part of the spanconfig.SQLWatcher interface.
 func (s *SQLWatcher) WatchForSQLUpdates(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	startTS hlc.Timestamp,
 	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
 ) error {
-	return s.watch(ctx, timestamp, handler)
+	return s.watch(ctx, startTS, handler)
 }
 
 func (s *SQLWatcher) watch(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	startTS hlc.Timestamp,
 	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
 ) error {
 
@@ -101,7 +107,7 @@ func (s *SQLWatcher) watch(
 	// serial semantics.
 	errCh := make(chan error)
 	frontierAdvanced := make(chan struct{})
-	buf := newBuffer(int(s.bufferMemLimit / sqlWatcherBufferEntrySize))
+	buf := newBuffer(int(s.bufferMemLimit/sqlWatcherBufferEntrySize), startTS)
 	onFrontierAdvance := func(ctx context.Context, rangefeed rangefeedKind, timestamp hlc.Timestamp) {
 		buf.advance(rangefeed, timestamp)
 		select {
@@ -131,17 +137,18 @@ func (s *SQLWatcher) watch(
 		}
 	}
 
-	descriptorsRF, err := s.watchForDescriptorUpdates(ctx, timestamp, onEvent, onFrontierAdvance)
+	descriptorsRF, err := s.watchForDescriptorUpdates(ctx, startTS, onEvent, onFrontierAdvance)
 	if err != nil {
 		return errors.Wrapf(err, "error establishing rangefeed over system.descriptors")
 	}
 	defer descriptorsRF.Close()
-	zonesRF, err := s.watchForZoneConfigUpdates(ctx, timestamp, onEvent, onFrontierAdvance)
+	zonesRF, err := s.watchForZoneConfigUpdates(ctx, startTS, onEvent, onFrontierAdvance)
 	if err != nil {
 		return errors.Wrapf(err, "error establishing rangefeed over system.zones")
 	}
 	defer zonesRF.Close()
 
+	checkpointNoops := util.Every(s.checkpointNoopsEvery)
 	for {
 		select {
 		case <-ctx.Done():
@@ -155,7 +162,7 @@ func (s *SQLWatcher) watch(
 			if err != nil {
 				return err
 			}
-			if len(events) == 0 {
+			if len(events) == 0 && !checkpointNoops.ShouldProcess(timeutil.Now()) {
 				continue
 			}
 			if err := handler(ctx, events, combinedFrontierTS); err != nil {
@@ -170,7 +177,7 @@ func (s *SQLWatcher) watch(
 // callback is invoked whenever the rangefeed frontier is advanced as well.
 func (s *SQLWatcher) watchForDescriptorUpdates(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	startTS hlc.Timestamp,
 	onEvent func(context.Context, event),
 	onFrontierAdvance func(context.Context, rangefeedKind, hlc.Timestamp),
 ) (*rangefeed.RangeFeed, error) {
@@ -239,7 +246,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		ctx,
 		"sql-watcher-descriptor-rangefeed",
 		descriptorTableSpan,
-		timestamp,
+		startTS,
 		handleEvent,
 		rangefeed.WithDiff(),
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
@@ -250,7 +257,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.descriptors table starting at time %s", timestamp)
+	log.Infof(ctx, "established range feed over system.descriptors table starting at time %s", startTS)
 	return rf, nil
 }
 
@@ -260,7 +267,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 // advanced.
 func (s *SQLWatcher) watchForZoneConfigUpdates(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	startTS hlc.Timestamp,
 	onEvent func(context.Context, event),
 	onFrontierAdvance func(context.Context, rangefeedKind, hlc.Timestamp),
 ) (*rangefeed.RangeFeed, error) {
@@ -296,7 +303,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		ctx,
 		"sql-watcher-zones-rangefeed",
 		zoneTableSpan,
-		timestamp,
+		startTS,
 		handleEvent,
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
 			onFrontierAdvance(ctx, zonesRangefeed, resolvedTS)
@@ -306,6 +313,6 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.zones table starting at time %s", timestamp)
+	log.Infof(ctx, "established range feed over system.zones table starting at time %s", startTS)
 	return rf, nil
 }
