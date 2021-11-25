@@ -372,9 +372,13 @@ func startServer(t *testing.T) *TestServer {
 }
 
 func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
+	ac := testutils.MakeAmbientCtx()
+	var c base.NodeIDContainer
+	ac.AddLogTag("n", &c)
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: ts.Tracer()},
+		AmbientCtx: ac,
+		NodeID:     &c,
 		Config:     cfg,
 		Clock:      ts.Clock(),
 		Stopper:    ts.Stopper(),

@@ -307,7 +307,6 @@ type Context struct {
 	stats StatsHandler
 
 	ClusterID base.ClusterIDContainer
-	NodeID    base.NodeIDContainer
 
 	metrics Metrics
 
@@ -332,8 +331,10 @@ type Context struct {
 // (targetAddr, class) pair.
 type connKey struct {
 	targetAddr string
-	nodeID     roachpb.NodeID
-	class      ConnectionClass
+	// Note: this ought to be renamed, see:
+	// https://github.com/cockroachdb/cockroach/pull/73309
+	nodeID roachpb.NodeID
+	class  ConnectionClass
 }
 
 var _ redact.SafeFormatter = connKey{}
@@ -361,6 +362,14 @@ type ContextOptions struct {
 	// error.
 	OnOutgoingPing func(*PingRequest) error
 	Knobs          ContextTestingKnobs
+
+	// NodeID is the node ID / SQL instance ID container shared
+	// with the remainder of the server. If unset in the options,
+	// the RPC context will instantiate its own separate container
+	// (this is useful in tests).
+	// Note: this ought to be renamed, see:
+	// https://github.com/cockroachdb/cockroach/pull/73309
+	NodeID *base.NodeIDContainer
 }
 
 func (c ContextOptions) validate() error {
@@ -391,6 +400,12 @@ func (c ContextOptions) validate() error {
 func NewContext(opts ContextOptions) *Context {
 	if err := opts.validate(); err != nil {
 		panic(err)
+	}
+
+	if opts.NodeID == nil {
+		// Tests rely on NewContext to generate its own ID container.
+		var c base.NodeIDContainer
+		opts.NodeID = &c
 	}
 
 	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
@@ -459,6 +474,8 @@ func (ctx *Context) Metrics() *Metrics {
 
 // GetLocalInternalClientForAddr returns the context's internal batch client
 // for target, if it exists.
+// Note: the node ID ought to be retyped, see
+// https://github.com/cockroachdb/cockroach/pull/73309
 func (ctx *Context) GetLocalInternalClientForAddr(
 	target string, nodeID roachpb.NodeID,
 ) roachpb.InternalClient {
@@ -696,6 +713,8 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 
 // ConnHealth returns nil if we have an open connection of the request
 // class to the given node that succeeded on its most recent heartbeat.
+// Note: the node ID ought to be retyped, see
+// https://github.com/cockroachdb/cockroach/pull/73309
 func (ctx *Context) ConnHealth(target string, nodeID roachpb.NodeID, class ConnectionClass) error {
 	// The local client is always considered healthy.
 	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
@@ -1331,7 +1350,7 @@ func (ctx *Context) NewHeartbeatService() *HeartbeatService {
 		clusterName:                           ctx.ClusterName(),
 		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
 		clusterID:                             &ctx.ClusterID,
-		nodeID:                                &ctx.NodeID,
+		nodeID:                                ctx.NodeID,
 		settings:                              ctx.Settings,
 		onHandlePing:                          ctx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,

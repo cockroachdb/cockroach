@@ -324,6 +324,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: cfg.AmbientCtx,
+		NodeID:     cfg.IDContainer,
 		Config:     cfg.Config,
 		Clock:      clock,
 		Stopper:    stopper,
