@@ -54,7 +54,7 @@ export const selectLastReset = createSelector(
   },
 );
 
-const selectLastError = createSelector(
+export const selectLastError = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
