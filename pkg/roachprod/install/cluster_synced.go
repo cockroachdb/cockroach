@@ -16,12 +16,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
 	"os/signal"
+	// "path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -43,39 +46,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
-
-// ClusterSettings contains various knobs that affect operations on a cluster.
-type ClusterSettings struct {
-	Secure         bool
-	PGUrlCertsDir  string
-	Env            []string
-	Tag            string
-	UseTreeDist    bool
-	Quiet          bool
-	NumRacks       int
-	MaxConcurrency int // used in Parallel
-	// DebugDir is used to stash debug information.
-	DebugDir string
-}
-
-// DefaultClusterSettings returns the default settings.
-func DefaultClusterSettings() ClusterSettings {
-	return ClusterSettings{
-		Tag:           "",
-		PGUrlCertsDir: "./certs",
-		Secure:        false,
-		Quiet:         false,
-		UseTreeDist:   true,
-		Env: []string{
-			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
-		},
-		NumRacks:       0,
-		MaxConcurrency: 32,
-	}
-}
-
-var _ = DefaultClusterSettings
 
 // A SyncedCluster is created from the cluster metadata in the synced clusters
 // cache and is used as the target for installing and managing various software
@@ -410,6 +380,12 @@ type NodeMonitorInfo struct {
 	Err error
 }
 
+// MonitorOpts is used to pass the options needed by Monitor.
+type MonitorOpts struct {
+	OneShot          bool // Report the status of all targeted nodes once, then exit.
+	IgnoreEmptyNodes bool // Only monitor nodes with a nontrivial data directory.
+}
+
 // Monitor writes NodeMonitorInfo for the cluster nodes to the returned channel.
 // Infos sent to the channel always have the Index and exactly one of Msg or Err
 // set.
@@ -421,7 +397,7 @@ type NodeMonitorInfo struct {
 // If ignoreEmptyNodes is true, nodes on which no CockroachDB data is found
 // (in {store-dir}) will not be probed and single message, "skipped", will
 // be emitted for them.
-func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMonitorInfo {
+func (c *SyncedCluster) Monitor(opts MonitorOpts) chan NodeMonitorInfo {
 	ch := make(chan NodeMonitorInfo)
 	nodes := c.TargetNodes()
 	var wg sync.WaitGroup
@@ -453,8 +429,8 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 				Port        int
 				Local       bool
 			}{
-				OneShot:     oneShot,
-				IgnoreEmpty: ignoreEmptyNodes,
+				OneShot:     opts.OneShot,
+				IgnoreEmpty: opts.IgnoreEmptyNodes,
 				Store:       c.NodeDir(nodes[i], 1 /* storeIndex */),
 				Port:        c.NodePort(nodes[i]),
 				Local:       c.IsLocal(),
@@ -571,6 +547,113 @@ done
 	return ch
 }
 
+// RunResultDetails holds details of the result of commands executed by Run().
+type RunResultDetails struct {
+	Node             Node
+	Stdout           string
+	Stderr           string
+	Err              error
+	RemoteExitStatus string
+}
+
+// OutputRunResults prints stdout and stderr of a given RunResultDetails.
+func OutputRunResults(results []RunResultDetails) {
+	for _, result := range results {
+		if !config.Quiet {
+			// print STDOUT/STDERR and return if the node returned an err
+			fmt.Printf("--------------------------\nNODE #%d\n--------------------------\n", result.Node)
+			fmt.Printf("EXIT STATUS: %s\n", result.RemoteExitStatus)
+			if result.Stdout != "" {
+				fmt.Println(result.Stdout)
+				fmt.Println("End of STDOUT")
+			}
+			if result.Stderr != "" {
+				fmt.Println(result.Stderr)
+				fmt.Println("End of STDERR")
+			}
+		}
+	}
+}
+
+func processStdout(stdout string) (string, string) {
+	retStdout := stdout
+	exitStatusPattern := "LAST EXIT STATUS: "
+	exitStatusIndex := strings.LastIndex(retStdout, exitStatusPattern)
+	remoteExitStatus := "-1"
+	// If exitStatusIndex is -1 then "echo LAST EXIT STATUS: $?" didn't run
+	// mostly due to an ssh error but avoid speculation and temporarily
+	// use "-1" for unknown error before checking if it's SSH related later.
+	if exitStatusIndex != -1 {
+		retStdout = stdout[:exitStatusIndex]
+		remoteExitStatus = strings.TrimSpace(stdout[exitStatusIndex+len(exitStatusPattern):])
+	}
+	return retStdout, remoteExitStatus
+}
+
+func runCmdOnSingleNode(c *SyncedCluster, node Node, cmd string) (RunResultDetails, error) {
+	var result RunResultDetails
+	result.Node = node
+	sess, err := c.newSession(node)
+	if err != nil {
+		return result, err
+	}
+	sess.SetWithExitStatus(true)
+	defer sess.Close()
+	var stdoutBuffer, stderrBuffer bytes.Buffer
+	sess.SetStdout(&stdoutBuffer)
+	sess.SetStderr(&stderrBuffer)
+
+	// Argument template expansion is node specific (e.g. for {store-dir}).
+	e := expander{
+		node: node,
+	}
+	expandedCmd, err := e.expand(c, cmd)
+	if err != nil {
+		return result, err
+	}
+
+	// Be careful about changing these command strings. In particular, we need
+	// to support running commands in the background on both local and remote
+	// nodes. For example:
+	//
+	//   roachprod run cluster -- "sleep 60 &> /dev/null < /dev/null &"
+	//
+	// That command should return immediately. And a "roachprod status" should
+	// reveal that the sleep command is running on the cluster.
+	nodeCmd := fmt.Sprintf(`export ROACHPROD=%s GOTRACEBACK=crash && bash -c %s`,
+		c.roachprodEnvValue(node), ssh.Escape1(expandedCmd))
+	if c.IsLocal() {
+		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
+	}
+
+	err = sess.Run(nodeCmd)
+	result.Stderr = strings.TrimSpace(stderrBuffer.String())
+	result.Stdout, result.RemoteExitStatus = processStdout(stdoutBuffer.String())
+
+	if err != nil {
+		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
+		err = errors.WithDetail(err, detailMsg)
+		err = rperrors.ClassifyCmdError(err)
+		if reflect.TypeOf(err) == reflect.TypeOf(rperrors.SSH{}) {
+			result.RemoteExitStatus = "255"
+		}
+		result.Err = err
+	} else if result.RemoteExitStatus != "0" {
+		message := fmt.Sprintf("Exit Code: %s\nStdout:%s\nStderr:%s\n", result.RemoteExitStatus, result.Stdout, result.Stderr)
+		result.Err = &NonZeroExitCode{message}
+	}
+	return result, nil
+}
+
+// NonZeroExitCode is returned when a command executed by Run() exits with a non-zero status.
+type NonZeroExitCode struct {
+	message string
+}
+
+func (e *NonZeroExitCode) Error() string {
+	return e.message
+}
+
 // Run a command on >= 1 node in the cluster.
 //
 // When running on just one node, the command output is streamed to stdout.
@@ -658,6 +741,28 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes Nodes, title, cmd st
 		}
 	}
 	return rperrors.SelectPriorityError(errs)
+}
+
+// RunNew will replace Run but we are still migrating so both exist now.
+func (c *SyncedCluster) RunNew(nodes Nodes, title, cmd string) ([]RunResultDetails, error) {
+	display := fmt.Sprintf("%s: %s", c.Name, title)
+	results := make([]RunResultDetails, len(nodes))
+
+	failed, err := c.ParallelE(display, len(nodes), 0, func(i int) ([]byte, error) {
+		result, err := runCmdOnSingleNode(c, nodes[i], cmd)
+		if err != nil {
+			return nil, err
+		}
+		results[i] = result
+		return nil, nil
+	})
+	if err != nil {
+		for _, node := range failed {
+			results[node.Index].Err = node.Err
+			results[node.Index].Stdout = string(node.Out)
+		}
+	}
+	return results, nil
 }
 
 // Wait TODO(peter): document
@@ -1108,6 +1213,24 @@ func formatProgress(p float64) string {
 
 // Put TODO(peter): document
 func (c *SyncedCluster) Put(src, dest string) error {
+	// Check if source file exists and if it's a symlink.
+	var potentialSymlinkPath string
+	var err error
+	if potentialSymlinkPath, err = filepath.EvalSymlinks(src); err != nil {
+		return err
+	}
+	// Different paths imply it is a symlink.
+	if potentialSymlinkPath != src {
+		// Get target symlink access mode.
+		var symlinkTargetInfo fs.FileInfo
+		if symlinkTargetInfo, err = os.Stat(potentialSymlinkPath); err != nil {
+			return err
+		}
+		redColor, resetColor := "\033[31m", "\033[0m"
+		fmt.Println(redColor + "WARNING: Source file is a symlink.")
+		fmt.Printf("WARNING: Remote file will inherit the target permissions '%v'.\n"+resetColor, symlinkTargetInfo.Mode())
+	}
+
 	// NB: This value was determined with a few experiments. Higher values were
 	// not tested.
 	const treeDistFanout = 10
@@ -1262,7 +1385,7 @@ func (c *SyncedCluster) Put(src, dest string) error {
 
 	var writer ui.Writer
 	var ticker *time.Ticker
-	if !c.Quiet {
+	if !config.Quiet {
 		ticker = time.NewTicker(100 * time.Millisecond)
 	} else {
 		ticker = time.NewTicker(1000 * time.Millisecond)
@@ -1276,7 +1399,7 @@ func (c *SyncedCluster) Put(src, dest string) error {
 	for done := false; !done; {
 		select {
 		case <-ticker.C:
-			if c.Quiet {
+			if config.Quiet {
 				fmt.Printf(".")
 			}
 		case r, ok := <-results:
@@ -1292,7 +1415,7 @@ func (c *SyncedCluster) Put(src, dest string) error {
 				linesMu.Unlock()
 			}
 		}
-		if !c.Quiet {
+		if !config.Quiet {
 			linesMu.Lock()
 			for i := range lines {
 				fmt.Fprintf(&writer, "  %2d: ", c.Nodes[i])
@@ -1309,7 +1432,7 @@ func (c *SyncedCluster) Put(src, dest string) error {
 		}
 	}
 
-	if c.Quiet {
+	if config.Quiet {
 		fmt.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
@@ -1617,7 +1740,7 @@ func (c *SyncedCluster) Get(src, dest string) error {
 	}()
 
 	var ticker *time.Ticker
-	if !c.Quiet {
+	if config.Quiet {
 		ticker = time.NewTicker(100 * time.Millisecond)
 	} else {
 		ticker = time.NewTicker(1000 * time.Millisecond)
@@ -1631,7 +1754,7 @@ func (c *SyncedCluster) Get(src, dest string) error {
 	for done := false; !done; {
 		select {
 		case <-ticker.C:
-			if c.Quiet {
+			if config.Quiet {
 				fmt.Printf(".")
 			}
 		case r, ok := <-results:
@@ -1647,7 +1770,7 @@ func (c *SyncedCluster) Get(src, dest string) error {
 				linesMu.Unlock()
 			}
 		}
-		if !c.Quiet {
+		if !config.Quiet {
 			linesMu.Lock()
 			for i := range lines {
 				fmt.Fprintf(&writer, "  %2d: ", c.Nodes[i])
@@ -1664,7 +1787,7 @@ func (c *SyncedCluster) Get(src, dest string) error {
 		}
 	}
 
-	if c.Quiet {
+	if config.Quiet {
 		fmt.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
@@ -1819,7 +1942,7 @@ func (c *SyncedCluster) Parallel(
 //
 // ParallelE runs the user-defined functions on the first `count`
 // nodes in the cluster. It runs at most `concurrency` (or
-// `c.MaxConcurrency` if it is lower) in parallel. If `concurrency` is
+// `config.MaxConcurrency` if it is lower) in parallel. If `concurrency` is
 // 0, then it defaults to `count`.
 //
 // If err is non-nil, the slice of ParallelResults will contain the
@@ -1830,8 +1953,8 @@ func (c *SyncedCluster) ParallelE(
 	if concurrency == 0 || concurrency > count {
 		concurrency = count
 	}
-	if c.MaxConcurrency > 0 && concurrency > c.MaxConcurrency {
-		concurrency = c.MaxConcurrency
+	if config.MaxConcurrency > 0 && concurrency > config.MaxConcurrency {
+		concurrency = config.MaxConcurrency
 	}
 
 	results := make(chan ParallelResult, count)
@@ -1864,7 +1987,7 @@ func (c *SyncedCluster) ParallelE(
 	}
 
 	var ticker *time.Ticker
-	if !c.Quiet {
+	if !config.Quiet {
 		ticker = time.NewTicker(100 * time.Millisecond)
 	} else {
 		ticker = time.NewTicker(1000 * time.Millisecond)
@@ -1880,7 +2003,7 @@ func (c *SyncedCluster) ParallelE(
 	for done := false; !done; {
 		select {
 		case <-ticker.C:
-			if c.Quiet {
+			if config.Quiet {
 				fmt.Fprintf(out, ".")
 			}
 		case r, ok := <-results:
@@ -1896,7 +2019,7 @@ func (c *SyncedCluster) ParallelE(
 			}
 		}
 
-		if !c.Quiet {
+		if !config.Quiet {
 			fmt.Fprint(&writer, display)
 			var n int
 			for i := range complete {
@@ -1914,7 +2037,7 @@ func (c *SyncedCluster) ParallelE(
 		}
 	}
 
-	if c.Quiet {
+	if config.Quiet {
 		fmt.Fprintf(out, "\n")
 	}
 
