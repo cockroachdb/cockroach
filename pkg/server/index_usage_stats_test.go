@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,17 +57,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
-
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				IndexUsageStatsKnobs: &idxusage.TestingKnobs{
-					OnIndexUsageStatsProcessedCallback: statsIngestionCb,
-				},
-			},
-		},
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
@@ -172,14 +161,6 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	// Fetch stats reader from each individual
 	thirdServer := testCluster.Server(2 /* idx */)
 	thirdLocalStatsReader := thirdServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
-
-	// Wait for the stats to be ingested.
-	require.NoError(t,
-		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
-			indexKeyA: {},
-			indexKeyB: {},
-		}, /* expectedKeys */ 4 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-	)
 
 	// First node should have nothing.
 	stats := firstLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -327,13 +326,7 @@ func TestResetIndexUsageStatsRPCForTenant(t *testing.T) {
 	skip.UnderStressRace(t, "expensive tests")
 
 	ctx := context.Background()
-
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
-
 	knobs := tests.CreateTestingKnobs()
-	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
-		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
-	}
 
 	testCases := []struct {
 		indexStatsResetter func(helper *tenantTestHelper)
@@ -387,8 +380,6 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 			// Record scan on secondary index.
 			cluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
 			testTableIDStr := cluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
-			testTableID, err := strconv.Atoi(testTableIDStr)
-			require.NoError(t, err)
 
 			// Set table ID outside of loop.
 			if i == 0 {
@@ -396,20 +387,6 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 			} else {
 				controlTableID = testTableIDStr
 			}
-
-			// Wait for the stats to be ingested.
-			require.NoError(t,
-				idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
-					{
-						TableID: roachpb.TableID(testTableID),
-						IndexID: 1,
-					}: {},
-					{
-						TableID: roachpb.TableID(testTableID),
-						IndexID: 2,
-					}: {},
-				}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-			)
 
 			query := `
 SELECT
@@ -489,12 +466,7 @@ func TestTableIndexStats(t *testing.T) {
 
 	ctx := context.Background()
 
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
-
 	knobs := tests.CreateTestingKnobs()
-	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
-		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
-	}
 
 	testCases := []struct {
 		getTableIndexStats func(helper *tenantTestHelper, db string) *serverpb.TableIndexStatsResponse
@@ -557,21 +529,6 @@ CREATE TABLE test (
 SET DATABASE=test_db1;
 SELECT * FROM test;
 `)
-
-		// Get Table ID.
-		testTableIDStr := cluster.tenantConn(0).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
-		testTableID, err := strconv.Atoi(testTableIDStr)
-		require.NoError(t, err)
-
-		// Wait for the stats to be ingested.
-		require.NoError(t,
-			idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
-				{
-					TableID: roachpb.TableID(testTableID),
-					IndexID: 1,
-				}: {},
-			}, 1 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-		)
 
 		// Get index usage stats and assert expected results.
 		resp := testCase.getTableIndexStats(testHelper, "test_db1")
@@ -688,12 +645,7 @@ func TestIndexUsageForTenants(t *testing.T) {
 
 	ctx := context.Background()
 
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
-
 	knobs := tests.CreateTestingKnobs()
-	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
-		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
-	}
 	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
 	defer testHelper.cleanup(ctx, t)
 
@@ -722,20 +674,6 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
 	testTableID, err := strconv.Atoi(testTableIDStr)
 	require.NoError(t, err)
-
-	// Wait for the stats to be ingested.
-	require.NoError(t,
-		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
-			{
-				TableID: roachpb.TableID(testTableID),
-				IndexID: 1,
-			}: {},
-			{
-				TableID: roachpb.TableID(testTableID),
-				IndexID: 2,
-			}: {},
-		}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-	)
 
 	query := `
 SELECT
