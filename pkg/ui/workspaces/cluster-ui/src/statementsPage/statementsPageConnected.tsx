@@ -35,6 +35,7 @@ import {
   selectColumns,
   selectDateRange,
   selectSortSetting,
+  selectFilters,
 } from "./statementsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { AggregateStatistics } from "../statementsTable";
@@ -59,6 +60,7 @@ export const ConnectedStatementsPage = withRouter(
       dateRange: selectDateRange(state),
       sortSetting: selectSortSetting(state),
       isTenant: selectIsTenant(state),
+      filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>
@@ -108,15 +110,22 @@ export const ConnectedStatementsPage = withRouter(
             page: "Statements",
           }),
         ),
-      onFilterChange: value =>
+      onFilterChange: value => {
         dispatch(
           analyticsActions.track({
             name: "Filter Clicked",
             page: "Statements",
             filterName: "app",
-            value,
+            value: value.toString(),
           }),
-        ),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "filters/StatementsPage",
+            value: value,
+          }),
+        );
+      },
       onSortingChange: (
         tableName: string,
         columnName: string,
