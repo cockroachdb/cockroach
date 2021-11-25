@@ -1571,15 +1571,113 @@ message AdminVerifyProtectedTimestampResponse {
   repeated FailedRange verification_failed_ranges = 4 [(gogoproto.nullable) = false];
 }
 
-// AddSSTableRequest is arguments to the AddSSTable() method, to link a file
-// into the RocksDB log-structured merge-tree.
+// AddSSTableRequest contains arguments to the AddSSTable method, which links an
+// SST file into the Pebble log-structured merge-tree. The SST should only
+// contain committed versioned values with non-zero MVCC timestamps (no intents
+// or inline values) and no tombstones, but this is only fully enforced when
+// WriteAtRequestTimestamp is enabled, for performance. It cannot be used in a
+// transaction, cannot be split across ranges, and must be alone in a batch.
+// 
+// By default, AddSSTable will blindly write the SST contents into Pebble, with
+// fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
+// guarantees, including ACID, serializability and single-key linearizability:
+// it mutates MVCC history (by replacing existing versions or writing below
+// their timestamp) and does not respect the timestamp cache (by writing at
+// timestamps that have already been read) nor the closed timestamp (by writing
+// at immutable timestamps).
+//
+// The following parameters can be used to make AddSSTable enforce these
+// guarantees, at a performance cost:
+//
+// * WriteAtRequestTimestamp: ensures compliance with the timestamp cache and
+//   closed timestamp, by rewriting SST timestamps to the request timestamp.
+//
+// * DisallowConflicts, DisallowShadowing, or DisallowShadowingBelow: ensures
+//   compliance with MVCC, by checking for conflicting keys in existing data
+//   instead of writing blindly.
+//
+// If the above parameters are not enabled, the caller must make sure these
+// guarantees are upheld via other mechanisms. These options are orthogonal,
+// providing different guarantees, and neither is sufficient by itself to
+// enforce ACID guarantees -- they must both be enabled. See comments on these
+// parameters for more details.
+//
+// AddSSTable always synchronizes with ongoing transactions, by taking out a
+// lock span, scanning for separated intents, and resolving them. This is done
+// even in the case of blind writes, since the caller is expected to make sure
+// there are no ongoing writes to the ingested key span, so there should be few
+// or no intents in the common case.
+//
+// If writing blindly (without e.g. DisallowConflicts), the range's MVCC stats
+// may be incorrect as the SST stats are not adjusted for existing keys, so they
+// will be marked with ContainsEstimates. The caller should recompute statistics
+// after ingestion.
 message AddSSTableRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
-  // If set, indicates that AddSSTable will not allow ingestion of keys which
-  // shadow already existing key entries. This disallows any key slice overlap
-  // regardless of the timestamps.
+
+  // WriteAtRequestTimestamp updates all MVCC timestamps in the SST to the
+  // request timestamp, even if the request gets pushed. This ensures the writes
+  // comply with the timestamp cache and closed timestamp.
+  //
+  // Callers should always set this, except in very special circumstances when
+  // the timestamp cache and closed timestamp can safely be ignored (e.g.
+  // streaming replication into an offline tenant).
+  //
+  // Note that this alone is not sufficient to guarantee MVCC correctness, since
+  // it can write below or replace existing committed versions (the tscache is
+  // only bumped when the values are subsequently read). Use DisallowConflicts
+  // or DisallowShadowing in addition to guarantee MVCC correctness and
+  // serializability.
+  // 
+  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
+  bool write_at_request_timestamp = 6;
+
+  // DisallowConflicts will check for MVCC conflicts with existing keys, i.e.
+  // scan for existing keys with a timestamp at or above the SST key and
+  // return WriteTooOldError (possibly retrying). It also ensures MVCC
+  // statistics are accurately updated.
+  //
+  // Note that this alone is not sufficient to guarantee serializability or
+  // single-key linearizability, since it can write to a timestamp that another
+  // reader has already observed, changing the value at that timestamp and above
+  // it. Use WriteAtRequestTimestamp in addition to guarantee serializability.
+  //
+  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
+  //
+  // TODO(erikgrinaker): It might be possible to avoid this parameter if we
+  // could pick an MVCC timestamp that's guaranteed to not collide with
+  // existing keys, see: https://github.com/cockroachdb/cockroach/issues/73047.
+  // However, this would always lead to inaccurate MVCC stats.
+  bool disallow_conflicts = 7; 
+
+  // DisallowShadowing implies DisallowConflicts, and additionally rejects
+  // writing above keys that have an existing/visible value (but will write
+  // above tombstones).
+  //
+  // TODO(erikgrinaker): Consider removing this in 22.1 if all callers have
+  // been migrated to DisallowShadowingBelow.
   bool disallow_shadowing = 3;
+
+  // DisallowShadowingBelow implies DisallowConflicts, and additionally rejects
+  // writing above keys that have an existing/visible value (but will write
+  // above tombstones). Unlike DisallowShadowing, it allows shadowing keys
+  // that have a timestamp at or above the given timestamp as long as the
+  // value is identical to the existing value, and also allows idempotent writes
+  // (same key/timestamp/value) at or above the given timestamp.
+  //
+  // This is a specialized method for the IMPORT INTO use-case, where we do not
+  // want to shadow existing keys (which could cause them to be GCed before the
+  // import finalizes, preventing a rollback), but we need to allow shadowing
+  // keys that were previously written by the import itself in the case of a
+  // resumption or retry. The equal value requirement is to avoid unique
+  // constraint violations.
+  //
+  // This parameter cannot be used together with DisallowShadowing.
+  //
+  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
+  util.hlc.Timestamp disallow_shadowing_below = 8 [(gogoproto.nullable) = false];
+
   // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
   // used as-is during evaluation of the AddSSTable command to update the range
   // MVCCStats, instead of computing the stats for the SSTable by iterating it.

@@ -14,9 +14,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
+	gogoproto "github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto" // nolint deprecated, but required for Protobuf v1 reflection
 	"github.com/stretchr/testify/require"
 )
 
@@ -304,5 +307,46 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 	c.Sub(&b)
 	if exp := (TenantConsumption{}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
+	}
+}
+
+// TestFlagCombinations tests that flag dependencies and exclusions as specified
+// in flagDependencies and flagExclusions are satisfied by all requests.
+func TestFlagCombinations(t *testing.T) {
+	// Any non-zero-valued request variants that conditionally affect flags.
+	reqVariants := []Request{
+		&AddSSTableRequest{WriteAtRequestTimestamp: true},
+		&DeleteRangeRequest{Inline: true},
+		&GetRequest{KeyLocking: lock.Exclusive},
+		&ReverseScanRequest{KeyLocking: lock.Exclusive},
+		&ScanRequest{KeyLocking: lock.Exclusive},
+	}
+
+	reqTypes := []Request{}
+	oneofFields := proto.MessageReflect(&RequestUnion{}).Descriptor().Oneofs().Get(0).Fields()
+	for i := 0; i < oneofFields.Len(); i++ {
+		msgName := string(oneofFields.Get(i).Message().FullName())
+		msgType := gogoproto.MessageType(msgName).Elem()
+		require.NotNil(t, msgType, "unknown message type %s", msgName)
+		reqTypes = append(reqTypes, reflect.New(msgType).Interface().(Request))
+	}
+
+	for _, req := range append(reqTypes, reqVariants...) {
+		name := reflect.TypeOf(req).Elem().Name()
+		flags := req.flags()
+		for flag, deps := range flagDependencies {
+			if flags&flag != 0 {
+				for _, dep := range deps {
+					require.NotZero(t, flags&dep, "%s has flag %d but not dependant flag %d", name, flag, dep)
+				}
+			}
+		}
+		for flag, excls := range flagExclusions {
+			if flags&flag != 0 {
+				for _, excl := range excls {
+					require.Zero(t, flags&excl, "%s flag %d cannot be combined with flag %d", name, flag, excl)
+				}
+			}
+		}
 	}
 }

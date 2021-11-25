@@ -1386,7 +1386,7 @@ func (r *Replica) checkGCThresholdAndLeaseRLocked(
 	//
 	// If the request is an INCONSISTENT request (and thus a read), it similarly
 	// doesn't check the lease.
-	leaseChecked := !ba.IsSingleSkipLeaseCheckRequest() && ba.ReadConsistency != roachpb.INCONSISTENT
+	leaseChecked := !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != roachpb.INCONSISTENT
 	if leaseChecked {
 		// Now check the lease.
 		var err error

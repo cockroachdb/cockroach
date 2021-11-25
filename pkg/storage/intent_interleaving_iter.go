@@ -941,12 +941,6 @@ func (i *intentInterleavingIter) FindSplitKey(
 	return findSplitKeyUsingIterator(i, start, end, minSplitKey, targetSize)
 }
 
-func (i *intentInterleavingIter) CheckForKeyCollisions(
-	sstData []byte, start, end roachpb.Key, maxIntents int64,
-) (enginepb.MVCCStats, error) {
-	return checkForKeyCollisionsGo(i, sstData, start, end, maxIntents)
-}
-
 func (i *intentInterleavingIter) SetUpperBound(key roachpb.Key) {
 	i.iter.SetUpperBound(key)
 	// Preceding call to SetUpperBound has confirmed that key != nil.

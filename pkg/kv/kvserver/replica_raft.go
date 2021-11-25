@@ -174,7 +174,7 @@ func (r *Replica) evalAndPropose(
 	// reference the previous lease. Note that TransferLease also skip lease
 	// checks (for technical reasons, see `TransferLease.flags`) and uses the
 	// same mechanism.
-	if ba.IsSingleSkipLeaseCheckRequest() {
+	if ba.IsSingleSkipsLeaseCheckRequest() {
 		proposal.command.ProposerLeaseSequence = ba.GetPrevLeaseForLeaseRequest().Sequence
 	} else if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Perform a sanity check that the lease is owned by this replica. This must
