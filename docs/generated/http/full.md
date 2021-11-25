@@ -5890,3 +5890,20 @@ Support status: [reserved](#support-status)
 
 
 
+## SendKVBatch
+
+
+
+SendKVBatch proxies the given BatchRequest into KV, returning the
+response. It is used by the CLI `debug send-kv-batch` command.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+#### Response Parameters
+
+
+

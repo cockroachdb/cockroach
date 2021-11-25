@@ -18,6 +18,7 @@ import "server/serverpb/status.proto";
 import "storage/enginepb/mvcc.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/log.proto";
+import "roachpb/api.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
@@ -1011,5 +1012,10 @@ service Admin {
       post: "/_admin/v1/enqueue_range"
       body : "*"
     };
+  }
+
+  // SendKVBatch proxies the given BatchRequest into KV, returning the
+  // response. It is used by the CLI `debug send-kv-batch` command.
+  rpc SendKVBatch(roachpb.BatchRequest) returns (roachpb.BatchResponse) {
   }
 }

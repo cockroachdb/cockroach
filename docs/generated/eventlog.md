@@ -139,6 +139,35 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+## Debugging events
+
+Events in this category pertain to debugging operations performed by
+operators or (more commonly) Cockroach Labs employees. These operations can
+e.g. directly access and mutate internal state, breaking system invariants.
+
+Events in this category are logged to the `OPS` channel.
+
+
+### `debug_send_kv_batch`
+
+An event of type `debug_send_kv_batch` is recorded when an arbitrary KV BatchRequest is submitted
+to the cluster via the `debug send-kv-batch` CLI command.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `BatchRequest` |  | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `NodeID` | The node ID where the event originated. | no |
+| `User` | The user which performed the operation. | yes |
+
 ## Health events
 
 Events in this category pertain to the health of one or more servers.
