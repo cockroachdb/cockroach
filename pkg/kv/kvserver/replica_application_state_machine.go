@@ -981,7 +981,9 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 		}
 		return wrapWithNonDeterministicFailure(errors.AssertionFailedf(
 			"command writing below closed timestamp; cmd: %x, write ts: %s, "+
-				"batch state closed: %s, command closed: %s, request: %s, lease: %s",
+				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n"+
+				"This assertion will fire again on restart; to ignore run with env var\n"+
+				"COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false",
 			cmd.idKey, wts,
 			b.state.RaftClosedTimestamp, cmd.raftCmd.ClosedTimestamp,
 			req, b.state.Lease),
