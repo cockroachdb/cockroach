@@ -24,10 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // ExitCodeTestsFailed is the exit code that results from a run of
@@ -38,6 +42,28 @@ const ExitCodeTestsFailed = 10
 // runnerLogsDir is the dir under the artifacts root where the test runner log
 // and other runner-related logs (i.e. cluster creation logs) will be written.
 const runnerLogsDir = "_runner-logs"
+
+// Only used if passed otherwise refer to ClusterSpec.
+// If a new flag is added here it should also be added to createFlagsOverride().
+func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
+	// roachprod create flags
+	flags.DurationVar(&opts.Lifetime,
+		"lifetime", opts.Lifetime, "Lifetime of the cluster")
+	flags.BoolVar(&opts.SSDOpts.UseLocalSSD,
+		"roachprod-local-ssd", opts.SSDOpts.UseLocalSSD, "Use local SSD")
+	flags.StringVar(&opts.SSDOpts.FileSystem,
+		"filesystem", opts.SSDOpts.FileSystem, "The underlying file system(ext4/zfs).")
+	flags.BoolVar(&opts.SSDOpts.NoExt4Barrier,
+		"local-ssd-no-ext4-barrier", opts.SSDOpts.NoExt4Barrier,
+		`Mount the local SSD with the "-o nobarrier" flag. `+
+			`Ignored if --local-ssd=false is specified.`)
+	flags.IntVarP(&overrideNumNodes,
+		"nodes", "n", -1, "Total number of nodes")
+	flags.IntVarP(&opts.OsVolumeSize,
+		"os-volume-size", "", opts.OsVolumeSize, "OS disk volume size in GB")
+	flags.BoolVar(&opts.GeoDistributed,
+		"geo", opts.GeoDistributed, "Create geo-distributed cluster")
+}
 
 func main() {
 	rand.Seed(timeutil.Now().UnixNano())
@@ -251,7 +277,7 @@ runner itself.
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
-			&roachprod, "roachprod", "", "path to roachprod binary to use")
+			&roachprodBinary, "roachprod", "", "path to roachprod binary to use")
 		cmd.Flags().BoolVar(
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
@@ -269,8 +295,6 @@ runner itself.
 			&httpPort, "port", 8080, "the port on which to serve the HTTP interface")
 		cmd.Flags().BoolVar(
 			&localSSDArg, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
-		cmd.Flags().StringSliceVar(
-			&createArgs, "create-args", []string{}, "extra args to pass onto the roachprod create command")
 		cmd.Flags().StringToStringVar(
 			&versionsBinaryOverride, "versions-binary-override", nil,
 			"List of <version>=<path to cockroach binary>. If a certain version <ver> "+
@@ -279,9 +303,24 @@ runner itself.
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
 	}
 
+	parseCreateOpts(runCmd.Flags(), &overrideOpts)
+	overrideFlagset = runCmd.Flags()
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
+
+	var err error
+	config.OSUser, err = user.Current()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to lookup current user: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := roachprod.InitDirs(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		code := 1

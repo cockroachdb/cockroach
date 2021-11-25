@@ -124,7 +124,7 @@ func ClassifyCmdError(err error) Error {
 	return Unclassified{err}
 }
 
-// Extract the an ExitError from err's error tree or (nil, false) if none exists.
+// Extract the ExitError from err's error tree or (nil, false) if none exists.
 func asExitError(err error) (*exec.ExitError, bool) {
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -176,3 +176,5 @@ func SelectPriorityError(errors []error) error {
 	}
 	return nil
 }
+
+var _ = SelectPriorityError
