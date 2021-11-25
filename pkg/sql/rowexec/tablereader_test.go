@@ -227,7 +227,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 
 	// Ensure the evalCtx is connected to the server's ID container, so they
 	// are consistent with each other.
-	evalCtx.NodeID = base.NewSQLIDContainerForNode(&tc.Server(0).RPCContext().NodeID)
+	evalCtx.NodeID = base.NewSQLIDContainerForNode(tc.Server(0).RPCContext().NodeID)
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
