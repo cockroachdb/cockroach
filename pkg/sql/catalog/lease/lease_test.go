@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -208,12 +207,14 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		var c base.NodeIDContainer
 		c.Set(context.Background(), roachpb.NodeID(nodeID))
 		nc := base.NewSQLIDContainerForNode(&c)
+		ambientCtx := testutils.MakeAmbientCtx()
+		ambientCtx.AddLogTag("n", nc)
 		// Hack the ExecutorConfig that we pass to the Manager to have a
 		// different node id.
 		cfgCpy := t.server.ExecutorConfig().(sql.ExecutorConfig)
 		cfgCpy.NodeInfo.NodeID = nc
 		mgr = lease.NewLeaseManager(
-			log.AmbientContext{Tracer: tracing.NewTracer()},
+			ambientCtx,
 			nc,
 			cfgCpy.DB,
 			cfgCpy.Clock,
