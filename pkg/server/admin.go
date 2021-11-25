@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -98,8 +99,9 @@ var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "
 // the cockroach cluster.
 type adminServer struct {
 	*adminPrivilegeChecker
-	server     *Server
-	memMonitor *mon.BytesMonitor
+	internalExecutor *sql.InternalExecutor
+	server           *Server
+	memMonitor       *mon.BytesMonitor
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -112,6 +114,7 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
 	server := &adminServer{
 		adminPrivilegeChecker: &adminPrivilegeChecker{ie: ie},
+		internalExecutor:      ie,
 		server:                s,
 	}
 	// TODO(knz): We do not limit memory usage by admin operations
@@ -2593,6 +2596,47 @@ func (s *adminServer) enqueueRangeLocal(
 		response.Details[0].Error = processErr.Error()
 	}
 	return response, nil
+}
+
+// SendKVBatch proxies the given BatchRequest into KV, returning the
+// response. It is for use by the CLI `debug send-kv-batch` command.
+func (s *adminServer) SendKVBatch(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	// Note: the root user will bypass SQL auth checks, which is useful in case of
+	// a cluster outage.
+	user, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ba == nil {
+		return nil, errors.New("BatchRequest cannot be nil")
+	}
+
+	// Emit a structured log event for the call.
+	jsonpb := protoutil.JSONPb{}
+	baJSON, err := jsonpb.Marshal(ba)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode BatchRequest as JSON")
+	}
+	event := &eventpb.DebugSendKvBatch{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			Timestamp: timeutil.Now().UnixNano(),
+		},
+		CommonDebugEventDetails: eventpb.CommonDebugEventDetails{
+			NodeID: int32(s.server.NodeID()),
+			User:   user.Normalized(),
+		},
+		BatchRequest: string(baJSON),
+	}
+	log.StructuredEvent(ctx, event)
+
+	// Send the batch to KV.
+	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
+	if pErr != nil {
+		return nil, pErr.GoError()
+	}
+	return br, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses

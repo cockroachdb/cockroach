@@ -1532,6 +1532,7 @@ var debugCmds = append(DebugCmdsForPebble,
 	debugMergeLogsCmd,
 	debugListFilesCmd,
 	debugResetQuorumCmd,
+	debugSendKVBatchCmd,
 )
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.

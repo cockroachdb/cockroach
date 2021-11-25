@@ -1566,6 +1566,7 @@ docs/generated/redact_safe.md:
 # Order matters!!
 EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/events.proto \
+	pkg/util/log/eventpb/debug_events.proto \
 	pkg/util/log/eventpb/ddl_events.proto \
 	pkg/util/log/eventpb/misc_sql_events.proto \
 	pkg/util/log/eventpb/privilege_events.proto \
