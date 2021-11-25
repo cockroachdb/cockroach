@@ -36,9 +36,9 @@ import {
   selectDateRange,
   selectSortSetting,
   selectFilters,
+  selectSearch,
 } from "./statementsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
-import { AggregateStatistics } from "../statementsTable";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
 
@@ -49,18 +49,19 @@ export const ConnectedStatementsPage = withRouter(
     RouteComponentProps
   >(
     (state: AppState, props: StatementsPageProps) => ({
+      apps: selectApps(state),
+      columns: selectColumns(state),
+      databases: selectDatabases(state),
+      dateRange: selectDateRange(state),
+      filters: selectFilters(state),
+      isTenant: selectIsTenant(state),
+      lastReset: selectLastReset(state),
+      nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
+      search: selectSearch(state),
+      sortSetting: selectSortSetting(state),
       statements: selectStatements(state, props),
       statementsError: selectStatementsLastError(state),
-      apps: selectApps(state),
-      databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
-      lastReset: selectLastReset(state),
-      columns: selectColumns(state),
-      nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
-      dateRange: selectDateRange(state),
-      sortSetting: selectSortSetting(state),
-      isTenant: selectIsTenant(state),
-      filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>
@@ -103,13 +104,20 @@ export const ConnectedStatementsPage = withRouter(
             action: "Downloaded",
           }),
         ),
-      onSearchComplete: (_results: AggregateStatistics[]) =>
+      onSearchComplete: (query: string) => {
         dispatch(
           analyticsActions.track({
             name: "Keyword Searched",
             page: "Statements",
           }),
-        ),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "search/StatementsPage",
+            value: query,
+          }),
+        );
+      },
       onFilterChange: value => {
         dispatch(
           analyticsActions.track({

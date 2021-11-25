@@ -33,10 +33,12 @@ import { nodeRegionsByIDSelector } from "../store/nodes";
 import {
   selectDateRange,
   selectFilters,
+  selectSearch,
 } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
 import { Filters } from "../queryFilter";
+import { actions as analyticsActions } from "../store/analytics";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -45,14 +47,15 @@ export const TransactionsPageConnected = withRouter(
     RouteComponentProps
   >(
     (state: AppState) => ({
-      data: selectTransactionsData(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
-      error: selectTransactionsLastError(state),
-      isTenant: selectIsTenant(state),
-      dateRange: selectDateRange(state),
       columns: selectTxnColumns(state),
-      sortSetting: selectSortSetting(state),
+      data: selectTransactionsData(state),
+      dateRange: selectDateRange(state),
+      error: selectTransactionsLastError(state),
       filters: selectFilters(state),
+      isTenant: selectIsTenant(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
+      search: selectSearch(state),
+      sortSetting: selectSortSetting(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req?: StatementsRequest) =>
@@ -92,9 +95,31 @@ export const TransactionsPageConnected = withRouter(
       },
       onFilterChange: (value: Filters) => {
         dispatch(
+          analyticsActions.track({
+            name: "Filter Clicked",
+            page: "Transactions",
+            filterName: "app",
+            value: value.toString(),
+          }),
+        );
+        dispatch(
           localStorageActions.update({
             key: "filters/TransactionsPage",
             value: value,
+          }),
+        );
+      },
+      onSearchComplete: (query: string) => {
+        dispatch(
+          analyticsActions.track({
+            name: "Keyword Searched",
+            page: "Transactions",
+          }),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "search/TransactionsPage",
+            value: query,
           }),
         );
       },
