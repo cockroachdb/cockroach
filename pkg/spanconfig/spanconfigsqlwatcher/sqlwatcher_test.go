@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -122,14 +121,14 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
-	sqlWatcher := spanconfigsqlwatcher.NewFactory(
+	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
 		nil, /* knobs */
-	).New()
+	)
 
 	var mu struct {
 		syncutil.Mutex
@@ -195,12 +194,10 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	wg.Wait()
 }
 
-// TestSQLWatcherFactory tests that the SQLWatcherFactory can create multiple
-// SQLWatchers and that every SQLWatcher is only good for a single
-// WatchForSQLUpdates.
-func TestSQLWatcherFactory(t *testing.T) {
+// TestSQLWatcherMultiple tests that we're able to fire off multiple sql watcher
+// processes, both sequentially and concurrently.
+func TestSQLWatcherMultiple(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.IgnoreLint(t, "buggy test; handler's invoked but test doesn't expect it to be")
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -219,7 +216,7 @@ func TestSQLWatcherFactory(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
-	sqlWatcherFactory := spanconfigsqlwatcher.NewFactory(
+	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
@@ -228,47 +225,98 @@ func TestSQLWatcherFactory(t *testing.T) {
 		nil, /* knobs */
 	)
 
-	startTS := ts.Clock().Now()
+	beforeStmtTS := ts.Clock().Now()
 	tdb.Exec(t, "CREATE TABLE t()")
-
-	sqlWatcher := sqlWatcherFactory.New()
+	afterStmtTS := ts.Clock().Now()
+	const expDescID descpb.ID = 52
 
 	var wg sync.WaitGroup
+	mu := struct {
+		syncutil.Mutex
+		w1LastCheckpoint, w2LastCheckpoint, w3LastCheckpoint hlc.Timestamp
+	}{}
 
-	watcherCtx, watcherCancel := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
+	f := func(ctx context.Context, onExit func(), onCheckpoint func(hlc.Timestamp)) {
 		defer wg.Done()
-		_ = sqlWatcher.WatchForSQLUpdates(watcherCtx, startTS, func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error {
-			t.Error("handler should never run")
-			return nil
-		})
-	}()
 
-	watcherCancel()
-	wg.Wait()
+		receivedIDs := make(map[descpb.ID]struct{})
+		err := sqlWatcher.WatchForSQLUpdates(ctx, beforeStmtTS,
+			func(_ context.Context, updates []spanconfig.DescriptorUpdate, checkpointTS hlc.Timestamp) error {
+				onCheckpoint(checkpointTS)
 
-	err := sqlWatcher.WatchForSQLUpdates(watcherCtx, startTS, func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error {
-		t.Fatal("handler should never run")
-		return nil
-	})
-	require.Error(t, err)
-	require.True(t, testutils.IsError(err, "watcher already started watching"))
-
-	newSQLWatcher := sqlWatcherFactory.New()
-	newWatcherCtx, newWatcherCancel := context.WithCancel(ctx)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err = newSQLWatcher.WatchForSQLUpdates(newWatcherCtx, startTS, func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error {
-			t.Error("handler should never run")
-			return nil
-		})
+				for _, update := range updates {
+					receivedIDs[update.ID] = struct{}{}
+				}
+				return nil
+			})
 		require.True(t, testutils.IsError(err, "context canceled"))
-	}()
+		require.Equal(t, 1, len(receivedIDs))
+		_, seen := receivedIDs[expDescID]
+		require.True(t, seen)
+	}
 
-	newWatcherCancel()
+	{
+		// Run the first watcher; wait for it to observe the update before
+		// tearing it down.
+
+		watcher1Ctx, watcher1Cancel := context.WithCancel(ctx)
+		wg.Add(1)
+		go f(watcher1Ctx, func() { wg.Done() }, func(ts hlc.Timestamp) {
+			mu.Lock()
+			mu.w1LastCheckpoint = ts
+			mu.Unlock()
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			if mu.w1LastCheckpoint.Less(afterStmtTS) {
+				return errors.New("w1 checkpoint precedes statement timestamp")
+			}
+			return nil
+		})
+		watcher1Cancel()
+		wg.Wait()
+	}
+
+	{
+		// Run two more watchers; wait for each to independently observe the
+		// update before tearing them down.
+
+		watcher2Ctx, watcher2Cancel := context.WithCancel(ctx)
+		wg.Add(1)
+		go f(watcher2Ctx, func() { wg.Done() }, func(ts hlc.Timestamp) {
+			mu.Lock()
+			mu.w2LastCheckpoint = ts
+			mu.Unlock()
+		})
+
+		watcher3Ctx, watcher3Cancel := context.WithCancel(ctx)
+		wg.Add(1)
+		go f(watcher3Ctx, func() { wg.Done() }, func(ts hlc.Timestamp) {
+			mu.Lock()
+			mu.w3LastCheckpoint = ts
+			mu.Unlock()
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			if mu.w2LastCheckpoint.Less(afterStmtTS) {
+				return errors.New("w2 checkpoint precedes statement timestamp")
+			}
+			if mu.w3LastCheckpoint.Less(afterStmtTS) {
+				return errors.New("w3 checkpoint precedes statement timestamp")
+			}
+			return nil
+		})
+
+		watcher2Cancel()
+		watcher3Cancel()
+	}
+
 	wg.Wait()
 }
 
@@ -295,7 +343,7 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
-	sqlWatcherFactory := spanconfigsqlwatcher.NewFactory(
+	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
@@ -311,7 +359,6 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	startTS := ts.Clock().Now()
 	tdb.Exec(t, "CREATE TABLE t()")
 
-	sqlWatcher := sqlWatcherFactory.New()
 	err := sqlWatcher.WatchForSQLUpdates(ctx, startTS, func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error {
 		t.Fatal("handler should never run")
 		return nil
@@ -342,14 +389,14 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
-	sqlWatcher := spanconfigsqlwatcher.NewFactory(
+	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
 		nil, /* knobs */
-	).New()
+	)
 
 	tdb.Exec(t, "CREATE TABLE t()")
 

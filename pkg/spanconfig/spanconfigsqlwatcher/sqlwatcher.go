@@ -12,7 +12,6 @@ package spanconfigsqlwatcher
 
 import (
 	"context"
-	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,14 +29,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Factory implements the spanconfig.SQLWatcherFactory interface.
-var _ spanconfig.SQLWatcherFactory = &Factory{}
-
 // SQLWatcher implements the spanconfig.SQLWatcher interface.
 var _ spanconfig.SQLWatcher = &SQLWatcher{}
 
-// Factory is used to construct spanconfig.SQLWatcher interfaces.
-type Factory struct {
+// SQLWatcher is the concrete implementation of spanconfig.SQLWatcher. It
+// establishes rangefeeds over system.zones and system.descriptors to
+// incrementally watch for SQL updates.
+type SQLWatcher struct {
 	codec            keys.SQLCodec
 	settings         *cluster.Settings
 	stopper          *stop.Stopper
@@ -46,19 +44,19 @@ type Factory struct {
 	bufferMemLimit   int64
 }
 
-// NewFactory constructs a new Factory.
-func NewFactory(
+// New constructs a new SQLWatcher.
+func New(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	rangeFeedFactory *rangefeed.Factory,
 	bufferMemLimit int64,
 	stopper *stop.Stopper,
 	knobs *spanconfig.TestingKnobs,
-) *Factory {
+) *SQLWatcher {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
-	return &Factory{
+	return &SQLWatcher{
 		codec:            codec,
 		settings:         settings,
 		rangeFeedFactory: rangeFeedFactory,
@@ -68,37 +66,9 @@ func NewFactory(
 	}
 }
 
-// SQLWatcher is the concrete implementation of spanconfig.SQLWatcher. It
-// establishes rangefeeds over system.zones and system.descriptors to
-// incrementally watch for SQL updates.
-type SQLWatcher struct {
-	codec            keys.SQLCodec
-	settings         *cluster.Settings
-	rangeFeedFactory *rangefeed.Factory
-	stopper          *stop.Stopper
-
-	buffer *buffer
-
-	knobs *spanconfig.TestingKnobs
-
-	started int32 // accessed atomically.
-}
-
 // sqlWatcherBufferEntrySize is the size of an entry stored in the sqlWatcher's
 // buffer. We use this value to calculate the buffer capacity.
 const sqlWatcherBufferEntrySize = int64(unsafe.Sizeof(event{}) + unsafe.Sizeof(rangefeedbuffer.Event(nil)))
-
-// New constructs a spanconfig.SQLWatcher.
-func (f *Factory) New() spanconfig.SQLWatcher {
-	return &SQLWatcher{
-		codec:            f.codec,
-		settings:         f.settings,
-		rangeFeedFactory: f.rangeFeedFactory,
-		stopper:          f.stopper,
-		buffer:           newBuffer(int(f.bufferMemLimit / sqlWatcherBufferEntrySize)),
-		knobs:            f.knobs,
-	}
-}
 
 // WatchForSQLUpdates is part of the spanconfig.SQLWatcher interface.
 func (s *SQLWatcher) WatchForSQLUpdates(
@@ -106,19 +76,32 @@ func (s *SQLWatcher) WatchForSQLUpdates(
 	timestamp hlc.Timestamp,
 	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
 ) error {
-	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
-		return errors.AssertionFailedf("watcher already started watching")
-	}
+	w := &inner{sqlWatcher: s}
+	return w.watch(ctx, timestamp, handler)
+}
+
+type inner struct {
+	sqlWatcher *SQLWatcher
+
+	// TODO(irfansharif): We could forego this factory pattern altogether;
+	// there's no mutable state shared across multiple watchers.
+}
+
+func (i *inner) watch(
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
+) error {
 
 	// The callbacks below are invoked by both the rangefeeds we establish, both
-	// of which run on separate goroutines. To ensure calls to the handler
-	// function are serial we only ever run it on the main thread of
-	// WatchForSQLUpdates (instead of pushing it into the rangefeed callbacks).
-	// The rangefeed callbacks use channels to report errors and notifications to
-	// to flush events from the buffer. As WatchForSQLUpdate's main thread is the
-	// sole listener on these channels, doing expensive work in the handler
-	// function can lead to blocking the rangefeed, which isn't great. This is an
-	// unfortunate asterisk for users of this interface to be aware of.
+	// of which run on separate goroutines. We serialize calls to the handler
+	// function by invoking in this single watch thread (instead of pushing it
+	// into the rangefeed callbacks). The rangefeed callbacks use channels to
+	// report errors and notifications to flush events from the buffer. As
+	// WatchForSQLUpdate's main thread is the sole listener on these channels,
+	// doing expensive work in the handler function can lead to blocking the
+	// rangefeed, which isn't great. This is an unfortunate asterisk for users
+	// of this interface to be aware of.
 	//
 	// TODO(arul): Possibly get rid of this limitation by introducing another
 	// buffer interface here to store updates produced by the Watcher so that
@@ -126,8 +109,9 @@ func (s *SQLWatcher) WatchForSQLUpdates(
 	// serial semantics.
 	errCh := make(chan error)
 	frontierAdvanced := make(chan struct{})
+	buf := newBuffer(int(i.sqlWatcher.bufferMemLimit / sqlWatcherBufferEntrySize))
 	onFrontierAdvance := func(ctx context.Context, rangefeed rangefeedKind, timestamp hlc.Timestamp) {
-		s.buffer.advance(rangefeed, timestamp)
+		buf.advance(rangefeed, timestamp)
 		select {
 		case <-ctx.Done():
 			// The context is canceled when the rangefeed is being closed, which
@@ -137,12 +121,12 @@ func (s *SQLWatcher) WatchForSQLUpdates(
 	}
 	onEvent := func(ctx context.Context, event event) {
 		err := func() error {
-			if fn := s.knobs.SQLWatcherOnEventInterceptor; fn != nil {
+			if fn := i.sqlWatcher.knobs.SQLWatcherOnEventInterceptor; fn != nil {
 				if err := fn(); err != nil {
 					return err
 				}
 			}
-			return s.buffer.add(event)
+			return buf.add(event)
 		}()
 		if err != nil {
 			log.Warningf(ctx, "error adding event %v: %v", event, err)
@@ -155,12 +139,12 @@ func (s *SQLWatcher) WatchForSQLUpdates(
 		}
 	}
 
-	descriptorsRF, err := s.watchForDescriptorUpdates(ctx, timestamp, onEvent, onFrontierAdvance)
+	descriptorsRF, err := i.watchForDescriptorUpdates(ctx, timestamp, onEvent, onFrontierAdvance)
 	if err != nil {
 		return errors.Wrapf(err, "error establishing rangefeed over system.descriptors")
 	}
 	defer descriptorsRF.Close()
-	zonesRF, err := s.watchForZoneConfigUpdates(ctx, timestamp, onEvent, onFrontierAdvance)
+	zonesRF, err := i.watchForZoneConfigUpdates(ctx, timestamp, onEvent, onFrontierAdvance)
 	if err != nil {
 		return errors.Wrapf(err, "error establishing rangefeed over system.zones")
 	}
@@ -170,12 +154,12 @@ func (s *SQLWatcher) WatchForSQLUpdates(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-s.stopper.ShouldQuiesce():
+		case <-i.sqlWatcher.stopper.ShouldQuiesce():
 			return nil
-		case err = <-errCh:
+		case err := <-errCh:
 			return err
 		case <-frontierAdvanced:
-			events, combinedFrontierTS, err := s.buffer.flush(ctx)
+			events, combinedFrontierTS, err := buf.flush(ctx)
 			if err != nil {
 				return err
 			}
@@ -192,13 +176,13 @@ func (s *SQLWatcher) WatchForSQLUpdates(
 // watchForDescriptorUpdates establishes a rangefeed over system.descriptors and
 // invokes the onEvent callback for observed events. The onFrontierAdvance
 // callback is invoked whenever the rangefeed frontier is advanced as well.
-func (s *SQLWatcher) watchForDescriptorUpdates(
+func (i *inner) watchForDescriptorUpdates(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
 	onEvent func(context.Context, event),
 	onFrontierAdvance func(context.Context, rangefeedKind, hlc.Timestamp),
 ) (*rangefeed.RangeFeed, error) {
-	descriptorTableStart := s.codec.TablePrefix(keys.DescriptorTableID)
+	descriptorTableStart := i.sqlWatcher.codec.TablePrefix(keys.DescriptorTableID)
 	descriptorTableSpan := roachpb.Span{
 		Key:    descriptorTableStart,
 		EndKey: descriptorTableStart.PrefixEnd(),
@@ -218,7 +202,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		if err := value.GetProto(&descriptor); err != nil {
 			logcrash.ReportOrPanic(
 				ctx,
-				&s.settings.SV,
+				&i.sqlWatcher.settings.SV,
 				"%s: failed to unmarshal descriptor %v",
 				ev.Key,
 				value,
@@ -247,7 +231,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			id = schema.GetID()
 			descType = catalog.Schema
 		default:
-			logcrash.ReportOrPanic(ctx, &s.settings.SV, "unknown descriptor unmarshalled %v", descriptor)
+			logcrash.ReportOrPanic(ctx, &i.sqlWatcher.settings.SV, "unknown descriptor unmarshalled %v", descriptor)
 		}
 
 		rangefeedEvent := event{
@@ -259,7 +243,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		}
 		onEvent(ctx, rangefeedEvent)
 	}
-	rf, err := s.rangeFeedFactory.RangeFeed(
+	rf, err := i.sqlWatcher.rangeFeedFactory.RangeFeed(
 		ctx,
 		"sql-watcher-descriptor-rangefeed",
 		descriptorTableSpan,
@@ -282,25 +266,25 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 // invokes the onEvent callback whenever an event is observed. The
 // onFrontierAdvance callback is also invoked whenever the rangefeed frontier is
 // advanced.
-func (s *SQLWatcher) watchForZoneConfigUpdates(
+func (i *inner) watchForZoneConfigUpdates(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
 	onEvent func(context.Context, event),
 	onFrontierAdvance func(context.Context, rangefeedKind, hlc.Timestamp),
 ) (*rangefeed.RangeFeed, error) {
-	zoneTableStart := s.codec.TablePrefix(keys.ZonesTableID)
+	zoneTableStart := i.sqlWatcher.codec.TablePrefix(keys.ZonesTableID)
 	zoneTableSpan := roachpb.Span{
 		Key:    zoneTableStart,
 		EndKey: zoneTableStart.PrefixEnd(),
 	}
 
-	decoder := newZonesDecoder(s.codec)
+	decoder := newZonesDecoder(i.sqlWatcher.codec)
 	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
 		descID, err := decoder.DecodePrimaryKey(ev.Key)
 		if err != nil {
 			logcrash.ReportOrPanic(
 				ctx,
-				&s.settings.SV,
+				&i.sqlWatcher.settings.SV,
 				"sql watcher zones range feed error: %v",
 				err,
 			)
@@ -316,7 +300,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		}
 		onEvent(ctx, rangefeedEvent)
 	}
-	rf, err := s.rangeFeedFactory.RangeFeed(
+	rf, err := i.sqlWatcher.rangeFeedFactory.RangeFeed(
 		ctx,
 		"sql-watcher-zones-rangefeed",
 		zoneTableSpan,
