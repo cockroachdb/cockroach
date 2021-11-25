@@ -14,6 +14,7 @@ import {
   getStatementsByFingerprintIdAndTime,
   statementFingerprintIdsToText,
 } from "./utils";
+import { TimestampToString } from "../util";
 import { Filters } from "../queryFilter";
 import { data, nodeRegions, timestamp } from "./transactions.fixture";
 import Long from "long";
@@ -25,7 +26,7 @@ describe("getStatementsByFingerprintIdAndTime", () => {
   it("filters statements by fingerprint id and time", () => {
     const selectedStatements = getStatementsByFingerprintIdAndTime(
       [Long.fromInt(4104049045071304794), Long.fromInt(3334049045071304794)],
-      timestamp,
+      TimestampToString(timestamp),
       [
         {
           id: Long.fromInt(4104049045071304794),
@@ -41,7 +42,7 @@ describe("getStatementsByFingerprintIdAndTime", () => {
   });
 });
 
-const txData = (data.transactions as any) as Transaction[];
+const txData = data.transactions as Transaction[];
 
 describe("Filter transactions", () => {
   it("show non internal if no filters applied", () => {
