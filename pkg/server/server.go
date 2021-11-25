@@ -291,8 +291,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// regular tag since it's just doing an (atomic) load when a log/trace message
 	// is constructed. The node ID is set by the Store if this host was
 	// bootstrapped; otherwise a new one is allocated in Node.
-	nodeIDContainer := &base.NodeIDContainer{}
-	cfg.AmbientCtx.AddLogTag("n", nodeIDContainer)
+	nodeIDContainer := cfg.IDContainer
 	idContainer := base.NewSQLIDContainerForNode(nodeIDContainer)
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())

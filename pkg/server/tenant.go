@@ -165,17 +165,6 @@ func StartTenant(
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
-	// Also add the SQL instance tag to the tenant status server's
-	// ambient context.
-	//
-	// We use the tag "n" here like for KV nodes, using the knowledge
-	// that the value part of a SQL instance ID container will prefix
-	// the value with the string "sql", resulting in a tag that is prefixed
-	// with "nsql".
-	//
-	// TODO(knz): find a way to share common logging tags between
-	// multiple AmbientContext instances.
-	tenantStatusServer.AmbientContext.AddLogTag("n", s.sqlIDContainer)
 
 	if err != nil {
 		return nil, "", "", err
@@ -370,13 +359,7 @@ func makeTenantSQLServerArgs(
 
 	// We want all log messages issued on behalf of this SQL instance to report
 	// the instance ID (once known) as a tag.
-	var c base.NodeIDContainer
-	instanceIDContainer := c.SwitchToSQLIDContainer()
-	// We use the tag "n" here like for KV nodes, using the knowledge
-	// that the value part of a SQL instance ID container will prefix
-	// the value with the string "sql", resulting in a tag that is prefixed
-	// with "nsql".
-	baseCfg.AmbientCtx.AddLogTag("n", instanceIDContainer)
+	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
