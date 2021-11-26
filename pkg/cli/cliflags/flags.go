@@ -1143,14 +1143,16 @@ The line length where sqlfmt will try to wrap.`,
 		Name: "sql-port",
 		Description: `First port number for SQL servers.
 There should be as many TCP ports available as the value of --nodes
-starting at the specified value.`,
+starting at the specified value; for multitenant demo clusters, the
+number of required ports is twice the value of --nodes.`,
 	}
 
 	DemoHTTPPort = FlagInfo{
 		Name: "http-port",
 		Description: `First port number for HTTP servers.
 There should be as many TCP ports available as the value of --nodes
-starting at the specified value.`,
+starting at the specified value; for multitenant demo clusters, the
+number of required ports is twice the value of --nodes.`,
 	}
 
 	DemoNodes = FlagInfo{

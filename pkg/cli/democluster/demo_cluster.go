@@ -167,6 +167,13 @@ func NewDemoCluster(
 
 	c.httpFirstPort = c.demoCtx.HTTPPort
 	c.sqlFirstPort = c.demoCtx.SQLPort
+	if c.demoCtx.Multitenant {
+		// This allows the first demo tenant to get the desired ports (i.e., those
+		// configured by --http-port or --sql-port, or the default) without
+		// conflicting with the system tenant.
+		c.httpFirstPort += c.demoCtx.NumNodes
+		c.sqlFirstPort += c.demoCtx.NumNodes
+	}
 
 	c.stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
 	return c, nil
@@ -388,12 +395,16 @@ func (c *transientCluster) Start(
 				c.infoLog(ctx, "starting tenant node %d", i)
 				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
-					// tenant 1 is the system tenant.
-					TenantID:      roachpb.MakeTenantID(uint64(i + 2)),
-					Stopper:       c.stopper,
-					ForceInsecure: c.demoCtx.Insecure,
-					SSLCertsDir:   c.demoDir,
-					Locality:      c.demoCtx.Localities[i],
+					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
+					// SQL/HTTP ports so the first tenant ends up with the desired default
+					// ports.
+					TenantID:         roachpb.MakeTenantID(uint64(i + 2)),
+					Stopper:          c.stopper,
+					ForceInsecure:    c.demoCtx.Insecure,
+					SSLCertsDir:      c.demoDir,
+					StartingSQLPort:  c.demoCtx.SQLPort - 2,
+					StartingHTTPPort: c.demoCtx.HTTPPort - 2,
+					Locality:         c.demoCtx.Localities[i],
 					TestingKnobs: base.TestingKnobs{
 						TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
 						Server: &server.TestingKnobs{
