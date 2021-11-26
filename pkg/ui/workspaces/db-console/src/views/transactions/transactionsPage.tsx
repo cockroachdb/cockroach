@@ -36,7 +36,7 @@ import { LocalSetting } from "src/redux/localsettings";
 export const selectData = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data || state.inFlight) return null;
+    if (!state.data || state.inFlight || !state.valid) return null;
     return state.data;
   },
 );

@@ -26,7 +26,7 @@ import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
-import { actions as statementsActions } from "src/store/statements";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   actions as statementDiagnosticsActions,
   selectDiagnosticsReportsByStatementFingerprint,
@@ -44,7 +44,7 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
   const statementFingerprint = statement?.statement;
   return {
     statement,
-    statementsError: state.adminUI.statements.lastError,
+    statementsError: state.adminUI.sqlStats.lastError,
     dateRange: selectDateRange(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
@@ -62,7 +62,7 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
-  refreshStatements: () => dispatch(statementsActions.refresh()),
+  refreshStatements: () => dispatch(sqlStatsActions.refresh()),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),

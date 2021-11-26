@@ -14,9 +14,7 @@ import { Dispatch } from "redux";
 import { Moment } from "moment";
 
 import { AppState } from "src/store";
-import { actions as transactionsActions } from "src/store/transactions";
-import { actions as resetSQLStatsActions } from "src/store/sqlStats";
-import { actions as statementsActions } from "src/store/statements";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { TransactionsPage } from "./transactionsPage";
 import {
   TransactionsPageStateProps,
@@ -59,11 +57,11 @@ export const TransactionsPageConnected = withRouter(
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req?: StatementsRequest) =>
-        dispatch(transactionsActions.refresh(req)),
-      resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
+        dispatch(sqlStatsActions.refresh(req)),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       onDateRangeChange: (start: Moment, end: Moment) => {
         dispatch(
-          statementsActions.updateDateRange({
+          sqlStatsActions.updateDateRange({
             start: start.unix(),
             end: end.unix(),
           }),

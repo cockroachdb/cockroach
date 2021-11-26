@@ -11,26 +11,32 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
+import { StatementsRequest } from "src/api/statementsApi";
 
-type ResetSQLStatsResponse = cockroach.server.serverpb.ResetSQLStatsResponse;
+type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
-export type ResetSQLStatsState = {
-  data: ResetSQLStatsResponse;
+export type SQLStatsState = {
+  data: StatementsResponse;
   lastError: Error;
   valid: boolean;
 };
 
-const initialState: ResetSQLStatsState = {
+const initialState: SQLStatsState = {
   data: null,
   lastError: null,
   valid: true,
 };
 
-const resetSQLStatsSlice = createSlice({
-  name: `${DOMAIN_NAME}/resetsqlstats`,
+export type UpdateDateRangePayload = {
+  start: number;
+  end: number;
+};
+
+const sqlStatsSlice = createSlice({
+  name: `${DOMAIN_NAME}/sqlstats`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<ResetSQLStatsResponse>) => {
+    received: (state, action: PayloadAction<StatementsResponse>) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
@@ -42,10 +48,11 @@ const resetSQLStatsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (_, action?: PayloadAction<StatementsRequest>) => {},
+    request: (_, action?: PayloadAction<StatementsRequest>) => {},
+    updateDateRange: (_, action: PayloadAction<UpdateDateRangePayload>) => {},
+    reset: _ => {},
   },
 });
 
-export const { reducer, actions } = resetSQLStatsSlice;
+export const { reducer, actions } = sqlStatsSlice;
