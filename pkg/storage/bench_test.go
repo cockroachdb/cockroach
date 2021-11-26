@@ -1524,3 +1524,47 @@ type noopWriter struct{}
 
 func (noopWriter) Close() error                { return nil }
 func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap bool) {
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	value := make([]byte, 128)
+	for i := range value {
+		value[i] = 'a'
+	}
+
+	eng := setupMVCCInMemPebble(b, "")
+	defer eng.Close()
+
+	for i := 0; i < numEngineKeys; i++ {
+		batch := eng.NewBatch()
+		for j := 0; j < numVersions; j++ {
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+			ts := hlc.Timestamp{WallTime: int64(j + 1)}
+			require.NoError(b, batch.PutMVCC(MVCCKey{key, ts}, value))
+		}
+		require.NoError(b, batch.Commit(false))
+	}
+	require.NoError(b, eng.Flush())
+
+	// The engine contains keys numbered key-1, key-2, key-3, etc, while
+	// the SST contains keys numbered key-11, key-21, etc., that fit in
+	// between the engine keys without colliding.
+	sstFile := &MemFile{}
+	sstWriter := MakeIngestionSSTWriter(sstFile)
+	for i := 0; i < numSstKeys; i++ {
+		keyNum := int((float64(i) / float64(numSstKeys)) * float64(numEngineKeys))
+		if !overlap {
+			keyNum = i + numEngineKeys
+		}
+		key := roachpb.Key(encoding.EncodeUvarintAscending(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyNum)), 1))
+		require.NoError(b, sstWriter.Put(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(numVersions + 3)}}, value))
+	}
+	sstWriter.Close()
+
+	b.ResetTimer()
+	startKey := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(0)))
+	for i := 0; i < b.N; i++ {
+		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, MVCCKey{Key: startKey}, MVCCKeyMax, false, hlc.Timestamp{}, math.MaxInt64)
+		require.NoError(b, err)
+	}
+}
