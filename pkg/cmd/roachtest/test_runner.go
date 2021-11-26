@@ -818,10 +818,9 @@ func (r *testRunner) runTest(
 		// Don't use surrounding context, which are likely already canceled.
 		if nodes := c.All(); len(nodes) > 0 { // avoid tests
 			innerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			// SIGABRT causes the go runtime to dump stacks and terminate.
-			// We also need --wait because roachprod does not think signals other than SIGKILL will terminate
-			// the process, and that is mistaken.
-			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=ABRT", "--wait=true"))
+			// Send SIGQUIT to dump stacks (this is how CRDB handles it) followed by SIGKILL.
+			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=3"))
+			_ = c.StopE(innerCtx, c.All())
 			t.L().PrintfCtx(ctx, "CockroachDB nodes aborted; check the stderr log for goroutine stack traces")
 			cancel()
 		}
