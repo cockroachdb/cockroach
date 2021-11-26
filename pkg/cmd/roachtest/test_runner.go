@@ -820,7 +820,8 @@ func (r *testRunner) runTest(
 			// SIGABRT causes the go runtime to dump stacks and terminate.
 			// We also need --wait because roachprod does not think signals other than SIGKILL will terminate
 			// the process, and that is mistaken.
-			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=ABRT", "--wait=true"))
+			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=3")) // SIGQUIT to dump stacks to logs
+			_ = c.StopE(innerCtx, c.All())                             // kill -9
 			t.L().PrintfCtx(ctx, "CockroachDB nodes aborted; check the stderr log for goroutine stack traces")
 			cancel()
 		}
