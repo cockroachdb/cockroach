@@ -60,7 +60,7 @@ describe("SQLStats sagas", () => {
 
   describe("refreshSQLStatsSaga", () => {
     it("dispatches request SQLStats action", () => {
-      expectSaga(refreshSQLStatsSaga)
+      return expectSaga(refreshSQLStatsSaga)
         .put(actions.request())
         .run();
     });
@@ -68,7 +68,7 @@ describe("SQLStats sagas", () => {
 
   describe("requestSQLStatsSaga", () => {
     it("successfully requests statements list", () => {
-      expectSaga(requestSQLStatsSaga)
+      return expectSaga(requestSQLStatsSaga)
         .provide(stmtStatsAPIProvider)
         .put(actions.received(nonCombinedSQLStatsResponse))
         .withReducer(reducer)
@@ -81,7 +81,7 @@ describe("SQLStats sagas", () => {
     });
 
     it("requests combined SQL Stats if combined=true in the request message", () => {
-      expectSaga(requestSQLStatsSaga, {
+      return expectSaga(requestSQLStatsSaga, {
         payload: new cockroach.server.serverpb.StatementsRequest({
           combined: true,
         }),
@@ -98,7 +98,7 @@ describe("SQLStats sagas", () => {
     });
 
     it("requests combined SQL Stats if combined=false in the request message", () => {
-      expectSaga(requestSQLStatsSaga, {
+      return expectSaga(requestSQLStatsSaga, {
         payload: new cockroach.server.serverpb.StatementsRequest({
           combined: false,
         }),
@@ -116,7 +116,7 @@ describe("SQLStats sagas", () => {
 
     it("returns error on failed request", () => {
       const error = new Error("Failed request");
-      expectSaga(requestSQLStatsSaga)
+      return expectSaga(requestSQLStatsSaga)
         .provide([[matchers.call.fn(getStatements), throwError(error)]])
         .put(actions.failed(error))
         .withReducer(reducer)
@@ -132,7 +132,7 @@ describe("SQLStats sagas", () => {
   describe("receivedSQLStatsSaga", () => {
     it("sets valid status to false after specified period of time", () => {
       const timeout = 500;
-      expectSaga(receivedSQLStatsSaga, timeout)
+      return expectSaga(receivedSQLStatsSaga, timeout)
         .delay(timeout)
         .put(actions.invalidated())
         .withReducer(reducer, {
@@ -153,7 +153,7 @@ describe("SQLStats sagas", () => {
     const resetSQLStatsResponse = new cockroach.server.serverpb.ResetSQLStatsResponse();
 
     it("successfully resets SQL stats", () => {
-      expectSaga(resetSQLStatsSaga)
+      return expectSaga(resetSQLStatsSaga)
         .provide([[matchers.call.fn(resetSQLStats), resetSQLStatsResponse]])
         .put(actions.invalidated())
         .put(actions.refresh())
@@ -168,7 +168,7 @@ describe("SQLStats sagas", () => {
 
     it("returns error on failed reset", () => {
       const err = new Error("failed to reset");
-      expectSaga(resetSQLStatsSaga)
+      return expectSaga(resetSQLStatsSaga)
         .provide([[matchers.call.fn(resetSQLStats), throwError(err)]])
         .put(actions.failed(err))
         .withReducer(reducer)
