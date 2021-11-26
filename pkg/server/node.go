@@ -1009,19 +1009,21 @@ func (n *Node) setupSpanForIncomingRPC(
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
 	tr := n.storeCfg.AmbientCtx.Tracer
-	var newSpan, grpcSpan *tracing.Span
-	if isLocalRequest := grpcutil.IsLocalRequestContext(ctx) && tenID == roachpb.SystemTenantID; isLocalRequest {
+	// newSpan is set if we end up creating a new span.
+	var newSpan *tracing.Span
+	parentSpan := tracing.SpanFromContext(ctx)
+	localRequest := grpcutil.IsLocalRequestContext(ctx)
+	if localRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
 		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, opName, tracing.WithServerSpanKind)
 	} else {
-		grpcSpan = tracing.SpanFromContext(ctx)
-		if grpcSpan == nil {
+		if parentSpan == nil {
 			// If tracing information was passed via gRPC metadata, the gRPC interceptor
 			// should have opened a span for us. If not, open a span now (if tracing is
 			// disabled, this will be a noop span).
 			ctx, newSpan = tr.StartSpanCtx(ctx, opName)
 		} else {
-			grpcSpan.SetTag("node", attribute.IntValue(int(n.Descriptor.NodeID)))
+			parentSpan.SetTag("node", attribute.IntValue(int(n.Descriptor.NodeID)))
 		}
 	}
 
@@ -1032,20 +1034,30 @@ func (n *Node) setupSpanForIncomingRPC(
 		if br == nil {
 			return
 		}
-		if grpcSpan != nil {
-			// If our local span descends from a parent on the other
-			// end of the RPC (i.e. the !isLocalRequest) case,
-			// attach the span recording to the batch response.
-			// Tenants get a redacted recording, i.e. with anything
-			// sensitive stripped out of the verbose messages. However,
-			// structured payloads stay untouched.
-			if rec := grpcSpan.GetRecording(grpcSpan.RecordingType()); rec != nil {
-				err := redactRecordingForTenant(tenID, rec)
-				if err == nil {
-					br.CollectedSpans = append(br.CollectedSpans, rec...)
-				} else {
-					log.Errorf(ctx, "error redacting trace recording: %s", err)
+		// For non-local requests, we need to attach the recording to the outgoing
+		// BatchResponse if the request is traced. For non-local requests,
+		// parentSpan is expected to have been created by the gRPC server
+		// interceptor.
+		if !localRequest && parentSpan != nil {
+			if rec := parentSpan.GetRecording(parentSpan.RecordingType()); rec != nil {
+				// Decide if the trace for this RPC, if any, will need to be redacted. It
+				// needs to be redacted if the response goes to a tenant. In case the request
+				// is local, then the trace might eventually go to a tenant (and tenID might
+				// be set), but it will go to the tenant only indirectly, through the response
+				// of a parent RPC. In that case, that parent RPC is responsible for the
+				// redaction.
+				//
+				// Tenants get a redacted recording, i.e. with anything
+				// sensitive stripped out of the verbose messages. However,
+				// structured payloads stay untouched.
+				needRedaction := tenID != roachpb.SystemTenantID
+				if needRedaction {
+					if err := redactRecordingForTenant(tenID, rec); err != nil {
+						log.Errorf(ctx, "error redacting trace recording: %s", err)
+						rec = nil
+					}
 				}
+				br.CollectedSpans = append(br.CollectedSpans, rec...)
 			}
 		}
 	}
