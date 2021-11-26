@@ -13,6 +13,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_grpc//:go_default_library",

@@ -341,7 +341,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// signal remote node that it is not considered valid anymore and
 			// operations should fail immediately.
 			return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
-		}}
+		},
+	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
