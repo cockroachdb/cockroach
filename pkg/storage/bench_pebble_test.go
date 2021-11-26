@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -360,4 +361,54 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 	}
 
 	b.StopTimer()
+}
+
+func BenchmarkCheckSSTConflicts(b *testing.B) {
+	value := make([]byte, 128)
+	for i := range value {
+		value[i] = byte(i)
+	}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+
+	for _, numKeys := range []int{1000, 10000, 100000, 1000000} {
+		b.Run(fmt.Sprintf("keys=%d", numKeys), func(b *testing.B) {
+			for _, numVersions := range []int{8, 64} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					eng := setupMVCCInMemPebble(b, "")
+					defer eng.Close()
+
+					for i := 0; i < numKeys; i++ {
+						batch := eng.NewBatch()
+						for j := 0; j < numVersions; j++ {
+							key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+							ts := hlc.Timestamp{WallTime: int64(j + 1)}
+							require.NoError(b, batch.PutMVCC(MVCCKey{key, ts}, value))
+						}
+						require.NoError(b, batch.Commit(false))
+					}
+					eng.Flush()
+
+					// The engine contains keys numbered key-1, key-2, key-3, etc, while
+					// the SST contains keys numbered key-11, key-21, etc., that fit in
+					// between the engine keys without colliding.
+					const sstKeys = 1000
+					sstFile := &MemFile{}
+					sstWriter := MakeIngestionSSTWriter(sstFile)
+					for i := 0; i < sstKeys; i++ {
+						keyNum := int((float64(i) / float64(sstKeys)) * float64(numKeys))
+						key := roachpb.Key(encoding.EncodeUvarintAscending(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyNum)), 1))
+						sstWriter.Put(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(numVersions + 3)}}, value)
+					}
+					sstWriter.Close()
+
+					b.ResetTimer()
+					startKey := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(0)))
+					for i := 0; i < b.N; i++ {
+						_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, MVCCKey{Key: startKey}, MVCCKeyMax, false, hlc.Timestamp{}, math.MaxInt64)
+						require.NoError(b, err)
+					}
+				})
+			}
+		})
+	}
 }
