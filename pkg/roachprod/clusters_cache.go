@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,7 +37,22 @@ import (
 
 // syncedClusters stores the synced clusters metadata, populated from the
 // clusters cache.
-var syncedClusters cloud.Clusters
+
+type syncedClustersWithMutex struct {
+	clusters cloud.Clusters
+	mu       syncutil.Mutex
+}
+
+var syncedClusters syncedClustersWithMutex
+
+func readSyncedClusters(key string) (*cloud.Cluster, bool) {
+	syncedClusters.mu.Lock()
+	defer syncedClusters.mu.Unlock()
+	if cluster, ok := syncedClusters.clusters[key]; ok {
+		return cluster, ok
+	}
+	return nil, false
+}
 
 // InitDirs initializes the directories for storing cluster metadata and debug
 // logs.
@@ -117,7 +133,9 @@ func shouldIgnoreCluster(c *cloud.Cluster) bool {
 // populates syncedClusters. It is assumed that this is called when the process
 // starts, before any roachprod operations.
 func LoadClusters() error {
-	syncedClusters = make(cloud.Clusters)
+	syncedClusters.mu.Lock()
+	defer syncedClusters.mu.Unlock()
+	syncedClusters.clusters = make(cloud.Clusters)
 
 	clusterNames, err := listClustersInCache()
 	if err != nil {
@@ -137,7 +155,7 @@ func LoadClusters() error {
 			continue
 		}
 
-		syncedClusters[c.Name] = c
+		syncedClusters.clusters[c.Name] = c
 
 		if config.IsLocalClusterName(c.Name) {
 			// Add the local cluster to the local provider.
