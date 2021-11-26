@@ -46,6 +46,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timetz",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
@@ -54,6 +55,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_golang_mock//gomock",  # keep
         "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//metadata",  # keep
     ],
 )

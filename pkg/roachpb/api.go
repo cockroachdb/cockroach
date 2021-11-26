@@ -11,13 +11,16 @@
 package roachpb
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"google.golang.org/grpc"
 )
 
 //go:generate mockgen -package=roachpb -destination=mocks_generated.go . InternalClient,Internal_RangeFeedClient
@@ -1683,4 +1686,21 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 // String implements fmt.Stringer.
 func (s *ScanStats) String() string {
 	return redact.StringWithoutMarkers(s)
+}
+
+// TracingInternalClient wraps an InternalClient and fills in trace information
+// on Batch RPCs.
+type TracingInternalClient struct {
+	InternalClient
+}
+
+// Batch overrides the Batch RPC client method and fills in tracing information.
+func (tic TracingInternalClient) Batch(
+	ctx context.Context, req *BatchRequest, opts ...grpc.CallOption,
+) (*BatchResponse, error) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil && !sp.IsNoop() {
+		req.TraceInfo = sp.Meta().ToProto()
+	}
+	return tic.InternalClient.Batch(ctx, req, opts...)
 }

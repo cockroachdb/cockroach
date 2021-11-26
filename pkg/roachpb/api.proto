@@ -23,6 +23,7 @@ import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
+import "util/tracing/tracingpb/tracing.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 
@@ -2298,6 +2299,9 @@ message Header {
   //
   // Requests with a non-zero timestamp are not allowed to set this field.
   BoundedStalenessHeader bounded_staleness = 22;
+
+  util.tracing.tracingpb.TraceInfo trace_info = 25 [(gogoproto.nullable) = false];
+
   reserved 7, 10, 12, 14;
 }
 
