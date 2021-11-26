@@ -355,7 +355,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 		}
 
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
-			getWaitPeriod(&s.Settings.SV, s.TestingKnobs)) {
+			getWaitPeriod(ctx, &s.Settings.SV, jitter, s.TestingKnobs)) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
@@ -414,8 +414,12 @@ const recheckEnabledAfterPeriod = 5 * time.Minute
 
 var warnIfPaceTooLow = log.Every(time.Minute)
 
+type jitterFn func(duration time.Duration) time.Duration
+
 // Returns duration to wait before scanning system.scheduled_jobs.
-func getWaitPeriod(sv *settings.Values, knobs base.ModuleTestingKnobs) time.Duration {
+func getWaitPeriod(
+	ctx context.Context, sv *settings.Values, jitter jitterFn, knobs base.ModuleTestingKnobs,
+) time.Duration {
 	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonScanDelay != nil {
 		return k.SchedulerDaemonScanDelay()
 	}
@@ -433,7 +437,7 @@ func getWaitPeriod(sv *settings.Values, knobs base.ModuleTestingKnobs) time.Dura
 		pace = minPacePeriod
 	}
 
-	return pace
+	return jitter(pace)
 }
 
 // StartJobSchedulerDaemon starts a daemon responsible for periodically scanning
