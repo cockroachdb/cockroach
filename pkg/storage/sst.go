@@ -58,9 +58,19 @@ func CheckSSTConflicts(
 			"cannot set both DisallowShadowing and DisallowShadowingBelow")
 	}
 
-	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end.Key})
+	// Fast path: there are no keys in the reader between the sstable's start and
+	// end keys. We use a non-prefix iterator for this search, and reopen a prefix
+	// one if there are engine keys in the span.
+	nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end.Key})
+	nonPrefixIter.SeekGE(start)
+	valid, _ := nonPrefixIter.Valid()
+	nonPrefixIter.Close()
+	if !valid {
+		return statsDiff, nil
+	}
+
+	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end.Key, Prefix: true})
 	defer extIter.Close()
-	extIter.SeekGE(start)
 
 	sstIter, err := NewMemSSTIterator(sst, false)
 	if err != nil {
@@ -69,11 +79,30 @@ func CheckSSTConflicts(
 	defer sstIter.Close()
 	sstIter.SeekGE(start)
 
-	extOK, extErr := extIter.Valid()
+	// extIter is a prefix iterator; it is expected to skip keys that belong
+	// to different prefixes. Only iterate along the sst iterator, and re-seek
+	// extIter each time.
 	sstOK, sstErr := sstIter.Valid()
-	for extErr == nil && sstErr == nil && extOK && sstOK {
+	if sstOK {
+		extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+	}
+	extOK, extErr := extIter.Valid()
+	for sstErr == nil && sstOK {
 		if err := ctx.Err(); err != nil {
 			return enginepb.MVCCStats{}, err
+		}
+		if !extOK {
+			// There is no key in extIter matching this prefix. Check the next
+			// key in sstIter. Note that we can't just use an exhausted extIter
+			// as a sign that we are done; extIter could be skipping keys, so it
+			// must be re-seeked.
+			sstIter.NextKey()
+			sstOK, sstErr = sstIter.Valid()
+			if sstOK {
+				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			}
+			extOK, extErr = extIter.Valid()
+			continue
 		}
 
 		extKey, extValue := extIter.UnsafeKey(), extIter.UnsafeValue()
@@ -81,12 +110,19 @@ func CheckSSTConflicts(
 
 		// Keep seeking the iterators until both keys are equal.
 		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
+			// sstIter is further ahead. Seek extIter.
 			extIter.SeekGE(MVCCKey{Key: sstKey.Key})
 			extOK, extErr = extIter.Valid()
 			continue
 		} else if cmp > 0 {
-			sstIter.SeekGE(MVCCKey{Key: extKey.Key})
+			// extIter is further ahead. But it could have skipped keys in between,
+			// so re-seek it at the next sst key.
+			sstIter.NextKey()
 			sstOK, sstErr = sstIter.Valid()
+			if sstOK {
+				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			}
+			extOK, extErr = extIter.Valid()
 			continue
 		}
 
@@ -118,7 +154,11 @@ func CheckSSTConflicts(
 				if int64(len(intents)) >= maxIntents {
 					return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
 				}
-				extIter.NextKey()
+				sstIter.NextKey()
+				sstOK, sstErr = sstIter.Valid()
+				if sstOK {
+					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+				}
 				extOK, extErr = extIter.Valid()
 				continue
 			}
@@ -155,7 +195,11 @@ func CheckSSTConflicts(
 			statsDiff.ValBytes -= int64(len(sstValue))
 			statsDiff.ValCount--
 
-			extIter.NextKey()
+			sstIter.NextKey()
+			sstOK, sstErr = sstIter.Valid()
+			if sstOK {
+				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			}
 			extOK, extErr = extIter.Valid()
 			continue
 		}
@@ -194,15 +238,19 @@ func CheckSSTConflicts(
 			statsDiff.LiveBytes -= int64(len(extValue)) + MVCCVersionTimestampSize
 		}
 
-		extIter.NextKey()
+		sstIter.NextKey()
+		sstOK, sstErr = sstIter.Valid()
+		if sstOK {
+			extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+		}
 		extOK, extErr = extIter.Valid()
 	}
 
-	if extErr != nil {
-		return enginepb.MVCCStats{}, extErr
-	}
 	if sstErr != nil {
 		return enginepb.MVCCStats{}, sstErr
+	}
+	if extErr != nil {
+		return enginepb.MVCCStats{}, extErr
 	}
 	if len(intents) > 0 {
 		return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
