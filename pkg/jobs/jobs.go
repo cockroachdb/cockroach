@@ -723,9 +723,9 @@ func (j *Job) FractionCompleted() float32 {
 // sessionBoundInternalExecutorFactory for a more detailed explanation of why
 // this exists.
 func (j *Job) MakeSessionBoundInternalExecutor(
-	ctx context.Context, sd *sessiondata.SessionData,
+	ctx context.Context, initInternalExecutor func(sqlutil.InternalExecutor),
 ) sqlutil.InternalExecutor {
-	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd)
+	return j.registry.sessionBoundInternalExecutorFactory(ctx, initInternalExecutor)
 }
 
 func (j *Job) runInTxn(

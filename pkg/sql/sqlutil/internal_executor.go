@@ -158,6 +158,13 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetSessionData binds the session variables that will be used by queries
+	// performed through this executor from now on. This creates a new session
+	// stack.
+	//
+	// SetSessionData cannot be called concurrently with query execution.
+	SetSessionData(*sessiondata.SessionData)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -194,7 +201,7 @@ type InternalRows interface {
 // SessionBoundInternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
 type SessionBoundInternalExecutorFactory func(
-	context.Context, *sessiondata.SessionData,
+	context.Context, func(InternalExecutor),
 ) InternalExecutor
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.

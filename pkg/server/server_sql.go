@@ -774,7 +774,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
 	ieFactory := func(
-		ctx context.Context, sessionData *sessiondata.SessionData,
+		ctx context.Context, initInternalExecutor func(ie sqlutil.InternalExecutor),
 	) sqlutil.InternalExecutor {
 		ie := sql.MakeInternalExecutor(
 			ctx,
@@ -782,7 +782,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			internalMemMetrics,
 			cfg.Settings,
 		)
-		ie.SetSessionData(sessionData)
+		initInternalExecutor(&ie)
 		return &ie
 	}
 

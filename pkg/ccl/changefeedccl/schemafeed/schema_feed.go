@@ -83,13 +83,15 @@ func New(
 	metrics *Metrics,
 ) SchemaFeed {
 	m := &schemaFeed{
-		filter:            schemaChangeEventFilters[events],
-		db:                cfg.DB,
-		clock:             cfg.DB.Clock(),
-		settings:          cfg.Settings,
-		targets:           targets,
-		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
-		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
+		filter:   schemaChangeEventFilters[events],
+		db:       cfg.DB,
+		clock:    cfg.DB.Clock(),
+		settings: cfg.Settings,
+		targets:  targets,
+		leaseMgr: cfg.LeaseManager.(*lease.Manager),
+		ie: cfg.SessionBoundInternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {
+			ie.SetSessionData(&sessiondata.SessionData{})
+		}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
 	}

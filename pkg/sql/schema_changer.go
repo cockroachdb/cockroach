@@ -128,7 +128,7 @@ func NewSchemaChangerForTesting(
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
 		ieFactory: func(
-			ctx context.Context, sd *sessiondata.SessionData,
+			ctx context.Context, initInternalExecutor func(sqlutil.InternalExecutor),
 		) sqlutil.InternalExecutor {
 			return execCfg.InternalExecutor
 		},
@@ -1949,7 +1949,9 @@ func createSchemaChangeEvalCtx(
 ) extendedEvalContext {
 
 	sd := NewFakeSessionData(execCfg.SV())
-	ie := ieFactory(ctx, sd)
+	ie := ieFactory(ctx, func(ex sqlutil.InternalExecutor) {
+		ex.SetSessionData(sd)
+	})
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
@@ -2057,8 +2059,8 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+			ieFactory: func(ctx context.Context, initInternalExecutor func(ie sqlutil.InternalExecutor)) sqlutil.InternalExecutor {
+				return r.job.MakeSessionBoundInternalExecutor(ctx, initInternalExecutor)
 			},
 			metrics: p.ExecCfg().SchemaChangerMetrics,
 		}
@@ -2243,8 +2245,8 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+		ieFactory: func(ctx context.Context, initInternalExecutor func(executor sqlutil.InternalExecutor)) sqlutil.InternalExecutor {
+			return r.job.MakeSessionBoundInternalExecutor(ctx, initInternalExecutor)
 		},
 	}
 

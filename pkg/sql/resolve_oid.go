@@ -29,7 +29,9 @@ import (
 func (p *planner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
 ) (*tree.DOid, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {
+		ie.SetSessionData(p.SessionData())
+	})
 	return resolveOID(
 		ctx, p.Txn(),
 		ie,
@@ -41,7 +43,9 @@ func (p *planner) ResolveOIDFromString(
 func (p *planner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
 ) (*tree.DOid, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {
+		ie.SetSessionData(p.SessionData())
+	})
 	return resolveOID(
 		ctx, p.Txn(),
 		ie,

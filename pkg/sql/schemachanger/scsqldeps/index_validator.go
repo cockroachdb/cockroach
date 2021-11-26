@@ -75,7 +75,9 @@ func (iv indexValidator) ValidateForwardIndexes(
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, iv.ieFactory(ctx, func(ie sqlutil.InternalExecutor) {
+			ie.SetSessionData(iv.newFakeSessionData(&iv.settings.SV))
+		}))
 	}
 	return iv.validateForwardIndexes(ctx, tableDesc, indexes, txnRunner, withFirstMutationPublic, gatherAllInvalid, override)
 }
@@ -95,7 +97,9 @@ func (iv indexValidator) ValidateInvertedIndexes(
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, iv.ieFactory(ctx, func(ie sqlutil.InternalExecutor) {
+			ie.SetSessionData(iv.newFakeSessionData(&iv.settings.SV))
+		}))
 	}
 	return iv.validateInvertedIndexes(ctx, iv.codec, tableDesc, indexes, txnRunner, gatherAllInvalid, override)
 }

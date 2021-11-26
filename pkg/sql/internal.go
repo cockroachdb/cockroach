@@ -116,8 +116,8 @@ func MakeInternalExecutor(
 }
 
 // SetSessionData binds the session variables that will be used by queries
-// performed through this executor from now on. This creates a new session stack.
-// It is recommended to use SetSessionDataStack.
+// performed through this executor from now on. This creates a new session
+// stack.
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
