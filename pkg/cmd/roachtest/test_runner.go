@@ -263,6 +263,7 @@ func (r *testRunner) Run(
 		cfg := clusterConfig{
 			spec:         t.Cluster,
 			artifactsDir: artifactsDir,
+			username:     clustersOpt.user,
 			localCluster: clustersOpt.typ == localCluster,
 			alloc:        alloc,
 		}
