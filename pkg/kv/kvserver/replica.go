@@ -1384,9 +1384,8 @@ func (r *Replica) checkGCThresholdAndLeaseRLocked(
 	//
 	// If the request is an INCONSISTENT request (and thus a read), it similarly
 	// doesn't check the lease.
-	leaseChecked := !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != roachpb.INCONSISTENT
-	if leaseChecked {
-		// Now check the lease.
+	if !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != roachpb.INCONSISTENT {
+		// Check the lease.
 		var err error
 		shouldExtend, err = r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
 		if err != nil {
@@ -1397,8 +1396,12 @@ func (r *Replica) checkGCThresholdAndLeaseRLocked(
 				return kvserverpb.LeaseStatus{}, false, err
 			}
 			// Otherwise, suppress the error. Also, remember that we're not serving
-			// this under the lease.
-			leaseChecked, err = false, nil
+			// this under the lease by zeroing out the status. We also intentionally
+			// do not pass the original status to checkTSAboveGCThresholdRLocked as
+			// this method assumes that a valid status indicates that this replica
+			// holds the lease (see #73123). `shouldExtend` is already false in this
+			// branch, but for completeness we zero it out as well.
+			st, shouldExtend, err = kvserverpb.LeaseStatus{}, false, nil
 		}
 	}
 
@@ -1409,9 +1412,6 @@ func (r *Replica) checkGCThresholdAndLeaseRLocked(
 		return kvserverpb.LeaseStatus{}, false, err
 	}
 
-	if !leaseChecked {
-		return kvserverpb.LeaseStatus{}, false, nil
-	}
 	return st, shouldExtend, nil
 }
 
