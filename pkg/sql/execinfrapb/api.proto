@@ -24,9 +24,12 @@ import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors.proto";
 import "sql/sessiondatapb/session_data.proto";
+import "util/tracing/tracingpb/tracing.proto";
 
 message SetupFlowRequest {
   reserved 1, 2;
+
+  optional util.tracing.tracingpb.TraceInfo trace_info = 11 [(gogoproto.nullable) = false];
 
   // LeafTxnInputState is the input parameter for the *client.Txn needed for
   // executing the flow.

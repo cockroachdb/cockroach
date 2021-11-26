@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
@@ -171,7 +172,7 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	return ctx, roachpb.NewInternalClient(conn), err
+	return ctx, TracingInternalClient{InternalClient: roachpb.NewInternalClient(conn)}, err
 }
 
 // dial performs the dialing of the remote connection. If breaker is nil,
@@ -312,4 +313,21 @@ func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
 		latency = 0
 	}
 	return latency, nil
+}
+
+// TracingInternalClient wraps an InternalClient and fills in trace information
+// on Batch RPCs.
+type TracingInternalClient struct {
+	roachpb.InternalClient
+}
+
+// Batch overrides the Batch RPC client method and fills in tracing information.
+func (tic TracingInternalClient) Batch(
+	ctx context.Context, req *roachpb.BatchRequest, opts ...grpc.CallOption,
+) (*roachpb.BatchResponse, error) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil && !sp.IsNoop() {
+		req.TraceInfo = sp.Meta().ToProto()
+	}
+	return tic.InternalClient.Batch(ctx, req, opts...)
 }

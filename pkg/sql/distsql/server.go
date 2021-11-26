@@ -565,18 +565,57 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	return ctx, f, opChains, err
 }
 
+// setupSpanForIncomingRPC creates a span for a SetupFlow RPC. The caller must
+// finish the returned span.
+//
+// For most other RPCs, there's a gRPC server interceptor that opens spans based
+// on trace info passed as gRPC metadata. But the SetupFlow RPC is common and so
+// we have a more efficient implementation based on tracing information being
+// passed in the request proto.
+func (ds *ServerImpl) setupSpanForIncomingRPC(
+	ctx context.Context, req *execinfrapb.SetupFlowRequest,
+) (context.Context, *tracing.Span) {
+	tr := ds.ServerConfig.AmbientContext.Tracer
+	parentSpan := tracing.SpanFromContext(ctx)
+	if parentSpan != nil {
+		// It's not expected to have a span in the context since the gRPC server
+		// interceptor that generally opens spans exempts this particular RPC. Note
+		// that this method is not called for flows local to the gateway.
+		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+			tracing.WithParent(parentSpan),
+			tracing.WithServerSpanKind)
+	}
+
+	var remoteParent tracing.SpanMeta
+	if !req.TraceInfo.Empty() {
+		remoteParent = tracing.SpanMetaFromProto(req.TraceInfo)
+	} else {
+		// For backwards compatibility with 21.2, if tracing info was passed as
+		// gRPC metadata, we use it.
+		var err error
+		remoteParent, err = tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+		if err != nil {
+			log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
+		}
+	}
+	return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+		tracing.WithRemoteParent(remoteParent),
+		tracing.WithServerSpanKind)
+}
+
 // SetupFlow is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
-	parentSpan := tracing.SpanFromContext(ctx)
+	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
+	defer rpcSpan.Finish()
 
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
 	ctx, f, _, err := ds.setupFlow(
-		ctx, parentSpan, ds.memMonitor, req, nil, /* rowSyncFlowConsumer */
+		ctx, rpcSpan, ds.memMonitor, req, nil, /* rowSyncFlowConsumer */
 		nil /* batchSyncFlowConsumer */, LocalState{},
 	)
 	if err == nil {
