@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"sort"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -153,204 +152,49 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 	}
 }
 
-type sortedIndexIDs []descpb.IndexID
-
-func (s sortedIndexIDs) Less(i, j int) bool {
-	return s[i] < s[j]
-}
-
-func (s sortedIndexIDs) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s sortedIndexIDs) Len() int {
-	return len(s)
-}
-
-// getLogicallyMergedTableSpans returns all the non-drop index spans of the
-// provided table but after merging them so as to minimize the number of spans
-// generated. The following rules are used to logically merge the sorted set of
-// non-drop index spans:
-// - Contiguous index spans are merged.
-// - Two non-contiguous index spans are merged if a scan request for the index
-// IDs between them does not return any results.
-//
-// Egs: {/Table/51/1 - /Table/51/2}, {/Table/51/3 - /Table/51/4} => {/Table/51/1 - /Table/51/4}
-// provided the dropped index represented by the span
-// {/Table/51/2 - /Table/51/3} has been gc'ed.
-func getLogicallyMergedTableSpans(
-	ctx context.Context,
-	table catalog.TableDescriptor,
-	added map[tableAndIndex]bool,
-	codec keys.SQLCodec,
-	endTime hlc.Timestamp,
-	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
+// getPublicIndexTableSpans returns all the public index spans of the
+// provided table.
+func getPublicIndexTableSpans(
+	table catalog.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
 ) ([]roachpb.Span, error) {
-	// Spans with adding indexes are not safe to include in the backup since
-	// they may see non-transactional AddSST traffic. Future incremental backups
-	// will not have a way of incrementally backing up the data until #62585 is
-	// resolved.
-	addingIndexIDs := make(map[descpb.IndexID]struct{})
-	var publicIndexIDs []descpb.IndexID
-
-	allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
-	if err := catalog.ForEachIndex(table, allPhysicalIndexOpts, func(idx catalog.Index) error {
+	publicIndexSpans := make([]roachpb.Span, 0)
+	if err := catalog.ForEachActiveIndex(table, func(idx catalog.Index) error {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
 		if added[key] {
 			return nil
 		}
 		added[key] = true
-		if idx.Public() {
-			publicIndexIDs = append(publicIndexIDs, idx.GetID())
-		}
-		if idx.Adding() {
-			addingIndexIDs[idx.GetID()] = struct{}{}
-		}
+		publicIndexSpans = append(publicIndexSpans, table.IndexSpan(codec, idx.GetID()))
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	if len(publicIndexIDs) == 0 {
-		return nil, nil
-	}
-
-	// There is no merging possible with only a single index, short circuit.
-	if len(publicIndexIDs) == 1 {
-		return []roachpb.Span{table.IndexSpan(codec, publicIndexIDs[0])}, nil
-	}
-
-	sort.Sort(sortedIndexIDs(publicIndexIDs))
-
-	var mergedIndexSpans []roachpb.Span
-
-	// mergedSpan starts off as the first span in the set of spans being
-	// considered for a logical merge.
-	// The logical span merge algorithm walks over the table's non drop indexes
-	// using an lhsSpan and rhsSpan  (always offset by 1). It checks all index IDs
-	// between lhsSpan and rhsSpan to look for dropped but non-gced KVs. The
-	// existence of such a KV indicates that the rhsSpan cannot be included in the
-	// current set of spans being logically merged, and so we update the
-	// mergedSpan to encompass the lhsSpan as that is the furthest we can go.
-	// After recording the new "merged" span, we update mergedSpan to be the
-	// rhsSpan, and start processing the next logically mergeable span set.
-	mergedSpan := table.IndexSpan(codec, publicIndexIDs[0])
-	for curIndex := 0; curIndex < len(publicIndexIDs)-1; curIndex++ {
-		lhsIndexID := publicIndexIDs[curIndex]
-		rhsIndexID := publicIndexIDs[curIndex+1]
-
-		lhsSpan := table.IndexSpan(codec, lhsIndexID)
-		rhsSpan := table.IndexSpan(codec, rhsIndexID)
-
-		lhsIndex, err := table.FindIndexWithID(lhsIndexID)
-		if err != nil {
-			return nil, err
-		}
-		rhsIndex, err := table.FindIndexWithID(rhsIndexID)
-		if err != nil {
-			return nil, err
-		}
-
-		// If either the lhs or rhs is an interleaved index, we do not attempt to
-		// perform a logical merge of the spans because the index span for
-		// interleaved contains the tableID/indexID of the furthest ancestor in
-		// the interleaved chain.
-		if lhsIndex.IsInterleaved() || rhsIndex.IsInterleaved() {
-			mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
-			mergedSpan = rhsSpan
-		} else {
-			var foundDroppedKV bool
-			// Iterate over all index IDs between the two candidates (lhs and
-			// rhs) which may be logically merged. These index IDs represent
-			// non-public (and perhaps dropped) indexes between the two public
-			// index spans.
-			for i := lhsIndexID + 1; i < rhsIndexID; i++ {
-				// If we find an index which has been dropped but not gc'ed, we
-				// cannot merge the lhs and rhs spans.
-				foundDroppedKV, err = checkForKVInBounds(lhsSpan.EndKey, rhsSpan.Key, endTime)
-				if err != nil {
-					// If we're unable to check for KVs in bounds, assume that we've found
-					// one. It's always safe to assume that since we won't merge over this
-					// span. One possible error is a GC threshold error if this schema
-					// revision is older than the configured GC window on the span we're
-					// checking.
-					log.Warningf(ctx, "error while scanning [%s, %s) @ %v: %v",
-						lhsSpan.EndKey, rhsSpan.Key, endTime, err)
-					foundDroppedKV = true
-				}
-				// If we find an index that is being added, don't merge the spans. We
-				// don't want to backup data that is being backfilled until the backfill
-				// is complete. Even if the backfill has not started yet and there is no
-				// data we should not back up this span since we want these spans to
-				// appear as introduced when the index becomes PUBLIC.
-				// The indexes will appear in introduced spans because indexes
-				// will never go from PUBLIC to ADDING.
-				_, foundAddingIndex := addingIndexIDs[i]
-				if foundDroppedKV || foundAddingIndex {
-					mergedSpan.EndKey = lhsSpan.EndKey
-					mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
-					mergedSpan = rhsSpan
-					break
-				}
-			}
-		}
-
-		// The loop will terminate after this iteration and so we must update the
-		// current mergedSpan to encompass the last element in the indexIDs
-		// slice as well.
-		if curIndex == len(publicIndexIDs)-2 {
-			mergedSpan.EndKey = rhsSpan.EndKey
-			mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
-		}
-	}
-
-	return mergedIndexSpans, nil
+	return publicIndexSpans, nil
 }
 
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
-// The outputted spans are merged as described by the method
-// getLogicallyMergedTableSpans, so as to optimize the size/number of the spans
-// we BACKUP and lay protected ts records for.
+// Overlapping index spans are merged so as to optimize the size/number of the
+// spans we BACKUP and lay protected ts records for.
 func spansForAllTableIndexes(
-	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	endTime hlc.Timestamp,
 	tables []catalog.TableDescriptor,
 	revs []BackupManifest_DescriptorRevision,
 ) ([]roachpb.Span, error) {
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
-	var mergedIndexSpans []roachpb.Span
+	var publicIndexSpans []roachpb.Span
 	var err error
 
-	// checkForKVInBounds issues a scan request between start and end at endTime,
-	// and returns true if a non-nil result is returned.
-	checkForKVInBounds := func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
-		var foundKV bool
-		err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetFixedTimestamp(ctx, endTime); err != nil {
-				return err
-			}
-			res, err := txn.Scan(ctx, start, end, 1 /* maxRows */)
-			if err != nil {
-				return err
-			}
-			foundKV = len(res) != 0
-			return nil
-		})
-		return foundKV, err
-	}
-
 	for _, table := range tables {
-		mergedIndexSpans, err = getLogicallyMergedTableSpans(ctx, table, added, execCfg.Codec, endTime,
-			checkForKVInBounds)
+		publicIndexSpans, err = getPublicIndexTableSpans(table, added, execCfg.Codec)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, indexSpan := range mergedIndexSpans {
+		for _, indexSpan := range publicIndexSpans {
 			if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
@@ -367,14 +211,13 @@ func spansForAllTableIndexes(
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.Public() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
-			revSpans, err := getLogicallyMergedTableSpans(ctx, tbl, added, execCfg.Codec, rev.Time,
-				checkForKVInBounds)
+			revSpans, err := getPublicIndexTableSpans(tbl, added, execCfg.Codec)
 			if err != nil {
 				return nil, err
 			}
 
-			mergedIndexSpans = append(mergedIndexSpans, revSpans...)
-			for _, indexSpan := range mergedIndexSpans {
+			publicIndexSpans = append(publicIndexSpans, revSpans...)
+			for _, indexSpan := range publicIndexSpans {
 				if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
 					panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 				}
@@ -1011,7 +854,7 @@ func backupPlanHook(
 			}
 			tenants = []descpb.TenantInfoWithUsage{tenantInfo}
 		} else {
-			tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tables, revs)
+			tableSpans, err := spansForAllTableIndexes(p.ExecCfg(), tables, revs)
 			if err != nil {
 				return err
 			}
@@ -1528,7 +1371,7 @@ func getReintroducedSpans(
 		}
 	}
 
-	tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tablesToReinclude, allRevs)
+	tableSpans, err := spansForAllTableIndexes(p.ExecCfg(), tablesToReinclude, allRevs)
 	if err != nil {
 		return nil, err
 	}
