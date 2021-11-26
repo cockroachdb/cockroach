@@ -12,11 +12,14 @@ package schemachanger_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,11 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,13 +65,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 				for _, stmt := range stmts {
 					tdb.Exec(t, stmt.SQL)
 				}
-				q := fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status <> 'succeeded'`,
-					jobspb.TypeSchemaChange,
-					jobspb.TypeTypeSchemaChange,
-					jobspb.TypeNewSchemaChange,
-				)
-				tdb.CheckQueryResultsRetry(t, q, [][]string{{"0"}})
+				waitForSchemaChangesToComplete(t, tdb)
 			}
 
 			switch d.Cmd {
@@ -112,6 +112,16 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 			}
 		})
 	})
+}
+
+func waitForSchemaChangesToComplete(t *testing.T, tdb *sqlutils.SQLRunner) {
+	q := fmt.Sprintf(
+		`SELECT count(*) FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status <> 'succeeded'`,
+		jobspb.TypeSchemaChange,
+		jobspb.TypeTypeSchemaChange,
+		jobspb.TypeNewSchemaChange,
+	)
+	tdb.CheckQueryResultsRetry(t, q, [][]string{{"0"}})
 }
 
 // execStatementWithTestDeps executes the DDL statement using the declarative
@@ -182,4 +192,196 @@ func prettyNamespaceDump(t *testing.T, tdb *sqlutils.SQLRunner) string {
 		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// TestRollback tests that the schema changer job rolls back properly.
+// This data-driven test uses the same input as TestSchemaChangerSideEffects
+// but ignores the expected output.
+func TestRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
+		var setup []parser.Statement
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			stmts, err := parser.Parse(d.Input)
+			require.NoError(t, err)
+			require.NotEmpty(t, stmts)
+
+			switch d.Cmd {
+			case "setup":
+				// no-op
+			case "test":
+				var lines []string
+				for _, stmt := range stmts {
+					lines = append(lines, stmt.SQL)
+				}
+				t.Run(strings.Join(lines, "; "), func(t *testing.T) {
+					numStages, numRevertibleStages := countRevertiblePostCommitStages(ctx, t, setup, stmts)
+					if numStages == 0 {
+						t.Logf("test case has no post-commit stages, skipping...")
+						return
+					}
+					if numRevertibleStages == 0 {
+						t.Logf("test case has %d post-commit stages but none are revertible, skipping...", numStages)
+						return
+					}
+					t.Logf("test case has %d post-commit stages of which %d are revertible", numStages, numRevertibleStages)
+					for i := 0; i < numRevertibleStages; i++ {
+						if !t.Run(fmt.Sprintf("rollback stage %d of %d", i+1, numStages), func(t *testing.T) {
+							testRollbackCase(ctx, t, setup, stmts, i)
+						}) {
+							return
+						}
+					}
+				})
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+			setup = append(setup, stmts...)
+			return d.Expected
+		})
+	})
+}
+
+// testRollbackCase is a helper function for TestRollback.
+func testRollbackCase(
+	ctx context.Context,
+	t *testing.T,
+	setup []parser.Statement,
+	stmts []parser.Statement,
+	rollbackStageIdx int,
+) {
+	var numInjectedFailures uint32
+	beforeRevertiblePostCommitStage := func(p scplan.Plan, stageIdx int) error {
+		if atomic.LoadUint32(&numInjectedFailures) == 0 && stageIdx == rollbackStageIdx {
+			atomic.AddUint32(&numInjectedFailures, 1)
+			return errors.Errorf("boom %d", rollbackStageIdx)
+		}
+		return nil
+	}
+	resetTxnState := func() {
+		// Reset the counter in case the transaction is retried for whatever reason.
+		atomic.StoreUint32(&numInjectedFailures, 0)
+	}
+	err := execRolledBackStatements(ctx, t, setup, stmts, beforeRevertiblePostCommitStage, resetTxnState)
+	if atomic.LoadUint32(&numInjectedFailures) == 0 {
+		require.NoError(t, err)
+	} else {
+		require.Regexp(t, fmt.Sprintf("boom %d", rollbackStageIdx), err)
+	}
+}
+
+// countRevertiblePostCommitStages runs the test statements to count the number
+// of stages in the post-commit phase which are marked as revertible.
+func countRevertiblePostCommitStages(
+	ctx context.Context, t *testing.T, setup []parser.Statement, stmt []parser.Statement,
+) (numTotalPostCommitStages int, numRevertiblePostCommitStages int) {
+	var nTotal, nRevertible uint32
+	beforeRevertiblePostCommitStage := func(p scplan.Plan, stageIdx int) error {
+		atomic.StoreUint32(&nTotal, uint32(len(p.Stages)))
+		n := uint32(0)
+		for _, stage := range p.Stages {
+			if !stage.Revertible {
+				break
+			}
+			n++
+		}
+		atomic.StoreUint32(&nRevertible, n)
+		return nil
+	}
+	require.NoError(t, execRolledBackStatements(ctx, t, setup, stmt, beforeRevertiblePostCommitStage, func() {}))
+	return int(atomic.LoadUint32(&nTotal)), int(atomic.LoadUint32(&nRevertible))
+}
+
+// execRolledBackStatements spins up a test cluster, executes the setup
+// statements with the legacy schema changer, then executes the test statements
+// with the declarative schema changer.
+func execRolledBackStatements(
+	ctx context.Context,
+	t *testing.T,
+	setup []parser.Statement,
+	stmts []parser.Statement,
+	beforeRevertiblePostCommitStageCallback func(p scplan.Plan, stageIdx int) error,
+	txnStartCallback func(),
+) (err error) {
+	const fetchDescriptorStateQuery = `
+		SELECT
+			create_statement
+		FROM
+			(
+				SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
+				UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
+				UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
+			)
+		ORDER BY
+			create_statement;`
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+					BeforeStage: func(p scplan.Plan, stageIdx int) error {
+						if p.Params.ExecutionPhase != scop.PostCommitPhase || !p.Stages[stageIdx].Revertible {
+							return nil
+						}
+						return beforeRevertiblePostCommitStageCallback(p, stageIdx)
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Execute the setup statements with the legacy schema changer so that the
+	// declarative schema changer testing knobs don't get used.
+	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'off'")
+	for _, stmt := range setup {
+		tdb.Exec(t, stmt.SQL)
+	}
+	waitForSchemaChangesToComplete(t, tdb)
+	before := tdb.QueryStr(t, fetchDescriptorStateQuery)
+
+	// Execute the tested statements with the declarative schema changer and fail
+	// the test if it all takes too long. This prevents the test suite from
+	// hanging when a regression is introduced.
+	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'unsafe_always'")
+	{
+		c := make(chan error, 1)
+		go func() {
+			c <- crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+				txnStartCallback()
+				for _, stmt := range stmts {
+					if _, err := tx.Exec(stmt.SQL); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}()
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case e := <-c:
+				err = e
+				return nil
+			default:
+				return errors.New("waiting for statements to execute")
+			}
+		})
+	}
+
+	if err != nil {
+		// If the statement execution failed, then we expect to end up in the same
+		// state as when we started.
+		require.Equal(t, before, tdb.QueryStr(t, fetchDescriptorStateQuery))
+		return err
+	}
+
+	// Ensure we're really done here.
+	waitForSchemaChangesToComplete(t, tdb)
+	return nil
 }
