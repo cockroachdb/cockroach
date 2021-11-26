@@ -171,7 +171,7 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	return ctx, roachpb.NewInternalClient(conn), err
+	return ctx, roachpb.TracingInternalClient{InternalClient: roachpb.NewInternalClient(conn)}, err
 }
 
 // dial performs the dialing of the remote connection. If breaker is nil,

@@ -24,9 +24,12 @@ import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors.proto";
 import "sql/sessiondatapb/session_data.proto";
+import "util/tracing/tracingpb/tracing.proto";
 
 message SetupFlowRequest {
   reserved 1, 2;
+
+  optional util.tracing.tracingpb.TraceInfo trace_info = 10 [(gogoproto.nullable) = false];
 
   // LeafTxnInputState is the input parameter for the *client.Txn needed for
   // executing the flow.
@@ -140,7 +143,8 @@ message CancelDeadFlowsRequest {
 service DistSQL {
   // SetupFlow instantiates a flow (subgraphs of a distributed SQL
   // computation) on the receiving node.
-  rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
+  rpc SetupFlow(
+    SetupFlowRequest) returns (SimpleResponse) {}
 
   // CancelDeadFlows cancels all specified flows that are currently scheduled to
   // run on the receiving node but haven't been started yet because the flows

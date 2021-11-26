@@ -56,6 +56,19 @@ func (t RecordingType) ToCarrierValue() string {
 	}
 }
 
+func (t RecordingType) ToProto() tracingpb.TraceInfo_RecordingMode {
+	switch t {
+	case RecordingOff:
+		return tracingpb.TraceInfo_NONE
+	case RecordingStructured:
+		return tracingpb.TraceInfo_STRUCTURED
+	case RecordingVerbose:
+		return tracingpb.TraceInfo_VERBOSE
+	default:
+		panic(fmt.Sprintf("invalid RecordingType: %d", t))
+	}
+}
+
 // RecordingTypeFromCarrierValue decodes a recording type carried by a carrier.
 func RecordingTypeFromCarrierValue(val string) RecordingType {
 	switch val {

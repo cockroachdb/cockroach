@@ -25,6 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -194,7 +195,10 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	}
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer))
+		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer,
+			func(reqCtx context.Context) bool {
+				return !ctx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
+			} /* compatibilityMode */))
 		streamInterceptor = append(streamInterceptor, tracing.StreamServerInterceptor(tracer))
 	}
 
@@ -784,7 +788,10 @@ func (ctx *Context) grpcDialOptions(
 			span.SetTag("node", attribute.IntValue(int(ctx.NodeID.Get())))
 		}
 		unaryInterceptors = append(unaryInterceptors,
-			tracing.ClientInterceptor(tracer, tagger))
+			tracing.ClientInterceptor(tracer, tagger,
+				func(reqCtx context.Context) bool {
+					return !ctx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
+				} /* compatibilityMode */))
 		streamInterceptors = append(streamInterceptors,
 			tracing.StreamClientInterceptor(tracer, tagger))
 	}
