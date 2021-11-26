@@ -123,7 +123,9 @@ func verifyClusterName(clusterName, username string) error {
 
 func sortedClusters() []string {
 	var r []string
-	for n := range syncedClusters {
+	syncedClusters.mu.Lock()
+	defer syncedClusters.mu.Unlock()
+	for n := range syncedClusters.clusters {
 		r = append(r, n)
 	}
 	sort.Strings(r)
@@ -151,7 +153,7 @@ func newCluster(name string, opts ...install.ClusterSettingOption) (*install.Syn
 		}
 	}
 
-	metadata, ok := syncedClusters[name]
+	metadata, ok := readSyncedClusters(name)
 	if !ok {
 		err := errors.Newf(`unknown cluster: %s`, name)
 		err = errors.WithHintf(err, "\nAvailable clusters:\n  %s\n", strings.Join(sortedClusters(), "\n  "))
@@ -206,7 +208,10 @@ func Version() string {
 // alphabetical order.
 func CachedClusters(fn func(clusterName string, numVMs int)) {
 	for _, name := range sortedClusters() {
-		c := syncedClusters[name]
+		c, ok := readSyncedClusters(name)
+		if !ok {
+			return
+		}
 		fn(c.Name, len(c.VMs))
 	}
 }
@@ -1019,7 +1024,7 @@ func destroyCluster(cld *cloud.Cloud, clusterName string) error {
 }
 
 func destroyLocalCluster(clusterName string) error {
-	if _, ok := syncedClusters[clusterName]; !ok {
+	if _, ok := readSyncedClusters(clusterName); !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
@@ -1094,7 +1099,7 @@ func Create(username string, numNodes int, createVMOpts vm.CreateOpts) (retErr e
 			return &ClusterAlreadyExistsError{name: clusterName}
 		}
 	} else {
-		if _, ok := syncedClusters[clusterName]; ok {
+		if _, ok := readSyncedClusters(clusterName); ok {
 			return &ClusterAlreadyExistsError{name: clusterName}
 		}
 
