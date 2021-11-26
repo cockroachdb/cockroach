@@ -755,6 +755,9 @@ type clusterConfig struct {
 	spec spec.ClusterSpec
 	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
+	// username is the username passed via the --username argument
+	// or the ROACHPROD_USER command-line option.
+	username     string
 	localCluster bool
 	useIOBarrier bool
 	alloc        *quotapool.IntAlloc
@@ -934,7 +937,7 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		err = roachprod.Create("" /* username */, cfg.spec.NodeCount, createVMOpts)
+		err = roachprod.Create(cfg.username, cfg.spec.NodeCount, createVMOpts)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, err
