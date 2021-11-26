@@ -259,7 +259,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFq4kAUhu_3K
 # Calculation and rendering are happening at the end.
 query T
 EXPLAIN (DISTSQL) SELECT covar_pop(a, c) FROM data
-
+----
 distribution: full
 vectorized: true
 ·
