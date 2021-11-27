@@ -2318,20 +2318,18 @@ func (c *clusterImpl) IsLocal() bool {
 	return c.name == "local"
 }
 
-// Extend extends the cluster's expiration by d, after truncating d to minute
-// granularity.
+// Extend extends the cluster's expiration by d.
 func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Logger) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Extend")
 	}
-	minutes := int(d.Minutes())
-	l.PrintfCtx(ctx, "extending cluster by %d minutes", minutes)
+	l.PrintfCtx(ctx, "extending cluster by %s", d.String())
 	if err := roachprod.Extend(c.name, d); err != nil {
 		l.PrintfCtx(ctx, "roachprod extend failed: %v", err)
 		return errors.Wrap(err, "roachprod extend failed")
 	}
 	// Update c.expiration. Keep it under the real expiration.
-	c.expiration = c.expiration.Add(time.Duration((minutes - 1)) * time.Minute)
+	c.expiration = c.expiration.Add(d)
 	return nil
 }
 
