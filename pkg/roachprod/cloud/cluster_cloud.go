@@ -280,8 +280,8 @@ func DestroyCluster(c *Cluster) error {
 
 // ExtendCluster TODO(peter): document
 func ExtendCluster(c *Cluster, extension time.Duration) error {
-	newLifetime := c.Lifetime + extension
-
+	// Round new lifetime to nearest second.
+	newLifetime := (c.Lifetime + extension).Round(time.Second)
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		return p.Extend(vms, newLifetime)
 	})
