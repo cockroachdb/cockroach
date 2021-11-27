@@ -68,6 +68,7 @@ go_library(
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings",
