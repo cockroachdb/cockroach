@@ -354,7 +354,7 @@ func (c *SyncedCluster) generateStartCmd(
 	node Node, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
 
-	args, advertiseFirstIP, err := c.generateStartArgs(node, startOpts, vers)
+	args, err := c.generateStartArgs(node, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -375,25 +375,23 @@ func (c *SyncedCluster) generateStartCmd(
 			"GOTRACEBACK=crash",
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
 		}, c.Env...), getEnvVars()...),
-		Binary:           cockroachNodeBinary(c, node),
-		StartCmd:         startCmd,
-		Args:             args,
-		MemoryMax:        config.MemoryMax,
-		Local:            c.IsLocal(),
-		AdvertiseFirstIP: advertiseFirstIP,
+		Binary:    cockroachNodeBinary(c, node),
+		StartCmd:  startCmd,
+		Args:      args,
+		MemoryMax: config.MemoryMax,
+		Local:     c.IsLocal(),
 	})
 }
 
 type startTemplateData struct {
-	Local            bool
-	AdvertiseFirstIP bool
-	LogDir           string
-	Binary           string
-	StartCmd         string
-	KeyCmd           string
-	MemoryMax        string
-	Args             []string
-	EnvVars          []string
+	Local     bool
+	LogDir    string
+	Binary    string
+	StartCmd  string
+	KeyCmd    string
+	MemoryMax string
+	Args      []string
+	EnvVars   []string
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {
@@ -415,7 +413,7 @@ func execStartTemplate(data startTemplateData) (string, error) {
 
 func (c *SyncedCluster) generateStartArgs(
 	node Node, startOpts StartOpts, vers *version.Version,
-) (_ []string, _advertiseFirstIP bool, _ error) {
+) ([]string, error) {
 	var args []string
 	nodes := c.TargetNodes()
 
@@ -444,8 +442,9 @@ func (c *SyncedCluster) generateStartArgs(
 		// Encryption at rest is turned on for the cluster.
 		for _, storeDir := range storeDirs {
 			// TODO(windchan7): allow key size to be specified through flags.
-			encryptArgs := "path=%s,key=%s/aes-128.key,old-key=plain"
-			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
+			encryptArgs := fmt.Sprintf(
+				"path=%s,key=%s/aes-128.key,old-key=plain", storeDir, storeDir,
+			)
 			args = append(args, `--enterprise-encryption`, encryptArgs)
 		}
 	}
@@ -468,15 +467,29 @@ func (c *SyncedCluster) generateStartArgs(
 	args = append(args, fmt.Sprintf("--cache=%d%%", cache))
 	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
 
+	listenHost := ""
 	if c.IsLocal() {
 		// This avoids annoying firewall prompts on Mac OS X.
-		args = append(args, "--listen-addr=127.0.0.1")
+		listenHost = "127.0.0.1"
 	}
 
 	args = append(args,
-		fmt.Sprintf("--port=%d", c.NodePort(node)),
-		fmt.Sprintf("--http-port=%d", c.NodeUIPort(node)),
+		fmt.Sprintf("--listen-addr=%s:%d", listenHost, c.NodePort(node)),
+		fmt.Sprintf("--http-addr=%s:%d", listenHost, c.NodeUIPort(node)),
 	)
+
+	if !c.IsLocal() {
+		advertiseHost := ""
+		if c.shouldAdvertisePublicIP() {
+			advertiseHost = c.Host(node)
+		} else {
+			advertiseHost = c.VMs[node-1].PrivateIP
+		}
+		args = append(args,
+			fmt.Sprintf("--advertise-addr=%s:%d", advertiseHost, c.NodePort(node)),
+		)
+	}
+
 	if locality := c.locality(node); locality != "" {
 		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
 			args = append(args, "--locality="+locality)
@@ -488,18 +501,6 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
 	}
 
-	var advertiseFirstIP bool
-	if c.shouldAdvertisePublicIP() {
-		args = append(args, fmt.Sprintf("--advertise-host=%s", c.Host(node)))
-	} else if !c.IsLocal() {
-		// Explicitly advertise by IP address so that we don't need to
-		// deal with cross-region name resolution. The `hostname -I`
-		// prints all IP addresses for the host and then we'll select
-		// the first from the list. This has to be done on the server,
-		// so we pass the information that this needs to be done along.
-		advertiseFirstIP = true
-	}
-
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{
 		node: node,
@@ -507,12 +508,12 @@ func (c *SyncedCluster) generateStartArgs(
 	for _, arg := range startOpts.ExtraArgs {
 		expandedArg, err := e.expand(c, arg)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		args = append(args, strings.Split(expandedArg, " ")...)
 	}
 
-	return args, advertiseFirstIP, nil
+	return args, nil
 }
 
 func (c *SyncedCluster) initializeCluster(node Node) (string, error) {
