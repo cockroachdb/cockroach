@@ -2090,7 +2090,7 @@ func (a *finalRegressionAccumulatorBase) combine(array []float64) error {
 		}
 
 		tmpX := sx1/n1 - sx2/n2
-		sxx = sxx1 + sxx2 + n1*n2*tmpX*tmpX/n
+		sxx = sxx1 + sxx2 + (n1*n2/n)*tmpX*tmpX
 		if math.IsInf(sxx, 0) && !math.IsInf(sxx1, 0) && !math.IsInf(sxx2, 0) {
 			return tree.ErrFloatOutOfRange
 		}
@@ -2101,12 +2101,12 @@ func (a *finalRegressionAccumulatorBase) combine(array []float64) error {
 		}
 
 		tmpY := sy1/n1 - sy2/n2
-		syy = syy1 + syy2 + n1*n2*tmpY*tmpY/n
+		syy = syy1 + syy2 + (n1*n2/n)*tmpY*tmpY
 		if math.IsInf(syy, 0) && !math.IsInf(syy1, 0) && !math.IsInf(syy2, 0) {
 			return tree.ErrFloatOutOfRange
 		}
 
-		sxy = sxy1 + sxy2 + n1*n2*tmpX*tmpY/n
+		sxy = sxy1 + sxy2 + (n1*n2/n)*tmpX*tmpY
 		if math.IsInf(sxy, 0) && !math.IsInf(sxy1, 0) && !math.IsInf(sxy2, 0) {
 			return tree.ErrFloatOutOfRange
 		}
@@ -2129,7 +2129,11 @@ func (a *regressionAccumulatorBase) float64Val(datum tree.Datum) (float64, error
 	case *tree.DInt:
 		return float64(*val), nil
 	case *tree.DDecimal:
-		return val.Decimal.Float64()
+		f, err := val.Decimal.Float64()
+		if err != nil {
+			return 0, tree.ErrFloatOutOfRange
+		}
+		return f, nil
 	default:
 		return 0, fmt.Errorf("invalid type %T (%v)", val, val)
 	}
