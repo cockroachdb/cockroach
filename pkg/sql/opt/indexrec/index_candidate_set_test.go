@@ -229,9 +229,15 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 	indexCol2 := cat.IndexColumn{Column: &col2, Descending: false}
 	indexCol3 := cat.IndexColumn{Column: &col3, Descending: true}
 
-	// Add arbitrary primary indexes.
-	table1.Indexes = []*testcat.Index{{Columns: []cat.IndexColumn{indexCol1}}}
-	table2.Indexes = []*testcat.Index{{Columns: []cat.IndexColumn{indexCol1}}}
+	// Add existing indexes.
+	table1.Indexes = []*testcat.Index{
+		{Columns: []cat.IndexColumn{indexCol1}, ExplicitColCount: 1},
+		{Columns: []cat.IndexColumn{indexCol2}, ExplicitColCount: 1},
+	}
+	table2.Indexes = []*testcat.Index{
+		{Columns: []cat.IndexColumn{indexCol1}, ExplicitColCount: 1},
+		{Columns: []cat.IndexColumn{indexCol2, indexCol3}, ExplicitColCount: 2},
+	}
 
 	return []cat.Table{&table1, &table2}, []cat.IndexColumn{indexCol1, indexCol2, indexCol3}
 }
