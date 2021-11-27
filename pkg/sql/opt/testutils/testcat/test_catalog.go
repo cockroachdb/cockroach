@@ -820,6 +820,10 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 type Index struct {
 	IdxName string
 
+	// ExplicitColCount is the number of columns that are explicitly specified in
+	// the index definition.
+	ExplicitColCount int
+
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the cat.Index.KeyColumnCount for more details.
 	KeyCount int
@@ -899,6 +903,11 @@ func (ti *Index) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
+}
+
+// ExplicitColumnCount is part of the cat.Index interface.
+func (ti *Index) ExplicitColumnCount() int {
+	return ti.ExplicitColCount
 }
 
 // KeyColumnCount is part of the cat.Index interface.
