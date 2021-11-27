@@ -2068,7 +2068,7 @@ func (ot *OptTester) IndexRecommendations() string {
 	normExpr, _ := ot.OptNorm()
 	md := normExpr.(memo.RelExpr).Memo().Metadata()
 	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
-	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates, make(map[cat.Table][][]cat.IndexColumn))
+	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
 
 	optExpr, _ := ot.OptimizeWithTables(hypTables)
 	result := indexrec.FindIndexRecommendationSet(optExpr, optExpr.(memo.RelExpr).Memo().Metadata())

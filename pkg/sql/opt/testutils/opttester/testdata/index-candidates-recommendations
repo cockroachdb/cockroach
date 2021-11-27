@@ -71,7 +71,7 @@ project
       ├── select
       │    ├── columns: t1.k:1(int) t1.i:2(int!null)
       │    ├── ordering: +1
-      │    ├── scan t1@_hyp_4
+      │    ├── scan t1@_hyp_3
       │    │    ├── columns: t1.k:1(int) t1.i:2(int)
       │    │    └── ordering: +1
       │    └── filters
