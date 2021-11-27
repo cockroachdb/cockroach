@@ -56,7 +56,7 @@ project
       │    ├── columns: t1.k:1 t1.i:2!null
       │    ├── cost: 1084.55
       │    ├── ordering: +1
-      │    ├── scan t1@_hyp_4
+      │    ├── scan t1@_hyp_3
       │    │    ├── columns: t1.k:1 t1.i:2
       │    │    ├── cost: 1074.52
       │    │    └── ordering: +1
