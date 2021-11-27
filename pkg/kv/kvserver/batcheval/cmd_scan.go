@@ -45,7 +45,7 @@ func Scan(
 	opts := storage.MVCCScanOptions{
 		Inconsistent:           h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:                    h.Txn,
-		LocalUncertaintyLimit:  cArgs.LocalUncertaintyLimit,
+		Uncertainty:            cArgs.Uncertainty,
 		MaxKeys:                h.MaxSpanRequestKeys,
 		MaxIntents:             storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:            h.TargetBytes,

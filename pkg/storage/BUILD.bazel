@@ -122,6 +122,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
+        "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",

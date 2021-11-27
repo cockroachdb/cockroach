@@ -334,6 +334,7 @@ go_test(
         "//pkg/kv/kvserver/tenantrate",
         "//pkg/kv/kvserver/tscache",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

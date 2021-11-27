@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsUncertain(t *testing.T) {
+func TestInterval_IsUncertain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	makeTs := func(walltime int64) hlc.Timestamp {
@@ -67,6 +67,7 @@ func TestIsUncertain(t *testing.T) {
 		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeSynTs(25), exp: false},
 	}
 	for _, test := range testCases {
-		require.Equal(t, test.exp, IsUncertain(test.localLim, test.globalLim, test.valueTs), "%+v", test)
+		in := Interval{GlobalLimit: test.globalLim, LocalLimit: hlc.ClockTimestamp(test.localLim)}
+		require.Equal(t, test.exp, in.IsUncertain(test.valueTs), "%+v", test)
 	}
 }

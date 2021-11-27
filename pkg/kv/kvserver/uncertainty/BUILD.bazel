@@ -36,9 +36,9 @@ go_test(
 go_library(
     name = "uncertainty",
     srcs = [
+        "compute.go",
         "doc.go",
-        "limit.go",
-        "uncertainty.go",
+        "interval.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty",
     visibility = ["//visibility:public"],
@@ -52,8 +52,8 @@ go_library(
 go_test(
     name = "uncertainty_test",
     srcs = [
-        "limit_test.go",
-        "uncertainty_test.go",
+        "compute_test.go",
+        "interval_test.go",
     ],
     embed = [":uncertainty"],
     deps = [
