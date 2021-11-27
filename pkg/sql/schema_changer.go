@@ -130,7 +130,7 @@ func NewSchemaChangerForTesting(
 		ieFactory: func(
 			ctx context.Context, initInternalExecutor func(sqlutil.InternalExecutor),
 		) sqlutil.InternalExecutor {
-			return execCfg.InternalExecutor
+			return execCfg.InternalExecutorFactory(ctx, initInternalExecutor)
 		},
 		metrics:        NewSchemaChangerMetrics(),
 		clock:          db.Clock(),
@@ -586,8 +586,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	// If there are any names to drain, then drain them.
 	if len(desc.GetDrainingNames()) > 0 {
+		ie := sc.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		if err := drainNamesForDescriptor(
-			ctx, desc.GetID(), sc.execCfg.CollectionFactory, sc.db, sc.execCfg.InternalExecutor,
+			ctx, desc.GetID(), sc.execCfg.CollectionFactory, sc.db, ie,
 			sc.execCfg.Codec, sc.testingKnobs.OldNamesDrainedNotification,
 		); err != nil {
 			return err
@@ -1040,7 +1041,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
-	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, func(
+	ie := sc.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	err := sc.execCfg.CollectionFactory.Txn(ctx, ie, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
@@ -1338,7 +1340,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// If any operations was skipped because a mutation was made
 	// redundant due to a column getting dropped later on then we should
 	// wait for those jobs to complete before returning our result back.
-	if err := sc.jobRegistry.WaitForJobs(ctx, sc.execCfg.InternalExecutor, depMutationJobs); err != nil {
+	if err := sc.jobRegistry.WaitForJobs(ctx, ie, depMutationJobs); err != nil {
 		return errors.Wrap(err, "A dependent transaction failed for this schema change")
 	}
 
@@ -1930,7 +1932,8 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
-	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutorFactory(ctx,
+		func(ie sqlutil.InternalExecutor) {}), sc.db, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.

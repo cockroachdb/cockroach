@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -176,7 +177,8 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
-			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
+			ie := n.p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+			if _ /* cols */, delErr := ie.Exec(
 				ctx, "delete-job", nil /* txn */, stmt, jobID,
 			); delErr != nil {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
@@ -670,7 +672,8 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	if job != nil {
 		jobID = job.ID()
 	}
-	exists, err := jobs.RunningJobExists(ctx, jobID, p.ExecCfg().InternalExecutor, nil /* txn */, func(payload *jobspb.Payload) bool {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	exists, err := jobs.RunningJobExists(ctx, jobID, ie, nil /* txn */, func(payload *jobspb.Payload) bool {
 		return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
 	})
 

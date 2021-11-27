@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -165,8 +166,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			// is in keeping with the semantics we use when creating a schema during
 			// sql execution. Namely, queue job in the txn which creates the schema
 			// desc and run once the txn has committed.
-			if err := p.ExecCfg().JobRegistry.Run(ctx, p.ExecCfg().InternalExecutor,
-				schemaMetadata.queuedSchemaJobs); err != nil {
+			ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+			if err := p.ExecCfg().JobRegistry.Run(ctx, ie, schemaMetadata.queuedSchemaJobs); err != nil {
 				return err
 			}
 
@@ -954,6 +955,7 @@ func (r *importResumer) publishTables(
 func (r *importResumer) writeStubStatisticsForImportedTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, res roachpb.BulkOpSummary,
 ) {
+	ie := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	details := r.job.Details().(jobspb.ImportDetails)
 	for _, tbl := range details.Tables {
 		if tbl.IsNew {
@@ -977,7 +979,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 					statistic.AvgSize = avgRowSize
 				}
 				// TODO(michae2): parallelize insertion of statistics.
-				err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, nil /* txn */, statistics)
+				err = stats.InsertNewStats(ctx, ie, nil /* txn */, statistics)
 			}
 			if err != nil {
 				// Failure to create statistics should not fail the entire import.
@@ -1317,7 +1319,8 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	// This would be a job to drop all the schemas, and a job to update the parent
 	// database descriptor.
 	if len(jobsToRunAfterTxnCommit) != 0 {
-		if err := p.ExecCfg().JobRegistry.Run(ctx, p.ExecCfg().InternalExecutor,
+		ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		if err := p.ExecCfg().JobRegistry.Run(ctx, ie,
 			jobsToRunAfterTxnCommit); err != nil {
 			return errors.Wrap(err, "failed to run jobs that drop the imported schemas")
 		}

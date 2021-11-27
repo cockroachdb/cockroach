@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -54,7 +55,8 @@ func (p *planner) showVersionSetting(
 			// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() error {
 				return p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+					ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+					datums, err := ie.QueryRowEx(
 						ctx, "read-setting",
 						txn,
 						sessiondata.InternalExecutorOverride{User: security.RootUserName()},

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -91,10 +92,12 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
 
 	}
+
+	ie := params.p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 	// Setting the comment to NULL is the
 	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"set-constraint-comment",
 			params.p.Txn(),
@@ -108,7 +111,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"delete-constraint-comment",
 			params.p.Txn(),

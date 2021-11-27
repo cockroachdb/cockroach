@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -60,8 +61,9 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		return err
 	}
 
+	ie := params.p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"set-column-comment",
 			params.p.Txn(),
@@ -75,7 +77,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"delete-column-comment",
 			params.p.Txn(),

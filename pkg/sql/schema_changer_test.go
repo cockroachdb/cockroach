@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -98,7 +99,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.NodeID,
 		execCfg.DB,
 		execCfg.Clock,
-		execCfg.InternalExecutor,
+		execCfg.InternalExecutorFactory(context.Background(), func(ie sqlutil.InternalExecutor) {}),
 		execCfg.Settings,
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},

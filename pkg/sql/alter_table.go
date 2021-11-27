@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -156,6 +157,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			"%q was not resolved as a table but is %T", resolved, resolved)
 	}
 
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 	for i, cmd := range n.n.Cmds {
 		telemetry.Inc(cmd.TelemetryCounter())
 
@@ -809,7 +811,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateCheckInTxn(
-					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutor, params.SessionData(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
+					params.ctx, &params.p.semaCtx, ie, params.SessionData(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
 				); err != nil {
 					return err
 				}
@@ -831,7 +833,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateFkInTxn(
-					params.ctx, params.p.LeaseMgr(), params.ExecCfg().InternalExecutor,
+					params.ctx, ie,
 					n.tableDesc, params.EvalContext().Txn, name, params.EvalContext().Codec,
 				); err != nil {
 					return err
@@ -855,7 +857,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
 					if err := validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx, params.ExecCfg().InternalExecutor, n.tableDesc, params.EvalContext().Txn, name,
+						params.ctx, ie, n.tableDesc, params.EvalContext().Txn, name,
 					); err != nil {
 						return err
 					}
@@ -1459,8 +1461,9 @@ func injectTableStats(
 		return err
 	}
 
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 	// First, delete all statistics for the table.
-	if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	if _ /* rows */, err := ie.Exec(
 		params.ctx,
 		"delete-stats",
 		params.EvalContext().Txn,
@@ -1519,7 +1522,7 @@ func insertJSONStatistic(
 ) error {
 	var (
 		ctx      = params.ctx
-		ie       = params.ExecCfg().InternalExecutor
+		ie       = params.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		txn      = params.EvalContext().Txn
 		settings = params.ExecCfg().Settings
 	)
@@ -1584,7 +1587,8 @@ func insertJSONStatistic(
 func (p *planner) removeColumnComment(
 	ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	_, err := ie.ExecEx(
 		ctx,
 		"delete-column-comment",
 		p.txn,

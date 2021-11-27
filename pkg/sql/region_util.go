@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -70,7 +71,8 @@ func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterReg
 		User: security.RootUserName(),
 	}
 
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	it, err := ie.QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
 		p.ExtendedEvalContext().Txn,
@@ -758,7 +760,8 @@ func applyZoneConfigForMultiRegionDatabase(
 	)
 	// If the new zone config is the same as a blank zone config, delete it.
 	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
-		_, err = execConfig.InternalExecutor.Exec(
+		ie := execConfig.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		_, err = ie.Exec(
 			ctx,
 			"delete-zone-multiregion-database",
 			txn,

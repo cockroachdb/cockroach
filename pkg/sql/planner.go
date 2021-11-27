@@ -421,11 +421,12 @@ func internalExtendedEvalCtx(
 	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsController tree.SQLStatsController
 	var indexUsageStatsController tree.IndexUsageStatsController
-	if execCfg.InternalExecutor != nil {
-		if execCfg.InternalExecutor.s != nil {
-			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
-			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
-			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
+	if execCfg.InternalExecutorFactory != nil {
+		ie := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {}).(*InternalExecutor)
+		if ie.s != nil {
+			indexUsageStats = ie.s.indexUsageStats
+			sqlStatsController = ie.s.sqlStatsController
+			indexUsageStatsController = ie.s.indexUsageStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -89,7 +90,8 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 func (p *planner) upsertIndexComment(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, comment string,
 ) error {
-	_, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+	ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	_, err := ie.ExecEx(
 		ctx,
 		"set-index-comment",
 		p.Txn(),
@@ -106,7 +108,8 @@ func (p *planner) upsertIndexComment(
 func (p *planner) removeIndexComment(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	_, err := ie.ExecEx(
 		ctx,
 		"delete-index-comment",
 		p.txn,

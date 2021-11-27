@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -686,7 +687,8 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// We cannot rely on b.job containing created_by_id because on job
 		// resumption the registry does not populate the resumer's CreatedByInfo.
-		datums, err := exec.InternalExecutor.QueryRowEx(
+		ie := exec.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		datums, err := ie.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
 			txn,
@@ -706,7 +708,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
-			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
+			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, ie, txn); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}

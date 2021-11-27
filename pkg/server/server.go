@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -554,7 +555,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
-	// need an InternalExecutor, but the InternalExecutor needs an xecutorConfig,
+	// need an InternalExecutor, but the InternalExecutor needs an ExecutorConfig,
 	// which in turn needs many things. That's why everybody that needs an
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
@@ -681,7 +682,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	registry.AddMetricStruct(tenantUsage.Metrics())
 
 	node := NewNode(
-		storeCfg, recorder, registry, stopper,
+		ctx, storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
 		tenantUsage, spanConfigAccessor,
@@ -803,7 +804,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn(), sStatus)
-	node.InitLogger(sqlServer.execCfg)
+	node.InitLogger(ctx, sqlServer.execCfg)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
@@ -2540,9 +2541,10 @@ func (s *Server) Decommission(
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				ie := s.sqlServer.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 				return sql.InsertEventRecord(
 					ctx,
-					s.sqlServer.execCfg.InternalExecutor,
+					ie.(*sql.InternalExecutor),
 					txn,
 					int32(s.NodeID()), /* reporting ID: the node where the event is logged */
 					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */

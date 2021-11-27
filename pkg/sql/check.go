@@ -44,7 +44,7 @@ func validateCheckExpr(
 	sessionData *sessiondata.SessionData,
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 ) error {
 	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
@@ -237,7 +237,7 @@ func validateForeignKey(
 	ctx context.Context,
 	srcTable *tabledesc.Mutable,
 	fk *descpb.ForeignKeyConstraint,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 ) error {

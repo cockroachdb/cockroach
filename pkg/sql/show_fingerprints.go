@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -155,7 +156,9 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 
-	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx,
+		func(ie sqlutil.InternalExecutor) {})
+	fingerprintCols, err := ie.QueryRowEx(
 		params.ctx, "hash-fingerprint",
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},

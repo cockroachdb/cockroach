@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -69,7 +70,9 @@ func (n *saveTableNode) startExec(params runParams) error {
 		create.Defs = append(create.Defs, def)
 	}
 
-	_, err := params.p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	ie := params.p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(params.ctx,
+		func(ie sqlutil.InternalExecutor) {})
+	_, err := ie.Exec(
 		params.ctx,
 		"create save table",
 		nil, /* txn */
@@ -82,7 +85,9 @@ func (n *saveTableNode) startExec(params runParams) error {
 func (n *saveTableNode) issue(params runParams) error {
 	if v := &n.run.vals; len(v.Rows) > 0 {
 		stmt := fmt.Sprintf("INSERT INTO %s %s", n.target.String(), v.String())
-		if _, err := params.p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ie := params.p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(params.ctx,
+			func(ie sqlutil.InternalExecutor) {})
+		if _, err := ie.Exec(
 			params.ctx,
 			"insert into save table",
 			nil, /* txn */

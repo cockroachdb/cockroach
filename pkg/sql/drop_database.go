@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -306,7 +307,8 @@ func (p *planner) accumulateCascadingViews(
 }
 
 func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	_, err := ie.ExecEx(
 		ctx,
 		"delete-db-comment",
 		p.txn,
@@ -323,7 +325,8 @@ func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) erro
 	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
 		return nil
 	}
-	rowsDeleted, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	rowsDeleted, err := ie.ExecEx(
 		ctx,
 		"delete-db-role-settings",
 		p.txn,

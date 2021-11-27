@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -157,7 +158,8 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+	row, err := ie.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -220,7 +222,8 @@ func (n *alterRoleNode) startExec(params runParams) error {
 
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+		_, err = ie.Exec(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -263,7 +266,8 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			}
 		}
 
-		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+		_, err := ie.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -465,8 +469,9 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 	upsertOrDeleteFunc := func(newSettings []string) error {
 		var rowsAffected int
 		var internalExecErr error
+		ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 		if newSettings == nil {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = ie.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -476,7 +481,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				roleName,
 			)
 		} else {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = ie.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -553,7 +558,8 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+	row, err := ie.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -591,7 +597,8 @@ func (n *alterRoleSetNode) makeNewSettings(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
-	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+	datums, err := ie.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,

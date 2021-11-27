@@ -317,7 +317,7 @@ func (p *planner) MemberOfWithAdminOption(
 	return MemberOfWithAdminOption(
 		ctx,
 		p.execCfg,
-		p.ExecCfg().InternalExecutor,
+		p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {}),
 		p.Descriptors(),
 		p.Txn(),
 		member,
@@ -492,7 +492,8 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	hasRolePrivilege, err := ie.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(

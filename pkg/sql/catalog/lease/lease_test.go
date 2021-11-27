@@ -217,7 +217,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			nc,
 			cfgCpy.DB,
 			cfgCpy.Clock,
-			cfgCpy.InternalExecutor,
+			cfgCpy.InternalExecutorFactory(context.Background(), func(ie sqlutil.InternalExecutor) {}),
 			cfgCpy.Settings,
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,

@@ -1057,18 +1057,17 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer  serverpb.SQLStatusServer
-	RegionsServer    serverpb.RegionsServer
-	MetricsRecorder  nodeStatusGenerator
-	SessionRegistry  *SessionRegistry
-	SQLLiveness      sqlliveness.Liveness
-	JobRegistry      *jobs.Registry
-	VirtualSchemas   *VirtualSchemaHolder
-	DistSQLPlanner   *DistSQLPlanner
-	TableStatsCache  *stats.TableStatisticsCache
-	StatsRefresher   *stats.Refresher
-	InternalExecutor *InternalExecutor
-	QueryCache       *querycache.C
+	SQLStatusServer serverpb.SQLStatusServer
+	RegionsServer   serverpb.RegionsServer
+	MetricsRecorder nodeStatusGenerator
+	SessionRegistry *SessionRegistry
+	SQLLiveness     sqlliveness.Liveness
+	JobRegistry     *jobs.Registry
+	VirtualSchemas  *VirtualSchemaHolder
+	DistSQLPlanner  *DistSQLPlanner
+	TableStatsCache *stats.TableStatisticsCache
+	StatsRefresher  *stats.Refresher
+	QueryCache      *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -3062,7 +3061,8 @@ func DescsTxn(
 	execCfg *ExecutorConfig,
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
-	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutorFactory(ctx,
+		func(ie sqlutil.InternalExecutor) {}), execCfg.DB, f)
 }
 
 // NewRowMetrics creates a row.Metrics struct for either internal or user

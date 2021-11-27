@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -891,7 +892,7 @@ func allocateDescriptorRewrites(
 // restore.
 func dropDefaultUserDBs(ctx context.Context, execCfg *sql.ExecutorConfig) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		ie := execCfg.InternalExecutor
+		ie := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		_, err := ie.Exec(ctx, "drop-defaultdb", nil, "DROP DATABASE IF EXISTS defaultdb")
 		if err != nil {
 			return err
@@ -1894,8 +1895,9 @@ func doRestorePlan(
 		if !p.ExecCfg().Codec.ForSystemTenant() {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can restore other tenants")
 		}
+		ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		for _, i := range tenants {
-			res, err := p.ExecCfg().InternalExecutor.QueryRow(
+			res, err := ie.QueryRow(
 				ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
 				`SELECT active FROM system.tenants WHERE id = $1`, i.ID,
 			)

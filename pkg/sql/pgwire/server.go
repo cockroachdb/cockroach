@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -710,7 +711,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			connType:        connType,
 			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
+			ie:              s.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {}),
 			auth:            hbaConf,
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,

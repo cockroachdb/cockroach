@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -74,7 +75,8 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	rows, err := ie.QueryBuffered(
 		ctx, "scrub-fk", params.p.txn, checkQuery,
 	)
 	if err != nil {
@@ -93,7 +95,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+		rows, err := ie.QueryBuffered(
 			ctx, "scrub-fk", params.p.txn, checkNullsQuery,
 		)
 		if err != nil {

@@ -715,7 +715,7 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.leaseMgr, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.GetName(), evalCtx.Codec); err != nil {
+					if err := validateFkInTxn(ctx, evalCtx.SchemaChangeInternalExecutor, desc, txn, c.GetName(), evalCtx.Codec); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
@@ -2051,11 +2051,12 @@ func runSchemaChangesInTxn(
 	// Now that the table descriptor is in a valid state with all column and index
 	// mutations applied, it can be used for validating check/FK constraints.
 	for _, c := range constraintAdditionMutations {
+		ie := planner.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		if c.IsCheck() || c.IsNotNull() {
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, &planner.semaCtx, planner.ExecCfg().InternalExecutor, planner.SessionData(), tableDesc, planner.txn, check.Expr,
+					ctx, &planner.semaCtx, ie, planner.SessionData(), tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2079,7 +2080,7 @@ func runSchemaChangesInTxn(
 			uwi := &c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint
 			if uwi.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.ExecCfg().InternalExecutor, tableDesc, planner.txn, c.GetName(),
+					ctx, ie, tableDesc, planner.txn, c.GetName(),
 				); err != nil {
 					return err
 				}
@@ -2152,7 +2153,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2181,8 +2182,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	leaseMgr *lease.Manager,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	fkName string,
@@ -2224,7 +2224,7 @@ func validateFkInTxn(
 // reuse an existing kv.Txn safely.
 func validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	constraintName string,

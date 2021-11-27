@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -252,9 +253,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 	// If there are any names to drain, then do so.
 	if len(typeDesc.GetDrainingNames()) > 0 {
+		ie := t.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		if err := drainNamesForDescriptor(
 			ctx, typeDesc.GetID(), t.execCfg.CollectionFactory, t.execCfg.DB,
-			t.execCfg.InternalExecutor, codec, nil,
+			ie, codec, nil,
 		); err != nil {
 			return err
 		}
@@ -936,7 +938,8 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				User:     security.RootUserName(),
 				Database: dbDesc.GetName(),
 			}
-			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
+			ie := t.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+			rows, err := ie.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 			}
@@ -1164,7 +1167,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			User:     security.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
-		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
+		ie := t.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		rows, err := ie.QueryRowEx(
 			ctx,
 			"count-array-type-value-usage",
 			txn,
@@ -1297,9 +1301,10 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 			return err
 		}
 
+		ie := tc.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		if err := drainNamesForDescriptor(
 			ctx, tc.typeID, tc.execCfg.CollectionFactory, tc.execCfg.DB,
-			tc.execCfg.InternalExecutor, tc.execCfg.Codec,
+			ie, tc.execCfg.Codec,
 			nil, /* beforeDrainNames */
 		); err != nil {
 			return err

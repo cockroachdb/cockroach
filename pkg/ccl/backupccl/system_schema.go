@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -89,7 +90,7 @@ func defaultSystemTableRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
+	executor := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	opName := systemTableName + "-data-deletion"
@@ -117,7 +118,7 @@ func defaultSystemTableRestoreFunc(
 func jobsMigrationFunc(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, tempTableName string,
 ) (err error) {
-	executor := execCfg.InternalExecutor
+	executor := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 
 	const statesToRevert = `('` + string(jobs.StatusRunning) + `', ` +
 		`'` + string(jobs.StatusPauseRequested) + `', ` +
@@ -191,7 +192,7 @@ func jobsRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
+	executor := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 
 	// When restoring jobs, don't clear the existing table.
 
@@ -212,7 +213,7 @@ func settingsRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
+	executor := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version'", systemTableName)
 	opName := systemTableName + "-data-deletion"

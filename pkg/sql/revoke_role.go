@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -131,7 +132,9 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 					"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					security.RootUser, security.AdminRole)
 			}
-			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx,
+				func(ie sqlutil.InternalExecutor) {})
+			affected, err := ie.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,

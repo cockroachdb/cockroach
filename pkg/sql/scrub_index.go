@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -116,7 +117,8 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colNames(pkColumns), colNames(otherColumns), o.tableDesc.GetID(), o.index.GetID(),
 	)
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	rows, err := ie.QueryBuffered(
 		ctx, "scrub-index", params.p.txn, checkQuery,
 	)
 	if err != nil {

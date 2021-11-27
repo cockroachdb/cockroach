@@ -616,6 +616,7 @@ go_test(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqltestutils",
+        "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/tests",

@@ -379,7 +379,8 @@ var userLoginTimeout = settings.RegisterDurationSetting(
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error) {
 	query := `SELECT username FROM system.users`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	it, err := ie.QueryIteratorEx(
 		ctx, "read-users", p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query)
@@ -410,7 +411,8 @@ func RoleExists(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
 ) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
-	row, err := execCfg.InternalExecutor.QueryRowEx(
+	ie := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	row, err := ie.QueryRowEx(
 		ctx, "read-users", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query, role,

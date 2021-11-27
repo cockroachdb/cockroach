@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -502,7 +503,8 @@ CREATE TABLE crdb_internal.table_row_statistics (
                   ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"
             AS OF SYSTEM TIME '%s'
             GROUP BY s."tableID"`, statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
-		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
+		ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		statRows, err := ie.QueryBufferedEx(
 			ctx, "crdb-internal-statistics-table", nil,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
@@ -711,7 +713,8 @@ CREATE TABLE crdb_internal.jobs (
 			args = append(args, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay())
 		}
 
-		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+		ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		it, err := ie.QueryIteratorEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query, args...)
@@ -3146,12 +3149,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
 func (p *planner) getAllNames(ctx context.Context) (map[descpb.ID]catalog.NameKey, error) {
-	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	return getAllNames(ctx, p.txn, ie)
 }
 
 // TestingGetAllNames is a wrapper for getAllNames.
 func TestingGetAllNames(
-	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
 ) (map[descpb.ID]catalog.NameKey, error) {
 	return getAllNames(ctx, txn, executor)
 }
@@ -3159,7 +3163,7 @@ func TestingGetAllNames(
 // getAllNames is the testable implementation of getAllNames.
 // It is public so that it can be tested outside the sql package.
 func getAllNames(
-	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
 ) (map[descpb.ID]catalog.NameKey, error) {
 	namespace := map[descpb.ID]catalog.NameKey{}
 	it, err := executor.QueryIterator(
@@ -3243,7 +3247,8 @@ CREATE TABLE crdb_internal.zones (
 
 		// For some reason, if we use the iterator API here, "concurrent txn use
 		// detected" error might occur, so we buffer up all zones first.
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+		ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		rows, err := ie.QueryBuffered(
 			ctx, "crdb-internal-zones-table", p.txn, `SELECT id, config FROM system.zones`)
 		if err != nil {
 			return err
@@ -4367,7 +4372,8 @@ func collectMarshaledJobMetadataMap(
 	// Build job map with referenced job IDs.
 	m := make(marshaledJobMetadataMap)
 	query := `SELECT id, status, payload, progress FROM system.jobs`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	it, err := ie.QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query)
@@ -4986,9 +4992,10 @@ CREATE TABLE crdb_internal.statement_statistics (
 		}
 
 		execCfg := p.ExecCfg()
+		ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
 			Settings:         execCfg.Settings,
-			InternalExecutor: execCfg.InternalExecutor,
+			InternalExecutor: ie,
 			KvDB:             execCfg.DB,
 			SQLIDContainer:   execCfg.NodeID,
 			Knobs:            execCfg.SQLStatsTestingKnobs,
@@ -5138,9 +5145,10 @@ CREATE TABLE crdb_internal.transaction_statistics (
 		}
 
 		execCfg := p.ExecCfg()
+		ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
 			Settings:         execCfg.Settings,
-			InternalExecutor: execCfg.InternalExecutor,
+			InternalExecutor: ie,
 			KvDB:             execCfg.DB,
 			SQLIDContainer:   execCfg.NodeID,
 			Knobs:            execCfg.SQLStatsTestingKnobs,

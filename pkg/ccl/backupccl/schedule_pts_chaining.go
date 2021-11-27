@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -56,9 +57,10 @@ func maybeUpdateSchedulePTSRecord(
 	}
 
 	return exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		ie := exec.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 		// We cannot rely on b.job containing created_by_id because on job
 		// resumption the registry does not populate the resumers' CreatedByInfo.
-		datums, err := exec.InternalExecutor.QueryRowEx(
+		datums, err := ie.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
 			txn,
@@ -77,8 +79,7 @@ func maybeUpdateSchedulePTSRecord(
 		}
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
-		_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-			exec.InternalExecutor, scheduleID)
+		_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn, ie, scheduleID)
 		if err != nil {
 			return errors.Wrap(err, "load scheduled job")
 		}
@@ -132,10 +133,11 @@ func manageFullBackupPTSChaining(
 	exec *sql.ExecutorConfig,
 	args *ScheduledBackupExecutionArgs,
 ) error {
+	ie := exec.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	// Let's resolve the dependent incremental schedule as the first step. If the
 	// schedule has been dropped then we can avoid doing unnecessary work.
 	incSj, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-		exec.InternalExecutor, args.DependentScheduleID)
+		ie, args.DependentScheduleID)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "could not find dependent schedule with id %d",
@@ -180,7 +182,7 @@ func manageFullBackupPTSChaining(
 		return err
 	}
 	incSj.SetExecutionDetails(incSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
-	return incSj.Update(ctx, exec.InternalExecutor, txn)
+	return incSj.Update(ctx, ie, txn)
 }
 
 // manageIncrementalBackupPTSChaining is invoked on successful completion of an

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -94,7 +95,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 		}
 		blocked := false
 		if err := p.ExecCfg().CollectionFactory.Txn(
-			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
+			ctx, p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {}), p.ExecCfg().DB,
 			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 					return err

@@ -41,7 +41,7 @@ var _ jobs.Resumer = &sqlStatsCompactionResumer{}
 func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	log.Infof(ctx, "starting sql stats compaction job")
 	p := execCtx.(JobExecContext)
-	ie := p.ExecCfg().InternalExecutor
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	db := p.ExecCfg().DB
 
 	var (
@@ -81,7 +81,7 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		r.st,
 		ie,
 		db,
-		ie.s.ServerMetrics.StatsMetrics.SQLStatsRemovedRows,
+		ie.(*InternalExecutor).s.ServerMetrics.StatsMetrics.SQLStatsRemovedRows,
 		p.ExecCfg().SQLStatsTestingKnobs)
 	if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
 		return err
@@ -98,7 +98,7 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 func (r *sqlStatsCompactionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(JobExecContext)
 	execCfg := p.ExecCfg()
-	ie := execCfg.InternalExecutor
+	ie := execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	return r.maybeNotifyJobTerminated(ctx, ie, execCfg, jobs.StatusFailed)
 }
 

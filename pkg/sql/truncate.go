@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -418,7 +419,8 @@ func (p *planner) copySplitPointsToNewIndexes(
 	if preservedSplitsMultiple <= 0 {
 		return nil
 	}
-	row, err := p.execCfg.InternalExecutor.QueryRowEx(
+	ie := p.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+	row, err := ie.QueryRowEx(
 		// Run as Root, since ordinary users can't select from this table.
 		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT count(*) FROM crdb_internal.kv_node_status")
@@ -551,8 +553,9 @@ func (p *planner) copySplitPointsToNewIndexes(
 func (p *planner) reassignIndexComments(
 	ctx context.Context, table *tabledesc.Mutable, indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
+	ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	// Check if there are any index comments that need to be updated.
-	row, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := ie.QueryRowEx(
 		ctx,
 		"update-table-comments",
 		p.txn,
@@ -569,7 +572,7 @@ func (p *planner) reassignIndexComments(
 	}
 	if int(tree.MustBeDInt(row[0])) > 0 {
 		for old, new := range indexIDMapping {
-			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+			if _, err := ie.ExecEx(
 				ctx,
 				"update-table-comments",
 				p.txn,

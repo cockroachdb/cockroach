@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,11 +32,12 @@ import (
 func (p *planner) LookupNamespaceID(
 	ctx context.Context, parentID int64, name string,
 ) (tree.DInt, bool, error) {
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	query := fmt.Sprintf(
 		`SELECT id FROM [%d AS namespace] WHERE "parentID" = $1 AND "parentSchemaID" IN (0, 29) AND name = $2`,
 		keys.NamespaceTableID,
 	)
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	r, err := ie.QueryRowEx(
 		ctx,
 		"crdb-internal-get-descriptor-id",
 		p.txn,
@@ -65,8 +67,9 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 		return "", false, err
 	}
 
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	r, err := ie.QueryRowEx(
 		ctx,
 		"crdb-internal-get-zone",
 		p.txn,

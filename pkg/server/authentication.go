@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -254,10 +255,11 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
+	ie := s.server.sqlServer.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
-		s.server.sqlServer.execCfg.InternalExecutor,
+		ie.(*sql.InternalExecutor),
 		username,
 		"", /* databaseName */
 	)
@@ -417,10 +419,11 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
+	ie := s.server.sqlServer.execCfg.InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
 	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
-		s.server.sqlServer.execCfg.InternalExecutor,
+		ie.(*sql.InternalExecutor),
 		username,
 		"", /* databaseName */
 	)

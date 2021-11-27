@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -43,13 +44,14 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 	var rows []tree.Datums
 	var cols colinfo.ResultColumns
 
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 	if n.ScheduleID != nil {
 		sjID, err := strconv.Atoi(n.ScheduleID.String())
 		if err != nil {
 			return nil, err
 		}
 
-		datums, columns, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
+		datums, columns, err := ie.QueryRowExWithCols(
 			params.ctx,
 			"load-schedules",
 			params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -61,7 +63,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		rows = append(rows, datums)
 		cols = columns
 	} else {
-		datums, columns, err := params.ExecCfg().InternalExecutor.QueryBufferedExWithCols(
+		datums, columns, err := ie.QueryBufferedExWithCols(
 			params.ctx,
 			"load-schedules",
 			params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -114,7 +116,8 @@ func (p *planner) ShowCreateSchedule(
 				}
 
 				createStmtStr, err := ex.GetCreateScheduleStatement(ctx,
-					scheduledjobs.ProdJobSchedulerEnv, p.Txn(), sj, p.ExecCfg().InternalExecutor)
+					scheduledjobs.ProdJobSchedulerEnv, p.Txn(), sj,
+					p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {}))
 				if err != nil {
 					return nil, err
 				}

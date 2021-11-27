@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -61,7 +62,8 @@ func (p *planner) CreateJoinToken(ctx context.Context) (string, error) {
 	}
 	expiration := timeutil.Now().Add(security.JoinTokenExpiration)
 	err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err = p.ExecCfg().InternalExecutor.Exec(
+		ie := p.ExecCfg().InternalExecutorFactory(ctx, func(ie sqlutil.InternalExecutor) {})
+		_, err = ie.Exec(
 			ctx, "insert-join-token", txn,
 			"insert into system.join_tokens(id, secret, expiration) "+
 				"values($1, $2, $3)",

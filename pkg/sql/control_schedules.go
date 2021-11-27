@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,7 +64,8 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 
 	// Load schedule expression.  This is needed for resume command, but we
 	// also use this query to check for the schedule existence.
-	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+	datums, cols, err := ie.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
 		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -91,7 +93,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 	return schedule.Update(
 		params.ctx,
-		params.ExecCfg().InternalExecutor,
+		params.ExecCfg().InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {}),
 		params.EvalContext().Txn,
 	)
 }
@@ -99,7 +101,8 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 // deleteSchedule deletes specified schedule.
 func deleteSchedule(params runParams, scheduleID int64) error {
 	env := jobSchedulerEnv(params)
-	_, err := params.ExecCfg().InternalExecutor.ExecEx(
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
+	_, err := ie.ExecEx(
 		params.ctx,
 		"delete-schedule",
 		params.EvalContext().Txn,
@@ -153,8 +156,9 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 				return errors.Wrap(err, "failed to get scheduled job executor during drop")
 			}
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
+				ie := params.ExecCfg().InternalExecutorFactory(params.ctx, func(ie sqlutil.InternalExecutor) {})
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
-					params.ExecCfg().ProtectedTimestampProvider, params.ExecCfg().InternalExecutor)
+					params.ExecCfg().ProtectedTimestampProvider, ie)
 				if err := controller.OnDrop(params.ctx, scheduleControllerEnv,
 					scheduledjobs.ProdJobSchedulerEnv, schedule,
 					params.extendedEvalCtx.Txn); err != nil {

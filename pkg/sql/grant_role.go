@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -175,9 +176,11 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	}
 
 	var rowsAffected int
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx,
+		func(ie sqlutil.InternalExecutor) {})
 	for _, r := range n.roles {
 		for _, m := range n.members {
-			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			affected, err := ie.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
