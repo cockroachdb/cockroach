@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -664,7 +665,7 @@ func TestEvaluateBatch(t *testing.T) {
 				d.MockEvalCtx.EvalContext(),
 				&d.ms,
 				&d.ba,
-				hlc.Timestamp{},
+				uncertainty.Interval{},
 				d.readOnly,
 			)
 

@@ -26,13 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -762,7 +762,7 @@ func (r *Replica) evaluateProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
-	lul hlc.Timestamp,
+	ui uncertainty.Interval,
 	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp.IsEmpty() {
@@ -779,7 +779,7 @@ func (r *Replica) evaluateProposal(
 	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans)
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, ui, latchSpans)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -873,10 +873,10 @@ func (r *Replica) requestToProposal(
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	st kvserverpb.LeaseStatus,
-	lul hlc.Timestamp,
+	ui uncertainty.Interval,
 	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, lul, latchSpans)
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, ui, latchSpans)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
