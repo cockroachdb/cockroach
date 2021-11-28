@@ -1946,6 +1946,7 @@ func (a *regressionAccumulatorBase) add(y float64, x float64) error {
 	sx += x
 	sy += y
 
+	outOfRange := false
 	if a.n > 0 {
 		tmpX := x*n - sx
 		tmpY := y*n - sy
@@ -1954,8 +1955,8 @@ func (a *regressionAccumulatorBase) add(y float64, x float64) error {
 		syy += tmpY * tmpY * scale
 		sxy += tmpX * tmpY * scale
 
-		// Overflow check.  We only report an overflow error when finite
-		// inputs lead to infinite results.  Note also that sxx, syy and Sxy
+		// Overflow check. We only report an overflow error when finite
+		// inputs lead to infinite results. Note also that sxx, syy and sxy
 		// should be NaN if any of the relevant inputs are infinite, so we
 		// intentionally prevent them from becoming infinite.
 		if math.IsInf(sx, 0) || math.IsInf(sxx, 0) || math.IsInf(sy, 0) || math.IsInf(syy, 0) || math.IsInf(sxy, 0) {
@@ -1966,7 +1967,7 @@ func (a *regressionAccumulatorBase) add(y float64, x float64) error {
 				(math.IsInf(sxy, 0) &&
 					!math.IsInf(a.sx, 0) && !math.IsInf(x, 0) &&
 					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) {
-				return tree.ErrFloatOutOfRange
+				outOfRange = true
 			}
 
 			if math.IsInf(sxx, 0) {
@@ -2001,6 +2002,9 @@ func (a *regressionAccumulatorBase) add(y float64, x float64) error {
 	a.syy = syy
 	a.sxy = sxy
 
+	if outOfRange {
+		return tree.ErrFloatOutOfRange
+	}
 	return nil
 }
 
@@ -2057,6 +2061,8 @@ func (a *finalRegressionAccumulatorBase) combine(array []float64) error {
 	syy2 := array[4]
 	sxy2 := array[5]
 
+	outOfRange := false
+
 	/*
 	 * The transition values combine using a generalization of the
 	 * Youngs-Cramer algorithm as follows:
@@ -2086,29 +2092,30 @@ func (a *finalRegressionAccumulatorBase) combine(array []float64) error {
 		n = n1 + n2
 		sx = sx1 + sx2
 		if math.IsInf(sx, 0) && !math.IsInf(sx1, 0) && !math.IsInf(sx2, 0) {
-			return tree.ErrFloatOutOfRange
+			outOfRange = true
 		}
 
 		tmpX := sx1/n1 - sx2/n2
-		sxx = sxx1 + sxx2 + (n1*n2/n)*tmpX*tmpX
+		tmpN := n1 * n2 / n
+		sxx = sxx1 + sxx2 + tmpN*tmpX*tmpX
 		if math.IsInf(sxx, 0) && !math.IsInf(sxx1, 0) && !math.IsInf(sxx2, 0) {
-			return tree.ErrFloatOutOfRange
+			outOfRange = true
 		}
 
 		sy = sy1 + sy2
 		if math.IsInf(sy, 0) && !math.IsInf(sy1, 0) && !math.IsInf(sy2, 0) {
-			return tree.ErrFloatOutOfRange
+			outOfRange = true
 		}
 
 		tmpY := sy1/n1 - sy2/n2
-		syy = syy1 + syy2 + (n1*n2/n)*tmpY*tmpY
+		syy = syy1 + syy2 + tmpN*tmpY*tmpY
 		if math.IsInf(syy, 0) && !math.IsInf(syy1, 0) && !math.IsInf(syy2, 0) {
-			return tree.ErrFloatOutOfRange
+			outOfRange = true
 		}
 
-		sxy = sxy1 + sxy2 + (n1*n2/n)*tmpX*tmpY
+		sxy = sxy1 + sxy2 + tmpN*tmpX*tmpY
 		if math.IsInf(sxy, 0) && !math.IsInf(sxy1, 0) && !math.IsInf(sxy2, 0) {
-			return tree.ErrFloatOutOfRange
+			outOfRange = true
 		}
 	}
 
@@ -2119,6 +2126,9 @@ func (a *finalRegressionAccumulatorBase) combine(array []float64) error {
 	a.syy = syy
 	a.sxy = sxy
 
+	if outOfRange {
+		return tree.ErrFloatOutOfRange
+	}
 	return nil
 }
 

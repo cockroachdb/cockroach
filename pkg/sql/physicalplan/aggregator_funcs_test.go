@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -346,7 +347,15 @@ func checkDistAggregationInfo(
 		pgCodeDistErr := pgerror.GetPGCode(distErr)
 		pgCodeNonDistErr := pgerror.GetPGCode(nonDistErr)
 		if pgCodeDistErr != pgCodeNonDistErr {
-			t.Errorf("different errors (dist: %s rows dist: %v, non-dist: %s, rows non-dist: %v)", distErr, rowsDist, nonDistErr, rowsNonDist)
+			// if one of the errors is "22003" - "out of range" and another is nil and
+			// the result of the other calculation is NaN, then it was determined by
+			// the split & values order.
+			if pgCodeDistErr == pgcode.NumericValueOutOfRange && nonDistErr == nil && len(rowsNonDist) > 0 && rowsNonDist[0][0].Datum.String() == "NaN" ||
+				pgCodeNonDistErr == pgcode.NumericValueOutOfRange && distErr == nil && len(rowsDist) > 0 && rowsDist[0][0].Datum.String() == "NaN" {
+				// Treat this situation as normal.
+			} else {
+				t.Errorf("different errors (dist: %s, non-dist: %s)", distErr, nonDistErr)
+			}
 		}
 	} else if len(rowsDist[0]) != len(rowsNonDist[0]) {
 		t.Errorf("different row lengths (dist: %d non-dist: %d)", len(rowsDist[0]), len(rowsNonDist[0]))
@@ -437,11 +446,12 @@ func almostEqualRelative(a, b float64) bool {
 	return diff <= largest*maxRelDiff
 }
 
-// Test that distributing agg functions according to DistAggregationTable
-// yields correct results. We're going to run each aggregation as either the
-// two-stage process described by the DistAggregationTable or as a single global
-// process, and verify that the results are the same.
-func TestDistAggregationTable(t *testing.T) {
+// Test that single argument distributed aggregate functions according to
+// DistAggregationTable yield correct results. We're going to run each
+// aggregation as either the two-stage process described by the
+// DistAggregationTable or as a single global process, and verify that the
+// results are the same.
+func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const numRows = 100
@@ -535,12 +545,12 @@ func TestDistAggregationTable(t *testing.T) {
 	}
 }
 
-// Test that distributing regression aggregate functions according to
-// DistAggregationTable yields correct results. We're going to run each
+// Test that two-argument distributed regression aggregate functions according
+// to DistAggregationTable yield correct results. We're going to run each
 // aggregation as either the two-stage process described by the
 // DistAggregationTable or as a single global process, and verify that the
 // results are the same.
-func TestDistRegressionAggregationTable(t *testing.T) {
+func TestTwoArgumentRegressionAggregateFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const numRows = 100

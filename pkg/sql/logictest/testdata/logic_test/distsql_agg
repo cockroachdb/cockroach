@@ -575,7 +575,7 @@ SELECT sum(a) FROM data WHERE FALSE
 ----
 NULL
 
-# Test statistics aggregate functions local.
+# Test non distributed statistics aggregate functions.
 statement ok
 CREATE TABLE statistics_agg_test (y INT, x INT)
 
@@ -607,7 +607,7 @@ SELECT regr_avgx(y, x), regr_avgy(y, x) FROM statistics_agg_test
 ----
 4.5 50.5
 
-# Test statistics aggregate functions distributed.
+# Test distributed statistics aggregate functions.
 # Split statistics_agg_test ten parts.
 statement ok
 ALTER TABLE statistics_agg_test SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
