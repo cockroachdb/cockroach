@@ -113,7 +113,7 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 	withServerSideBatchTimestamp := func(ba roachpb.BatchRequest, ts hlc.Timestamp) roachpb.BatchRequest {
 		ba = withBatchTimestamp(ba, ts)
-		ba.TimestampFromServerClock = true
+		ba.TimestampFromServerClock = (*hlc.ClockTimestamp)(&ts)
 		return ba
 	}
 

@@ -49,7 +49,7 @@ func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 	//    propose writes to Raft.
 	// 4. the batch needs to be non-locking, because unreplicated locks are only
 	//    held on the leaseholder.
-	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock)
+	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock != nil)
 	if tsFromServerClock {
 		return false
 	}

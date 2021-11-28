@@ -69,7 +69,7 @@ func (s *Store) Send(
 		ba = newBa
 	}
 
-	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
