@@ -2248,7 +2248,7 @@ func TestQuotaPool(t *testing.T) {
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
 		var ba roachpb.BatchRequest
 		ba.Add(putArgs(keyToWrite, value))
-		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 			t.Fatal(err)
 		}
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2269,7 +2269,7 @@ func TestQuotaPool(t *testing.T) {
 		go func() {
 			var ba roachpb.BatchRequest
 			ba.Add(putArgs(keyToWrite, value))
-			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 				ch <- roachpb.NewError(err)
 				return
 			}
@@ -2359,7 +2359,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	value := []byte("value")
 	var ba roachpb.BatchRequest
 	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 		t.Fatal(err)
 	}
 	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {

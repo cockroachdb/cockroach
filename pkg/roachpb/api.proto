@@ -2094,14 +2094,24 @@ message Header {
   // (txn.WriteTimestamp).
   util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   // timestamp_from_server_clock is set when a non-transactional BatchRequest
-  // has its timestamp initialized to the wall time of the server node. This
-  // flag is needed to ensure that such requests are never served as follower
+  // has its timestamp initialized to the wall time of the server node. When
+  // non-nil, this denotes the clock timestamp that the timestamp field was
+  // initially assigned upon arriving at the server node.
+  //
+  // It is needed to ensure that such requests are never served as follower
   // reads. Initializing the timestamp of a request on a node that holds a
   // follower instead of the leaseholder for a range and then using this
   // timestamp to deem a follower read safe could allow for consistency
   // violations where a non-transactional read following a write could fail to
   // observe the write.
-  bool timestamp_from_server_clock = 20;
+  //
+  // It is also needed to record the time at which the request was received by
+  // the server node. The operation timestamp cannot serve this role because it
+  // can change due to server-side uncertainty retries. By remembering a stable
+  // reference to the initial timestamp, we ensure that a non-transactional
+  // request's uncertainty interval remains fixed across retries.
+  util.hlc.Timestamp timestamp_from_server_clock = 25 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
@@ -2318,7 +2328,7 @@ message Header {
   //
   // Requests with a non-zero timestamp are not allowed to set this field.
   BoundedStalenessHeader bounded_staleness = 22;
-  reserved 7, 10, 12, 14;
+  reserved 7, 10, 12, 14, 20;
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
