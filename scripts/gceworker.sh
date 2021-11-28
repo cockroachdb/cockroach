@@ -28,7 +28,7 @@ case "${cmd}" in
 
     gcloud compute instances \
            create "${NAME}" \
-           --machine-type "custom-24-32768" \
+           --machine-type "n2-custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
