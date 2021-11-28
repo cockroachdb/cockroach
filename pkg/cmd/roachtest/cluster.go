@@ -2096,6 +2096,9 @@ func (c *clusterImpl) pgURLErr(
 	if err != nil {
 		return nil, err
 	}
+	for i, url := range urls {
+		urls[i] = strings.Trim(url, "'")
+	}
 	return urls, nil
 }
 

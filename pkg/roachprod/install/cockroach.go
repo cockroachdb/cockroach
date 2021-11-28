@@ -218,7 +218,7 @@ func (c *SyncedCluster) NodeURL(host string, port int) string {
 		v.Add("sslmode", "disable")
 	}
 	u.RawQuery = v.Encode()
-	return u.String()
+	return "'" + u.String() + "'"
 }
 
 // NodePort returns the SQL port for the given node.
