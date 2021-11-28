@@ -1,0 +1,2 @@
+This file is intentionally left with some random strings since the docker init
+process will ignore it.
