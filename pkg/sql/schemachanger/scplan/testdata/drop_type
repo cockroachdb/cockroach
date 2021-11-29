@@ -5,7 +5,7 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 ops
 DROP TYPE defaultdb.typ
 ----
-Stage 0
+Stage 1 of 3
   transitions:
     [Type:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
@@ -14,7 +14,7 @@ Stage 0
       DescID: 52
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 53
-Stage 1 (non-revertible)
+Stage 2 of 3 (non-revertible)
   transitions:
     [Type:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
     [Type:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
@@ -23,7 +23,7 @@ Stage 1 (non-revertible)
       DescID: 52
     *scop.MarkDescriptorAsDropped
       DescID: 53
-Stage 2 (non-revertible)
+Stage 3 of 3 (non-revertible)
   transitions:
     [Type:{DescID: 52}, DROPPED, DROP] -> ABSENT
     [Type:{DescID: 53}, DROPPED, DROP] -> ABSENT

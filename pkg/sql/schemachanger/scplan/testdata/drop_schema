@@ -201,7 +201,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-Stage 0
+Stage 1 of 4
   transitions:
     [Sequence:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
     [Table:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
@@ -238,7 +238,7 @@ Stage 0
       DescID: 60
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 52
-Stage 1
+Stage 2 of 4
   transitions:
     [Namespace:{DescID: 53, Name: sq1}, PUBLIC, DROP] -> ABSENT
     [Namespace:{DescID: 54, Name: t1}, PUBLIC, DROP] -> ABSENT
@@ -262,7 +262,7 @@ Stage 1
       TableID: 58
     *scop.DrainDescriptorName
       TableID: 61
-Stage 2 (non-revertible)
+Stage 3 of 4 (non-revertible)
   transitions:
     [Sequence:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
     [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
@@ -341,7 +341,7 @@ Stage 2 (non-revertible)
       TypeID: 60
     *scop.MarkDescriptorAsDropped
       DescID: 52
-Stage 3 (non-revertible)
+Stage 4 of 4 (non-revertible)
   transitions:
     [Sequence:{DescID: 53}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 54}, DROPPED, DROP] -> ABSENT

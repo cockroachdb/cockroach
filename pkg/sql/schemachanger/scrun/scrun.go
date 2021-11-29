@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/errors"
 )
 
 // RunSchemaChangesInTxn executes in-transaction schema changes for the targeted
@@ -42,7 +44,7 @@ func RunSchemaChangesInTxn(
 		// TODO(ajwerner): Populate the set of new descriptors
 	})
 	if err != nil {
-		return scpb.State{}, err
+		return scpb.State{}, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 	after := state
 	for i, s := range sc.Stages {
@@ -137,7 +139,7 @@ func RunSchemaChangesInJob(
 		rollback)
 	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
 	if err != nil {
-		return err
+		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 
 	if len(sc.Stages) == 0 {
@@ -230,5 +232,10 @@ func executeStage(ctx context.Context, deps TxnRunDependencies, p scplan.Plan, s
 			return err
 		}
 	}
-	return scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), p.Stages[stageIdx].Ops)
+	err := scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), p.Stages[stageIdx].Ops)
+	if err != nil {
+		err = errors.Wrapf(err, "Error executing %s stage %d of %d", p.Params.ExecutionPhase, stageIdx+1, len(p.Stages))
+		return scgraphviz.DecorateErrorWithPlanDetails(err, p)
+	}
+	return nil
 }

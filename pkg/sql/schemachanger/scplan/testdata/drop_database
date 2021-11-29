@@ -50,7 +50,7 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 ops
 DROP DATABASE db1 CASCADE
 ----
-Stage 0
+Stage 1 of 4
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
     [Table:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
@@ -100,7 +100,7 @@ Stage 0
       DescID: 53
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 52
-Stage 1
+Stage 2 of 4
   transitions:
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
     [Namespace:{DescID: 57, Name: t1}, PUBLIC, DROP] -> ABSENT
@@ -130,7 +130,7 @@ Stage 1
       TableID: 61
     *scop.DrainDescriptorName
       TableID: 64
-Stage 2 (non-revertible)
+Stage 3 of 4 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
@@ -232,7 +232,7 @@ Stage 2 (non-revertible)
       DescID: 53
     *scop.MarkDescriptorAsDropped
       DescID: 52
-Stage 3 (non-revertible)
+Stage 4 of 4 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 57}, DROPPED, DROP] -> ABSENT
