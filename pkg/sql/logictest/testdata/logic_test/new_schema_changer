@@ -1060,3 +1060,32 @@ DROP TABLE multi_t1,multi_t2
 
 statement ok
 DROP SEQUENCE multi_sq1, multi_sq1
+
+# Sequence related back ref test
+subtest seq-back-ref
+
+statement ok
+CREATE SEQUENCE sqbf1;
+
+statement ok
+CREATE TABLE sbt1 (test INT not null, value INT not null DEFAULT nextval('sqbf1'))
+
+statement ok
+CREATE VIEW sbv1 AS SELECT  nextval('sqbf1')
+
+statement ok
+INSERT into sbt1 VALUES(1)
+
+statement ok
+select * from sbv1
+
+statement ok
+DROP SEQUENCE sqbf1 CASCADE
+
+# Default expression is dropped so this should error out.
+statement error null value in column "value" violates not-null constraint
+INSERT into sbt1 VALUES(1)
+
+# View referencing it should also be cleaned up.
+statement error relation "sbv1" does not exist
+select * from sbv1

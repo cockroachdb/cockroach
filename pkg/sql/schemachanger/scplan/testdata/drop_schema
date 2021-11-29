@@ -366,13 +366,13 @@ PreCommitPhase non-revertible stage 1 of 2 with 28 MutationType ops
     [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 56, Name: t1}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: root}, PUBLIC, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 57, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -424,12 +424,12 @@ PreCommitPhase non-revertible stage 1 of 2 with 28 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 55
-    *scop.DrainDescriptorName
-      TableID: 56
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 56
     *scop.UpdateRelationDeps
+      TableID: 56
+    *scop.DrainDescriptorName
       TableID: 56
     *scop.MarkDescriptorAsDropped
       DescID: 57

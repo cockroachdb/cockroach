@@ -62,6 +62,36 @@ CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- DROP DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 57}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 59
+    typeId: 57
+- DROP DefaultExpression:{DescID: 55, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    defaultExpr: nextval(54:::REGCLASS)
+    tableId: 55
+    usesSequenceIDs:
+    - 54
+- DROP DefaultExpression:{DescID: 56, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    defaultExpr: nextval(54:::REGCLASS)
+    tableId: 56
+    usesSequenceIDs:
+    - 54
+- DROP DefaultExpression:{DescID: 59, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    defaultExpr: CAST(chr(nextval(54:::REGCLASS)) AS @100057)
+    tableId: 59
+    usesSequenceIDs:
+    - 54
 - DROP Locality:{DescID: 54}
   state: PUBLIC
   details:
@@ -81,16 +111,19 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 55
     tableId: 54
 - DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 56
     tableId: 54
 - DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 59}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 59
     tableId: 54
 - DROP Sequence:{DescID: 54}

@@ -186,14 +186,16 @@ func decomposeDefaultExprToElements(
 		DefaultExpr:     defaultExpr,
 		UsesSequenceIDs: sequenceIDs,
 	}
-	addOrDropForDir(b, dir, &expressionElem)
-	// Decompose any elements required for expressions.
-	decomposeExprToElements(b,
-		defaultExpr,
-		exprTypeDefault,
-		table,
-		column,
-		dir)
+	if !b.HasTarget(dir, &expressionElem) {
+		addOrDropForDir(b, dir, &expressionElem)
+		// Decompose any elements required for expressions.
+		decomposeExprToElements(b,
+			defaultExpr,
+			exprTypeDefault,
+			table,
+			column,
+			dir)
+	}
 }
 
 // decomposeDescToElements converts generic parts
@@ -301,7 +303,9 @@ func decomposeSequenceDescToElements(
 		sequenceOwnedBy := &scpb.SequenceOwnedBy{
 			SequenceID:   seq.GetID(),
 			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
-		addOrDropForDir(b, dir, sequenceOwnedBy)
+		if !b.HasTarget(dir, sequenceOwnedBy) {
+			addOrDropForDir(b, dir, sequenceOwnedBy)
+		}
 	}
 }
 
@@ -456,12 +460,24 @@ func decomposeTableDescToElements(
 		}
 	}
 	for _, depBy := range tbl.GetDependedOnBy() {
-		dependedOnBy := &scpb.RelationDependedOnBy{
-			DependedOnBy: depBy.ID,
-			TableID:      tbl.GetID(),
+		if len(depBy.ColumnIDs) == 0 {
+			dependedOnBy := &scpb.RelationDependedOnBy{
+				DependedOnBy: depBy.ID,
+				TableID:      tbl.GetID(),
+			}
+			if !b.HasTarget(dir, dependedOnBy) {
+				addOrDropForDir(b, dir, dependedOnBy)
+			}
 		}
-		if !b.HasTarget(dir, dependedOnBy) {
-			addOrDropForDir(b, dir, dependedOnBy)
+		for _, colID := range depBy.ColumnIDs {
+			dependedOnBy := &scpb.RelationDependedOnBy{
+				DependedOnBy: depBy.ID,
+				TableID:      tbl.GetID(),
+				ColumnID:     colID,
+			}
+			if !b.HasTarget(dir, dependedOnBy) {
+				addOrDropForDir(b, dir, dependedOnBy)
+			}
 		}
 	}
 	//TODO (fqazi) Computed Expressions / Update expressions can be moved out

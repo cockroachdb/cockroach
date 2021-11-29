@@ -258,6 +258,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 61
     tableId: 59
 - DROP SequenceOwnedBy:{DescID: 60, ReferencedDescID: 59}
