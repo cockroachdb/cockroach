@@ -149,7 +149,9 @@ insert uniq
                           └── k:37 != uniq.k:30
 
 # No need to plan checks for w since it's always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, NULL, 1, 1), (2, 2, NULL, 2, 2)
 ----
 insert uniq
@@ -161,64 +163,33 @@ insert uniq
  │    ├── column4:16 => uniq.x:4
  │    └── column5:17 => uniq.y:5
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:13!null column2:14!null column3:15 column4:16!null column5:17!null
- │    ├── values
- │    │    ├── columns: column1:8!null column2:9!null column3:10 column4:11!null column5:12!null
- │    │    ├── (1, 1, NULL::INT8, 1, 1)
- │    │    └── (2, 2, NULL::INT8, 2, 2)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:13]
- │         │    └── column1:8
- │         ├── assignment-cast: INT8 [as=column2:14]
- │         │    └── column2:9
- │         ├── assignment-cast: INT8 [as=column3:15]
- │         │    └── column3:10
- │         ├── assignment-cast: INT8 [as=column4:16]
- │         │    └── column4:11
- │         └── assignment-cast: INT8 [as=column5:17]
- │              └── column5:12
+ │    ├── (1, 1, NULL, 1, 1)
+ │    └── (2, 2, NULL, 2, 2)
  └── unique-checks
-      ├── unique-checks-item: uniq(w)
-      │    └── project
-      │         ├── columns: w:27
-      │         └── semi-join (hash)
-      │              ├── columns: k:25!null v:26!null w:27 x:28!null y:29!null
-      │              ├── with-scan &1
-      │              │    ├── columns: k:25!null v:26!null w:27 x:28!null y:29!null
-      │              │    └── mapping:
-      │              │         ├──  column1:13 => k:25
-      │              │         ├──  column2:14 => v:26
-      │              │         ├──  column3:15 => w:27
-      │              │         ├──  column4:16 => x:28
-      │              │         └──  column5:17 => y:29
-      │              ├── scan uniq
-      │              │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
-      │              └── filters
-      │                   ├── w:27 = uniq.w:20
-      │                   └── k:25 != uniq.k:18
       └── unique-checks-item: uniq(x,y)
            └── project
-                ├── columns: x:40!null y:41!null
+                ├── columns: x:28!null y:29!null
                 └── semi-join (hash)
-                     ├── columns: k:37!null v:38!null w:39 x:40!null y:41!null
+                     ├── columns: k:25!null x:28!null y:29!null
                      ├── with-scan &1
-                     │    ├── columns: k:37!null v:38!null w:39 x:40!null y:41!null
+                     │    ├── columns: k:25!null x:28!null y:29!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:37
-                     │         ├──  column2:14 => v:38
-                     │         ├──  column3:15 => w:39
-                     │         ├──  column4:16 => x:40
-                     │         └──  column5:17 => y:41
+                     │         ├──  column1:13 => k:25
+                     │         ├──  column4:16 => x:28
+                     │         └──  column5:17 => y:29
                      ├── scan uniq
-                     │    └── columns: uniq.k:30!null uniq.v:31 uniq.w:32 uniq.x:33 uniq.y:34
+                     │    └── columns: uniq.k:18!null uniq.x:21 uniq.y:22
                      └── filters
-                          ├── x:40 = uniq.x:33
-                          ├── y:41 = uniq.y:34
-                          └── k:37 != uniq.k:30
+                          ├── x:28 = uniq.x:21
+                          ├── y:29 = uniq.y:22
+                          └── k:25 != uniq.k:18
 
 # No need to plan checks for x,y since x is always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, 1, NULL, 1), (2, 2, NULL, NULL, 2)
 ----
 insert uniq
@@ -230,64 +201,31 @@ insert uniq
  │    ├── column4:16 => uniq.x:4
  │    └── column5:17 => uniq.y:5
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:13!null column2:14!null column3:15 column4:16 column5:17!null
- │    ├── values
- │    │    ├── columns: column1:8!null column2:9!null column3:10 column4:11 column5:12!null
- │    │    ├── (1, 1, 1, NULL::INT8, 1)
- │    │    └── (2, 2, NULL::INT8, NULL::INT8, 2)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:13]
- │         │    └── column1:8
- │         ├── assignment-cast: INT8 [as=column2:14]
- │         │    └── column2:9
- │         ├── assignment-cast: INT8 [as=column3:15]
- │         │    └── column3:10
- │         ├── assignment-cast: INT8 [as=column4:16]
- │         │    └── column4:11
- │         └── assignment-cast: INT8 [as=column5:17]
- │              └── column5:12
+ │    ├── (1, 1, 1, NULL, 1)
+ │    └── (2, 2, NULL, NULL, 2)
  └── unique-checks
-      ├── unique-checks-item: uniq(w)
-      │    └── project
-      │         ├── columns: w:27
-      │         └── semi-join (hash)
-      │              ├── columns: k:25!null v:26!null w:27 x:28 y:29!null
-      │              ├── with-scan &1
-      │              │    ├── columns: k:25!null v:26!null w:27 x:28 y:29!null
-      │              │    └── mapping:
-      │              │         ├──  column1:13 => k:25
-      │              │         ├──  column2:14 => v:26
-      │              │         ├──  column3:15 => w:27
-      │              │         ├──  column4:16 => x:28
-      │              │         └──  column5:17 => y:29
-      │              ├── scan uniq
-      │              │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
-      │              └── filters
-      │                   ├── w:27 = uniq.w:20
-      │                   └── k:25 != uniq.k:18
-      └── unique-checks-item: uniq(x,y)
+      └── unique-checks-item: uniq(w)
            └── project
-                ├── columns: x:40 y:41!null
+                ├── columns: w:27
                 └── semi-join (hash)
-                     ├── columns: k:37!null v:38!null w:39 x:40 y:41!null
+                     ├── columns: k:25!null w:27
                      ├── with-scan &1
-                     │    ├── columns: k:37!null v:38!null w:39 x:40 y:41!null
+                     │    ├── columns: k:25!null w:27
                      │    └── mapping:
-                     │         ├──  column1:13 => k:37
-                     │         ├──  column2:14 => v:38
-                     │         ├──  column3:15 => w:39
-                     │         ├──  column4:16 => x:40
-                     │         └──  column5:17 => y:41
+                     │         ├──  column1:13 => k:25
+                     │         └──  column3:15 => w:27
                      ├── scan uniq
-                     │    └── columns: uniq.k:30!null uniq.v:31 uniq.w:32 uniq.x:33 uniq.y:34
+                     │    └── columns: uniq.k:18!null uniq.w:20
                      └── filters
-                          ├── x:40 = uniq.x:33
-                          ├── y:41 = uniq.y:34
-                          └── k:37 != uniq.k:30
+                          ├── w:27 = uniq.w:20
+                          └── k:25 != uniq.k:18
 
 # No need to plan checks for x,y since y is always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, 1, 1, NULL), (2, 2, 2, 2, NULL)
 ----
 insert uniq
@@ -299,130 +237,45 @@ insert uniq
  │    ├── column4:16 => uniq.x:4
  │    └── column5:17 => uniq.y:5
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17
- │    ├── values
- │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12
- │    │    ├── (1, 1, 1, 1, NULL::INT8)
- │    │    └── (2, 2, 2, 2, NULL::INT8)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:13]
- │         │    └── column1:8
- │         ├── assignment-cast: INT8 [as=column2:14]
- │         │    └── column2:9
- │         ├── assignment-cast: INT8 [as=column3:15]
- │         │    └── column3:10
- │         ├── assignment-cast: INT8 [as=column4:16]
- │         │    └── column4:11
- │         └── assignment-cast: INT8 [as=column5:17]
- │              └── column5:12
+ │    ├── (1, 1, 1, 1, NULL)
+ │    └── (2, 2, 2, 2, NULL)
  └── unique-checks
-      ├── unique-checks-item: uniq(w)
-      │    └── project
-      │         ├── columns: w:27!null
-      │         └── semi-join (hash)
-      │              ├── columns: k:25!null v:26!null w:27!null x:28!null y:29
-      │              ├── with-scan &1
-      │              │    ├── columns: k:25!null v:26!null w:27!null x:28!null y:29
-      │              │    └── mapping:
-      │              │         ├──  column1:13 => k:25
-      │              │         ├──  column2:14 => v:26
-      │              │         ├──  column3:15 => w:27
-      │              │         ├──  column4:16 => x:28
-      │              │         └──  column5:17 => y:29
-      │              ├── scan uniq
-      │              │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
-      │              └── filters
-      │                   ├── w:27 = uniq.w:20
-      │                   └── k:25 != uniq.k:18
-      └── unique-checks-item: uniq(x,y)
+      └── unique-checks-item: uniq(w)
            └── project
-                ├── columns: x:40!null y:41
+                ├── columns: w:27!null
                 └── semi-join (hash)
-                     ├── columns: k:37!null v:38!null w:39!null x:40!null y:41
+                     ├── columns: k:25!null w:27!null
                      ├── with-scan &1
-                     │    ├── columns: k:37!null v:38!null w:39!null x:40!null y:41
+                     │    ├── columns: k:25!null w:27!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:37
-                     │         ├──  column2:14 => v:38
-                     │         ├──  column3:15 => w:39
-                     │         ├──  column4:16 => x:40
-                     │         └──  column5:17 => y:41
+                     │         ├──  column1:13 => k:25
+                     │         └──  column3:15 => w:27
                      ├── scan uniq
-                     │    └── columns: uniq.k:30!null uniq.v:31 uniq.w:32 uniq.x:33 uniq.y:34
+                     │    └── columns: uniq.k:18!null uniq.w:20
                      └── filters
-                          ├── x:40 = uniq.x:33
-                          ├── y:41 = uniq.y:34
-                          └── k:37 != uniq.k:30
+                          ├── w:27 = uniq.w:20
+                          └── k:25 != uniq.k:18
 
 # No need to plan any checks, since w, x and y are always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, NULL, NULL, NULL), (2, 2, NULL, NULL, NULL)
 ----
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
- ├── input binding: &1
- ├── project
- │    ├── columns: column1:13!null column2:14!null column3:15 column4:16 column5:17
- │    ├── values
- │    │    ├── columns: column1:8!null column2:9!null column3:10 column4:11 column5:12
- │    │    ├── (1, 1, NULL::INT8, NULL::INT8, NULL::INT8)
- │    │    └── (2, 2, NULL::INT8, NULL::INT8, NULL::INT8)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:13]
- │         │    └── column1:8
- │         ├── assignment-cast: INT8 [as=column2:14]
- │         │    └── column2:9
- │         ├── assignment-cast: INT8 [as=column3:15]
- │         │    └── column3:10
- │         ├── assignment-cast: INT8 [as=column4:16]
- │         │    └── column4:11
- │         └── assignment-cast: INT8 [as=column5:17]
- │              └── column5:12
- └── unique-checks
-      ├── unique-checks-item: uniq(w)
-      │    └── project
-      │         ├── columns: w:27
-      │         └── semi-join (hash)
-      │              ├── columns: k:25!null v:26!null w:27 x:28 y:29
-      │              ├── with-scan &1
-      │              │    ├── columns: k:25!null v:26!null w:27 x:28 y:29
-      │              │    └── mapping:
-      │              │         ├──  column1:13 => k:25
-      │              │         ├──  column2:14 => v:26
-      │              │         ├──  column3:15 => w:27
-      │              │         ├──  column4:16 => x:28
-      │              │         └──  column5:17 => y:29
-      │              ├── scan uniq
-      │              │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
-      │              └── filters
-      │                   ├── w:27 = uniq.w:20
-      │                   └── k:25 != uniq.k:18
-      └── unique-checks-item: uniq(x,y)
-           └── project
-                ├── columns: x:40 y:41
-                └── semi-join (hash)
-                     ├── columns: k:37!null v:38!null w:39 x:40 y:41
-                     ├── with-scan &1
-                     │    ├── columns: k:37!null v:38!null w:39 x:40 y:41
-                     │    └── mapping:
-                     │         ├──  column1:13 => k:37
-                     │         ├──  column2:14 => v:38
-                     │         ├──  column3:15 => w:39
-                     │         ├──  column4:16 => x:40
-                     │         └──  column5:17 => y:41
-                     ├── scan uniq
-                     │    └── columns: uniq.k:30!null uniq.v:31 uniq.w:32 uniq.x:33 uniq.y:34
-                     └── filters
-                          ├── x:40 = uniq.x:33
-                          ├── y:41 = uniq.y:34
-                          └── k:37 != uniq.k:30
+ │    ├── column1:13 => k:1
+ │    ├── column2:14 => v:2
+ │    ├── column3:15 => w:3
+ │    ├── column4:16 => x:4
+ │    └── column5:17 => y:5
+ └── values
+      ├── columns: column1:13!null column2:14!null column3:15 column4:16 column5:17
+      ├── (1, 1, NULL, NULL, NULL)
+      └── (2, 2, NULL, NULL, NULL)
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
 # conflict columns.
@@ -1146,48 +999,21 @@ insert uniq_partial
                           └── k:17 != uniq_partial.k:12
 
 # No need to plan checks for a since it's always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq_partial VALUES (1, NULL, 1), (2, NULL, 2)
 ----
 insert uniq_partial
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => uniq_partial.k:1
- │    ├── column2:10 => uniq_partial.a:2
- │    └── column3:11 => uniq_partial.b:3
- ├── input binding: &1
- ├── project
- │    ├── columns: column1:9!null column2:10 column3:11!null
- │    ├── values
- │    │    ├── columns: column1:6!null column2:7 column3:8!null
- │    │    ├── (1, NULL::INT8, 1)
- │    │    └── (2, NULL::INT8, 2)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:9]
- │         │    └── column1:6
- │         ├── assignment-cast: INT8 [as=column2:10]
- │         │    └── column2:7
- │         └── assignment-cast: INT8 [as=column3:11]
- │              └── column3:8
- └── unique-checks
-      └── unique-checks-item: uniq_partial(a)
-           └── project
-                ├── columns: a:18
-                └── semi-join (hash)
-                     ├── columns: k:17!null a:18 b:19!null
-                     ├── with-scan &1
-                     │    ├── columns: k:17!null a:18 b:19!null
-                     │    └── mapping:
-                     │         ├──  column1:9 => k:17
-                     │         ├──  column2:10 => a:18
-                     │         └──  column3:11 => b:19
-                     ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
-                     └── filters
-                          ├── a:18 = uniq_partial.a:13
-                          ├── b:19 > 0
-                          ├── uniq_partial.b:14 > 0
-                          └── k:17 != uniq_partial.k:12
+ │    ├── column1:9 => k:1
+ │    ├── column2:10 => a:2
+ │    └── column3:11 => b:3
+ └── values
+      ├── columns: column1:9!null column2:10 column3:11!null
+      ├── (1, NULL, 1)
+      └── (2, NULL, 2)
 
 # Use all the unique constraint as an arbiter for DO NOTHING with no conflict
 # columns.
@@ -1683,50 +1509,33 @@ insert uniq_partial_constraint_and_index
  ├── partial index put columns: partial_index_put1:18
  ├── input binding: &1
  ├── project
- │    ├── columns: partial_index_put1:18!null column1:9 column2:10 column3:11
- │    ├── upsert-distinct-on
- │    │    ├── columns: column1:9 column2:10 column3:11 arbiter_uniq_partial_constraint_and_index_a_key_distinct:17!null
- │    │    ├── grouping columns: column2:10
- │    │    ├── project
- │    │    │    ├── columns: arbiter_uniq_partial_constraint_and_index_a_key_distinct:17!null column1:9 column2:10 column3:11
- │    │    │    ├── anti-join (hash)
- │    │    │    │    ├── columns: column1:9 column2:10 column3:11
- │    │    │    │    ├── values
- │    │    │    │    │    ├── columns: column1:9 column2:10 column3:11
- │    │    │    │    │    └── tuple
- │    │    │    │    │         ├── assignment-cast: INT8
- │    │    │    │    │         │    └── 1
- │    │    │    │    │         ├── assignment-cast: INT8
- │    │    │    │    │         │    └── 1
- │    │    │    │    │         └── assignment-cast: INT8
- │    │    │    │    │              └── 1
- │    │    │    │    ├── scan uniq_partial_constraint_and_index
- │    │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13
- │    │    │    │    │    └── partial index predicates
- │    │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
- │    │    │    │    └── filters
- │    │    │    │         └── column2:10 = uniq_partial_constraint_and_index.a:13
- │    │    │    └── projections
- │    │    │         └── true [as=arbiter_uniq_partial_constraint_and_index_a_key_distinct:17]
- │    │    └── aggregations
- │    │         ├── first-agg [as=column1:9]
- │    │         │    └── column1:9
- │    │         ├── first-agg [as=column3:11]
- │    │         │    └── column3:11
- │    │         └── const-agg [as=arbiter_uniq_partial_constraint_and_index_a_key_distinct:17]
- │    │              └── arbiter_uniq_partial_constraint_and_index_a_key_distinct:17
+ │    ├── columns: partial_index_put1:18!null column1:9!null column2:10!null column3:11!null
+ │    ├── anti-join (cross)
+ │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    │    └── (1, 1, 1)
+ │    │    ├── select
+ │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13!null
+ │    │    │    ├── scan uniq_partial_constraint_and_index
+ │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13
+ │    │    │    │    └── partial index predicates
+ │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    └── filters
+ │    │    │         └── uniq_partial_constraint_and_index.a:13 = 1
+ │    │    └── filters (true)
  │    └── projections
  │         └── true [as=partial_index_put1:18]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
            └── project
-                ├── columns: a:25
+                ├── columns: a:25!null
                 └── semi-join (hash)
-                     ├── columns: k:24 a:25 b:26!null
+                     ├── columns: k:24!null a:25!null b:26!null
                      ├── select
-                     │    ├── columns: k:24 a:25 b:26!null
+                     │    ├── columns: k:24!null a:25!null b:26!null
                      │    ├── with-scan &1
-                     │    │    ├── columns: k:24 a:25 b:26
+                     │    │    ├── columns: k:24!null a:25!null b:26!null
                      │    │    └── mapping:
                      │    │         ├──  column1:9 => k:24
                      │    │         ├──  column2:10 => a:25
@@ -1771,39 +1580,22 @@ insert uniq_constraint_and_partial_index
  │    └── column3:11 => b:3
  ├── partial index put columns: partial_index_put1:18
  └── project
-      ├── columns: partial_index_put1:18 column1:9 column2:10 column3:11
-      ├── upsert-distinct-on
-      │    ├── columns: column1:9 column2:10 column3:11 arbiter_unique_a_distinct:17!null
-      │    ├── grouping columns: column2:10
-      │    ├── project
-      │    │    ├── columns: arbiter_unique_a_distinct:17!null column1:9 column2:10 column3:11
-      │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9 column2:10 column3:11
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:9 column2:10 column3:11
-      │    │    │    │    └── tuple
-      │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │         │    └── 1
-      │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │         │    └── 1
-      │    │    │    │         └── assignment-cast: INT8
-      │    │    │    │              └── 1
-      │    │    │    ├── scan uniq_constraint_and_partial_index
-      │    │    │    │    ├── columns: a:13
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
-      │    │    │    │              └── b:14 > 0
-      │    │    │    └── filters
-      │    │    │         └── column2:10 = a:13
-      │    │    └── projections
-      │    │         └── true [as=arbiter_unique_a_distinct:17]
-      │    └── aggregations
-      │         ├── first-agg [as=column1:9]
-      │         │    └── column1:9
-      │         ├── first-agg [as=column3:11]
-      │         │    └── column3:11
-      │         └── const-agg [as=arbiter_unique_a_distinct:17]
-      │              └── arbiter_unique_a_distinct:17
+      ├── columns: partial_index_put1:18!null column1:9!null column2:10!null column3:11!null
+      ├── anti-join (cross)
+      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    └── (1, 1, 1)
+      │    ├── select
+      │    │    ├── columns: a:13!null
+      │    │    ├── scan uniq_constraint_and_partial_index
+      │    │    │    ├── columns: a:13
+      │    │    │    └── partial index predicates
+      │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
+      │    │    │              └── b:14 > 0
+      │    │    └── filters
+      │    │         └── a:13 = 1
+      │    └── filters (true)
       └── projections
            └── column3:11 > 0 [as=partial_index_put1:18]
 

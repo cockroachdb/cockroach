@@ -254,11 +254,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 2
-│           │
-│           └── • values
-│                 size: 5 columns, 2 rows
+│       └── • values
+│             size: 5 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -308,27 +305,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 2
-│           │
-│           └── • values
-│                 size: 5 columns, 2 rows
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • hash join (right semi)
-│           │ equality: (w) = (column3)
-│           │ pred: column1 != k
-│           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: uniq@uniq_pkey
-│           │     spans: FULL SCAN
-│           │
-│           └── • scan buffer
-│                 label: buffer 1
+│       └── • values
+│             size: 5 columns, 2 rows
 │
 └── • constraint-check
     │
@@ -362,76 +340,55 @@ vectorized: true
 │ arbiter indexes: uniq_pkey, uniq_v_key
 │ arbiter constraints: unique_w, unique_x_y
 │
-└── • distinct
+└── • cross join (right anti)
     │ columns: (column1, column2, column3, column4, column5)
     │ estimated row count: 0 (missing stats)
-    │ distinct on: column4, column5
-    │ nulls are distinct
     │
-    └── • distinct
+    ├── • scan
+    │     columns: (k)
+    │     estimated row count: 1 (missing stats)
+    │     table: uniq@uniq_pkey
+    │     spans: /1/0
+    │
+    └── • hash join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: column3
-        │ nulls are distinct
+        │ equality: (w) = (column3)
+        │ right cols are key
         │
-        └── • distinct
+        ├── • scan
+        │     columns: (w)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: uniq@uniq_pkey
+        │     spans: FULL SCAN
+        │
+        └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4, column5)
             │ estimated row count: 0 (missing stats)
-            │ distinct on: column2
-            │ nulls are distinct
+            │ table: uniq@uniq_v_key
+            │ equality: (column2) = (v)
+            │ equality cols are key
             │
-            └── • distinct
+            └── • hash join (right anti)
                 │ columns: (column1, column2, column3, column4, column5)
                 │ estimated row count: 0 (missing stats)
-                │ distinct on: column1
-                │ nulls are distinct
+                │ equality: (x, y) = (column4, column5)
+                │ right cols are key
                 │
-                └── • hash join (right anti)
-                    │ columns: (column1, column2, column3, column4, column5)
-                    │ estimated row count: 0 (missing stats)
-                    │ equality: (w) = (column3)
-                    │ right cols are key
-                    │
-                    ├── • scan
-                    │     columns: (w)
-                    │     estimated row count: 1,000 (missing stats)
-                    │     table: uniq@uniq_pkey
-                    │     spans: FULL SCAN
-                    │
-                    └── • lookup join (anti)
-                        │ columns: (column1, column2, column3, column4, column5)
-                        │ estimated row count: 0 (missing stats)
-                        │ table: uniq@uniq_pkey
-                        │ equality: (column1) = (k)
-                        │ equality cols are key
-                        │
-                        └── • lookup join (anti)
-                            │ columns: (column1, column2, column3, column4, column5)
-                            │ estimated row count: 0 (missing stats)
-                            │ table: uniq@uniq_v_key
-                            │ equality: (column2) = (v)
-                            │ equality cols are key
-                            │
-                            └── • hash join (right anti)
-                                │ columns: (column1, column2, column3, column4, column5)
-                                │ estimated row count: 0 (missing stats)
-                                │ equality: (x, y) = (column4, column5)
-                                │ right cols are key
-                                │
-                                ├── • scan
-                                │     columns: (x, y)
-                                │     estimated row count: 1,000 (missing stats)
-                                │     table: uniq@uniq_pkey
-                                │     spans: FULL SCAN
-                                │
-                                └── • values
-                                      columns: (column1, column2, column3, column4, column5)
-                                      size: 5 columns, 1 row
-                                      row 0, expr 0: crdb_internal.assignment_cast(1, NULL::INT8)
-                                      row 0, expr 1: crdb_internal.assignment_cast(2, NULL::INT8)
-                                      row 0, expr 2: crdb_internal.assignment_cast(3, NULL::INT8)
-                                      row 0, expr 3: crdb_internal.assignment_cast(4, NULL::INT8)
-                                      row 0, expr 4: crdb_internal.assignment_cast(5, NULL::INT8)
+                ├── • scan
+                │     columns: (x, y)
+                │     estimated row count: 1,000 (missing stats)
+                │     table: uniq@uniq_pkey
+                │     spans: FULL SCAN
+                │
+                └── • values
+                      columns: (column1, column2, column3, column4, column5)
+                      size: 5 columns, 1 row
+                      row 0, expr 0: 1
+                      row 0, expr 1: 2
+                      row 0, expr 2: 3
+                      row 0, expr 3: 4
+                      row 0, expr 4: 5
 
 # Insert with non-constant input.
 query T
@@ -503,11 +460,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 2
-│           │
-│           └── • values
-│                 size: 4 columns, 2 rows
+│       └── • values
+│             size: 4 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -774,25 +728,17 @@ vectorized: true
 │           │ render column3: column3
 │           │ render column4: column4
 │           │
-│           └── • render
-│               │ columns: (column1, column2, column3, column4)
-│               │ estimated row count: 2
-│               │ render column1: crdb_internal.assignment_cast(column1, NULL::public.region)
-│               │ render column2: crdb_internal.assignment_cast(column2, NULL::STRING)
-│               │ render column3: crdb_internal.assignment_cast(column3, NULL::INT8)
-│               │ render column4: crdb_internal.assignment_cast(column4, NULL::INT8)
-│               │
-│               └── • values
-│                     columns: (column1, column2, column3, column4)
-│                     size: 4 columns, 2 rows
-│                     row 0, expr 0: 'us-west'
-│                     row 0, expr 1: 'foo'
-│                     row 0, expr 2: 1
-│                     row 0, expr 3: 1
-│                     row 1, expr 0: 'us-east'
-│                     row 1, expr 1: 'bar'
-│                     row 1, expr 2: 2
-│                     row 1, expr 3: 2
+│           └── • values
+│                 columns: (column1, column2, column3, column4)
+│                 size: 4 columns, 2 rows
+│                 row 0, expr 0: 'us-west'
+│                 row 0, expr 1: 'foo'
+│                 row 0, expr 2: 1
+│                 row 0, expr 3: 1
+│                 row 1, expr 0: 'us-east'
+│                 row 1, expr 1: 'bar'
+│                 row 1, expr 2: 2
+│                 row 1, expr 3: 2
 │
 ├── • constraint-check
 │   │
@@ -906,8 +852,8 @@ vectorized: true
 │               │ estimated row count: 2
 │               │ render r_default: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render j_default: CAST(NULL AS INT8)
-│               │ render column1: crdb_internal.assignment_cast(column1, NULL::STRING)
-│               │ render column2: crdb_internal.assignment_cast(column2, NULL::INT8)
+│               │ render column1: column1
+│               │ render column2: column2
 │               │
 │               └── • values
 │                     columns: (column1, column2)
@@ -982,77 +928,45 @@ vectorized: true
     │ render column3: column3
     │ render column4: column4
     │
-    └── • distinct
+    └── • lookup join (anti)
         │ columns: (column1, column2, column3, column4)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: column2, column4
-        │ nulls are distinct
+        │ table: uniq_enum@uniq_enum_r_s_j_key
+        │ equality cols are key
+        │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
         │
-        └── • distinct
+        └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
             │ estimated row count: 0 (missing stats)
-            │ distinct on: column3
-            │ nulls are distinct
+            │ table: uniq_enum@uniq_enum_pkey
+            │ equality cols are key
+            │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
             │
-            └── • distinct
+            └── • lookup join (anti)
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 0 (missing stats)
-                │ distinct on: column1, column2, column4
-                │ nulls are distinct
+                │ table: uniq_enum@uniq_enum_pkey
+                │ equality: (column1, column3) = (r,i)
+                │ equality cols are key
                 │
-                └── • distinct
+                └── • lookup join (anti)
                     │ columns: (column1, column2, column3, column4)
                     │ estimated row count: 0 (missing stats)
-                    │ distinct on: column1, column3
-                    │ nulls are distinct
+                    │ table: uniq_enum@uniq_enum_r_s_j_key
+                    │ equality: (column1, column2, column4) = (r,s,j)
+                    │ equality cols are key
                     │
-                    └── • lookup join (anti)
-                        │ columns: (column1, column2, column3, column4)
-                        │ estimated row count: 0 (missing stats)
-                        │ table: uniq_enum@uniq_enum_r_s_j_key
-                        │ equality cols are key
-                        │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
-                        │
-                        └── • lookup join (anti)
-                            │ columns: (column1, column2, column3, column4)
-                            │ estimated row count: 0 (missing stats)
-                            │ table: uniq_enum@uniq_enum_pkey
-                            │ equality cols are key
-                            │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
-                            │
-                            └── • lookup join (anti)
-                                │ columns: (column1, column2, column3, column4)
-                                │ estimated row count: 0 (missing stats)
-                                │ table: uniq_enum@uniq_enum_pkey
-                                │ equality: (column1, column3) = (r,i)
-                                │ equality cols are key
-                                │
-                                └── • lookup join (anti)
-                                    │ columns: (column1, column2, column3, column4)
-                                    │ estimated row count: 0 (missing stats)
-                                    │ table: uniq_enum@uniq_enum_r_s_j_key
-                                    │ equality: (column1, column2, column4) = (r,s,j)
-                                    │ equality cols are key
-                                    │
-                                    └── • render
-                                        │ columns: (column1, column2, column3, column4)
-                                        │ estimated row count: 2
-                                        │ render column1: crdb_internal.assignment_cast(column1, NULL::public.region)
-                                        │ render column2: crdb_internal.assignment_cast(column2, NULL::STRING)
-                                        │ render column3: crdb_internal.assignment_cast(column3, NULL::INT8)
-                                        │ render column4: crdb_internal.assignment_cast(column4, NULL::INT8)
-                                        │
-                                        └── • values
-                                              columns: (column1, column2, column3, column4)
-                                              size: 4 columns, 2 rows
-                                              row 0, expr 0: 'us-west'
-                                              row 0, expr 1: 'foo'
-                                              row 0, expr 2: 1
-                                              row 0, expr 3: 1
-                                              row 1, expr 0: 'us-east'
-                                              row 1, expr 1: 'bar'
-                                              row 1, expr 2: 2
-                                              row 1, expr 3: 2
+                    └── • values
+                          columns: (column1, column2, column3, column4)
+                          size: 4 columns, 2 rows
+                          row 0, expr 0: 'us-west'
+                          row 0, expr 1: 'foo'
+                          row 0, expr 2: 1
+                          row 0, expr 3: 1
+                          row 1, expr 0: 'us-east'
+                          row 1, expr 1: 'bar'
+                          row 1, expr 2: 2
+                          row 1, expr 3: 2
 
 # None of the inserted values have nulls.
 query T
@@ -1069,11 +983,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 2
-│           │
-│           └── • values
-│                 size: 3 columns, 2 rows
+│       └── • values
+│             size: 3 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -1137,35 +1048,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 2
-│           │
-│           └── • values
-│                 size: 3 columns, 2 rows
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • hash join (right semi)
-│           │ equality: (a) = (column2)
-│           │ pred: column1 != k
-│           │
-│           ├── • filter
-│           │   │ filter: b > 0
-│           │   │
-│           │   └── • scan
-│           │         missing stats
-│           │         table: uniq_partial@uniq_partial_pkey
-│           │         spans: FULL SCAN
-│           │
-│           └── • filter
-│               │ estimated row count: 1
-│               │ filter: column3 > 0
-│               │
-│               └── • scan buffer
-│                     estimated row count: 2
-│                     label: buffer 1
+│       └── • values
+│             size: 3 columns, 2 rows
 │
 └── • constraint-check
     │
@@ -1213,7 +1097,7 @@ vectorized: true
     └── • distinct
         │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: arbiter_unique_b_distinct, column3
+        │ distinct on: arbiter_unique_b_distinct
         │ nulls are distinct
         │
         └── • render
@@ -1227,7 +1111,7 @@ vectorized: true
             └── • distinct
                 │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
                 │ estimated row count: 0 (missing stats)
-                │ distinct on: arbiter_unique_a_distinct, column2
+                │ distinct on: arbiter_unique_a_distinct
                 │ nulls are distinct
                 │
                 └── • render
@@ -1238,60 +1122,57 @@ vectorized: true
                     │ render column2: column2
                     │ render column3: column3
                     │
-                    └── • distinct
+                    └── • hash join (right anti)
                         │ columns: (column1, column2, column3)
                         │ estimated row count: 0 (missing stats)
-                        │ distinct on: column1
-                        │ nulls are distinct
+                        │ equality: (b) = (column3)
+                        │ right cols are key
+                        │
+                        ├── • filter
+                        │   │ columns: (b)
+                        │   │ estimated row count: 333 (missing stats)
+                        │   │ filter: b > 0
+                        │   │
+                        │   └── • scan
+                        │         columns: (b)
+                        │         estimated row count: 1,000 (missing stats)
+                        │         table: uniq_partial@uniq_partial_pkey
+                        │         spans: FULL SCAN
                         │
                         └── • hash join (right anti)
                             │ columns: (column1, column2, column3)
                             │ estimated row count: 0 (missing stats)
-                            │ equality: (b) = (column3)
+                            │ equality: (a) = (column2)
                             │ right cols are key
+                            │ pred: column3 > 0
                             │
                             ├── • filter
-                            │   │ columns: (b)
+                            │   │ columns: (a, b)
                             │   │ estimated row count: 333 (missing stats)
                             │   │ filter: b > 0
                             │   │
                             │   └── • scan
-                            │         columns: (b)
+                            │         columns: (a, b)
                             │         estimated row count: 1,000 (missing stats)
                             │         table: uniq_partial@uniq_partial_pkey
                             │         spans: FULL SCAN
                             │
-                            └── • lookup join (anti)
+                            └── • cross join (anti)
                                 │ columns: (column1, column2, column3)
                                 │ estimated row count: 0 (missing stats)
-                                │ table: uniq_partial@uniq_partial_pkey
-                                │ equality: (column1) = (k)
-                                │ equality cols are key
                                 │
-                                └── • hash join (right anti)
-                                    │ columns: (column1, column2, column3)
-                                    │ estimated row count: 0 (missing stats)
-                                    │ equality: (a) = (column2)
-                                    │ right cols are key
-                                    │ pred: column3 > 0
-                                    │
-                                    ├── • filter
-                                    │   │ columns: (a, b)
-                                    │   │ estimated row count: 333 (missing stats)
-                                    │   │ filter: b > 0
-                                    │   │
-                                    │   └── • scan
-                                    │         columns: (a, b)
-                                    │         estimated row count: 1,000 (missing stats)
-                                    │         table: uniq_partial@uniq_partial_pkey
-                                    │         spans: FULL SCAN
-                                    │
-                                    └── • values
-                                          columns: (column1, column2, column3)
-                                          size: 3 columns, 1 row
-                                          row 0, expr 0: crdb_internal.assignment_cast(1, NULL::INT8)
-                                          row 0, expr 1: crdb_internal.assignment_cast(2, NULL::INT8)
-                                          row 0, expr 2: crdb_internal.assignment_cast(3, NULL::INT8)
+                                ├── • values
+                                │     columns: (column1, column2, column3)
+                                │     size: 3 columns, 1 row
+                                │     row 0, expr 0: 1
+                                │     row 0, expr 1: 2
+                                │     row 0, expr 2: 3
+                                │
+                                └── • scan
+                                      columns: (k)
+                                      estimated row count: 1 (missing stats)
+                                      table: uniq_partial@uniq_partial_pkey
+                                      spans: /1/0
 
 # Insert with non-constant input.
 query T
@@ -1367,15 +1248,10 @@ EXPLAIN INSERT INTO uniq_partial_overlaps_pk VALUES (1, 1, 1), (2, 2, 2)
 distribution: local
 vectorized: true
 ·
-• insert
-│ into: uniq_partial_overlaps_pk(k, a, b)
-│ auto commit
-│
-└── • render
-    │ estimated row count: 2
-    │
-    └── • values
-          size: 3 columns, 2 rows
+• insert fast path
+  into: uniq_partial_overlaps_pk(k, a, b)
+  auto commit
+  size: 3 columns, 2 rows
 
 # Insert with non-constant input.
 # Add inequality filters for the hidden primary key column.
@@ -1451,25 +1327,17 @@ vectorized: true
 │           │ render column3: column3
 │           │ render column4: column4
 │           │
-│           └── • render
-│               │ columns: (column1, column2, column3, column4)
-│               │ estimated row count: 2
-│               │ render column1: crdb_internal.assignment_cast(column1, NULL::public.region)
-│               │ render column2: crdb_internal.assignment_cast(column2, NULL::INT8)
-│               │ render column3: crdb_internal.assignment_cast(column3, NULL::INT8)
-│               │ render column4: crdb_internal.assignment_cast(column4, NULL::STRING)
-│               │
-│               └── • values
-│                     columns: (column1, column2, column3, column4)
-│                     size: 4 columns, 2 rows
-│                     row 0, expr 0: 'us-west'
-│                     row 0, expr 1: 1
-│                     row 0, expr 2: 1
-│                     row 0, expr 3: 'foo'
-│                     row 1, expr 0: 'us-east'
-│                     row 1, expr 1: 2
-│                     row 1, expr 2: 2
-│                     row 1, expr 3: 'bar'
+│           └── • values
+│                 columns: (column1, column2, column3, column4)
+│                 size: 4 columns, 2 rows
+│                 row 0, expr 0: 'us-west'
+│                 row 0, expr 1: 1
+│                 row 0, expr 2: 1
+│                 row 0, expr 3: 'foo'
+│                 row 1, expr 0: 'us-east'
+│                 row 1, expr 1: 2
+│                 row 1, expr 2: 2
+│                 row 1, expr 3: 'bar'
 │
 └── • constraint-check
     │
@@ -1556,45 +1424,31 @@ vectorized: true
             │ render column3: column3
             │ render column4: column4
             │
-            └── • distinct
+            └── • lookup join (anti)
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 0
-                │ distinct on: column1, column2
-                │ nulls are distinct
+                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: column4 IN ('bar', 'baz', 'foo')
                 │
                 └── • lookup join (anti)
                     │ columns: (column1, column2, column3, column4)
                     │ estimated row count: 0
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
-                    │ pred: column4 IN ('bar', 'baz', 'foo')
+                    │ table: uniq_partial_enum@uniq_partial_enum_pkey
+                    │ equality: (column1, column2) = (r,a)
+                    │ equality cols are key
                     │
-                    └── • lookup join (anti)
-                        │ columns: (column1, column2, column3, column4)
-                        │ estimated row count: 0
-                        │ table: uniq_partial_enum@uniq_partial_enum_pkey
-                        │ equality: (column1, column2) = (r,a)
-                        │ equality cols are key
-                        │
-                        └── • render
-                            │ columns: (column1, column2, column3, column4)
-                            │ estimated row count: 2
-                            │ render column1: crdb_internal.assignment_cast(column1, NULL::public.region)
-                            │ render column2: crdb_internal.assignment_cast(column2, NULL::INT8)
-                            │ render column3: crdb_internal.assignment_cast(column3, NULL::INT8)
-                            │ render column4: crdb_internal.assignment_cast(column4, NULL::STRING)
-                            │
-                            └── • values
-                                  columns: (column1, column2, column3, column4)
-                                  size: 4 columns, 2 rows
-                                  row 0, expr 0: 'us-west'
-                                  row 0, expr 1: 1
-                                  row 0, expr 2: 1
-                                  row 0, expr 3: 'foo'
-                                  row 1, expr 0: 'us-east'
-                                  row 1, expr 1: 2
-                                  row 1, expr 2: 2
-                                  row 1, expr 3: 'bar'
+                    └── • values
+                          columns: (column1, column2, column3, column4)
+                          size: 4 columns, 2 rows
+                          row 0, expr 0: 'us-west'
+                          row 0, expr 1: 1
+                          row 0, expr 2: 1
+                          row 0, expr 3: 'foo'
+                          row 1, expr 0: 'us-east'
+                          row 1, expr 1: 2
+                          row 1, expr 2: 2
+                          row 1, expr 3: 'bar'
 
 # We can eliminate uniqueness checks for i and s due to functional dependencies.
 # We cannot eliminate checks for d, since functional dependencies could not be
@@ -1616,11 +1470,8 @@ vectorized: true
 │       └── • render
 │           │ estimated row count: 2
 │           │
-│           └── • render
-│               │ estimated row count: 2
-│               │
-│               └── • values
-│                     size: 3 columns, 2 rows
+│           └── • values
+│                 size: 3 columns, 2 rows
 │
 └── • constraint-check
     │
@@ -1654,28 +1505,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 1
-│           │
-│           └── • values
-│                 size: 1 column, 1 row
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • hash join (right semi)
-│           │ equality: (id1) = (column1)
-│           │ right cols are key
-│           │ pred: rowid_default != rowid
-│           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: uniq_uuid@uniq_uuid_pkey
-│           │     spans: FULL SCAN
-│           │
-│           └── • scan buffer
-│                 label: buffer 1
+│       └── • values
+│             size: 3 columns, 1 row
 │
 └── • constraint-check
     │
@@ -1711,28 +1542,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 1
-│           │
-│           └── • values
-│                 size: 1 column, 1 row
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • hash join (right semi)
-│           │ equality: (id1) = (column1)
-│           │ right cols are key
-│           │ pred: rowid_default != rowid
-│           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: uniq_uuid@uniq_uuid_pkey
-│           │     spans: FULL SCAN
-│           │
-│           └── • scan buffer
-│                 label: buffer 1
+│       └── • values
+│             size: 3 columns, 1 row
 │
 └── • constraint-check
     │
@@ -1773,22 +1584,6 @@ vectorized: true
 │                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • hash join (semi)
-│           │ equality: (gen_random_uuid) = (id1)
-│           │ pred: rowid_default != rowid
-│           │
-│           ├── • scan buffer
-│           │     label: buffer 1
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: uniq_uuid@uniq_uuid_pkey
-│                 spans: FULL SCAN
-│
 └── • constraint-check
     │
     └── • error if rows
@@ -1823,11 +1618,8 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │ estimated row count: 1
-│           │
-│           └── • values
-│                 size: 1 column, 1 row
+│       └── • values
+│             size: 3 columns, 1 row
 │
 ├── • constraint-check
 │   │

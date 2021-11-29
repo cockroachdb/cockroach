@@ -1473,20 +1473,9 @@ insert decimals
  │    ├── c_default:11 => c:3
  │    └── d_comp:12 => d:4
  ├── check columns: check1:13 check2:14
- └── project
-      ├── columns: check1:13 check2:14 d_comp:12 column1:9 column2:10 c_default:11!null
-      ├── values
-      │    ├── columns: c_default:11!null column1:9 column2:10
-      │    └── tuple
-      │         ├── 1.2
-      │         ├── assignment-cast: DECIMAL(10)
-      │         │    └── 1.1
-      │         └── assignment-cast: DECIMAL(5,1)[]
-      │              └── ARRAY[0.95,NULL,15]
-      └── projections
-           ├── column1:9 = round(column1:9) [as=check1:13]
-           ├── column2:10[0] > 1 [as=check2:14]
-           └── (column1:9::DECIMAL + 1.2)::DECIMAL(10,1) [as=d_comp:12]
+ └── values
+      ├── columns: column1:9!null column2:10!null c_default:11!null check1:13!null check2:14 d_comp:12!null
+      └── (1, ARRAY[1.0,NULL,15.0], 1.2, true, NULL, 2.2)
 
 build
 INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
@@ -1530,16 +1519,8 @@ insert assn_cast
  │    ├── s_default:14 => s:4
  │    └── rowid_default:15 => rowid:5
  └── values
-      ├── columns: s_default:14 rowid_default:15 column1:11 column2:12 column3:13
-      └── tuple
-           ├── CAST(NULL AS STRING)
-           ├── unique_rowid()
-           ├── assignment-cast: CHAR
-           │    └── ' '
-           ├── assignment-cast: "char"
-           │    └── 'foo'
-           └── assignment-cast: INT8
-                └── 1
+      ├── columns: column1:11!null column2:12!null column3:13!null s_default:14 rowid_default:15
+      └── ('', 'f', 1, CAST(NULL AS STRING), unique_rowid())
 
 # Regression test for #38293; the default values should be separate projections.
 exec-ddl

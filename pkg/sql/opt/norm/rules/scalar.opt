@@ -59,12 +59,29 @@ $item
 (SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
-# that's equivalent to the desired static type.
+# that's identical to the desired static type.
 #
 # Note that CastExpr removes unnecessary casts during type-checking; this rule
 # can still be helpful if some other rule creates an unnecessary CastExpr.
 [EliminateCast, Normalize]
 (Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+=>
+$input
+
+# EliminateGenRandomUUIDAssignmentCast discards the assignment cast operator
+# if its input is the gen_random_uuid() builtin function. This is safe because
+# gen_random_uuid() always returns a value of type UUID which will never be
+# altered by an assignment cast. This rule allows uniqueness checks for
+# gen_random_uuid() values to be eliminated in more cases (see
+# UniquenessChecksForGenRandomUUIDClusterMode).
+[EliminateGenRandomUUIDAssignmentCast, Normalize]
+(AssignmentCast
+    $input:(Function
+        *
+        $private:(FunctionPrivate "gen_random_uuid")
+    )
+    $targetTyp:* & (HasColType $input $targetTyp)
+)
 =>
 $input
 
