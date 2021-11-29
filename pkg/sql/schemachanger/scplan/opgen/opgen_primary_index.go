@@ -94,6 +94,20 @@ func init() {
 	opRegistry.register(
 		(*scpb.PrimaryIndex)(nil),
 		scpb.Target_DROP,
+		scpb.Status_VALIDATED,
+		to(scpb.Status_DELETE_AND_WRITE_ONLY),
+	)
+
+	opRegistry.register(
+		(*scpb.PrimaryIndex)(nil),
+		scpb.Target_DROP,
+		scpb.Status_BACKFILLED,
+		to(scpb.Status_DELETE_AND_WRITE_ONLY),
+	)
+
+	opRegistry.register(
+		(*scpb.PrimaryIndex)(nil),
+		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		to(scpb.Status_DELETE_AND_WRITE_ONLY,
 			minPhase(scop.PreCommitPhase),
@@ -107,7 +121,6 @@ func init() {
 		to(scpb.Status_DELETE_ONLY,
 			minPhase(scop.PostCommitPhase),
 			revertible(false),
-			// TODO(ajwerner): This should be marked as not revertible.
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeDroppedIndexDeleteOnly{
 					TableID: this.TableID,
@@ -115,12 +128,19 @@ func init() {
 				}
 			})),
 		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): This should be marked as not revertible.
+			revertible(false),
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeIndexAbsent{
 					TableID: this.TableID,
 					IndexID: this.IndexID,
 				}
+			}),
+			emit(func(this *scpb.PrimaryIndex) scop.Op {
+				return &scop.CreateGcJobForIndex{
+					TableID: this.TableID,
+					IndexID: this.IndexID,
+				}
 			})),
 	)
+
 }

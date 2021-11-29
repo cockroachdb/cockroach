@@ -86,6 +86,13 @@ type CreateGcJobForDescriptor struct {
 	DescID descpb.ID
 }
 
+// CreateGcJobForIndex creates a GC job for a given table index.
+type CreateGcJobForIndex struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
 // MarkDescriptorAsDroppedSynthetically marks a descriptor as dropped within
 // a transaction by injecting a synthetic descriptor.
 type MarkDescriptorAsDroppedSynthetically struct {

@@ -115,6 +115,9 @@ Stage 7 of 7 (non-revertible)
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 52
+    *scop.CreateGcJobForIndex
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -229,6 +232,9 @@ Stage 7 of 7 (non-revertible)
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
+    *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 52
 
@@ -396,6 +402,9 @@ Stage 7 of 7 (non-revertible)
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 52
+    *scop.CreateGcJobForIndex
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
@@ -510,6 +519,9 @@ Stage 7 of 7 (non-revertible)
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
+    *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 52
 
@@ -720,6 +732,12 @@ Stage 7 of 7 (non-revertible)
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 52
+    *scop.CreateGcJobForIndex
+      IndexID: 1
+      TableID: 52
     *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 53
+    *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 53

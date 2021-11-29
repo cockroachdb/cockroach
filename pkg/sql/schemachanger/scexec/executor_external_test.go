@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -59,7 +61,7 @@ func (ti testInfra) newExecDeps(
 		ti.lm.Codec(),
 		txn,
 		descsCollection,
-		nil,                  /* jobRegistry */
+		noopJobRegistry{},    /* jobRegistry */
 		noopBackfiller{},     /* indexBackfiller */
 		noopIndexValidator{}, /* indexValidator */
 		noopCCLCallbacks{},   /* noopCCLCallbacks */
@@ -458,6 +460,20 @@ func TestSchemaChanger(t *testing.T) {
 		}))
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
+}
+
+type noopJobRegistry struct{}
+
+var _ scdeps.JobRegistry = noopJobRegistry{}
+
+func (n noopJobRegistry) MakeJobID() jobspb.JobID {
+	return jobspb.InvalidJobID
+}
+
+func (n noopJobRegistry) CreateJobWithTxn(
+	ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn,
+) (*jobs.Job, error) {
+	return &jobs.Job{}, nil
 }
 
 type noopBackfiller struct{}
