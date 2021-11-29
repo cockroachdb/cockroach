@@ -306,8 +306,6 @@ type Context struct {
 
 	stats StatsHandler
 
-	ClusterID base.ClusterIDContainer
-
 	metrics Metrics
 
 	// For unittesting.
@@ -370,6 +368,11 @@ type ContextOptions struct {
 	// Note: this ought to be renamed, see:
 	// https://github.com/cockroachdb/cockroach/pull/73309
 	NodeID *base.NodeIDContainer
+
+	// ClusterID is the cluster ID shared with the remainder of the
+	// server. If unset in the options, the RPC context will instantiate
+	// its own separate container (this is useful in tests).
+	ClusterID *base.ClusterIDContainer
 }
 
 func (c ContextOptions) validate() error {
@@ -406,6 +409,12 @@ func NewContext(opts ContextOptions) *Context {
 		// Tests rely on NewContext to generate its own ID container.
 		var c base.NodeIDContainer
 		opts.NodeID = &c
+	}
+
+	if opts.ClusterID == nil {
+		// Tests rely on NewContext to generate its own ID container.
+		var c base.ClusterIDContainer
+		opts.ClusterID = &c
 	}
 
 	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
@@ -1349,7 +1358,7 @@ func (ctx *Context) NewHeartbeatService() *HeartbeatService {
 		remoteClockMonitor:                    ctx.RemoteClocks,
 		clusterName:                           ctx.ClusterName(),
 		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
-		clusterID:                             &ctx.ClusterID,
+		clusterID:                             ctx.ClusterID,
 		nodeID:                                ctx.NodeID,
 		settings:                              ctx.Settings,
 		onHandlePing:                          ctx.OnIncomingPing,

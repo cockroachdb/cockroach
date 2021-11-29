@@ -130,7 +130,7 @@ func TestHeartbeatCB(t *testing.T) {
 		RegisterHeartbeatServer(s, &HeartbeatService{
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
-			clusterID:          &serverCtx.ClusterID,
+			clusterID:          serverCtx.ClusterID,
 			nodeID:             serverCtx.NodeID,
 			settings:           serverCtx.Settings,
 		})
@@ -594,7 +594,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		clusterID:          &serverCtx.ClusterID,
+		clusterID:          serverCtx.ClusterID,
 		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
@@ -775,7 +775,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		clusterID:          &serverCtx.ClusterID,
+		clusterID:          serverCtx.ClusterID,
 		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
@@ -955,7 +955,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		RegisterHeartbeatServer(s, &HeartbeatService{
 			clock:              clock,
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
-			clusterID:          &nodeCtxs[i].ctx.ClusterID,
+			clusterID:          nodeCtxs[i].ctx.ClusterID,
 			nodeID:             nodeCtxs[i].ctx.NodeID,
 			settings:           nodeCtxs[i].ctx.Settings,
 		})
@@ -1149,7 +1149,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 		HeartbeatService: HeartbeatService{
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
-			clusterID:          &serverCtx.ClusterID,
+			clusterID:          serverCtx.ClusterID,
 			nodeID:             serverCtx.NodeID,
 			settings:           serverCtx.Settings,
 		},
@@ -1345,7 +1345,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		clusterID:          &serverCtx.ClusterID,
+		clusterID:          serverCtx.ClusterID,
 		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
@@ -1418,7 +1418,7 @@ func TestClusterNameMismatch(t *testing.T) {
 			RegisterHeartbeatServer(s, &HeartbeatService{
 				clock:                          clock,
 				remoteClockMonitor:             serverCtx.RemoteClocks,
-				clusterID:                      &serverCtx.ClusterID,
+				clusterID:                      serverCtx.ClusterID,
 				nodeID:                         serverCtx.NodeID,
 				settings:                       serverCtx.Settings,
 				clusterName:                    serverCtx.Config.ClusterName,
@@ -1468,7 +1468,7 @@ func TestNodeIDMismatch(t *testing.T) {
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		clusterID:          &serverCtx.ClusterID,
+		clusterID:          serverCtx.ClusterID,
 		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
@@ -1541,7 +1541,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 			RegisterHeartbeatServer(s, &HeartbeatService{
 				clock:              clock,
 				remoteClockMonitor: serverCtx.RemoteClocks,
-				clusterID:          &serverCtx.ClusterID,
+				clusterID:          serverCtx.ClusterID,
 				nodeID:             serverCtx.NodeID,
 				settings:           serverCtx.Settings,
 			})
@@ -1587,7 +1587,7 @@ func TestGRPCDialClass(t *testing.T) {
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		clusterID:          &serverCtx.ClusterID,
+		clusterID:          serverCtx.ClusterID,
 		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
@@ -1645,7 +1645,7 @@ func TestTestingKnobs(t *testing.T) {
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		clusterID:          &serverCtx.ClusterID,
+		clusterID:          serverCtx.ClusterID,
 		nodeID:             serverCtx.NodeID,
 		settings:           serverCtx.Settings,
 	})
