@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -521,6 +522,15 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
+
+	// For index recommendations, after building we must interrupt the flow to
+	// find potential index candidates in the memo.
+	if _, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain && !opc.hasVirtualTables() {
+		if err := opc.makeQueryIndexRecommendation(); err != nil {
+			return nil, err
+		}
+	}
+
 	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
 		if _, err := opc.optimizer.Optimize(); err != nil {
 			return nil, err
@@ -647,4 +657,71 @@ func (opc *optPlanningCtx) runExecBuilder(
 // there a better way?
 func (p *planner) DecodeGist(gist string) ([]string, error) {
 	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
+}
+
+// makeQueryIndexRecommendation builds a statement and walks through it to find
+// potential index candidates. It then optimizes the statement with those
+// indexes hypothetically added to the table. An index recommendation for the
+// query is outputted based on which hypothetical indexes are helpful in the
+// optimal plan.
+func (opc *optPlanningCtx) makeQueryIndexRecommendation() error {
+	// Save the normalized memo created by the optbuilder.
+	savedMemo := opc.optimizer.DetachMemo()
+
+	// Use the optimizer to fully normalize the memo. We need to do this before
+	// finding index candidates because the *memo.SortExpr from the sort enforcer
+	// is only added to the memo in this step. The sort expression is required to
+	// determine certain index candidates.
+	f := opc.optimizer.Factory()
+	f.FoldingControl().AllowStableFolds()
+	if err := f.AssignPlaceholders(savedMemo); err != nil {
+		return err
+	}
+	opc.optimizer.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return ruleName.IsNormalize()
+	})
+	if _, err := opc.optimizer.Optimize(); err != nil {
+		return err
+	}
+
+	// Walk through the fully normalized memo to determine index candidates and
+	// create hypothetical tables.
+	indexCandidates := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
+	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
+
+	// Optimize with the saved memo and hypothetical tables. Walk through the
+	// optimal plan to determine index recommendations.
+	opc.optimizer.Init(f.EvalContext(), &opc.catalog)
+	if err := f.AssignPlaceholders(savedMemo); err != nil {
+		return err
+	}
+	opc.optimizer.Memo().Metadata().UpdateTableMeta(hypTables)
+	if _, err := opc.optimizer.Optimize(); err != nil {
+		return err
+	}
+
+	indexRecommendations := indexrec.FindIndexRecommendationSet(f.Memo().RootExpr(), f.Metadata())
+	opc.p.instrumentation.indexRecommendations = indexRecommendations.Output()
+
+	// Re-initialize the optimizer (which also re-initializes the factory) and
+	// update the saved memo's metadata with the original table information.
+	// Prepare to re-optimize and create an executable plan.
+	opc.optimizer.Init(f.EvalContext(), &opc.catalog)
+	savedMemo.Metadata().UpdateTableMeta(optTables)
+	if err := f.AssignPlaceholders(savedMemo); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// hasVirtualTables returns true if there are any virtual tables in the query
+// metadata. Otherwise, it returns false.
+func (opc *optPlanningCtx) hasVirtualTables() bool {
+	for _, tab := range opc.optimizer.Factory().Metadata().AllTables() {
+		if tab.Table.IsVirtualTable() {
+			return true
+		}
+	}
+	return false
 }
