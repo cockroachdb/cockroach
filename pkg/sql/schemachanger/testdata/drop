@@ -52,22 +52,10 @@ begin transaction #1
 ## stage 1 in StatementPhase: 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 7 MutationType ops
+## stage 1 in PreCommitPhase: 1 MutationType ops
+delete object namespace entry {52 54 t} -> 55
+## stage 2 in PreCommitPhase: 1 MutationType ops
 upsert descriptor #55
-  ...
-         family: StringFamily
-         oid: 25
-  -  - defaultExpr: unique_rowid()
-  -    hidden: true
-  +  - hidden: true
-       id: 3
-       name: rowid
-  ...
-     createAsOfTime:
-       wallTime: "1"
-  +  dependedOnBy: []
-     families:
-     - columnIds:
   ...
      replacementOf:
        time: {}
@@ -75,17 +63,13 @@ upsert descriptor #55
      unexposedParentSchemaId: 54
   -  version: "1"
   +  version: "2"
-## stage 2 in PreCommitPhase: 3 MutationType ops
-create job #1: "GC for Dropping descriptors 55 "
-  descriptor IDs: [55]
-delete object namespace entry {52 54 t} -> 55
-create job #2: "Schema change job"
+create job #1: "Schema change job"
   descriptor IDs: [55]
 upsert descriptor #55
   ...
      modificationTime: {}
      name: t
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextFamilyId: 1
   ...
@@ -93,15 +77,23 @@ upsert descriptor #55
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+## stage 1 in PostCommitPhase: 2 MutationType ops
+create job #2: "GC for Dropping descriptors 55 "
+  descriptor IDs: [55]
+update progress of schema change job #1
+commit transaction #2
+begin transaction #3
+## stage 2 in PostCommitPhase: is empty
+update progress of schema change job #1
 upsert descriptor #55
   ...
      modificationTime: {}
      name: t
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextFamilyId: 1
   ...
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 test
@@ -211,7 +203,17 @@ begin transaction #1
 ## stage 1 in StatementPhase: 13 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 35 MutationType ops
+## stage 1 in PreCommitPhase: 9 MutationType ops
+delete object namespace entry {58 29 sq1} -> 60
+delete object namespace entry {58 59 sq1} -> 61
+delete object namespace entry {58 59 t1} -> 62
+delete object namespace entry {58 29 t1} -> 63
+delete object namespace entry {58 59 v1} -> 64
+delete object namespace entry {58 59 v2} -> 65
+delete object namespace entry {58 59 v3} -> 66
+delete object namespace entry {58 59 v4} -> 67
+delete object namespace entry {58 59 v5} -> 70
+## stage 2 in PreCommitPhase: 19 MutationType ops
 upsert descriptor #58
   ...
        sc1:
@@ -228,16 +230,6 @@ upsert descriptor #59
   +  version: "2"
 upsert descriptor #60
   ...
-     createAsOfTime:
-       wallTime: "1"
-  -  dependedOnBy:
-  -  - byId: true
-  -    columnIds:
-  -    - 3
-  -    id: 63
-     families:
-     - columnIds:
-  ...
        sequenceOwner: {}
        start: "1"
   +  state: DROP
@@ -245,16 +237,6 @@ upsert descriptor #60
   -  version: "2"
   +  version: "3"
 upsert descriptor #61
-  ...
-     createAsOfTime:
-       wallTime: "1"
-  -  dependedOnBy:
-  -  - byId: true
-  -    columnIds:
-  -    - 3
-  -    id: 62
-     families:
-     - columnIds:
   ...
        sequenceOwner: {}
        start: "1"
@@ -320,18 +302,6 @@ upsert descriptor #63
   +  version: "2"
 upsert descriptor #64
   ...
-     createAsOfTime:
-       wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    id: 65
-  -  - columnIds:
-  -    - 1
-  -    id: 66
-     dependsOn:
-     - 62
-  ...
      replacementOf:
        time: {}
   +  state: DROP
@@ -340,20 +310,6 @@ upsert descriptor #64
   +  version: "4"
      viewQuery: (SELECT name FROM db1.sc1.t1)
 upsert descriptor #65
-  ...
-     createAsOfTime:
-       wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 66
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 67
-     dependsOn:
-     - 64
   ...
      replacementOf:
        time: {}
@@ -372,16 +328,6 @@ upsert descriptor #66
   +  version: "2"
      viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
 upsert descriptor #67
-  ...
-     createAsOfTime:
-       wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 70
-     dependsOn:
-     - 65
   ...
      replacementOf:
        time: {}
@@ -419,29 +365,16 @@ upsert descriptor #70
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
-## stage 2 in PreCommitPhase: 33 MutationType ops
-create job #1: "GC for Dropping descriptors 60 63 61 66 70 67 65 64 62 "
-  descriptor IDs: [60 63 61 66 70 67 65 64 62]
-delete database namespace entry {0 0 db1} -> 58
-delete schema namespace entry {58 0 sc1} -> 59
-delete object namespace entry {58 29 sq1} -> 60
-delete object namespace entry {58 59 sq1} -> 61
-delete object namespace entry {58 59 t1} -> 62
-delete object namespace entry {58 29 t1} -> 63
-delete object namespace entry {58 59 v1} -> 64
-delete object namespace entry {58 59 v2} -> 65
-delete object namespace entry {58 59 v3} -> 66
-delete object namespace entry {58 59 v4} -> 67
+## stage 3 in PreCommitPhase: 2 MutationType ops
 delete object namespace entry {58 59 typ} -> 68
 delete object namespace entry {58 59 _typ} -> 69
-delete object namespace entry {58 59 v5} -> 70
-create job #2: "Schema change job"
+create job #1: "Schema change job"
   descriptor IDs: [58 59 60 61 62 63 64 65 66 67 68 69 70]
 upsert descriptor #60
   ...
      modificationTime: {}
      name: sq1
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      parentId: 58
      primaryIndex:
   ...
@@ -449,7 +382,7 @@ upsert descriptor #61
   ...
      modificationTime: {}
      name: sq1
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      parentId: 58
      primaryIndex:
   ...
@@ -457,7 +390,7 @@ upsert descriptor #62
   ...
      modificationTime: {}
      name: t1
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextFamilyId: 1
   ...
@@ -465,7 +398,7 @@ upsert descriptor #63
   ...
      modificationTime: {}
      name: t1
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextFamilyId: 1
   ...
@@ -473,7 +406,7 @@ upsert descriptor #64
   ...
      modificationTime: {}
      name: v1
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 2
      nextMutationId: 1
   ...
@@ -481,7 +414,7 @@ upsert descriptor #65
   ...
      modificationTime: {}
      name: v2
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextMutationId: 1
   ...
@@ -489,7 +422,7 @@ upsert descriptor #66
   ...
      modificationTime: {}
      name: v3
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextMutationId: 1
   ...
@@ -497,7 +430,7 @@ upsert descriptor #67
   ...
      modificationTime: {}
      name: v4
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextMutationId: 1
   ...
@@ -505,7 +438,7 @@ upsert descriptor #70
   ...
      modificationTime: {}
      name: v5
-  +  newSchemaChangeJobId: "2"
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextMutationId: 1
   ...
@@ -513,11 +446,157 @@ upsert descriptor #70
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+## stage 1 in PostCommitPhase: 30 MutationType ops
+create job #2: "GC for Dropping descriptors 60 63 61 62 64 65 66 67 70 "
+  descriptor IDs: [60 63 61 62 64 65 66 67 70]
+delete database namespace entry {0 0 db1} -> 58
+delete schema namespace entry {58 0 sc1} -> 59
+upsert descriptor #60
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependedOnBy:
+  -  - byId: true
+  -    columnIds:
+  -    - 3
+  -    id: 63
+     families:
+     - columnIds:
+  ...
+     state: DROP
+     unexposedParentSchemaId: 29
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #61
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependedOnBy:
+  -  - byId: true
+  -    columnIds:
+  -    - 3
+  -    id: 62
+     families:
+     - columnIds:
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #62
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #63
+  ...
+     state: DROP
+     unexposedParentSchemaId: 29
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #64
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 65
+  -  - columnIds:
+  -    - 1
+  -    id: 66
+  -  dependsOn:
+  -  - 62
+     formatVersion: 3
+     id: 64
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "4"
+  +  version: "5"
+     viewQuery: (SELECT name FROM db1.sc1.t1)
+upsert descriptor #65
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    id: 66
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    id: 67
+  -  dependsOn:
+  -  - 64
+     formatVersion: 3
+     id: 65
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "4"
+  +  version: "5"
+     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+upsert descriptor #66
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependsOn:
+  -  - 64
+  -  - 65
+     formatVersion: 3
+     id: 66
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "2"
+  +  version: "3"
+     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
+upsert descriptor #67
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    id: 70
+  -  dependsOn:
+  -  - 65
+     formatVersion: 3
+     id: 67
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "3"
+  +  version: "4"
+     viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
+upsert descriptor #70
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependsOn:
+  -  - 67
+     dependsOnTypes:
+     - 68
+  ...
+     state: DROP
+     unexposedParentSchemaId: 59
+  -  version: "2"
+  +  version: "3"
+     viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
+update progress of schema change job #1
+commit transaction #2
+begin transaction #3
+## stage 2 in PostCommitPhase: is empty
+update progress of schema change job #1
 upsert descriptor #60
   ...
      modificationTime: {}
      name: sq1
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      parentId: 58
      primaryIndex:
   ...
@@ -525,7 +604,7 @@ upsert descriptor #61
   ...
      modificationTime: {}
      name: sq1
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      parentId: 58
      primaryIndex:
   ...
@@ -533,7 +612,7 @@ upsert descriptor #62
   ...
      modificationTime: {}
      name: t1
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextFamilyId: 1
   ...
@@ -541,7 +620,7 @@ upsert descriptor #63
   ...
      modificationTime: {}
      name: t1
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextFamilyId: 1
   ...
@@ -549,7 +628,7 @@ upsert descriptor #64
   ...
      modificationTime: {}
      name: v1
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 2
      nextMutationId: 1
   ...
@@ -557,7 +636,7 @@ upsert descriptor #65
   ...
      modificationTime: {}
      name: v2
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextMutationId: 1
   ...
@@ -565,7 +644,7 @@ upsert descriptor #66
   ...
      modificationTime: {}
      name: v3
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextMutationId: 1
   ...
@@ -573,7 +652,7 @@ upsert descriptor #67
   ...
      modificationTime: {}
      name: v4
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextMutationId: 1
   ...
@@ -581,9 +660,9 @@ upsert descriptor #70
   ...
      modificationTime: {}
      name: v5
-  -  newSchemaChangeJobId: "2"
+  -  newSchemaChangeJobId: "1"
      nextColumnId: 4
      nextMutationId: 1
   ...
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase

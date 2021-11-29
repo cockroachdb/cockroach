@@ -14,9 +14,7 @@ import { Dispatch } from "redux";
 import { Moment } from "moment";
 
 import { AppState } from "src/store";
-import { actions as transactionsActions } from "src/store/transactions";
-import { actions as resetSQLStatsActions } from "src/store/sqlStats";
-import { actions as statementsActions } from "src/store/statements";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { TransactionsPage } from "./transactionsPage";
 import {
   TransactionsPageStateProps,
@@ -30,9 +28,14 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectDateRange,
+  selectFilters,
+  selectSearch,
+} from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
+import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
 
 export const TransactionsPageConnected = withRouter(
@@ -42,21 +45,23 @@ export const TransactionsPageConnected = withRouter(
     RouteComponentProps
   >(
     (state: AppState) => ({
-      data: selectTransactionsData(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
-      error: selectTransactionsLastError(state),
-      isTenant: selectIsTenant(state),
-      dateRange: selectDateRange(state),
       columns: selectTxnColumns(state),
+      data: selectTransactionsData(state),
+      dateRange: selectDateRange(state),
+      error: selectTransactionsLastError(state),
+      filters: selectFilters(state),
+      isTenant: selectIsTenant(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
+      search: selectSearch(state),
       sortSetting: selectSortSetting(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req?: StatementsRequest) =>
-        dispatch(transactionsActions.refresh(req)),
-      resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
+        dispatch(sqlStatsActions.refresh(req)),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       onDateRangeChange: (start: Moment, end: Moment) => {
         dispatch(
-          statementsActions.updateDateRange({
+          sqlStatsActions.updateDateRange({
             start: start.unix(),
             end: end.unix(),
           }),
@@ -83,6 +88,36 @@ export const TransactionsPageConnected = withRouter(
           localStorageActions.update({
             key: "sortSetting/TransactionsPage",
             value: { columnTitle: columnName, ascending: ascending },
+          }),
+        );
+      },
+      onFilterChange: (value: Filters) => {
+        dispatch(
+          analyticsActions.track({
+            name: "Filter Clicked",
+            page: "Transactions",
+            filterName: "app",
+            value: value.toString(),
+          }),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "filters/TransactionsPage",
+            value: value,
+          }),
+        );
+      },
+      onSearchComplete: (query: string) => {
+        dispatch(
+          analyticsActions.track({
+            name: "Keyword Searched",
+            page: "Transactions",
+          }),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "search/TransactionsPage",
+            value: query,
           }),
         );
       },

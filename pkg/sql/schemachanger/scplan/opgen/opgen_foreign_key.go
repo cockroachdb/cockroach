@@ -17,18 +17,18 @@ import (
 
 func init() {
 	opRegistry.register(
-		(*scpb.InboundForeignKey)(nil),
+		(*scpb.ForeignKey)(nil),
 		scpb.Target_DROP,
 		scpb.Status_PUBLIC,
 		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): This probably cannot happen until post-commit.
+			// TODO(ajwerner): This  probably cannot happen until post-commit.
 			minPhase(scop.PreCommitPhase),
 			revertible(false),
-			emit(func(this *scpb.InboundForeignKey) scop.Op {
+			emit(func(this *scpb.ForeignKey) scop.Op {
 				return &scop.DropForeignKeyRef{
 					TableID:  this.OriginID,
 					Name:     this.Name,
-					Outbound: false,
+					Outbound: true,
 				}
 			})),
 	)

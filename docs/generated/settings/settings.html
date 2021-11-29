@@ -95,7 +95,7 @@
 <tr><td><code>sql.defaults.experimental_enable_unique_without_index_constraints.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default</td></tr>
 <tr><td><code>sql.defaults.experimental_hash_sharded_indexes.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default</td></tr>
 <tr><td><code>sql.defaults.experimental_implicit_column_partitioning.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning</td></tr>
-<tr><td><code>sql.defaults.experimental_new_schema_changer.enabled</code></td><td>enumeration</td><td><code>off</code></td><td>default value for experimental_use_new_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe_always = 2]</td></tr>
+<tr><td><code>sql.defaults.experimental_new_schema_changer.enabled</code></td><td>enumeration</td><td><code>off</code></td><td>default value for experimental_use_new_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]</td></tr>
 <tr><td><code>sql.defaults.experimental_stream_replication.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for experimental_stream_replication session setting;enables the ability to setup a replication stream</td></tr>
 <tr><td><code>sql.defaults.experimental_temporary_tables.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for experimental_enable_temp_tables; allows for use of temporary tables by default</td></tr>
 <tr><td><code>sql.defaults.foreign_key_cascades_limit</code></td><td>integer</td><td><code>10000</code></td><td>default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query</td></tr>
@@ -172,6 +172,6 @@
 <tr><td><code>trace.jaeger.agent</code></td><td>string</td><td><code></code></td><td>the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.</td></tr>
 <tr><td><code>trace.opentelemetry.collector</code></td><td>string</td><td><code></code></td><td>address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.</td></tr>
-<tr><td><code>version</code></td><td>version</td><td><code>21.2-14</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
+<tr><td><code>version</code></td><td>version</td><td><code>21.2-16</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
 </tbody>
 </table>

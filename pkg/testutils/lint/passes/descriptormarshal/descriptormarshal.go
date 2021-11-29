@@ -8,5 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./transactions.reducer";
-export * from "./transactions.sagas";
+package descriptormarshal
+
+import "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
+
+// Analyzer checks for correct unmarshaling of descpb descriptors by
+// disallowing calls to (descpb.Descriptor).GetTable() et al.
+// (Exported from forbiddenmethod.)
+var Analyzer = forbiddenmethod.DescriptorMarshalAnalyzer

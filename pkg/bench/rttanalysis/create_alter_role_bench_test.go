@@ -12,8 +12,9 @@ package rttanalysis
 
 import "testing"
 
-func BenchmarkCreateRole(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkCreateRole(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("CreateRole", []RoundTripBenchTestCase{
 		{
 			Name:  "create role with no options",
 			Stmt:  "CREATE ROLE rolea",
@@ -34,13 +35,12 @@ func BenchmarkCreateRole(b *testing.B) {
 			Stmt:  "CREATE ROLE rolea LOGIN CREATEROLE VALID UNTIL '2021-01-01'",
 			Reset: "DROP ROLE rolea",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterRole(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterRole(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterRole", []RoundTripBenchTestCase{
 		{
 			Name:  "alter role with 1 option",
 			Setup: "CREATE ROLE rolea",
@@ -59,7 +59,5 @@ func BenchmarkAlterRole(b *testing.B) {
 			Stmt:  "ALTER ROLE rolea CREATEROLE LOGIN PASSWORD '123'",
 			Reset: "DROP ROLE rolea",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }

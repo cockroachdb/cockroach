@@ -25,6 +25,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
+// NewTxnRunDependencies constructs dependencies for use planning and running a
+// phase of a schema change during transaction execution.
+func NewTxnRunDependencies(
+	execDependencies scexec.Dependencies, phase scop.Phase, knobs *scrun.TestingKnobs,
+) scrun.TxnRunDependencies {
+	return &runDeps{
+		execDeps:     execDependencies,
+		phase:        phase,
+		testingKnobs: knobs,
+	}
+}
+
+type runDeps struct {
+	execDeps scexec.Dependencies
+
+	phase        scop.Phase
+	testingKnobs *scrun.TestingKnobs
+}
+
+func (d *runDeps) ExecutorDependencies() scexec.Dependencies {
+	return d.execDeps
+}
+
+func (d *runDeps) Phase() scop.Phase {
+	return d.phase
+}
+
+var _ scrun.TxnRunDependencies = (*runDeps)(nil)
+
 // NewJobCreationDependencies returns an
 // scexec.SchemaChangeJobCreationDependencies implementation built from the
 // given arguments.
@@ -64,10 +93,9 @@ func (d *jobCreationDeps) Statements() []string {
 	return d.execDeps.Statements()
 }
 
-// NewJobExecutionDependencies returns an
-// scexec.SchemaChangeJobExecutionDependencies implementation built from the
+// NewJobRunDependencies returns an scrun.JobRunDependencies implementation built from the
 // given arguments.
-func NewJobExecutionDependencies(
+func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
@@ -79,9 +107,9 @@ func NewJobExecutionDependencies(
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
 	cclCallbacks scexec.Partitioner,
-	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
+	testingKnobs *scrun.TestingKnobs,
 	statements []string,
-) scrun.SchemaChangeJobExecutionDependencies {
+) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
 		collectionFactory: collectionFactory,
 		db:                db,
@@ -113,21 +141,20 @@ type jobExecutionDeps struct {
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
-	testingKnobs *scexec.NewSchemaChangerTestingKnobs
+	testingKnobs *scrun.TestingKnobs
 	statements   []string
 }
 
-var _ scrun.SchemaChangeJobExecutionDependencies = (*jobExecutionDeps)(nil)
+var _ scrun.JobRunDependencies = (*jobExecutionDeps)(nil)
 
-// ClusterSettings implements the scrun.SchemaChangeJobExecutionDependencies interface.
+// ClusterSettings implements the scrun.JobRunDependencies interface.
 func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 	return d.settings
 }
 
-// WithTxnInJob implements the scrun.SchemaChangeJobExecutionDependencies interface.
+// WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (d *jobExecutionDeps) WithTxnInJob(
-	ctx context.Context,
-	fn func(ctx context.Context, txndeps scrun.SchemaChangeJobTxnDependencies) error,
+	ctx context.Context, fn func(ctx context.Context, txndeps scrun.JobTxnRunDependencies) error,
 ) error {
 	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -157,9 +184,17 @@ type jobExecutionTxnDeps struct {
 	txnDeps
 }
 
-var _ scrun.SchemaChangeJobTxnDependencies = (*jobExecutionTxnDeps)(nil)
+func (d *jobExecutionTxnDeps) Phase() scop.Phase {
+	return scop.PostCommitPhase
+}
 
-// UpdateSchemaChangeJob implements the scrun.SchemaChangeJobTxnDependencies interface.
+func (d *jobExecutionTxnDeps) TestingKnobs() *scrun.TestingKnobs {
+	return d.testingKnobs
+}
+
+var _ scrun.JobTxnRunDependencies = (*jobExecutionTxnDeps)(nil)
+
+// UpdateSchemaChangeJob implements the scrun.JobTxnRunDependencies interface.
 func (d *jobExecutionTxnDeps) UpdateSchemaChangeJob(
 	ctx context.Context, fn func(md jobs.JobMetadata, ju scrun.JobProgressUpdater) error,
 ) error {
@@ -168,14 +203,11 @@ func (d *jobExecutionTxnDeps) UpdateSchemaChangeJob(
 	})
 }
 
-// ExecutorDependencies implements the scrun.SchemaChangeJobTxnDependencies interface.
+// ExecutorDependencies implements the scrun.JobTxnRunDependencies interface.
 func (d *jobExecutionTxnDeps) ExecutorDependencies() scexec.Dependencies {
 	return &execDeps{
 		txnDeps:         d.txnDeps,
 		indexBackfiller: d.indexBackfiller,
-		testingKnobs:    d.testingKnobs,
 		statements:      d.statements,
-
-		phase: scop.PostCommitPhase,
 	}
 }

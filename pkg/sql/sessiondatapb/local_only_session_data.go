@@ -184,6 +184,10 @@ const (
 	// supported statements in implicit transactions, but fall back to the old
 	// schema changer otherwise.
 	UseNewSchemaChangerOn
+	// UseNewSchemaChangerUnsafe means that we attempt to use the new schema
+	// changer for implemented statements including ones which aren't production
+	// ready. Used for testing/development.
+	UseNewSchemaChangerUnsafe
 	// UseNewSchemaChangerUnsafeAlways means that we attempt to use the new schema
 	// changer for all statements and return errors for unsupported statements.
 	// Used for testing/development.
@@ -196,6 +200,8 @@ func (m NewSchemaChangerMode) String() string {
 		return "off"
 	case UseNewSchemaChangerOn:
 		return "on"
+	case UseNewSchemaChangerUnsafe:
+		return "unsafe"
 	case UseNewSchemaChangerUnsafeAlways:
 		return "unsafe_always"
 	default:
@@ -210,6 +216,8 @@ func NewSchemaChangerModeFromString(val string) (_ NewSchemaChangerMode, ok bool
 		return UseNewSchemaChangerOff, true
 	case "ON":
 		return UseNewSchemaChangerOn, true
+	case "UNSAFE":
+		return UseNewSchemaChangerUnsafe, true
 	case "UNSAFE_ALWAYS":
 		return UseNewSchemaChangerUnsafeAlways, true
 	default:

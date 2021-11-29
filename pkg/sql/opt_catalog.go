@@ -1133,6 +1133,11 @@ func (ot *optTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	return &ot.uniqueConstraints[i]
 }
 
+// Zone is part of the cat.Table interface.
+func (ot *optTable) Zone() cat.Zone {
+	return ot.zone
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -2003,6 +2008,11 @@ func (ot *optVirtualTable) UniqueCount() int {
 // Unique is part of the cat.Table interface.
 func (ot *optVirtualTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	panic(errors.AssertionFailedf("no unique constraints"))
+}
+
+// Zone is part of the cat.Table interface.
+func (ot *optVirtualTable) Zone() cat.Zone {
+	panic(errors.AssertionFailedf("no zone"))
 }
 
 // CollectTypes is part of the cat.DataSource interface.

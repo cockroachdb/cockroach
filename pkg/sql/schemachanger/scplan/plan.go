@@ -13,12 +13,12 @@ package scplan
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scopt"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -27,13 +27,6 @@ import (
 type Params struct {
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
 	ExecutionPhase scop.Phase
-	// CreatedDescriptorIDs contains IDs for new descriptors created by the same
-	// schema changer (i.e., earlier in the same transaction). New descriptors
-	// can have most of their schema changes fully executed in the same
-	// transaction.
-	//
-	// This doesn't do anything right now.
-	CreatedDescriptorIDs catalog.DescriptorIDSet
 }
 
 // A Plan is a schema change plan, primarily containing ops to be executed that
@@ -77,12 +70,15 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	if err := deprules.Apply(g); err != nil {
 		return Plan{}, err
 	}
-
-	stages := buildStages(initial, g, params)
+	optimizedGraph, err := scopt.OptimizePlan(g)
+	if err != nil {
+		return Plan{}, err
+	}
+	stages := buildStages(initial, optimizedGraph, params)
 	return Plan{
 		Params:  params,
 		Initial: initial,
-		Graph:   g,
+		Graph:   optimizedGraph,
 		Stages:  stages,
 	}, nil
 }
@@ -97,7 +93,8 @@ func validateStages(stages []Stage) {
 		}
 		if stage.Revertible && !revertibleAllowed {
 			panic(errors.AssertionFailedf(
-				"invalid execution plan revertability flipped at stage (%d): %v", idx, stage))
+				"invalid execution plan: stage %d of %d is unexpectedly marked as revertible: %v",
+				idx+1, len(stages), stage))
 		}
 	}
 }
@@ -174,7 +171,15 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 				for i, ts := range cur.Nodes {
 					if e.From() == ts && isStageRevertible == e.Revertible() {
 						next.Nodes[i] = e.To()
-						ops = append(ops, e.Op()...)
+						// TODO(fqazi): MakePlan should never emit empty stages, they are harmless
+						// but a side effect of OpEdge filtering. We need to adjust the algorithm
+						// here to run multiple transitions in a stage when planning.
+
+						// If this edge has been marked as a no-op, then a state transition
+						// can happen without executing anything.
+						if !g.IsOpEdgeOptimizedOut(e) {
+							ops = append(ops, e.Op()...)
+						}
 						break
 					}
 				}
@@ -237,6 +242,9 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		stages = append(stages, s)
 		cur = s.After
 	}
+	// TODO(fqazi): Enforce here that only one post commit stage will be generated
+	// Inside OpGen we will enforce that only a single transition can occur in
+	// post commit.
 	validateStages(stages)
 	return stages
 }

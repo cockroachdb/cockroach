@@ -53,7 +53,7 @@ type testInfra struct {
 }
 
 func (ti testInfra) newExecDeps(
-	txn *kv.Txn, descsCollection *descs.Collection, phase scop.Phase,
+	txn *kv.Txn, descsCollection *descs.Collection,
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
 		ti.lm.Codec(),
@@ -66,9 +66,7 @@ func (ti testInfra) newExecDeps(
 		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
 			return nil
 		},
-		nil, /* testingKnobs */
 		nil, /* statements */
-		phase,
 	)
 }
 
@@ -149,11 +147,11 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			exDeps := ti.newExecDeps(txn, descriptors, scop.PreCommitPhase)
+			exDeps := ti.newExecDeps(txn, descriptors)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
-			require.NoError(t, scexec.ExecuteOps(ctx, exDeps, c.ops()))
+			require.NoError(t, scexec.ExecuteStage(ctx, exDeps, c.ops()))
 			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.exp(), after)
@@ -268,7 +266,6 @@ func TestSchemaChanger(t *testing.T) {
 			targetSlice = []*scpb.Target{
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
-					IndexName:           "new_primary_key",
 					IndexID:             2,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
@@ -277,27 +274,39 @@ func TestSchemaChanger(t *testing.T) {
 					Inverted:            false,
 				},
 					metadata),
+				scpb.NewTarget(scpb.Target_ADD, &scpb.IndexName{
+					TableID: fooTable.GetID(),
+					IndexID: 2,
+					Name:    "new_primary_key",
+				},
+					metadata),
+				scpb.NewTarget(scpb.Target_ADD, &scpb.ColumnName{
+					TableID:  fooTable.GetID(),
+					ColumnID: 2,
+					Name:     "j",
+				},
+					metadata),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
-					TableID:    fooTable.GetID(),
-					FamilyID:   descpb.FamilyID(0),
-					FamilyName: "primary",
-					Column: descpb.ColumnDescriptor{
-						Name:           "j",
-						ID:             2,
-						Type:           types.Int,
-						Nullable:       true,
-						PGAttributeNum: 2,
-					},
+					TableID:        fooTable.GetID(),
+					ColumnID:       2,
+					Type:           types.Int,
+					Nullable:       true,
+					PgAttributeNum: 2,
 				},
 					metadata),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID:             fooTable.GetID(),
-					IndexName:           "primary",
 					IndexID:             1,
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
 					Unique:              true,
 					Inverted:            false,
+				},
+					metadata),
+				scpb.NewTarget(scpb.Target_DROP, &scpb.IndexName{
+					TableID: fooTable.GetID(),
+					IndexID: 1,
+					Name:    "primary",
 				},
 					metadata),
 			}
@@ -314,6 +323,18 @@ func TestSchemaChanger(t *testing.T) {
 					},
 					{
 						Target: targetSlice[2],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[3],
+						Status: scpb.Status_ABSENT,
+					},
+					{
+						Target: targetSlice[4],
+						Status: scpb.Status_PUBLIC,
+					},
+					{
+						Target: targetSlice[5],
 						Status: scpb.Status_PUBLIC,
 					},
 				},
@@ -332,8 +353,8 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages
 				for _, s := range stages {
-					exDeps := ti.newExecDeps(txn, descriptors, phase)
-					require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+					exDeps := ti.newExecDeps(txn, descriptors)
+					require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 					ts = s.After
 				}
 			}
@@ -348,8 +369,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exDeps := ti.newExecDeps(txn, descriptors, scop.PostCommitPhase)
-				require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+				exDeps := ti.newExecDeps(txn, descriptors)
+				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 				after = s.After
 			}
 			return nil
@@ -366,9 +387,22 @@ func TestSchemaChanger(t *testing.T) {
 				},
 				{
 					Target: targetSlice[2],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[3],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: targetSlice[4],
 					Status: scpb.Status_ABSENT,
 				},
+				{
+					Target: targetSlice[5],
+					Status: scpb.Status_PUBLIC,
+				},
 			},
+
 			Statements: []*scpb.Statement{
 				{},
 			},
@@ -401,8 +435,8 @@ func TestSchemaChanger(t *testing.T) {
 					})
 					require.NoError(t, err)
 					for _, s := range sc.Stages {
-						exDeps := ti.newExecDeps(txn, descriptors, phase)
-						require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+						exDeps := ti.newExecDeps(txn, descriptors)
+						require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 						ts = s.After
 					}
 				}
@@ -417,8 +451,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exDeps := ti.newExecDeps(txn, descriptors, scop.PostCommitPhase)
-				require.NoError(t, scexec.ExecuteOps(ctx, exDeps, s.Ops))
+				exDeps := ti.newExecDeps(txn, descriptors)
+				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
 			}
 			return nil
 		}))

@@ -11,10 +11,7 @@
 package scbuildstmt
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -47,59 +44,38 @@ func DropView(b BuildCtx, n *tree.DropView) {
 }
 
 func dropView(b BuildCtx, view catalog.TableDescriptor, behavior tree.DropBehavior) {
-	var viewNode *scpb.View
-	c := b.WithNewSourceElementID()
-	// Any elements added with c will be children of this view.
-	{
-		// Validate we have drop privileges.
-		onErrPanic(c.AuthorizationAccessor().CheckPrivilege(b, view, privilege.DROP))
-		// Create a node for the view we are going to drop.
-		viewNode = &scpb.View{
-			TableID:      view.GetID(),
-			DependedOnBy: make([]descpb.ID, 0, len(view.GetDependedOnBy())),
-			DependsOn:    make([]descpb.ID, 0, len(view.TableDesc().DependsOn)),
-		}
-		// Add dependencies in an ordered manner for reliable
-		// unit testing.
-		for _, dep := range view.GetDependedOnBy() {
-			viewNode.DependedOnBy = append(viewNode.DependedOnBy, dep.ID)
-		}
-		viewNode.DependsOn = append(viewNode.DependsOn, view.TableDesc().DependsOn...)
-		sort.SliceStable(viewNode.DependsOn, func(i, j int) bool {
-			return viewNode.DependsOn[i] < viewNode.DependsOn[j]
-		})
-		sort.SliceStable(viewNode.DependedOnBy, func(i, j int) bool {
-			return viewNode.DependedOnBy[i] < viewNode.DependedOnBy[j]
-		})
-		// Clean up any back references to the tables.
-		for _, dep := range viewNode.DependsOn {
-			c.EnqueueDropIfNotExists(&scpb.RelationDependedOnBy{
-				TableID:      dep,
-				DependedOnBy: viewNode.TableID,
-			})
-		}
-	}
-	// Only add the node if it wasn't added to avoid cycles.
-	b.EnqueueDropIfNotExists(viewNode)
+	// Convert the table descriptor into elements.	b.EnqueueDropIfNotExists(viewNode)
+	decomposeTableDescToElements(b, view, scpb.Target_DROP)
 	// Use the c BuildCtx again.
 	{
-		// Remove any type back refs.
-		removeTypeBackRefDeps(c, view)
-		// Drop any dependent views next.
-		_ = view.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-			dependentDesc := c.MustReadTable(dep.ID)
-			if behavior != tree.DropCascade {
-				name, err := c.CatalogReader().GetQualifiedTableNameByID(b, int64(view.GetID()), tree.ResolveRequireViewDesc)
-				onErrPanic(err)
-				depViewName, err := c.CatalogReader().GetQualifiedTableNameByID(b, int64(dep.ID), tree.ResolveRequireViewDesc)
-				onErrPanic(err)
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-						name, depViewName.FQString()),
-					"you can drop %s instead.", depViewName.FQString()))
-			}
-			dropView(c, dependentDesc, behavior)
-			return nil
-		})
+		c := b.WithNewSourceElementID()
+		// Go over the dependencies and generate drop targets
+		// for them. In our case they should only be views.
+		scpb.ForEachRelationDependedOnBy(b,
+			func(_ scpb.Status,
+				_ scpb.Target_Direction,
+				dep *scpb.RelationDependedOnBy) {
+				if dep.TableID != view.GetID() {
+					return
+				}
+				dependentDesc := c.MustReadTable(dep.DependedOnBy)
+				if !dependentDesc.IsView() {
+					panic(errors.AssertionFailedf("descriptor :%s is not a view", dependentDesc.GetName()))
+				}
+				if behavior != tree.DropCascade {
+					name, err := b.CatalogReader().GetQualifiedTableNameByID(b.EvalCtx().Context, int64(view.GetID()), tree.ResolveRequireViewDesc)
+					onErrPanic(err)
+
+					depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b.EvalCtx().Context, int64(dep.DependedOnBy), tree.ResolveRequireViewDesc)
+					onErrPanic(err)
+					panic(errors.WithHintf(
+						sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
+							name, depViewName.FQString()),
+						"you can drop %s instead.", depViewName.FQString()))
+				}
+				// Decompose and recursively attempt to drop
+				dropView(b, dependentDesc, behavior)
+			})
+
 	}
 }

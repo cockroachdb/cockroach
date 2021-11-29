@@ -36,6 +36,7 @@ type rowFetcher interface {
 		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit rowinfra.BytesLimit,
 		rowLimitHint rowinfra.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
 	) error
+	StartScanFrom(_ context.Context, _ row.KVBatchFetcher, traceKV bool) error
 	StartInconsistentScan(
 		_ context.Context,
 		_ *kv.DB,

@@ -14,11 +14,10 @@ import { Dispatch } from "redux";
 import { Moment } from "moment";
 
 import { AppState } from "src/store";
-import { actions as statementsActions } from "src/store/statements";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { actions as resetSQLStatsActions } from "src/store/sqlStats";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   StatementsPage,
   StatementsPageDispatchProps,
@@ -36,9 +35,9 @@ import {
   selectDateRange,
   selectSortSetting,
   selectFilters,
+  selectSearch,
 } from "./statementsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
-import { AggregateStatistics } from "../statementsTable";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
 
@@ -49,25 +48,26 @@ export const ConnectedStatementsPage = withRouter(
     RouteComponentProps
   >(
     (state: AppState, props: StatementsPageProps) => ({
+      apps: selectApps(state),
+      columns: selectColumns(state),
+      databases: selectDatabases(state),
+      dateRange: selectDateRange(state),
+      filters: selectFilters(state),
+      isTenant: selectIsTenant(state),
+      lastReset: selectLastReset(state),
+      nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
+      search: selectSearch(state),
+      sortSetting: selectSortSetting(state),
       statements: selectStatements(state, props),
       statementsError: selectStatementsLastError(state),
-      apps: selectApps(state),
-      databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
-      lastReset: selectLastReset(state),
-      columns: selectColumns(state),
-      nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
-      dateRange: selectDateRange(state),
-      sortSetting: selectSortSetting(state),
-      isTenant: selectIsTenant(state),
-      filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>
-        dispatch(statementsActions.refresh(req)),
+        dispatch(sqlStatsActions.refresh(req)),
       onDateRangeChange: (start: Moment, end: Moment) => {
         dispatch(
-          statementsActions.updateDateRange({
+          sqlStatsActions.updateDateRange({
             start: start.unix(),
             end: end.unix(),
           }),
@@ -75,7 +75,7 @@ export const ConnectedStatementsPage = withRouter(
       },
       refreshStatementDiagnosticsRequests: () =>
         dispatch(statementDiagnosticsActions.refresh()),
-      resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       dismissAlertMessage: () =>
         dispatch(
           localStorageActions.update({
@@ -103,13 +103,20 @@ export const ConnectedStatementsPage = withRouter(
             action: "Downloaded",
           }),
         ),
-      onSearchComplete: (_results: AggregateStatistics[]) =>
+      onSearchComplete: (query: string) => {
         dispatch(
           analyticsActions.track({
             name: "Keyword Searched",
             page: "Statements",
           }),
-        ),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "search/StatementsPage",
+            value: query,
+          }),
+        );
+      },
       onFilterChange: value => {
         dispatch(
           analyticsActions.track({
@@ -122,7 +129,7 @@ export const ConnectedStatementsPage = withRouter(
         dispatch(
           localStorageActions.update({
             key: "filters/StatementsPage",
-            value: { filters: value },
+            value: value,
           }),
         );
       },

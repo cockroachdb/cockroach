@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -29,8 +30,9 @@ func doCompleteStreamIngestion(
 ) error {
 	// Get the job payload for job_id.
 	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
-	row, err := evalCtx.InternalExecutor.QueryRow(evalCtx.Context,
-		"get-stream-ingestion-job-metadata", txn, jobsQuery, jobID)
+	row, err := evalCtx.Planner.QueryRowEx(evalCtx.Context,
+		"get-stream-ingestion-job-metadata",
+		txn, sessiondata.NodeUserSessionDataOverride, jobsQuery, jobID)
 	if err != nil {
 		return err
 	}
@@ -82,7 +84,8 @@ func doCompleteStreamIngestion(
 		return err
 	}
 	updateJobQuery := `UPDATE system.jobs SET progress=$1 WHERE id=$2`
-	_, err = evalCtx.InternalExecutor.QueryRow(evalCtx.Context,
-		"set-stream-ingestion-job-metadata", txn, updateJobQuery, progressBytes, jobID)
+	_, err = evalCtx.Planner.QueryRowEx(evalCtx.Context,
+		"set-stream-ingestion-job-metadata", txn,
+		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, jobID)
 	return err
 }

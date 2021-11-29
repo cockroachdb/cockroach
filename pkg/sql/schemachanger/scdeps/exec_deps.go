@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -45,9 +45,7 @@ func NewExecutorDependencies(
 	indexValidator scexec.IndexValidator,
 	cclCallbacks scexec.Partitioner,
 	logEventFn LogEventCallback,
-	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
 	statements []string,
-	phase scop.Phase,
 ) scexec.Dependencies {
 	return &execDeps{
 		txnDeps: txnDeps{
@@ -60,9 +58,7 @@ func NewExecutorDependencies(
 			eventLogWriter:  newEventLogWriter(txn, logEventFn),
 		},
 		indexBackfiller: indexBackfiller,
-		testingKnobs:    testingKnobs,
 		statements:      statements,
-		phase:           phase,
 	}
 }
 
@@ -286,9 +282,7 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	indexBackfiller scexec.IndexBackfiller
-	testingKnobs    *scexec.NewSchemaChangerTestingKnobs
 	statements      []string
-	phase           scop.Phase
 }
 
 var _ scexec.Dependencies = (*execDeps)(nil)
@@ -323,18 +317,13 @@ func (d *execDeps) TransactionalJobCreator() scexec.TransactionalJobCreator {
 }
 
 // TestingKnobs implements the scexec.Dependencies interface.
-func (d *execDeps) TestingKnobs() *scexec.NewSchemaChangerTestingKnobs {
+func (d *runDeps) TestingKnobs() *scrun.TestingKnobs {
 	return d.testingKnobs
 }
 
 // Statements implements the scexec.Dependencies interface.
 func (d *execDeps) Statements() []string {
 	return d.statements
-}
-
-// Phase implements the scexec.Dependencies interface.
-func (d *execDeps) Phase() scop.Phase {
-	return d.phase
 }
 
 // LogEventCallback call back to allow the new schema changer

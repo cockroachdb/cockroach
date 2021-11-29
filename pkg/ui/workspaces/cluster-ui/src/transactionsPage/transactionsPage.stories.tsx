@@ -15,9 +15,11 @@ import { cloneDeep, noop, extend } from "lodash";
 import {
   data,
   nodeRegions,
+  columns,
   routeProps,
   dateRange,
   sortSetting,
+  filters,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
@@ -34,26 +36,34 @@ storiesOf("Transactions Page", module)
   .add("with data", () => (
     <TransactionsPage
       {...routeProps}
+      columns={columns}
       data={data}
       dateRange={dateRange}
+      filters={filters}
       nodeRegions={nodeRegions}
+      onFilterChange={noop}
+      onSortingChange={noop}
       refreshData={noop}
       resetSQLStats={noop}
+      search={""}
       sortSetting={sortSetting}
-      onSortingChange={noop}
     />
   ))
   .add("without data", () => {
     return (
       <TransactionsPage
         {...routeProps}
+        columns={columns}
         data={getEmptyData()}
         dateRange={dateRange}
+        filters={filters}
         nodeRegions={nodeRegions}
+        onFilterChange={noop}
+        onSortingChange={noop}
         refreshData={noop}
         resetSQLStats={noop}
+        search={""}
         sortSetting={sortSetting}
-        onSortingChange={noop}
       />
     );
   })
@@ -67,14 +77,18 @@ storiesOf("Transactions Page", module)
     return (
       <TransactionsPage
         {...routeProps}
+        columns={columns}
         data={getEmptyData()}
         dateRange={dateRange}
-        nodeRegions={nodeRegions}
-        refreshData={noop}
+        filters={filters}
         history={history}
-        resetSQLStats={noop}
-        sortSetting={sortSetting}
+        nodeRegions={nodeRegions}
+        onFilterChange={noop}
         onSortingChange={noop}
+        refreshData={noop}
+        resetSQLStats={noop}
+        search={""}
+        sortSetting={sortSetting}
       />
     );
   })
@@ -82,13 +96,17 @@ storiesOf("Transactions Page", module)
     return (
       <TransactionsPage
         {...routeProps}
+        columns={columns}
         data={undefined}
         dateRange={dateRange}
+        filters={filters}
         nodeRegions={nodeRegions}
+        onFilterChange={noop}
+        onSortingChange={noop}
         refreshData={noop}
         resetSQLStats={noop}
+        search={""}
         sortSetting={sortSetting}
-        onSortingChange={noop}
       />
     );
   })
@@ -96,9 +114,9 @@ storiesOf("Transactions Page", module)
     return (
       <TransactionsPage
         {...routeProps}
+        columns={columns}
         data={undefined}
         dateRange={dateRange}
-        nodeRegions={nodeRegions}
         error={
           new RequestError(
             "Forbidden",
@@ -106,10 +124,14 @@ storiesOf("Transactions Page", module)
             "this operation requires admin privilege",
           )
         }
+        filters={filters}
+        nodeRegions={nodeRegions}
+        onFilterChange={noop}
+        onSortingChange={noop}
         refreshData={noop}
         resetSQLStats={noop}
+        search={""}
         sortSetting={sortSetting}
-        onSortingChange={noop}
       />
     );
   });

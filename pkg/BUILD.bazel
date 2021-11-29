@@ -82,7 +82,6 @@ ALL_TESTS = [
     "//pkg/cmd/publish-artifacts:publish-artifacts_test",
     "//pkg/cmd/publish-provisional-artifacts:publish-provisional-artifacts_test",
     "//pkg/cmd/roachtest/prometheus:prometheus_test",
-    "//pkg/cmd/roachtest/spec:spec_test",
     "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest:roachtest_test",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",

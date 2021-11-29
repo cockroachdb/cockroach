@@ -120,6 +120,16 @@ func (c *rowFetcherStatCollector) StartScan(
 	return err
 }
 
+// StartScanFrom is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) StartScanFrom(
+	ctx context.Context, f row.KVBatchFetcher, traceKV bool,
+) error {
+	start := timeutil.Now()
+	err := c.Fetcher.StartScanFrom(ctx, f, traceKV)
+	c.startScanStallTime += timeutil.Since(start)
+	return err
+}
+
 // StartInconsistentScan is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) StartInconsistentScan(
 	ctx context.Context,

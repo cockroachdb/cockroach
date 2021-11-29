@@ -74,12 +74,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -431,6 +433,7 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	map[int64]string{
 		int64(sessiondatapb.UseNewSchemaChangerOff):          "off",
 		int64(sessiondatapb.UseNewSchemaChangerOn):           "on",
+		int64(sessiondatapb.UseNewSchemaChangerUnsafe):       "unsafe",
 		int64(sessiondatapb.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
 	},
 ).WithPublic()
@@ -1072,21 +1075,21 @@ type ExecutorConfig struct {
 	RowMetrics           *row.Metrics
 	InternalRowMetrics   *row.Metrics
 
-	TestingKnobs                  ExecutorTestingKnobs
-	MigrationTestingKnobs         *migration.TestingKnobs
-	PGWireTestingKnobs            *PGWireTestingKnobs
-	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
-	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
-	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
-	GCJobTestingKnobs             *GCJobTestingKnobs
-	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
-	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
-	TenantTestingKnobs            *TenantTestingKnobs
-	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
-	StreamingTestingKnobs         *StreamingTestingKnobs
-	IndexUsageStatsTestingKnobs   *idxusage.TestingKnobs
-	SQLStatsTestingKnobs          *sqlstats.TestingKnobs
-	TelemetryLoggingTestingKnobs  *TelemetryLoggingTestingKnobs
+	TestingKnobs                         ExecutorTestingKnobs
+	MigrationTestingKnobs                *migration.TestingKnobs
+	PGWireTestingKnobs                   *PGWireTestingKnobs
+	SchemaChangerTestingKnobs            *SchemaChangerTestingKnobs
+	DeclarativeSchemaChangerTestingKnobs *scrun.TestingKnobs
+	TypeSchemaChangerTestingKnobs        *TypeSchemaChangerTestingKnobs
+	GCJobTestingKnobs                    *GCJobTestingKnobs
+	DistSQLRunTestingKnobs               *execinfra.TestingKnobs
+	EvalContextTestingKnobs              tree.EvalContextTestingKnobs
+	TenantTestingKnobs                   *TenantTestingKnobs
+	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
+	StreamingTestingKnobs                *StreamingTestingKnobs
+	IndexUsageStatsTestingKnobs          *idxusage.TestingKnobs
+	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
+	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
@@ -1155,6 +1158,11 @@ type ExecutorConfig struct {
 	// SpanConfigReconciliationJobDeps are used to drive the span config
 	// reconciliation job.
 	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+
+	// InternalExecutorFactory is used to create an InternalExecutor binded with
+	// SessionData and other ExtraTxnState.
+	// This is currently only for builtin functions where we need to execute sql.
+	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

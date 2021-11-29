@@ -13,6 +13,8 @@ import Select from "react-select";
 import { Button } from "../button";
 import { CaretDown } from "@cockroachlabs/icons";
 import { Input } from "antd";
+import { History } from "history";
+import { isEqual } from "lodash";
 import {
   dropdownButton,
   dropdownContentWrapper,
@@ -25,6 +27,7 @@ import {
   checkbox,
 } from "./filterClasses";
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
+import { syncHistory } from "../util";
 
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
@@ -100,12 +103,110 @@ export const getFiltersFromQueryString = (
       const queryStringFilter = searchParams.get(filter);
       const filterValue =
         queryStringFilter == null
-          ? defaultValue
-          : defaultValue.constructor(searchParams.get(filter));
+          ? defaultValue // If this filter doesn't exist on query string, use default value.
+          : typeof defaultValue == "boolean"
+          ? searchParams.get(filter) === "true" // If it's a Boolean, convert from String to Boolean;
+          : defaultValue.constructor(searchParams.get(filter)); // Otherwise, use the constructor for that class.
+      // Boolean is converted without using its own constructor because the value from the query
+      // params is a string and Boolean('false') = true, which would be incorrect.
       return { [filter]: filterValue, ...filters };
     },
     {},
   );
+};
+
+/**
+ * Get Filters from Query String and if its value is different from the current
+ * filters value, it calls the onFilterChange function.
+ * @param history History
+ * @param filters the current active filters
+ * @param onFilterChange function to be called if the values from the search
+ * params are different from the current ones. This function can update
+ * the value stored on localStorage for example
+ * @returns Filters the active filters
+ */
+export const handleFiltersFromQueryString = (
+  history: History,
+  filters: Filters,
+  onFilterChange: (value: Filters) => void,
+): Filters => {
+  const filtersQueryString = getFiltersFromQueryString(history.location.search);
+  const searchParams = new URLSearchParams(history.location.search);
+  let hasFilter = false;
+
+  for (const key of Object.keys(defaultFilters)) {
+    if (searchParams.get(key)) {
+      hasFilter = true;
+      break;
+    }
+  }
+
+  if (onFilterChange && hasFilter && !isEqual(filtersQueryString, filters)) {
+    // If we have filters on query string and they're different
+    // from the current filter state on props (localStorage),
+    // we want to update the value on localStorage.
+    onFilterChange(filtersQueryString);
+  } else if (!isEqual(filters, defaultFilters)) {
+    // If the filters on props (localStorage) are different
+    // from the default values, we want to update the History,
+    // so the url can be easily shared with the filters selected.
+    syncHistory(
+      {
+        app: filters.app,
+        timeNumber: filters.timeNumber,
+        timeUnit: filters.timeUnit,
+        fullScan: filters.fullScan.toString(),
+        sqlType: filters.sqlType,
+        database: filters.database,
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      history,
+    );
+  }
+  // If we have a new filter selection on query params, they
+  // take precedent on what is stored on localStorage.
+  return hasFilter ? filtersQueryString : filters;
+};
+
+/**
+ * Update the query params to the current values of the Filter.
+ * When we change tabs inside the SQL Activity page for example,
+ * the constructor is called only on the first time.
+ * The component update event is called frequently and can be used to
+ * update the query params by using this function that only updates
+ * the query params if the values did change and we're on the correct tab.
+ * @param tab which the query params should update
+ * @param filters the current filters
+ * @param history
+ */
+export const updateFiltersQueryParamsOnTab = (
+  tab: string,
+  filters: Filters,
+  history: History,
+): void => {
+  const filtersQueryString = getFiltersFromQueryString(history.location.search);
+  const searchParams = new URLSearchParams(history.location.search);
+  const currentTab = searchParams.get("tab") || "";
+  if (
+    currentTab === tab &&
+    !isEqual(filters, defaultFilters) &&
+    !isEqual(filters, filtersQueryString)
+  ) {
+    syncHistory(
+      {
+        app: filters.app,
+        timeNumber: filters.timeNumber,
+        timeUnit: filters.timeUnit,
+        fullScan: filters.fullScan.toString(),
+        sqlType: filters.sqlType,
+        database: filters.database,
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      history,
+    );
+  }
 };
 
 /**

@@ -1081,7 +1081,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt)\.Marshal\(`),
+			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt)\.Marshal\(`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
@@ -1732,6 +1732,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
 				// Using deprecated WireLength call.
 				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
+				// roachpb/api.go needs v1 Protobuf reflection
+				stream.GrepNot(`pkg/roachpb/api_test.go:.*package github.com/golang/protobuf/proto is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
 				// rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).
 				stream.GrepNot(`pkg/rpc/codec.go:.*package github.com/golang/protobuf/proto is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
 				// goschedstats contains partial copies of go runtime structures, with
@@ -2046,7 +2048,9 @@ func TestLint(t *testing.T) {
 	// See pkg/cmd/roachvet.
 	t.Run("TestRoachVet", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 65517, "Some weird linkage issue")
+		if bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "the roachvet tests are run during the bazel build")
+		}
 		// The -printfuncs functionality is interesting and
 		// under-documented. It checks two things:
 		//

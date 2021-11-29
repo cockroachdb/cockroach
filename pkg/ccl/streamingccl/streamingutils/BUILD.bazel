@@ -11,6 +11,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",

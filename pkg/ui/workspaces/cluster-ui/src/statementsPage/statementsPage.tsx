@@ -10,12 +10,17 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { isNil, merge, isEqual } from "lodash";
+import { isNil, merge } from "lodash";
 import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { ColumnDescriptor, SortSetting } from "src/sortedtable";
+import {
+  ColumnDescriptor,
+  handleSortSettingFromQueryString,
+  SortSetting,
+  updateSortSettingQueryParamsOnTab,
+} from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
 import { DateRange } from "src/dateRange";
@@ -25,8 +30,9 @@ import {
   Filters,
   defaultFilters,
   calculateActiveFilters,
-  getFiltersFromQueryString,
   getTimeValueInSeconds,
+  handleFiltersFromQueryString,
+  updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 
 import {
@@ -80,7 +86,7 @@ export interface StatementsPageDispatchProps {
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (statement: string) => void;
   onDiagnosticsModalOpen?: (statement: string) => void;
-  onSearchComplete?: (results: AggregateStatistics[]) => void;
+  onSearchComplete?: (query: string) => void;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
     name: string,
@@ -106,11 +112,11 @@ export interface StatementsPageStateProps {
   nodeRegions: { [key: string]: string };
   sortSetting: SortSetting;
   filters: Filters;
+  search: string;
   isTenant?: UIConfigState["isTenant"];
 }
 
 export interface StatementsPageState {
-  search?: string;
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
@@ -142,7 +148,6 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
-      search: "",
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -150,61 +155,39 @@ export class StatementsPage extends React.Component<
   }
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
-    const { history, sortSetting, filters } = this.props;
+    const {
+      history,
+      search,
+      sortSetting,
+      filters,
+      onSearchComplete,
+      onFilterChange,
+      onSortingChange,
+    } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
+    if (onSearchComplete && searchQuery && search != searchQuery) {
+      onSearchComplete(searchQuery);
+    }
 
     // Sort Settings.
-    const ascending = (searchParams.get("ascending") || undefined) === "true";
-    const columnTitle = searchParams.get("columnTitle") || undefined;
-    if (
-      this.props.onSortingChange &&
-      columnTitle &&
-      (sortSetting.columnTitle != columnTitle ||
-        sortSetting.ascending != ascending)
-    ) {
-      this.props.onSortingChange("Statements", columnTitle, ascending);
-    }
+    handleSortSettingFromQueryString(
+      "Statements",
+      history.location.search,
+      sortSetting,
+      onSortingChange,
+    );
 
     // Filters.
-    const filtersQueryString = getFiltersFromQueryString(
-      history.location.search,
+    const latestFilter = handleFiltersFromQueryString(
+      history,
+      filters,
+      onFilterChange,
     );
-    const hasFilter = searchParams.get("app") || undefined;
-    if (
-      this.props.onFilterChange &&
-      hasFilter &&
-      !isEqual(filtersQueryString, filters)
-    ) {
-      // If we have filters on query string and they're different
-      // from the current filter state on props (localStorage),
-      // we want to update the value on localStorage.
-      this.props.onFilterChange(filtersQueryString);
-    } else if (!isEqual(filters, defaultFilters)) {
-      // If the filters on props (localStorage) are different
-      // from the default values, we want to update the History,
-      // so the url can be easily shared with the filters selected.
-      syncHistory(
-        {
-          app: filters.app,
-          timeNumber: filters.timeNumber,
-          timeUnit: filters.timeUnit,
-          sqlType: filters.sqlType,
-          database: filters.database,
-          regions: filters.regions,
-          nodes: filters.nodes,
-        },
-        this.props.history,
-      );
-    }
-    // If we have a new filter selection on query params, they
-    // take precedent on what is stored on localStorage.
-    const latestFilter = hasFilter ? filtersQueryString : filters;
 
     return {
-      search: searchQuery,
       filters: latestFilter,
       activeFilters: calculateActiveFilters(latestFilter),
     };
@@ -260,50 +243,40 @@ export class StatementsPage extends React.Component<
     }
   }
 
-  // When we change tabs inside the SQL Activity page,
-  // the constructor is called only on the first time.
-  // The component update event is called frequently
-  // and can be used to update the query params by using
-  // this function that makes sure it's only updating
-  // if the values did change and we're on the correct
-  // tab (Statements).
-  updateQueryParamsOnTabSwitch(): void {
-    const { filters } = this.state;
-    const filtersQueryString = getFiltersFromQueryString(
-      this.props.history.location.search,
-    );
-    const searchParams = new URLSearchParams(
-      this.props.history.location.search,
-    );
-    const tab = searchParams.get("tab") || "";
-    if (
-      tab === "Statements" &&
-      !isEqual(filters, defaultFilters) &&
-      !isEqual(filters, filtersQueryString)
-    ) {
+  updateQueryParams(): void {
+    const { history, search, sortSetting } = this.props;
+    const tab = "Statements";
+
+    // Search.
+    const searchParams = new URLSearchParams(history.location.search);
+    const currentTab = searchParams.get("tab") || "";
+    const searchQueryString = searchParams.get("q") || "";
+    if (currentTab === tab && search && search != searchQueryString) {
       syncHistory(
         {
-          app: filters.app,
-          timeNumber: filters.timeNumber,
-          timeUnit: filters.timeUnit,
-          sqlType: filters.sqlType,
-          database: filters.database,
-          regions: filters.regions,
-          nodes: filters.nodes,
+          q: search,
         },
-        this.props.history,
+        history,
       );
     }
+
+    // Filters.
+    updateFiltersQueryParamsOnTab(tab, this.state.filters, history);
+
+    // Sort Setting.
+    updateSortSettingQueryParamsOnTab(
+      tab,
+      sortSetting,
+      {
+        ascending: false,
+        columnTitle: "executionCount",
+      },
+      history,
+    );
   }
 
-  componentDidUpdate = (
-    __: StatementsPageProps,
-    prevState: StatementsPageState,
-  ): void => {
-    this.updateQueryParamsOnTabSwitch();
-    if (this.state.search && this.state.search !== prevState.search) {
-      this.props.onSearchComplete(this.filteredStatementsData());
-    }
+  componentDidUpdate = (): void => {
+    this.updateQueryParams();
     this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
@@ -321,7 +294,9 @@ export class StatementsPage extends React.Component<
   };
 
   onSubmitSearchField = (search: string): void => {
-    this.setState({ search });
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete(search);
+    }
     this.resetPagination();
     syncHistory(
       {
@@ -347,6 +322,7 @@ export class StatementsPage extends React.Component<
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
+        fullScan: filters.fullScan.toString(),
         sqlType: filters.sqlType,
         database: filters.database,
         regions: filters.regions,
@@ -357,7 +333,9 @@ export class StatementsPage extends React.Component<
   };
 
   onClearSearchField = (): void => {
-    this.setState({ search: "" });
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete("");
+    }
     syncHistory(
       {
         q: undefined,
@@ -382,6 +360,7 @@ export class StatementsPage extends React.Component<
         app: undefined,
         timeNumber: undefined,
         timeUnit: undefined,
+        fullScan: undefined,
         sqlType: undefined,
         database: undefined,
         regions: undefined,
@@ -392,8 +371,8 @@ export class StatementsPage extends React.Component<
   };
 
   filteredStatementsData = (): AggregateStatistics[] => {
-    const { search, filters } = this.state;
-    const { statements, nodeRegions, isTenant } = this.props;
+    const { filters } = this.state;
+    const { search, statements, nodeRegions, isTenant } = this.props;
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
@@ -425,10 +404,12 @@ export class StatementsPage extends React.Component<
       .filter(statement => (filters.fullScan ? statement.fullScan : true))
       .filter(statement =>
         search
-          .split(" ")
-          .every(val =>
-            statement.label.toLowerCase().includes(val.toLowerCase()),
-          ),
+          ? search
+              .split(" ")
+              .every(val =>
+                statement.label.toLowerCase().includes(val.toLowerCase()),
+              )
+          : true,
       )
       .filter(
         statement =>
@@ -473,7 +454,7 @@ export class StatementsPage extends React.Component<
   };
 
   renderStatements = (): React.ReactElement => {
-    const { pagination, search, filters, activeFilters } = this.state;
+    const { pagination, filters, activeFilters } = this.state;
     const {
       statements,
       apps,
@@ -486,6 +467,7 @@ export class StatementsPage extends React.Component<
       nodeRegions,
       isTenant,
       sortSetting,
+      search,
     } = this.props;
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);

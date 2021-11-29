@@ -288,6 +288,9 @@ const (
 	// system.statement_diagnostics_requests table to support collecting stmt
 	// bundles when the query latency exceeds the user provided threshold.
 	AlterSystemStmtDiagReqs
+	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
+	// WriteAtRequestTimestamp and DisallowConflicts parameters.
+	MVCCAddSSTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -496,6 +499,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemStmtDiagReqs,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
+	},
+	{
+		Key:     MVCCAddSSTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
 
 	// *************************************************

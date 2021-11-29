@@ -12,22 +12,398 @@
 
 package scpb
 
+type NodeIterator interface {
+	ForEachNode(fn func(status Status, dir Target_Direction, elem Element))
+}
+
+
 func (e Column) element() {}
+
+// ForEachColumn iterates over nodes of type Column.
+func ForEachColumn (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Column) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Column)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e PrimaryIndex) element() {}
+
+// ForEachPrimaryIndex iterates over nodes of type PrimaryIndex.
+func ForEachPrimaryIndex (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *PrimaryIndex) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*PrimaryIndex)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e SecondaryIndex) element() {}
+
+// ForEachSecondaryIndex iterates over nodes of type SecondaryIndex.
+func ForEachSecondaryIndex (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *SecondaryIndex) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*SecondaryIndex)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e SequenceDependency) element() {}
+
+// ForEachSequenceDependency iterates over nodes of type SequenceDependency.
+func ForEachSequenceDependency (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *SequenceDependency) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*SequenceDependency)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e UniqueConstraint) element() {}
+
+// ForEachUniqueConstraint iterates over nodes of type UniqueConstraint.
+func ForEachUniqueConstraint (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *UniqueConstraint) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*UniqueConstraint)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e CheckConstraint) element() {}
+
+// ForEachCheckConstraint iterates over nodes of type CheckConstraint.
+func ForEachCheckConstraint (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *CheckConstraint) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*CheckConstraint)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e Sequence) element() {}
+
+// ForEachSequence iterates over nodes of type Sequence.
+func ForEachSequence (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Sequence) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Sequence)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e DefaultExpression) element() {}
+
+// ForEachDefaultExpression iterates over nodes of type DefaultExpression.
+func ForEachDefaultExpression (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *DefaultExpression) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*DefaultExpression)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e View) element() {}
-func (e TypeReference) element() {}
+
+// ForEachView iterates over nodes of type View.
+func ForEachView (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *View) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*View)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e Table) element() {}
-func (e OutboundForeignKey) element() {}
-func (e InboundForeignKey) element() {}
+
+// ForEachTable iterates over nodes of type Table.
+func ForEachTable (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Table) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Table)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ForeignKey) element() {}
+
+// ForEachForeignKey iterates over nodes of type ForeignKey.
+func ForEachForeignKey (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ForeignKey) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ForeignKey)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ForeignKeyBackReference) element() {}
+
+// ForEachForeignKeyBackReference iterates over nodes of type ForeignKeyBackReference.
+func ForEachForeignKeyBackReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ForeignKeyBackReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ForeignKeyBackReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e RelationDependedOnBy) element() {}
+
+// ForEachRelationDependedOnBy iterates over nodes of type RelationDependedOnBy.
+func ForEachRelationDependedOnBy (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *RelationDependedOnBy) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*RelationDependedOnBy)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e SequenceOwnedBy) element() {}
+
+// ForEachSequenceOwnedBy iterates over nodes of type SequenceOwnedBy.
+func ForEachSequenceOwnedBy (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *SequenceOwnedBy) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*SequenceOwnedBy)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e Type) element() {}
+
+// ForEachType iterates over nodes of type Type.
+func ForEachType (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Type) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Type)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e Schema) element() {}
+
+// ForEachSchema iterates over nodes of type Schema.
+func ForEachSchema (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Schema) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Schema)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e Database) element() {}
+
+// ForEachDatabase iterates over nodes of type Database.
+func ForEachDatabase (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Database) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Database)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
 func (e Partitioning) element() {}
+
+// ForEachPartitioning iterates over nodes of type Partitioning.
+func ForEachPartitioning (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Partitioning) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Partitioning)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e Namespace) element() {}
+
+// ForEachNamespace iterates over nodes of type Namespace.
+func ForEachNamespace (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Namespace) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Namespace)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e Owner) element() {}
+
+// ForEachOwner iterates over nodes of type Owner.
+func ForEachOwner (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Owner) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Owner)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e UserPrivileges) element() {}
+
+// ForEachUserPrivileges iterates over nodes of type UserPrivileges.
+func ForEachUserPrivileges (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *UserPrivileges) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*UserPrivileges)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ColumnName) element() {}
+
+// ForEachColumnName iterates over nodes of type ColumnName.
+func ForEachColumnName (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ColumnName) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ColumnName)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e Locality) element() {}
+
+// ForEachLocality iterates over nodes of type Locality.
+func ForEachLocality (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Locality) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Locality)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e IndexName) element() {}
+
+// ForEachIndexName iterates over nodes of type IndexName.
+func ForEachIndexName (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *IndexName) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*IndexName)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ConstraintName) element() {}
+
+// ForEachConstraintName iterates over nodes of type ConstraintName.
+func ForEachConstraintName (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ConstraintName) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ConstraintName)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e DefaultExprTypeReference) element() {}
+
+// ForEachDefaultExprTypeReference iterates over nodes of type DefaultExprTypeReference.
+func ForEachDefaultExprTypeReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *DefaultExprTypeReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*DefaultExprTypeReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e OnUpdateExprTypeReference) element() {}
+
+// ForEachOnUpdateExprTypeReference iterates over nodes of type OnUpdateExprTypeReference.
+func ForEachOnUpdateExprTypeReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *OnUpdateExprTypeReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*OnUpdateExprTypeReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ComputedExprTypeReference) element() {}
+
+// ForEachComputedExprTypeReference iterates over nodes of type ComputedExprTypeReference.
+func ForEachComputedExprTypeReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ComputedExprTypeReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ComputedExprTypeReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ViewDependsOnType) element() {}
+
+// ForEachViewDependsOnType iterates over nodes of type ViewDependsOnType.
+func ForEachViewDependsOnType (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ViewDependsOnType) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ViewDependsOnType)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
+func (e ColumnTypeReference) element() {}
+
+// ForEachColumnTypeReference iterates over nodes of type ColumnTypeReference.
+func ForEachColumnTypeReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *ColumnTypeReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*ColumnTypeReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}

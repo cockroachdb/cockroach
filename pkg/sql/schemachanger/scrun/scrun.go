@@ -32,7 +32,7 @@ import (
 // (scop.PreCommitPhase), rather than the asynchronous changes which are done
 // by the schema changer job after the transaction commits.
 func RunSchemaChangesInTxn(
-	ctx context.Context, deps scexec.Dependencies, state scpb.State,
+	ctx context.Context, deps TxnRunDependencies, state scpb.State,
 ) (scpb.State, error) {
 	if len(state.Nodes) == 0 {
 		return scpb.State{}, nil
@@ -45,8 +45,8 @@ func RunSchemaChangesInTxn(
 		return scpb.State{}, err
 	}
 	after := state
-	for _, s := range sc.Stages {
-		if err := scexec.ExecuteOps(ctx, deps, s.Ops); err != nil {
+	for i, s := range sc.Stages {
+		if err := executeStage(ctx, deps, sc, i); err != nil {
 			return scpb.State{}, err
 		}
 		after = s.After
@@ -121,18 +121,20 @@ func CreateSchemaChangeJob(
 // declarative schema change job, with the dependencies abstracted away.
 func RunSchemaChangesInJob(
 	ctx context.Context,
-	deps SchemaChangeJobExecutionDependencies,
+	deps JobRunDependencies,
 	jobID jobspb.JobID,
 	jobDescriptorIDs []descpb.ID,
 	jobDetails jobspb.NewSchemaChangeDetails,
 	jobProgress jobspb.NewSchemaChangeProgress,
+	rollback bool,
 ) error {
 	state := makeState(ctx,
 		deps.ClusterSettings(),
 		jobDetails.Targets,
 		jobProgress.States,
 		jobProgress.Statements,
-		jobProgress.Authorization)
+		jobProgress.Authorization,
+		rollback)
 	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
 	if err != nil {
 		return err
@@ -142,7 +144,7 @@ func RunSchemaChangesInJob(
 		// In the case where no stage exists, and therefore there's nothing to
 		// execute, we still need to open a transaction to remove all references to
 		// this schema change job from the descriptors.
-		return deps.WithTxnInJob(ctx, func(ctx context.Context, td SchemaChangeJobTxnDependencies) error {
+		return deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
 			c := td.ExecutorDependencies().Catalog()
 			return scexec.UpdateDescriptorJobIDs(ctx, c, jobDescriptorIDs, jobID, jobspb.InvalidJobID)
 		})
@@ -151,9 +153,8 @@ func RunSchemaChangesInJob(
 	for i, stage := range sc.Stages {
 		isLastStage := i == len(sc.Stages)-1
 		// Execute each stage in its own transaction.
-		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td SchemaChangeJobTxnDependencies) error {
-			execDeps := td.ExecutorDependencies()
-			if err := scexec.ExecuteOps(ctx, execDeps, stage.Ops); err != nil {
+		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
+			if err := executeStage(ctx, td, sc, i); err != nil {
 				return err
 			}
 			if err := td.UpdateSchemaChangeJob(ctx, func(md jobs.JobMetadata, ju JobProgressUpdater) error {
@@ -167,7 +168,9 @@ func RunSchemaChangesInJob(
 			if isLastStage {
 				// Remove the reference to this schema change job from all affected
 				// descriptors in the transaction executing the last stage.
-				return scexec.UpdateDescriptorJobIDs(ctx, execDeps.Catalog(), jobDescriptorIDs, jobID, jobspb.InvalidJobID)
+				return scexec.UpdateDescriptorJobIDs(
+					ctx, td.ExecutorDependencies().Catalog(), jobDescriptorIDs, jobID, jobspb.InvalidJobID,
+				)
 			}
 			return nil
 		}); err != nil {
@@ -193,6 +196,7 @@ func makeState(
 	states []scpb.Status,
 	statements []*scpb.Statement,
 	authorization *scpb.Authorization,
+	rollback bool,
 ) scpb.State {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
@@ -208,6 +212,23 @@ func makeState(
 			Target: protos[i],
 			Status: states[i],
 		}
+		if rollback {
+			switch ts.Nodes[i].Direction {
+			case scpb.Target_ADD:
+				ts.Nodes[i].Direction = scpb.Target_DROP
+			case scpb.Target_DROP:
+				ts.Nodes[i].Direction = scpb.Target_ADD
+			}
+		}
 	}
 	return ts
+}
+
+func executeStage(ctx context.Context, deps TxnRunDependencies, p scplan.Plan, stageIdx int) error {
+	if knobs := deps.TestingKnobs(); knobs != nil && knobs.BeforeStage != nil {
+		if err := knobs.BeforeStage(p, stageIdx); err != nil {
+			return err
+		}
+	}
+	return scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), p.Stages[stageIdx].Ops)
 }

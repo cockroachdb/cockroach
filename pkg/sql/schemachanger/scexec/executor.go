@@ -21,26 +21,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ExecuteOps executes the provided ops. The ops must all be of the same type.
-func ExecuteOps(ctx context.Context, deps Dependencies, toExecute scop.Ops) error {
-	log.Infof(ctx, "executing %d ops of type %s", len(toExecute.Slice()), toExecute.Type().String())
-
-	if deps.TestingKnobs() != nil && deps.TestingKnobs().BeforeStage != nil {
-		md := TestingKnobMetadata{
-			Statements: deps.Statements(),
-			Phase:      deps.Phase(),
-		}
-		if err := deps.TestingKnobs().BeforeStage(toExecute, md); err != nil {
-			return err
-		}
+// ExecuteStage executes the provided ops. The ops must all be of the same type.
+func ExecuteStage(ctx context.Context, deps Dependencies, ops scop.Ops) error {
+	// It is perfectly valid to have empty stage after optimizations /
+	// transformations.
+	if ops == nil {
+		log.Infof(ctx, "skipping execution, no operations in this stage")
+		return nil
 	}
-	switch typ := toExecute.Type(); typ {
+	log.Infof(ctx, "executing %d ops of type %s", len(ops.Slice()), ops.Type().String())
+	switch typ := ops.Type(); typ {
 	case scop.MutationType:
-		return executeDescriptorMutationOps(ctx, deps, toExecute.Slice())
+		return executeDescriptorMutationOps(ctx, deps, ops.Slice())
 	case scop.BackfillType:
-		return executeBackfillOps(ctx, deps, toExecute.Slice())
+		return executeBackfillOps(ctx, deps, ops.Slice())
 	case scop.ValidationType:
-		return executeValidationOps(ctx, deps, toExecute.Slice())
+		return executeValidationOps(ctx, deps, ops.Slice())
 	default:
 		return errors.AssertionFailedf("unknown ops type %d", typ)
 	}
@@ -64,7 +60,7 @@ func UpdateDescriptorJobIDs(
 			return err
 		}
 
-		// Currently all "locking" schema changes are on tables. This will probably
+		// Currently, all "locking" schema changes are on tables. This will probably
 		// need to be expanded at least to types.
 		table, ok := desc.(*tabledesc.Mutable)
 		if !ok {

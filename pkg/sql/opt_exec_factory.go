@@ -1157,10 +1157,11 @@ func (e *urlOutputter) finish() (url.URL, error) {
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
 	var out urlOutputter
 
-	c := makeStmtEnvCollector(
+	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
 		ef.planner.EvalContext().Context,
-		ef.planner.extendedEvalCtx.InternalExecutor.(*InternalExecutor),
+		ef.planner.SessionData(),
 	)
+	c := makeStmtEnvCollector(ef.planner.EvalContext().Context, ie.(*InternalExecutor))
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {
@@ -1966,6 +1967,23 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 		tableDesc:         index.Table().(*optTable).desc,
 		index:             index.(*optIndex).idx,
 		rows:              input.(planNode),
+	}, nil
+}
+
+// ConstructAlterRangeRelocate is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterRangeRelocate(
+	input exec.Node, relocateLease bool, relocateNonVoters bool, toStoreID int64, fromStoreID int64,
+) (exec.Node, error) {
+	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+	}
+
+	return &relocateRange{
+		rows:              input.(planNode),
+		relocateLease:     relocateLease,
+		relocateNonVoters: relocateNonVoters,
+		toStoreID:         roachpb.StoreID(toStoreID),
+		fromStoreID:       roachpb.StoreID(fromStoreID),
 	}, nil
 }
 

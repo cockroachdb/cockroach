@@ -21,7 +21,11 @@ import { StatementsResponseMessage } from "src/util/api";
 import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 
-import { TransactionsPage } from "@cockroachlabs/cluster-ui";
+import {
+  TransactionsPage,
+  Filters,
+  defaultFilters,
+} from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
 import { setCombinedStatementsDateRangeAction } from "src/redux/statements";
@@ -32,7 +36,7 @@ import { LocalSetting } from "src/redux/localsettings";
 export const selectData = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    if (!state.data || state.inFlight) return null;
+    if (!state.data || state.inFlight || !state.valid) return null;
     return state.data;
   },
 );
@@ -68,6 +72,18 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
+export const filtersLocalSetting = new LocalSetting(
+  "filters/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  defaultFilters,
+);
+
+export const searchLocalSetting = new LocalSetting(
+  "search/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
 export const transactionColumnsLocalSetting = new LocalSetting(
   "showColumns/TransactionPage",
   (state: AdminUIState) => state.localSettings,
@@ -77,14 +93,16 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 const TransactionsPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({
-      data: selectData(state),
-      statementsError: state.cachedData.statements.lastError,
-      dateRange: selectDateRange(state),
-      lastReset: selectLastReset(state),
-      error: selectLastError(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
       columns: transactionColumnsLocalSetting.selectorToArray(state),
+      data: selectData(state),
+      dateRange: selectDateRange(state),
+      error: selectLastError(state),
+      filters: filtersLocalSetting.selector(state),
+      lastReset: selectLastReset(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
+      search: searchLocalSetting.selector(state),
       sortSetting: sortSettingLocalSetting.selector(state),
+      statementsError: state.cachedData.statements.lastError,
     }),
     {
       refreshData: refreshStatements,
@@ -107,6 +125,8 @@ const TransactionsPageConnected = withRouter(
           ascending: ascending,
           columnTitle: columnName,
         }),
+      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
+      onSearchComplete: (query: string) => searchLocalSetting.set(query),
     },
   )(TransactionsPage),
 );

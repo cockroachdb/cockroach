@@ -12,8 +12,9 @@ package rttanalysis
 
 import "testing"
 
-func BenchmarkSystemDatabaseQueries(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkSystemDatabaseQueries(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("SystemDatabaseQueries", []RoundTripBenchTestCase{
 		// This query performs 1-2 lookups: getting the descriptor ID by Name, then
 		// fetching the system table descriptor. The descriptor is then cached.
 		{
@@ -34,7 +35,5 @@ func BenchmarkSystemDatabaseQueries(b *testing.B) {
 			Setup: `SET sql_safe_updates = false; USE "";`,
 			Stmt:  `SELECT username, "hashedPassword"  FROM system.users WHERE username = 'root'`,
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }

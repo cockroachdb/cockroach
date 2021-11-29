@@ -26,8 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -87,11 +88,11 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					return nil
 				},
 			},
-			SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-				BeforeStage: func(_ scop.Ops, m scexec.TestingKnobMetadata) error {
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
-					if m.Phase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase != scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -138,7 +139,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 			assert.NoError(t, err)
 			_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
 			assert.NoError(t, err)
@@ -190,17 +191,17 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		// Closed when job 2 starts waiting for concurrent schema changes to finish.
 		job2WaitNotification := make(chan struct{})
 
-		stmt1 := `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`
-		stmt2 := `ALTER TABLE db.t ADD COLUMN c INT DEFAULT 2`
+		stmt1 := `ALTER TABLE db.t ADD COLUMN b INT8 DEFAULT 1`
+		stmt2 := `ALTER TABLE db.t ADD COLUMN c INT8 DEFAULT 2`
 
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-				BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
-					if m.Phase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase != scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -220,20 +221,23 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					// mutation IDs, so the first schema change is expected to have
 					// mutation IDs 1 and 2, and the second one 3 and 4.
 					lowestID, highestID := idsSeen[0], idsSeen[len(idsSeen)-1]
-					if m.Statements[0] == stmt1 {
+					stmt := p.Initial.Statements[0].Statement
+					switch stmt {
+					case stmt1:
 						assert.Truef(t, highestID <= 2, "unexpected mutation IDs %v", idsSeen)
-					} else if m.Statements[0] == stmt2 {
+					case stmt2:
 						assert.Truef(t, lowestID >= 3 && highestID <= 4, "unexpected mutation IDs %v", idsSeen)
-					} else {
-						t.Errorf("unexpected statements %v", m.Statements)
+					default:
+						t.Errorf("unexpected statements %v", p.Initial.Statements)
 						return errors.Errorf("test failure")
 					}
 
 					// Block job 1 during the backfill.
-					if m.Statements[0] != stmt1 || ops.Type() != scop.BackfillType {
+					s := p.Stages[idx]
+					if stmt != stmt1 || s.Ops.Type() != scop.BackfillType {
 						return nil
 					}
-					for _, op := range ops.Slice() {
+					for _, op := range s.Ops.Slice() {
 						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
@@ -271,7 +275,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 			assert.NoError(t, err)
 			_, err = conn.ExecContext(ctx, stmt1)
 			assert.NoError(t, err)
@@ -285,7 +289,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+			_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 			assert.NoError(t, err)
 			_, err = conn.ExecContext(ctx, stmt2)
 			assert.NoError(t, err)
@@ -329,11 +333,11 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				return nil
 			},
 		},
-		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, idx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if m.Phase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase != scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -341,11 +345,11 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-
-				if ops.Type() != scop.BackfillType {
+				s := p.Stages[idx]
+				if s.Ops.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range ops.Slice() {
+				for _, op := range s.Ops.Slice() {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
@@ -375,7 +379,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 		assert.NoError(t, err)
 		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
 		assert.NoError(t, err)
@@ -435,11 +439,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				return nil
 			},
 		},
-		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
-			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if m.Phase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase != scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -447,11 +451,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-
-				if ops.Type() != scop.BackfillType {
+				s := p.Stages[stageIdx]
+				if s.Ops.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range ops.Slice() {
+				for _, op := range s.Ops.Slice() {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
@@ -481,7 +485,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'unsafe'`)
 		assert.NoError(t, err)
 		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 100`)
 		assert.NoError(t, err)
