@@ -167,7 +167,10 @@ func (db *verifyFormatDB) execWithTimeout(
 			}
 			// TODO(yuzefovich): allow "no volatility for cast tuple" errors to
 			// fail once #70831 is resolved.
-			if es := err.Error(); (strings.Contains(es, "internal error") && !strings.Contains(es, "no volatility for cast tuple")) ||
+			if es := err.Error(); (strings.Contains(es, "internal error") &&
+				!strings.Contains(es, "no volatility for cast tuple")) ||
+				!strings.Contains(es, "comparison overload not found (ne, tuple, string)") ||
+				!strings.Contains(es, "comparison overload not found (eq, tuple, string)") ||
 				strings.Contains(es, "driver: bad connection") ||
 				strings.Contains(es, "unexpected error inside CockroachDB") {
 				return &crasher{
