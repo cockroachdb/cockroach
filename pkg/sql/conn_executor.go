@@ -62,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -1702,17 +1701,6 @@ func (ex *connExecutor) execCmd() error {
 	if err != nil {
 		return err // err could be io.EOF
 	}
-
-	// Ensure that every statement has a tracing span set up.
-	ctx, sp := tracing.EnsureChildSpan(
-		ctx, ex.server.cfg.AmbientCtx.Tracer,
-		// We print the type of command, not the String() which includes long
-		// statements.
-		cmd.command())
-	defer sp.Finish()
-	// We expect that the span is not used directly, so we'll overwrite the
-	// local variable.
-	sp = nil
 
 	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
