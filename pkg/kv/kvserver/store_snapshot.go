@@ -674,14 +674,6 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, why string, toStoreID roachpb.StoreID)
 }
 
-// validatePositive is a function to validate that a settings value is positive.
-func validatePositive(v int64) error {
-	if v <= 0 {
-		return errors.Errorf("%d is not positive", v)
-	}
-	return nil
-}
-
 // rebalanceSnapshotRate is the rate at which snapshots can be sent in the
 // context of up-replication or rebalancing (i.e. any snapshot that was not
 // requested by raft itself, to which `kv.snapshot_recovery.max_rate` applies).
@@ -689,10 +681,10 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	32<<20, // 32mb/s
-	validatePositive,
+	settings.PositiveInt,
 ).WithPublic().WithSystemOnly()
 
-// recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
+// recoverySnapshotRate is the rate at which Raft-initiated snapshot can be
 // sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
 // replicas to start out as learners or via splits, and to never be cut off from
 // the log. However, it has proved unfeasible to completely get rid of them.
@@ -705,7 +697,7 @@ var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	32<<20, // 32mb/s
-	validatePositive,
+	settings.PositiveInt,
 ).WithPublic().WithSystemOnly()
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
@@ -716,8 +708,8 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 	"kv.snapshot_sender.batch_size",
 	"size of key-value batches sent over the network during snapshots",
 	256<<10, // 256 KB
-	validatePositive,
-)
+	settings.PositiveInt,
+).WithSystemOnly()
 
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
 // The default of 2 MiB was chosen to be in line with the behavior in bulk-io.
@@ -726,8 +718,8 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
 	bulkIOWriteBurst,
-	validatePositive,
-)
+	settings.PositiveInt,
+).WithSystemOnly()
 
 func snapshotRateLimit(
 	st *cluster.Settings, priority SnapshotRequest_Priority,
