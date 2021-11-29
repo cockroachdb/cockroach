@@ -780,6 +780,10 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: tc@c
           spans: /10-/11
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: DROP INDEX tc@c; CREATE INDEX ON tc (a) STORING (b);
 
 query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
@@ -847,6 +851,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
@@ -904,6 +912,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
@@ -935,6 +947,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -985,6 +1001,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
@@ -1018,6 +1038,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: tt@tt_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: DROP INDEX tt@a; CREATE INDEX ON tt (x) STORING (y);
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT

@@ -158,28 +158,37 @@ func (ics indexCandidateSet) addOrderingIndex(ordering opt.Ordering) {
 	if len(ordering) == 0 {
 		return
 	}
-	columnList := make(opt.ColList, len(ordering))
-	descList := make([]bool, len(ordering))
+	columnList := make(opt.ColList, 0, len(ordering))
+	descList := make([]bool, 0, len(ordering))
 	numTables := len(ics.md.AllTables())
 	reverseOrder := make(map[cat.Table]bool, numTables)
 
-	for i, orderingCol := range ordering {
+	for _, orderingCol := range ordering {
 		colID := orderingCol.ID()
-		columnList[i] = colID
-		colTable := ics.md.Table(ics.md.ColumnMeta(colID).Table)
+
+		tabID := ics.md.ColumnMeta(colID).Table
+
+		// Do not add indexes on columns with no base table.
+		if tabID == 0 {
+			continue
+		}
+
+		columnList = append(columnList, colID)
+		colTable := ics.md.Table(tabID)
 
 		// Set descending bool for ordering column.
 		if _, found := reverseOrder[colTable]; !found {
 			reverseOrder[colTable] = orderingCol.Descending()
 		}
 		if reverseOrder[colTable] {
-			descList[i] = orderingCol.Ascending()
+			descList = append(descList, orderingCol.Ascending())
 		} else {
-			descList[i] = orderingCol.Descending()
+			descList = append(descList, orderingCol.Descending())
 		}
 	}
-
-	addMultiColumnIndex(columnList, descList, ics.md, ics.overallCandidates)
+	if len(columnList) > 0 {
+		addMultiColumnIndex(columnList, descList, ics.md, ics.overallCandidates)
+	}
 }
 
 // addJoinIndexes adds single-column indexes to joinCandidates for each outer
@@ -312,10 +321,6 @@ func addSingleColumnIndex(
 	md *opt.Metadata,
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) {
-	// If the column is unknown, return.
-	if colID == 0 {
-		return
-	}
 	columnMeta := md.ColumnMeta(colID)
 
 	// If there's no base table for the column, return.
@@ -339,6 +344,11 @@ func addIndexToCandidates(
 	currTable cat.Table,
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) {
+	// Do not add candidates from virtual tables.
+	if currTable.IsVirtualTable() {
+		return
+	}
+
 	// Do not add candidates that require inverted indexes.
 	for _, indexCol := range newIndex {
 		if !colinfo.ColumnTypeIsIndexable(indexCol.Column.DatumType()) {

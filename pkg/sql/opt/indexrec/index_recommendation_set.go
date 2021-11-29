@@ -27,11 +27,11 @@ import (
 // Note that because the index recommendation engine stores all table columns in
 // its hypothetical indexes when optimizing, and then prunes the stored columns
 // after, this may result in the best plan not being chosen. Meaning, a plan
-// might not be recommended because the optimizer includes the overhead of
-// scanning stored columns of an index, which results in plans with hypothetical
-// indexes being more expensive and reduces their likelihood of being
-// recommended. This is a tradeoff we accept in order to recommend STORING
-// columns, as the difference in plan costs is not very significant.
+// might not be chosen because the optimizer includes the overhead of scanning
+// stored columns of an index, which results in plans with hypothetical indexes
+// being more expensive and reduces their likelihood of being chosen. This is a
+// tradeoff we accept in order to recommend STORING columns, as the difference
+// in plan costs is not very significant.
 func FindIndexRecommendationSet(expr opt.Expr, md *opt.Metadata) IndexRecommendationSet {
 	var recommendationSet IndexRecommendationSet
 	recommendationSet.init(md)
@@ -119,14 +119,14 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	}
 	// Do not add real table indexes (non-hypothetical table indexes).
 	switch hypTable := irs.md.TableMeta(tabID).Table.(type) {
-	case *hypotheticalTable:
+	case *HypotheticalTable:
 		scannedColOrds := irs.getColOrdSet(scannedCols, tabID)
 		// Try to find an identical existing index recommendation.
 		for _, indexRec := range irs.indexRecs[hypTable] {
 			index := indexRec.index
 			if index.indexOrdinal == indexOrd {
-				// Update newStoredColOrds to include all stored column ordinals that
-				// are in scannedColOrds.
+				// Update indexRec.newStoredColOrds to include all stored column
+				// ordinals that are in scannedColOrds.
 				indexRec.addStoredColOrds(scannedColOrds)
 				return
 			}
@@ -139,20 +139,20 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	}
 }
 
-// String returns the string index recommendation output that will be
+// Output returns a string slice of index recommendation output that will be
 // displayed below the statement plan in EXPLAIN.
-func (irs *IndexRecommendationSet) String() string {
+func (irs *IndexRecommendationSet) Output() []string {
 	indexRecCount := 0
 	for t := range irs.indexRecs {
 		indexRecCount += len(irs.indexRecs[t])
 	}
 	if indexRecCount == 0 {
-		return ""
+		return nil
 	}
-	var sb strings.Builder
-	sb.WriteString(
-		fmt.Sprintf("\n\nindex recommendations: %d\n\n", indexRecCount),
-	)
+
+	outputRowCount := 2*len(irs.indexRecs) + 1
+	output := make([]string, 0, outputRowCount)
+	output = append(output, fmt.Sprintf("index recommendations: %d", indexRecCount))
 
 	sortedTables := make([]cat.Table, 0, len(irs.indexRecs))
 	for t := range irs.indexRecs {
@@ -166,6 +166,7 @@ func (irs *IndexRecommendationSet) String() string {
 	for _, t := range sortedTables {
 		indexes := irs.indexRecs[t]
 		for _, indexRec := range indexes {
+			var sb strings.Builder
 			recTypeStr := "index creation"
 			if indexRec.existingIndex != nil {
 				recTypeStr = "index replacement"
@@ -175,9 +176,10 @@ func (irs *IndexRecommendationSet) String() string {
 			indexCols := indexRec.indexColsString()
 			storingClause := indexRec.storingClauseString()
 			sb.WriteString(indexRec.indexRecommendationString(indexCols, storingClause))
+			output = append(output, sb.String())
 		}
 	}
-	return sb.String()
+	return output
 }
 
 // indexRecommendation stores the information pertaining to a single index
@@ -202,7 +204,7 @@ type indexRecommendation struct {
 // init initializes an index recommendation. If there is an existingIndex with
 // the same explicit key columns, it is stored here.
 func (ir *indexRecommendation) init(
-	indexOrd int, hypTable *hypotheticalTable, scannedColOrds util.FastIntSet,
+	indexOrd int, hypTable *HypotheticalTable, scannedColOrds util.FastIntSet,
 ) {
 	index := hypTable.Index(indexOrd).(*hypotheticalIndex)
 	ir.index = index
@@ -299,7 +301,7 @@ func (ir *indexRecommendation) indexRecommendationString(indexCols, storingClaus
 	}
 
 	createCmd := fmt.Sprintf(
-		"CREATE INDEX ON %s (%s)%s;\n\n",
+		"CREATE INDEX ON %s (%s)%s;",
 		tableName.String(),
 		indexCols,
 		storingClause,
