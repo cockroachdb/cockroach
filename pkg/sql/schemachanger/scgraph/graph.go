@@ -41,14 +41,14 @@ type Graph struct {
 	// Maps a target to its index in targetNodes.
 	targetIdxMap map[*scpb.Target]int
 
-	// nodeOpEdgesFrom maps a Node to an opEdge that proceeds
+	// opEdgesFrom maps a Node to an opEdge that proceeds
 	// from it. A Node may have at most one opEdge from it.
-	nodeOpEdgesFrom map[*scpb.Node]*OpEdge
+	opEdgesFrom map[*scpb.Node]*OpEdge
 
-	// nodeDepEdgesFrom maps a Node from its dependencies.
+	// depEdgesFrom maps a Node from its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	nodeDepEdgesFrom *depEdgeTree
+	depEdgesFrom *depEdgeTree
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -83,14 +83,14 @@ func New(initial scpb.State) (*Graph, error) {
 	}
 	g := Graph{
 		targetIdxMap:        map[*scpb.Target]int{},
-		nodeOpEdgesFrom:     map[*scpb.Node]*OpEdge{},
+		opEdgesFrom:         map[*scpb.Node]*OpEdge{},
 		optimizedOutOpEdges: map[*OpEdge]bool{},
 		opToNode:            map[scop.Op]*scpb.Node{},
 		entities:            db,
 		statements:          initial.Statements,
 		authorization:       initial.Authorization,
 	}
-	g.nodeDepEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
+	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
 	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
@@ -118,8 +118,8 @@ func (g *Graph) ShallowClone() *Graph {
 		authorization:       g.authorization,
 		targetNodes:         g.targetNodes,
 		targetIdxMap:        g.targetIdxMap,
-		nodeOpEdgesFrom:     g.nodeOpEdgesFrom,
-		nodeDepEdgesFrom:    g.nodeDepEdgesFrom,
+		opEdgesFrom:         g.opEdgesFrom,
+		depEdgesFrom:        g.depEdgesFrom,
 		opToNode:            g.opToNode,
 		edges:               g.edges,
 		entities:            g.entities,
@@ -177,7 +177,7 @@ var _ = (*Graph)(nil).containsTarget
 // GetOpEdgeFrom returns the unique outgoing op edge from the specified node,
 // if one exists.
 func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
-	oe, ok := g.nodeOpEdgesFrom[n]
+	oe, ok := g.opEdgesFrom[n]
 	return oe, ok
 }
 
@@ -196,7 +196,7 @@ func (g *Graph) AddOpEdges(
 	if oe.to, err = g.getOrCreateNode(t, to); err != nil {
 		return err
 	}
-	if existing, exists := g.nodeOpEdgesFrom[oe.from]; exists {
+	if existing, exists := g.opEdgesFrom[oe.from]; exists {
 		return errors.Errorf("duplicate outbound op edge %v and %v",
 			oe, existing)
 	}
@@ -211,7 +211,7 @@ func (g *Graph) AddOpEdges(
 		}
 	}
 	oe.typ = typ
-	g.nodeOpEdgesFrom[oe.from] = oe
+	g.opEdgesFrom[oe.from] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
 		g.opToNode[op] = oe.To()
@@ -243,7 +243,7 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	g.edges = append(g.edges, de)
-	g.nodeDepEdgesFrom.insert(de)
+	g.depEdgesFrom.insert(de)
 	return nil
 }
 
