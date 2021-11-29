@@ -266,7 +266,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
 				}
 				if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
-					return noSnap, err
+					return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
 				}
 			}
 		}
@@ -276,7 +276,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
 			if err := msstw.Finish(ctx); err != nil {
-				return noSnap, err
+				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
 
 			msstw.Close()
