@@ -133,6 +133,8 @@ type multiSSTWriter struct {
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
+	// The total size of SST data. Updated on SST finalization.
+	dataSize int64
 }
 
 func newMultiSSTWriter(
@@ -172,6 +174,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to finish sst")
 	}
+	msstw.dataSize += msstw.currSST.DataSize
 	msstw.currRange++
 	msstw.currSST.Close()
 	return nil
@@ -197,21 +200,21 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 	return nil
 }
 
-func (msstw *multiSSTWriter) Finish(ctx context.Context) error {
+func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
 	if msstw.currRange < len(msstw.keyRanges) {
 		for {
 			if err := msstw.finalizeSST(ctx); err != nil {
-				return err
+				return 0, err
 			}
 			if msstw.currRange >= len(msstw.keyRanges) {
 				break
 			}
 			if err := msstw.initSST(ctx); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
-	return nil
+	return msstw.dataSize, nil
 }
 
 func (msstw *multiSSTWriter) Close() {
@@ -275,10 +278,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// we did not receive any key-value pairs for some of the key ranges, but
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
-			if err := msstw.Finish(ctx); err != nil {
+			dataSize, err := msstw.Finish(ctx)
+			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
-
 			msstw.Close()
 
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
@@ -292,6 +295,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				SSTStorageScratch: kvSS.scratch,
 				FromReplica:       header.RaftMessageRequest.FromReplica,
 				Desc:              header.State.Desc,
+				DataSize:          dataSize,
 				snapType:          header.Type,
 				raftAppliedIndex:  header.State.RaftAppliedIndex,
 			}
@@ -969,9 +973,10 @@ func sendSnapshot(
 	}
 	log.Infof(
 		ctx,
-		"streamed %s to %s in %.2fs @ %s/s: %s, rate-limit: %s/s, queued: %.2fs",
+		"streamed %s to %s with %s in %.2fs @ %s/s: %s, rate-limit: %s/s, queued: %.2fs",
 		snap,
 		to,
+		humanizeutil.IBytes(numBytesSent),
 		durSent.Seconds(),
 		humanizeutil.IBytes(int64(float64(numBytesSent)/durSent.Seconds())),
 		ss.Status(),
