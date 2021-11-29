@@ -876,6 +876,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (a) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
@@ -897,6 +901,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (a) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d AS r FROM t
@@ -1173,6 +1181,10 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t@t_pkey
                   spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b) STORING (a);
 
 # Regression test for #47327. The span should have an end value of -1.
 statement ok

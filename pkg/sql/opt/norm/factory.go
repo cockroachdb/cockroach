@@ -245,7 +245,7 @@ func (f *Factory) CopyAndReplace(
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy
 	// the expressions without replacement.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarWithoutPlaceholders)
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarNoop)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -253,10 +253,10 @@ func (f *Factory) CopyAndReplace(
 	f.Memo().SetRoot(to, fromProps)
 }
 
-// CopyScalarWithoutPlaceholders returns a copy of the given scalar expression.
+// CopyScalarNoop returns a copy of the given scalar expression.
 // It does not attempt to replace placeholders with values.
-func (f *Factory) CopyScalarWithoutPlaceholders(e opt.Expr) opt.Expr {
-	return f.CopyAndReplaceDefault(e, f.CopyScalarWithoutPlaceholders)
+func (f *Factory) CopyScalarNoop(e opt.Expr) opt.Expr {
+	return f.CopyAndReplaceDefault(e, f.CopyScalarNoop)
 }
 
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes

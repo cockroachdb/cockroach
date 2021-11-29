@@ -11,11 +11,11 @@
 package indexrec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestCopyIndexes(t *testing.T) {
