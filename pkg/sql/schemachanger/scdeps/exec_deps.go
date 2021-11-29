@@ -358,8 +358,8 @@ func newEventLogWriter(txn *kv.Txn, logEvent LogEventCallback) *eventLogWriter {
 	}
 }
 
-// AddDropEvent implements scexec.EventLogger
-func (m *eventLogWriter) AddDropEvent(
+// EnqueueEvent implements scexec.EventLogger
+func (m *eventLogWriter) EnqueueEvent(
 	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
 	eventList := m.eventStatementMap[metadata.StatementID]
