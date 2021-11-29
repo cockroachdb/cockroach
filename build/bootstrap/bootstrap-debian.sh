@@ -6,7 +6,7 @@
 set -euxo pipefail
 
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | sudo apt-key add -
-echo "deb https://deb.nodesource.com/node_12.x xenial main" | sudo tee /etc/apt/sources.list.d/nodesource.list
+echo "deb https://deb.nodesource.com/node_16.x focal main" | sudo tee /etc/apt/sources.list.d/nodesource.list
 
 curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
 echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
@@ -16,7 +16,6 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y -o Dpkg::Options::="
 sudo apt-get install -y --no-install-recommends \
   mosh \
   autoconf \
-  cmake \
   ccache \
   docker.io \
   libncurses-dev \
@@ -42,7 +41,7 @@ curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20
 sha256sum -c - <<EOF
 97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6  /tmp/cmake.tgz
 EOF
-sudo tar -C /usr -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
+sudo tar -C /usr --strip-components=1 -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
