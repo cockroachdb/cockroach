@@ -114,6 +114,9 @@ type instrumentationHelper struct {
 
 	// regions used only on EXPLAIN ANALYZE to be displayed as top-level stat.
 	regions []string
+
+	// costEstimate is the cost of the query as estimated by the optimizer.
+	costEstimate float64
 }
 
 // outputMode indicates how the statement output needs to be populated (for

@@ -2737,6 +2737,25 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendUint(b, uint64(m.SkippedQueries), 10)
 	}
 
+	if m.CostEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CostEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.CostEstimate), 'f', -1, 64)
+	}
+
+	if m.Distribution != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Distribution\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Distribution)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 

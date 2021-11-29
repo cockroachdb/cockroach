@@ -599,6 +599,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+	planTop.instrumentation.costEstimate = float64(mem.RootExpr().(memo.RelExpr).Cost())
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
