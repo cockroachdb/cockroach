@@ -24,7 +24,7 @@ import (
 )
 
 var consistencyCheckInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"server.consistency_check.interval",
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
@@ -33,14 +33,14 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 )
 
 var consistencyCheckRate = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"server.consistency_check.max_rate",
 	"the rate limit (bytes/sec) to use for consistency checks; used in "+
 		"conjunction with server.consistency_check.interval to control the "+
 		"frequency of consistency checks. Note that setting this too high can "+
 		"negatively impact performance.",
 	8<<20, // 8MB
-	validatePositive,
+	settings.PositiveInt,
 ).WithPublic()
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
