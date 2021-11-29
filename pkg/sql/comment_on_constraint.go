@@ -23,12 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type commentOnConstraintNode struct {
 	n         *tree.CommentOnConstraint
 	tableDesc catalog.TableDescriptor
-	oid       *tree.DOid
 }
 
 //CommentOnConstraint add comment on a constraint
@@ -75,49 +75,36 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			"constraint %q of relation %q does not exist", constraintName, n.tableDesc.GetName())
 	}
 
-	hasher := makeOidHasher()
-	switch kind := constraint.Kind; kind {
-	case descpb.ConstraintTypePK:
-		constraintDesc := constraint.Index
-		n.oid = hasher.PrimaryKeyConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case descpb.ConstraintTypeFK:
-		constraintDesc := constraint.FK
-		n.oid = hasher.ForeignKeyConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case descpb.ConstraintTypeUnique:
-		constraintDesc := constraint.Index.ID
-		n.oid = hasher.UniqueConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case descpb.ConstraintTypeCheck:
-		constraintDesc := constraint.CheckConstraint
-		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-
+	constraintOid, err := makeConstraintOid(
+		constraint, n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(),
+	)
+	if err != nil {
+		return err
 	}
-	// Setting the comment to NULL is the
-	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		if _, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			"set-constraint-comment",
 			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.ConstraintCommentType,
-			n.oid.DInt,
+			constraintOid.DInt,
 			*n.n.Comment,
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		// Setting the comment to NULL is the equivalent of deleting the comment.
+		if _, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			"delete-constraint-comment",
 			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.ConstraintCommentType,
-			n.oid.DInt,
-		)
-		if err != nil {
+			constraintOid.DInt,
+		); err != nil {
 			return err
 		}
 	}
@@ -135,6 +122,59 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			Comment:        comment,
 			NullComment:    n.n.Comment == nil,
 		})
+}
+
+func (p *planner) removeConstraintComment(
+	ctx context.Context, constraintDetail descpb.ConstraintDetail, tableDesc catalog.TableDescriptor,
+) error {
+	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.Txn(), tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{},
+	)
+	if err != nil {
+		return err
+	}
+	constraintOid, err := makeConstraintOid(
+		constraintDetail, tableDesc.GetParentID(), schemaDesc.GetName(), tableDesc.GetID(),
+	)
+	if err != nil {
+		return err
+	}
+	if _, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"delete-constraint-comment",
+		p.Txn(),
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.ConstraintCommentType,
+		constraintOid.DInt,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func makeConstraintOid(
+	constraint descpb.ConstraintDetail, dbID descpb.ID, schemaName string, tableID descpb.ID,
+) (*tree.DOid, error) {
+	var constraintOid *tree.DOid
+	hasher := makeOidHasher()
+	switch kind := constraint.Kind; kind {
+	case descpb.ConstraintTypePK:
+		constraintDesc := constraint.Index
+		constraintOid = hasher.PrimaryKeyConstraintOid(dbID, schemaName, tableID, constraintDesc)
+	case descpb.ConstraintTypeFK:
+		constraintDesc := constraint.FK
+		constraintOid = hasher.ForeignKeyConstraintOid(dbID, schemaName, tableID, constraintDesc)
+	case descpb.ConstraintTypeUnique:
+		constraintDesc := constraint.Index.ID
+		constraintOid = hasher.UniqueConstraintOid(dbID, schemaName, tableID, constraintDesc)
+	case descpb.ConstraintTypeCheck:
+		constraintDesc := constraint.CheckConstraint
+		constraintOid = hasher.CheckConstraintOid(dbID, schemaName, tableID, constraintDesc)
+	default:
+		return nil, errors.AssertionFailedf("unknown constraint type %q", kind)
+	}
+	return constraintOid, nil
 }
 
 func (n *commentOnConstraintNode) Next(runParams) (bool, error) { return false, nil }

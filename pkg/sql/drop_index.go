@@ -514,6 +514,19 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
+	constraintInfo, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	if err := p.removeIndexComment(ctx, tableDesc.ID, idxDesc.ID); err != nil {
+		return err
+	}
+	if constraintDetail, ok := constraintInfo[string(idxName)]; ok {
+		if err := p.removeConstraintComment(ctx, constraintDetail, tableDesc); err != nil {
+			return err
+		}
+	}
+
 	// the idx we picked up with FindIndexByID at the top may not
 	// contain the same field any more due to other schema changes
 	// intervening since the initial lookup. So we send the recent
@@ -522,10 +535,6 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
-
-	if err := p.removeIndexComment(ctx, tableDesc.ID, idxDesc.ID); err != nil {
-		return err
-	}
 
 	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
 		return err

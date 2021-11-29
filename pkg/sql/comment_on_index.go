@@ -106,7 +106,7 @@ func (p *planner) upsertIndexComment(
 func (p *planner) removeIndexComment(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-index-comment",
 		p.txn,
@@ -114,9 +114,11 @@ func (p *planner) removeIndexComment(
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.IndexCommentType,
 		tableID,
-		indexID)
-
-	return err
+		indexID,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (n *commentOnIndexNode) Next(runParams) (bool, error) { return false, nil }

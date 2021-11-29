@@ -234,6 +234,11 @@ func (p *planner) dropTableImpl(
 ) ([]string, error) {
 	var droppedViews []string
 
+	err := p.removeTableComments(ctx, tableDesc)
+	if err != nil {
+		return droppedViews, err
+	}
+
 	// Remove foreign key back references from tables that this table has foreign
 	// keys to.
 	// Copy out the set of outbound fks as it may be overwritten in the loop.
@@ -299,11 +304,6 @@ func (p *planner) dropTableImpl(
 
 		droppedViews = append(droppedViews, cascadedViews...)
 		droppedViews = append(droppedViews, qualifiedView.FQString())
-	}
-
-	err := p.removeTableComments(ctx, tableDesc)
-	if err != nil {
-		return droppedViews, err
 	}
 
 	// Remove any references to types.
@@ -638,15 +638,26 @@ func removeMatchingReferences(
 }
 
 func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-table-comments",
 		p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id=$1",
-		tableDesc.ID)
+		tableDesc.ID,
+	); err != nil {
+		return err
+	}
+
+	constraintInfo, err := tableDesc.GetConstraintInfo()
 	if err != nil {
 		return err
 	}
-	return err
+	for _, constraintDetail := range constraintInfo {
+		if err := p.removeConstraintComment(ctx, constraintDetail, tableDesc); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

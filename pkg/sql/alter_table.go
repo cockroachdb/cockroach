@@ -697,13 +697,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			for _, constraintName := range constraintsToDrop {
-				err := n.tableDesc.DropConstraint(params.ctx, constraintName, constraintInfo[constraintName],
+				constraintDetail := constraintInfo[constraintName]
+				err := n.tableDesc.DropConstraint(params.ctx, constraintName, constraintDetail,
 					func(*tabledesc.Mutable, *descpb.ForeignKeyConstraint) error {
 						return nil
 					},
 					params.extendedEvalCtx.Settings,
 				)
 				if err != nil {
+					return err
+				}
+				if err := params.p.removeConstraintComment(params.ctx, constraintDetail, n.tableDesc); err != nil {
 					return err
 				}
 			}
@@ -770,6 +774,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				func(desc *tabledesc.Mutable, ref *descpb.ForeignKeyConstraint) error {
 					return params.p.removeFKBackReference(params.ctx, desc, ref)
 				}, params.ExecCfg().Settings); err != nil {
+				return err
+			}
+			if err := params.p.removeConstraintComment(params.ctx, details, n.tableDesc); err != nil {
 				return err
 			}
 			descriptorChanged = true

@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -457,6 +460,7 @@ func (p *planner) AlterPrimaryKey(
 		newIndexIDs = append(newIndexIDs, newIndex.ID)
 	}
 
+	oldPrimaryIndexName := tableDesc.GetPrimaryIndex().GetName()
 	swapArgs := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId:   tableDesc.GetPrimaryIndexID(),
 		NewPrimaryIndexId:   newPrimaryIndexDesc.ID,
@@ -474,6 +478,37 @@ func (p *planner) AlterPrimaryKey(
 		primaryIndex := *tableDesc.GetPrimaryIndex().IndexDesc()
 		primaryIndex.Disabled = false
 		tableDesc.SetPrimaryIndex(primaryIndex)
+	}
+
+	// Remove the comments for the old primary key. For any indexes that were
+	// re-written, we try to move the comment over to the new index.
+	constraintInfo, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	if err := p.removeIndexComment(ctx, tableDesc.ID, tableDesc.GetPrimaryIndexID()); err != nil {
+		return err
+	}
+	if constraintDetail, ok := constraintInfo[oldPrimaryIndexName]; ok {
+		if err := p.removeConstraintComment(ctx, constraintDetail, tableDesc); err != nil {
+			return err
+		}
+	}
+	for i, oldIndexID := range oldIndexIDs {
+		newIndexID := newIndexIDs[i]
+		if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+			ctx,
+			"update-index-comment",
+			p.txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			"UPDATE system.comments SET sub_id=$1 WHERE type=$2 AND object_id=$3 AND sub_id=$4",
+			oldIndexID,
+			keys.IndexCommentType,
+			tableDesc.GetID(),
+			newIndexID,
+		); err != nil {
+			return err
+		}
 	}
 
 	// N.B. We don't schedule index deletions here because the existing

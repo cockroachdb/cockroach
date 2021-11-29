@@ -1,0 +1,172 @@
+statement ok
+CREATE TABLE t (
+  a INT8 UNIQUE,
+  b DECIMAL CONSTRAINT positive_price CHECK (b > 0),
+  c INT8 CHECK (b > c),
+  CONSTRAINT t_ac_pkey PRIMARY KEY (a, c)
+);
+CREATE TABLE t2 (a UUID PRIMARY KEY, b INT8 NOT NULL REFERENCES t (a));
+CREATE SCHEMA s;
+CREATE TABLE s.t (
+  a INT8 UNIQUE,
+  b DECIMAL CONSTRAINT positive_price CHECK (b > 0),
+  c INT8 CHECK (b > c),
+  CONSTRAINT s_t_pkey PRIMARY KEY (a, c)
+)
+
+statement ok
+COMMENT ON CONSTRAINT t_a_key ON t IS 't_unique_comment';
+COMMENT ON INDEX t_a_key IS 't_unique_idx_comment';
+COMMENT ON CONSTRAINT t_a_key ON s.t IS 's_t_unique_comment';
+COMMENT ON CONSTRAINT positive_price ON t IS 't_check_comment';
+COMMENT ON CONSTRAINT check_b_c ON t IS 't_check_defaultname_comment';
+COMMENT ON CONSTRAINT t_ac_pkey ON t IS 't_primary_con_comment';
+COMMENT ON INDEX t_ac_pkey IS 't_primary_idx_comment';
+COMMENT ON CONSTRAINT t2_pkey ON t2 IS 't2_primary_comment';
+COMMENT ON CONSTRAINT t2_b_fkey ON t2 IS 't2_fk_comment'
+
+query TTTTBT
+SHOW CONSTRAINTS FROM t WITH COMMENT
+----
+t  check_b_c       CHECK        CHECK ((b > c))             true  t_check_defaultname_comment
+t  positive_price  CHECK        CHECK ((b > 0))             true  t_check_comment
+t  t_a_key         UNIQUE       UNIQUE (a ASC)              true  t_unique_comment
+t  t_ac_pkey       PRIMARY KEY  PRIMARY KEY (a ASC, c ASC)  true  t_primary_con_comment
+
+query TTTTBT
+SHOW CONSTRAINTS FROM t2 WITH COMMENT
+----
+t2  t2_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES t(a)  true  t2_fk_comment
+t2  t2_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true  t2_primary_comment
+
+query TTTTBT
+SHOW CONSTRAINTS FROM s.t WITH COMMENT
+----
+t  check_b_c       CHECK        CHECK ((b > c))             true  NULL
+t  positive_price  CHECK        CHECK ((b > 0))             true  NULL
+t  s_t_pkey        PRIMARY KEY  PRIMARY KEY (a ASC, c ASC)  true  NULL
+t  t_a_key         UNIQUE       UNIQUE (a ASC)              true  s_t_unique_comment
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+3  56          1  t_primary_idx_comment
+3  56          2  t_unique_idx_comment
+5  168198684   0  t_check_comment
+5  576034241   0  t_primary_con_comment
+5  954335422   0  t_check_defaultname_comment
+5  1921111248  0  t2_primary_comment
+5  3491775280  0  s_t_unique_comment
+5  3983618219  0  t_unique_comment
+5  4088444885  0  t2_fk_comment
+
+statement ok
+DROP TABLE t2
+
+# Make sure comments from t2 were cleaned up.
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+3  56          1  t_primary_idx_comment
+3  56          2  t_unique_idx_comment
+5  168198684   0  t_check_comment
+5  576034241   0  t_primary_con_comment
+5  954335422   0  t_check_defaultname_comment
+5  3491775280  0  s_t_unique_comment
+5  3983618219  0  t_unique_comment
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+3  56          2  t_unique_idx_comment
+5  168198684   0  t_check_comment
+5  954335422   0  t_check_defaultname_comment
+5  3491775280  0  s_t_unique_comment
+5  3983618219  0  t_unique_comment
+
+statement ok
+DROP INDEX t_a_key CASCADE
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+5  168198684   0  t_check_comment
+5  954335422   0  t_check_defaultname_comment
+5  3491775280  0  s_t_unique_comment
+
+# Regression test for SHOW CREATE TABLE; this used to have an error since the
+# index comments were not cleaned up.
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   a INT8 NOT NULL,
+   b DECIMAL NULL,
+   c INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+   UNIQUE INDEX t_a_c_key (a ASC, c ASC),
+   FAMILY fam_0_b_a (b, a),
+   FAMILY fam_1_c (c),
+   CONSTRAINT positive_price CHECK (b > 0:::DECIMAL),
+   CONSTRAINT check_b_c CHECK (b > c)
+)
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT check_b_c
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+5  168198684   0  t_check_comment
+5  3491775280  0  s_t_unique_comment
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT positive_price
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+5  3491775280  0  s_t_unique_comment
+
+statement ok
+DROP INDEX s.t@t_a_key CASCADE
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+
+# Drop a table and make sure all the comments are removed.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (
+  a INT8 UNIQUE,
+  b DECIMAL CONSTRAINT positive_price CHECK (b > 0),
+  c INT8 CHECK (b > c),
+  CONSTRAINT t_ac_pkey PRIMARY KEY (a, c)
+);
+COMMENT ON CONSTRAINT t_a_key ON t IS 't_unique_comment';
+COMMENT ON INDEX t_a_key IS 't_unique_idx_comment';
+COMMENT ON CONSTRAINT positive_price ON t IS 't_check_comment';
+COMMENT ON CONSTRAINT check_b_c ON t IS 't_check_defaultname_comment';
+COMMENT ON CONSTRAINT t_ac_pkey ON t IS 't_primary_con_comment';
+COMMENT ON INDEX t_ac_pkey IS 't_primary_idx_comment'
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
+3  60          1  t_primary_idx_comment
+3  60          2  t_unique_idx_comment
+5  773991663   0  t_unique_comment
+5  1073051882  0  t_check_defaultname_comment
+5  1661374981  0  t_primary_con_comment
+5  3553009320  0  t_check_comment
+
+statement ok
+DROP TABLE t
+
+query IIIT rowsort
+SELECT * FROM system.public.comments
+----
