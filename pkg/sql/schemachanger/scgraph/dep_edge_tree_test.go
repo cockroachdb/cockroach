@@ -127,3 +127,55 @@ func TestDepEdgeTree(t *testing.T) {
 		})
 	}
 }
+
+// TestGraphCompareNodes ensures the semantics of (*Graph).compareNodes is sane.
+func TestGraphCompareNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t1 := scpb.NewTarget(scpb.Target_ADD, &scpb.Table{TableID: 1}, nil)
+	t2 := scpb.NewTarget(scpb.Target_DROP, &scpb.Table{TableID: 2}, nil)
+	mkNode := func(t *scpb.Target, s scpb.Status) *scpb.Node {
+		return &scpb.Node{Target: t, Status: s}
+	}
+	t1ABSENT := mkNode(t1, scpb.Status_ABSENT)
+	t2PUBLIC := mkNode(t2, scpb.Status_PUBLIC)
+	g, err := New(scpb.State{
+		Nodes: []*scpb.Node{t1ABSENT, t2PUBLIC},
+	})
+	targetStr := func(target *scpb.Target) string {
+		switch target {
+		case t1:
+			return "t1"
+		case t2:
+			return "t2"
+		default:
+			panic("unexpected target")
+		}
+	}
+	nodeStr := func(n *scpb.Node) string {
+		if n == nil {
+			return "nil"
+		}
+		return fmt.Sprintf("%s:%s", targetStr(n.Target), n.Status.String())
+	}
+
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		a, b     *scpb.Node
+		less, eq bool
+	}{
+		{a: nil, b: nil, less: false, eq: true},
+		{a: t1ABSENT, b: nil, less: false, eq: false},
+		{a: nil, b: t1ABSENT, less: true, eq: false},
+		{a: t1ABSENT, b: t1ABSENT, less: false, eq: true},
+		{a: t2PUBLIC, b: t1ABSENT, less: false, eq: false},
+		{a: t1ABSENT, b: t2PUBLIC, less: true, eq: false},
+		{a: t1ABSENT, b: mkNode(t1, scpb.Status_PUBLIC), less: true, eq: false},
+		{a: mkNode(t1, scpb.Status_PUBLIC), b: t1ABSENT, less: false, eq: false},
+	} {
+		t.Run(fmt.Sprintf("cmp(%s,%s)", nodeStr(tc.a), nodeStr(tc.b)), func(t *testing.T) {
+			less, eq := g.compareNodes(tc.a, tc.b)
+			require.Equal(t, tc.less, less, "less")
+			require.Equal(t, tc.eq, eq, "eq")
+		})
+	}
+}
