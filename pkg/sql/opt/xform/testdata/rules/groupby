@@ -2284,12 +2284,11 @@ memo (optimized, ~21KB, required=[])
  ├── G17: (variable "?column?")
  ├── G18: (assignment-cast G23)
  ├── G19: (assignment-cast G24)
- ├── G20: (assignment-cast G25)
+ ├── G20: (const 1.0)
  ├── G21: (variable v)
  ├── G22: (variable x)
  ├── G23: (variable kuvw.v)
- ├── G24: (variable kuvw.w)
- └── G25: (const 1.0)
+ └── G24: (variable kuvw.w)
 
 # Ensure that streaming ensure-upsert-distinct-on will be used.
 memo

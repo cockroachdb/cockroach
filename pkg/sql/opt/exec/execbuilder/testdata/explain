@@ -793,8 +793,8 @@ vectorized: true
   into: t(k, v)
   auto commit
   size: 2 columns, 1 row
-  row 0, expr 0: (crdb_internal.assignment_cast((1)[int], ((NULL)[unknown]::INT8)[int]))[int]
-  row 0, expr 1: (crdb_internal.assignment_cast((2)[int], ((NULL)[unknown]::INT8)[int]))[int]
+  row 0, expr 0: (1)[int]
+  row 0, expr 1: (2)[int]
 
 query T
 EXPLAIN (TYPES) SELECT 42 AS a
@@ -1408,26 +1408,20 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: u_pkey, u_v_key
 │
-└── • distinct
-    │ distinct on: column2
-    │ nulls are distinct
+└── • lookup join (anti)
+    │ table: u@u_v_key
+    │ equality: (column2) = (v)
+    │ equality cols are key
     │
-    └── • distinct
-        │ distinct on: column1
-        │ nulls are distinct
+    └── • cross join (anti)
         │
-        └── • lookup join (anti)
-            │ table: u@u_pkey
-            │ equality: (column1) = (k)
-            │ equality cols are key
-            │
-            └── • lookup join (anti)
-                │ table: u@u_v_key
-                │ equality: (column2) = (v)
-                │ equality cols are key
-                │
-                └── • values
-                      size: 2 columns, 1 row
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: u@u_pkey
+              spans: [/1 - /1]
 
 # Make sure EXPLAIN (VERBOSE) works when there is a constrained scan of a
 # virtual table (#58193).
@@ -1566,14 +1560,9 @@ EXPLAIN INSERT INTO t2 SELECT x FROM t2 WHERE false
 distribution: local
 vectorized: true
 ·
-• insert
-│ into: t2(x)
-│ auto commit
-│
-└── • render
-    │ estimated row count: 0
-    │
-    └── • norows
+• insert fast path
+  into: t2(x)
+  auto commit
 
 statement ok
 PREPARE prep AS SELECT $1 + 1

@@ -1316,38 +1316,19 @@ insert uniq
  │    └── column3:11 => c:3
  ├── partial index put columns: partial_index_put1:18 partial_index_put2:19 partial_index_put3:20
  └── project
-      ├── columns: partial_index_put1:18 partial_index_put2:19 partial_index_put3:20!null column1:9 column2:10 column3:11
-      ├── upsert-distinct-on
-      │    ├── columns: column1:9 column2:10 column3:11 arbiter_u4_distinct:17!null
-      │    ├── grouping columns: column2:10
-      │    ├── project
-      │    │    ├── columns: arbiter_u4_distinct:17!null column1:9 column2:10 column3:11
-      │    │    ├── anti-join (merge)
-      │    │    │    ├── columns: column1:9 column2:10 column3:11
-      │    │    │    ├── left ordering: +10
-      │    │    │    ├── right ordering: +13
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:9 column2:10 column3:11
-      │    │    │    │    └── tuple
-      │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │         │    └── 1
-      │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │         │    └── 1
-      │    │    │    │         └── assignment-cast: STRING
-      │    │    │    │              └── 'bar'
-      │    │    │    ├── scan uniq@u4,partial
-      │    │    │    │    ├── columns: b:13
-      │    │    │    │    └── ordering: +13
-      │    │    │    └── filters (true)
-      │    │    └── projections
-      │    │         └── true [as=arbiter_u4_distinct:17]
-      │    └── aggregations
-      │         ├── first-agg [as=column1:9]
-      │         │    └── column1:9
-      │         ├── first-agg [as=column3:11]
-      │         │    └── column3:11
-      │         └── const-agg [as=arbiter_u4_distinct:17]
-      │              └── arbiter_u4_distinct:17
+      ├── columns: partial_index_put1:18!null partial_index_put2:19!null partial_index_put3:20!null column1:9!null column2:10!null column3:11!null
+      ├── anti-join (cross)
+      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    └── (1, 1, 'bar')
+      │    ├── select
+      │    │    ├── columns: b:13!null
+      │    │    ├── scan uniq@u4,partial
+      │    │    │    └── columns: b:13
+      │    │    └── filters
+      │    │         └── b:13 = 1
+      │    └── filters (true)
       └── projections
            ├── column3:11 = 'foo' [as=partial_index_put1:18]
            ├── column3:11 = 'bar' [as=partial_index_put2:19]
