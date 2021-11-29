@@ -74,6 +74,11 @@ func (c *CustomFuncs) AnyType() *types.T {
 	return types.Any
 }
 
+// UUIDType returns the UUID SQL type.
+func (c *CustomFuncs) UUIDType() *types.T {
+	return types.Uuid
+}
+
 // CanConstructBinary returns true if (op left right) has a valid binary op
 // overload and is therefore legal to construct. For example, while
 // (Minus <date> <int>) is valid, (Minus <int> <date>) is not.
