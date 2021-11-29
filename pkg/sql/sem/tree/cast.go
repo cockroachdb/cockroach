@@ -2354,6 +2354,10 @@ func performCastWithoutPrecisionTruncation(
 	case types.TupleFamily:
 		switch v := d.(type) {
 		case *DTuple:
+			if t == types.AnyTuple {
+				// If AnyTuple is the target type, we can just use the input tuple.
+				return v, nil
+			}
 			// To cast a Tuple to a Tuple, the lengths must be the same on both sides.
 			// Then, each element is casted to the other element type. The labels of
 			// the target type are kept.

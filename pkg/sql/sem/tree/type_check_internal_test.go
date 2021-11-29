@@ -260,7 +260,7 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{ptypesNone, types.Decimal, exprs(intConst("1"), placeholder(0)), types.Decimal, ptypesDecimal},
 		{ptypesNone, types.Decimal, exprs(decConst("1.1"), placeholder(0)), types.Decimal, ptypesDecimal},
 	} {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
 			attemptTypeCheckSameTypedExprs(t, i, d)
 		})
 	}
@@ -298,7 +298,9 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 		// Verify desired type when possible with unresolved constants.
 		{ptypesNone, ttuple(types.Int, types.Decimal), exprs(tuple(placeholder(0), intConst("1")), tuple(intConst("1"), placeholder(1))), ttuple(types.Int, types.Decimal), ptypesIntAndDecimal},
 	} {
-		attemptTypeCheckSameTypedExprs(t, i, d)
+		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
+			attemptTypeCheckSameTypedExprs(t, i, d)
+		})
 	}
 }
 
@@ -331,19 +333,20 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 	ctx := context.Background()
 	for i, d := range testData {
-		semaCtx := tree.MakeSemaContext()
-		if err := semaCtx.Placeholders.Init(len(d.ptypes), d.ptypes); err != nil {
-			t.Error(err)
-			continue
-		}
-		desired := types.Any
-		if d.desired != nil {
-			desired = d.desired
-		}
-		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
-			if _, _, err := tree.TypeCheckSameTypedExprs(ctx, &semaCtx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
-				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
+		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
+			semaCtx := tree.MakeSemaContext()
+			if err := semaCtx.Placeholders.Init(len(d.ptypes), d.ptypes); err != nil {
+				t.Error(err)
 			}
+			desired := types.Any
+			if d.desired != nil {
+				desired = d.desired
+			}
+			forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
+				if _, _, err := tree.TypeCheckSameTypedExprs(ctx, &semaCtx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
+					t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
+				}
+			})
 		})
 	}
 }
@@ -520,7 +523,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
 			args := d.initArgs
 			stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
 			if err := tree.ProcessPlaceholderAnnotations(&semaCtx, stmt, args); err != nil {
