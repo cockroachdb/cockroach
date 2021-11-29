@@ -103,6 +103,8 @@ type pubsubSink struct {
 
 	// errChan is written to indicate an error while sending message.
 	errChan chan error
+
+	withTopicName bool
 }
 
 // getGCPCredentials returns gcp credentials parsed out from url
@@ -183,12 +185,11 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, tar
 	//}
 
 	ctx, cancel := context.WithCancel(ctx)
-	// currently just hardcoding numWorkers to 100, it will be a config option later down the road
+	// currently just hardcoding numWorkers to 128, it will be a config option later down the road
 	p := &pubsubSink {
-		workerCtx: ctx, url: sinkURL, numWorkers: 100,
+		workerCtx: ctx, url: sinkURL, numWorkers: 128,
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
-
 	//creates a topic for each target
 	for id, topic := range targets {
 		var topicName string
@@ -200,6 +201,9 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, tar
 		p.topics[id] = &topicStruct{topicName: topicName}
 	}
 	p.setupWorkers()
+
+	// set flag true if with topic name option is on
+	p.withTopicName = pubsubTopicName == ""
 
 	// creates custom pubsub object based on scheme
 	switch u.Scheme {
@@ -243,7 +247,7 @@ func (p *pubsubSink) emitRow(
 		Value: value,
 		Topic: p.topics[topic.GetID()].topicName,
 	}}
-	log.Info(ctx, "\x1b[33m sending message \x1b[0m")
+	//log.Info(ctx, "\x1b[33m sending message \x1b[0m")
 	// calculate index by hashing key
 	i := p.workerIndex(key)
 	select {
@@ -275,13 +279,18 @@ func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder,
 		if err != nil {
 			return errors.Wrap(err, "emiting resolved timestamp")
 		}
+
+		// if with topic name option is set then you only need to send out to one of the topics
+		if p.withTopicName {
+			break
+		}
 	}
 	return nil
 }
 
 // Flush blocks until all messages in the event channels are sent
 func (p *pubsubSink) flush(ctx context.Context) error {
-	log.Info(p.workerCtx, "\x1b[33m flush mes \x1b[0m")
+	//log.Info(p.workerCtx, "\x1b[33m flush mes \x1b[0m")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -293,7 +302,7 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 			return err
 		}
 	}
-	log.Info(p.workerCtx, "\x1b[33m flush mes 2 \x1b[0m")
+	//log.Info(p.workerCtx, "\x1b[33m flush mes 2 \x1b[0m")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -307,8 +316,6 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 
 // Close closes all the channels and shutdowns the topic
 func (p *pubsubSink) close() error {
-	p.exitWorkers()
-	_ = p.workerGroup.Wait()
 	for _, topic := range p.topics {
 		if topic.topicClient != nil {
 			err := topic.topicClient.Shutdown(p.getWorkerCtx())
@@ -317,6 +324,8 @@ func (p *pubsubSink) close() error {
 			}
 		}
 	}
+	p.exitWorkers()
+	_ = p.workerGroup.Wait()
 	close(p.errChan)
 	close(p.flushDone)
 	for i := 0; i < p.numWorkers; i++ {
@@ -372,10 +381,10 @@ func (p *pubsubSink) setupWorkers() {
 // workerLoop consumes any message sent to the channel corresponding to the worker index
 func (p *pubsubSink) workerLoop(workerIndex int) {
 	for {
-		log.Info(p.workerCtx, "\x1b[33m workerselect \x1b[0m")
+		//log.Info(p.workerCtx, "\x1b[33m workerselect \x1b[0m")
 		select {
 		case <-p.workerCtx.Done():
-			log.Info(p.workerCtx, "\x1b[33m workerselect DONE\x1b[0m")
+			//log.Info(p.workerCtx, "\x1b[33m workerselect DONE\x1b[0m")
 			return
 		case msg := <-p.eventsChans[workerIndex]:
 			if msg.isFlush {
@@ -406,12 +415,12 @@ func (p *pubsubSink) exitWorkersWithError(err error) {
 		p.exitWorkers()
 	default:
 	}
-	log.Info(p.workerCtx, "\x1b[33m exiting workers \x1b[0m")
+	//log.Info(p.workerCtx, "\x1b[33m exiting workers \x1b[0m")
 }
 
 // sinkError checks if there is an error in the error channel
 func (p *pubsubSink) sinkError() error {
-	log.Info(p.workerCtx, "\x1b[33m select sinkError \x1b[0m")
+	//log.Info(p.workerCtx, "\x1b[33m select sinkError \x1b[0m")
 	select {
 	case err := <-p.errChan:
 		return err
@@ -429,14 +438,14 @@ func (p *pubsubSink) workerIndex(key []byte) uint32 {
 func (p *pubsubSink) flushWorkers() error {
 	for i := 0; i < p.numWorkers; i++ {
 		//flush message will be blocked until all the messages in the channel are processed
-		log.Info(p.workerCtx, "\x1b[33m flush \x1b[0m")
+		//log.Info(p.workerCtx, "\x1b[33m flush \x1b[0m")
 		select {
 		case <-p.workerCtx.Done():
 			return p.workerCtx.Err()
 		case p.eventsChans[i] <- pubsubMessage{isFlush: true}:
 		}
 	}
-	log.Info(p.workerCtx, "\x1b[33m flush2 \x1b[0m")
+	//log.Info(p.workerCtx, "\x1b[33m flush2 \x1b[0m")
 	select {
 	// signals sink that flush is complete
 	case <-p.workerCtx.Done():
@@ -498,7 +507,7 @@ func (p *gcpPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated hlc.Timestamp,  _ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
@@ -520,7 +529,7 @@ func (p *gcpPubsubSink) Flush(ctx context.Context) error {
 
 // Close calls the pubsubDesc Close and closes the client and connection
 func (p *gcpPubsubSink) Close() error {
-	log.Info(p.pubsubSink.workerCtx, "\x1b[33m closing pubsub \x1b[0m")
+	//	.Info(p.pubsubSink.workerCtx, "\x1b[33m closing pubsub \x1b[0m")
 	if p.pubsubSink != nil {
 		err := p.pubsubSink.close()
 		if err != nil {
@@ -549,8 +558,6 @@ func (p *memPubsubSink) Dial() error {
 	//p.pubsubSink.setTopic(topic)
 	var err error
 	for _, topic := range p.pubsubSink.topics {
-		//TODO: implement topic config https://pkg.go.dev/cloud.google.com/go/pubsub#TopicConfig
-		// implement odering key option for gcp https://cloud.google.com/pubsub/docs/publisher#using_ordering_keys
 		topic.topicClient, err = pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.url.String())
 		if err != nil {
 			return errors.Wrap(err, "opening topic")
@@ -564,7 +571,7 @@ func (p *memPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated hlc.Timestamp, _ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)

@@ -810,7 +810,7 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
-				tpccWarehouseCount:       50,
+				tpccWarehouseCount:       1,
 				workloadDuration:         "30m",
 				initialScan:              true,
 				whichSink:                pubsubSink,
