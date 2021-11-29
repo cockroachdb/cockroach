@@ -123,6 +123,10 @@ type instrumentationHelper struct {
 
 	// costEstimate is the cost of the query as estimated by the optimizer.
 	costEstimate float64
+
+	// indexRecommendations is a string slice containing index recommendations for
+	// the planned statement. This is only set for EXPLAIN statements.
+	indexRecommendations []string
 }
 
 // outputMode indicates how the statement output needs to be populated (for

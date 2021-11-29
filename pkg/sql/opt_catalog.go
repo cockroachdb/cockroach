@@ -809,7 +809,7 @@ func newOptTable(
 			// index; in fact the key contains values *derived* from that
 			// column. In the catalog, we refer to this key as a separate,
 			// inverted column.
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetKeyColumnID(idx.NumKeyColumns() - 1))
+			invertedSourceColOrdinal, _ := ot.LookupColumnOrdinal(idx.GetKeyColumnID(idx.NumKeyColumns() - 1))
 
 			// Add a inverted column that refers to the inverted index key.
 			invertedCol, invertedColOrd := newColumn()
@@ -1139,9 +1139,8 @@ func (ot *optTable) Zone() cat.Zone {
 	return ot.zone
 }
 
-// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
-// cache makes the lookup O(1).
-func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+// LookupColumnOrdinal is part of the cat.Table interface.
+func (ot *optTable) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
@@ -1265,7 +1264,7 @@ func (oi *optIndex) init(
 		notNull := true
 		for i := 0; i < idx.NumKeyColumns(); i++ {
 			id := idx.GetKeyColumnID(i)
-			ord, _ := tab.lookupColumnOrdinal(id)
+			ord, _ := tab.LookupColumnOrdinal(id)
 			if tab.Column(ord).IsNullable() {
 				notNull = false
 				break
@@ -1303,11 +1302,11 @@ func (oi *optIndex) init(
 		case inverted && i == numKeyCols-1:
 			ord = oi.invertedColOrd
 		case i < numKeyCols:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		case i < numKeyCols+numKeySuffixCols:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
 		default:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
 		}
 		oi.columnOrds[i] = ord
 	}
@@ -1569,7 +1568,7 @@ func (oi *optFamily) ColumnCount() int {
 
 // Column is part of the cat.Family interface.
 func (oi *optFamily) Column(i int) cat.FamilyColumn {
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+	ord, _ := oi.tab.LookupColumnOrdinal(oi.desc.ColumnIDs[i])
 	return cat.FamilyColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 
@@ -1616,8 +1615,7 @@ func (u *optUniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
 			tab.ID(), u.table,
 		))
 	}
-	optTab := tab.(*optTable)
-	ord, _ := optTab.lookupColumnOrdinal(u.columns[i])
+	ord, _ := tab.LookupColumnOrdinal(u.columns[i])
 	return ord
 }
 
@@ -1686,8 +1684,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 		))
 	}
 
-	tab := originTable.(*optTable)
-	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
+	ord, _ := originTable.LookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
 
@@ -1699,8 +1696,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 			referencedTable.ID(), fk.referencedTable,
 		))
 	}
-	tab := referencedTable.(*optTable)
-	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
+	ord, _ := referencedTable.LookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }
 
@@ -2106,9 +2102,8 @@ func (oi *optVirtualIndex) NonInvertedPrefixColumnCount() int {
 	panic("virtual indexes are not inverted")
 }
 
-// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
-// cache makes the lookup O(1).
-func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+// LookupColumnOrdinal is part of the cat.Table interface.
+func (ot *optVirtualTable) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
@@ -2125,7 +2120,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	}
 	length := oi.idx.NumKeyColumns()
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+		ord, _ := oi.tab.LookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		return cat.IndexColumn{
 			Column: oi.tab.Column(ord),
 		}
@@ -2137,7 +2132,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	}
 
 	i -= length + 1
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetStoredColumnID(i))
+	ord, _ := oi.tab.LookupColumnOrdinal(oi.idx.GetStoredColumnID(i))
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
