@@ -20,4 +20,4 @@ chmod o+rwx lib.docker_amd64
 cp $BAZEL_BIN/c-deps/libgeos/lib/libgeos.so   lib.docker_amd64
 cp $BAZEL_BIN/c-deps/libgeos/lib/libgeos_c.so lib.docker_amd64
 chmod a+w lib.docker_amd64/libgeos.so lib.docker_amd64/libgeos_c.so
-
+ln -s lib.docker_amd64 lib
