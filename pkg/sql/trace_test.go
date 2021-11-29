@@ -77,7 +77,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec stmt",
+				"sql query",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -137,7 +137,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
 				"flow",
 				"table reader",
 				"consuming rows",
@@ -172,7 +172,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec stmt",
+				"sql query",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -205,7 +205,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
 				"flow",
 				"table reader",
 				"consuming rows",
@@ -239,7 +239,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
 				"flow",
 				"batch flow coordinator",
 				"colbatchscan",

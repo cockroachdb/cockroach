@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -30,6 +31,8 @@ import (
 func (ex *connExecutor) execPrepare(
 	ctx context.Context, parseCmd PrepareStmt,
 ) (fsm.Event, fsm.EventPayload) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
+	defer sp.Finish()
 
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return ex.makeErrEvent(err, parseCmd.AST)

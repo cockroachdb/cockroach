@@ -259,6 +259,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
+	defer sp.Finish()
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
@@ -824,12 +826,10 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 // transaction. commitFn is passed as a separate function, so that we avoid
 // executing transactional logic when handling COMMIT in the CommitWait state.
 func (ex *connExecutor) commitSQLTransaction(
-	ctx context.Context,
-	ast tree.Statement,
-	commitFn func(ctx context.Context, ast tree.Statement) error,
+	ctx context.Context, ast tree.Statement, commitFn func(ctx context.Context) error,
 ) (fsm.Event, fsm.EventPayload) {
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
-	if err := commitFn(ctx, ast); err != nil {
+	if err := commitFn(ctx); err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
@@ -879,9 +879,10 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 	return nil
 }
 
-func (ex *connExecutor) commitSQLTransactionInternal(
-	ctx context.Context, ast tree.Statement,
-) error {
+func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error {
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
+	defer sp.Finish()
+
 	if err := ex.createJobs(ctx); err != nil {
 		return err
 	}
@@ -1614,7 +1615,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		return ex.commitSQLTransaction(
 			ctx,
 			ast,
-			func(ctx context.Context, ast tree.Statement) error {
+			func(ctx context.Context) error {
 				// COMMIT while in the CommitWait state is a no-op.
 				return nil
 			},
