@@ -133,7 +133,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Settings:   cfg.Settings,
 	})
 	cfg.RPCContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
-	clusterID := &cfg.RPCContext.ClusterID
+	clusterID := cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
 	var err error
