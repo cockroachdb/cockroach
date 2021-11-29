@@ -135,6 +135,10 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 	}
+	// Add index recommendations to output, if they exist.
+	if len(params.p.instrumentation.indexRecommendations) > 0 {
+		rows = append(rows, params.p.instrumentation.indexRecommendations)
+	}
 	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
 	datums := make([]tree.DString, len(rows))
 	for i, row := range rows {

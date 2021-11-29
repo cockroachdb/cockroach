@@ -120,6 +120,10 @@ type instrumentationHelper struct {
 	// planGist is a compressed version of plan that can be converted (lossily)
 	// back into a logical plan or be used to get a plan hash.
 	planGist explain.PlanGist
+
+	// indexRecommendations is a string containing index recommendations for the
+	// planned statement. This is only set for EXPLAIN statements.
+	indexRecommendations string
 }
 
 // outputMode indicates how the statement output needs to be populated (for
