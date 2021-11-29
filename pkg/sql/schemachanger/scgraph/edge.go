@@ -1,0 +1,70 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package scgraph
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+)
+
+// Edge represents a relationship between two Nodes.
+//
+// TODO(ajwerner): Consider hiding Node pointers behind an interface to clarify
+// mutability.
+type Edge interface {
+	From() *scpb.Node
+	To() *scpb.Node
+}
+
+// OpEdge represents an edge changing the state of a target with an op.
+type OpEdge struct {
+	from, to   *scpb.Node
+	op         []scop.Op
+	typ        scop.Type
+	revertible bool
+}
+
+// From implements the Edge interface.
+func (oe *OpEdge) From() *scpb.Node { return oe.from }
+
+// To implements the Edge interface.
+func (oe *OpEdge) To() *scpb.Node { return oe.to }
+
+// Op returns the scop.Op for execution that is associated with the op edge.
+func (oe *OpEdge) Op() []scop.Op { return oe.op }
+
+// Revertible returns if the dependency edge is revertible
+func (oe *OpEdge) Revertible() bool { return oe.revertible }
+
+// Type returns the types of operations associated with this edge.
+func (oe *OpEdge) Type() scop.Type {
+	return oe.typ
+}
+
+// DepEdge represents a dependency between two nodes. A dependency
+// implies that the To() node cannot be reached before the From() node. It
+// can be reached concurrently.
+type DepEdge struct {
+	from, to *scpb.Node
+
+	// TODO(ajwerner): Deal with the possibility that multiple rules could
+	// generate the same edge.
+	rule string
+}
+
+// From implements the Edge interface.
+func (de *DepEdge) From() *scpb.Node { return de.from }
+
+// To implements the Edge interface.
+func (de *DepEdge) To() *scpb.Node { return de.to }
+
+// Name returns the name of the rule which generated this edge.
+func (de *DepEdge) Name() string { return de.rule }

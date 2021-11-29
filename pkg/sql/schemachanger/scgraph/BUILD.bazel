@@ -4,6 +4,7 @@ go_library(
     name = "scgraph",
     srcs = [
         "dep_edge_tree.go",
+        "edge.go",
         "graph.go",
         "iteration.go",
     ],
