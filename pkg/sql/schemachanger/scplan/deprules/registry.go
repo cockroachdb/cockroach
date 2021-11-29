@@ -39,9 +39,10 @@ func Apply(g *scgraph.Graph) error {
 var depRules []rule
 
 type rule struct {
-	name     string
-	from, to rel.Var
-	q        *rel.Query
+	name      string
+	from, to  rel.Var
+	q         *rel.Query
+	sameStage bool
 }
 
 func register(ruleName string, from, to rel.Var, query *rel.Query) {

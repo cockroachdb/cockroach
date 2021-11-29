@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 )
 
 // Graph is a graph whose nodes are *scpb.Nodes. Graphs are constructed during
@@ -49,12 +48,7 @@ type Graph struct {
 	// nodeDepEdgesFrom maps a Node from its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	nodeDepEdgesFrom *btree.BTree
-
-	// nodeDepEdgesTo maps a Node to its dependencies.
-	// A Node dependency is another target node which must be
-	// reached before or concurrently with this node.
-	nodeDepEdgesTo *btree.BTree
+	nodeDepEdgesFrom *depEdgeTree
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -90,14 +84,13 @@ func New(initial scpb.State) (*Graph, error) {
 	g := Graph{
 		targetIdxMap:        map[*scpb.Target]int{},
 		nodeOpEdgesFrom:     map[*scpb.Node]*OpEdge{},
-		nodeDepEdgesFrom:    btree.New(2),
-		nodeDepEdgesTo:      btree.New(2),
 		optimizedOutOpEdges: map[*OpEdge]bool{},
 		opToNode:            map[scop.Op]*scpb.Node{},
 		entities:            db,
 		statements:          initial.Statements,
 		authorization:       initial.Authorization,
 	}
+	g.nodeDepEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
 	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
@@ -127,7 +120,6 @@ func (g *Graph) ShallowClone() *Graph {
 		targetIdxMap:        g.targetIdxMap,
 		nodeOpEdgesFrom:     g.nodeOpEdgesFrom,
 		nodeDepEdgesFrom:    g.nodeDepEdgesFrom,
-		nodeDepEdgesTo:      g.nodeDepEdgesTo,
 		opToNode:            g.opToNode,
 		edges:               g.edges,
 		entities:            g.entities,
@@ -251,16 +243,7 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	g.edges = append(g.edges, de)
-	g.nodeDepEdgesFrom.ReplaceOrInsert(&edgeTreeEntry{
-		g:     g,
-		edge:  de,
-		order: fromTo,
-	})
-	g.nodeDepEdgesTo.ReplaceOrInsert(&edgeTreeEntry{
-		g:     g,
-		edge:  de,
-		order: toFrom,
-	})
+	g.nodeDepEdgesFrom.insert(de)
 	return nil
 }
 
@@ -344,6 +327,23 @@ func (de *DepEdge) To() *scpb.Node { return de.to }
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }
 
+// compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
+func (g *Graph) compareNodes(a, b *scpb.Node) (less, eq bool) {
+	switch {
+	case a == b:
+		return false, true
+	case a == nil:
+		return true, false
+	case b == nil:
+		return false, false
+	case a.Target == b.Target:
+		return a.Status < b.Status, a.Status == b.Status
+	default:
+		aIdx, bIdx := g.targetIdxMap[a.Target], g.targetIdxMap[b.Target]
+		return aIdx < bIdx, aIdx == bIdx
+	}
+}
+
 // GetNodeRanks fetches ranks of nodes in topological order.
 func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 	defer func() {
@@ -398,55 +398,4 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 		cur = cur.Next()
 	}
 	return rank, nil
-}
-
-// edgeTreeOrder order in which the edge tree is sorted,
-// either based on from/to node indexes.
-type edgeTreeOrder bool
-
-const (
-	fromTo edgeTreeOrder = true
-	toFrom edgeTreeOrder = false
-)
-
-// edgeTreeEntry BTree items for tracking edges
-// in an ordered manner.
-type edgeTreeEntry struct {
-	g     *Graph
-	edge  Edge
-	order edgeTreeOrder
-}
-
-// Less implements btree.Item
-func (e *edgeTreeEntry) Less(other btree.Item) bool {
-	o := other.(*edgeTreeEntry)
-	var a1, b1, a2, b2 *scpb.Node
-	switch e.order {
-	case fromTo:
-		a1, b1, a2, b2 = e.edge.From(), o.edge.From(), e.edge.To(), o.edge.To()
-	case toFrom:
-		a1, b1, a2, b2 = e.edge.To(), o.edge.To(), e.edge.From(), o.edge.From()
-	}
-	less, eq := compareNodes(e.g, a1, b1)
-	if eq {
-		less, _ = compareNodes(e.g, a2, b2)
-	}
-	return less
-}
-
-// compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
-func compareNodes(g *Graph, a, b *scpb.Node) (less, eq bool) {
-	switch {
-	case a == b:
-		return false, true
-	case a == nil:
-		return true, false
-	case b == nil:
-		return false, false
-	case a.Target == b.Target:
-		return a.Status < b.Status, a.Status == b.Status
-	default:
-		aIdx, bIdx := g.targetIdxMap[a.Target], g.targetIdxMap[b.Target]
-		return aIdx < bIdx, aIdx == bIdx
-	}
 }
