@@ -44,6 +44,9 @@ type hypotheticalIndex struct {
 	// storedColsOrdSet contains all the table's column ordinals that are not key
 	// columns (neither index columns nor suffix key columns).
 	storedColsOrdSet util.FastIntSet
+
+	// inverted indicates if an index is inverted.
+	inverted bool
 }
 
 var _ cat.Index = &hypotheticalIndex{}
@@ -53,12 +56,14 @@ func (hi *hypotheticalIndex) init(
 	name tree.Name,
 	cols []cat.IndexColumn,
 	indexOrd int,
+	inverted bool,
 	zone *zonepb.ZoneConfig,
 ) {
 	hi.tab = tab
 	hi.name = name
 	hi.cols = cols
 	hi.indexOrdinal = indexOrd
+	hi.inverted = inverted
 	hi.zone = zone
 
 	// Build an index column ordinal set.
@@ -77,7 +82,11 @@ func (hi *hypotheticalIndex) init(
 	for i := 0; i < tab.ColumnCount(); i++ {
 		tableOrdinalSet.Add(i)
 	}
-	hi.storedColsOrdSet = tableOrdinalSet.Difference(keyColsOrds)
+
+	// Only add stored columns for non-inverted indexes.
+	if !inverted {
+		hi.storedColsOrdSet = tableOrdinalSet.Difference(keyColsOrds)
+	}
 }
 
 // ID is part of the cat.Index interface.
@@ -99,9 +108,7 @@ func (hi *hypotheticalIndex) IsUnique() bool {
 
 // IsInverted is part of the cat.Index interface.
 func (hi *hypotheticalIndex) IsInverted() bool {
-	// Hypothetical indexes are not inverted.
-	// TODO(nehageorge): Add support for inverted index recommendations.
-	return false
+	return hi.inverted
 }
 
 // ColumnCount is part of the cat.Index interface.
@@ -131,7 +138,10 @@ func (hi *hypotheticalIndex) LaxKeyColumnCount() int {
 
 // NonInvertedPrefixColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) NonInvertedPrefixColumnCount() int {
-	panic(errors.AssertionFailedf("hypothetical indexes are not inverted"))
+	if !hi.IsInverted() {
+		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted prefix columns"))
+	}
+	return len(hi.cols) - 1
 }
 
 // Column is part of the cat.Index interface.
@@ -154,7 +164,10 @@ func (hi *hypotheticalIndex) Column(i int) cat.IndexColumn {
 
 // InvertedColumn is part of the cat.Index interface.
 func (hi *hypotheticalIndex) InvertedColumn() cat.IndexColumn {
-	panic(errors.AssertionFailedf("hypothetical indexes are not inverted"))
+	if !hi.IsInverted() {
+		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
+	}
+	return hi.cols[len(hi.cols)-1]
 }
 
 // Predicate is part of the cat.Index interface.
@@ -188,6 +201,7 @@ func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
+// TODO(nehageorge): Add support for spatial index recommendations.
 func (hi *hypotheticalIndex) GeoConfig() *geoindex.Config {
 	return nil
 }
