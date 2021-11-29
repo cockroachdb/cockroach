@@ -370,6 +370,7 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 56, Name: t1}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 56}, PUBLIC, DROP] -> ABSENT
@@ -379,7 +380,6 @@ Stage 2 of 3 (non-revertible)
     [Column:{DescID: 56, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [PrimaryIndex:{DescID: 56, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
@@ -432,12 +432,12 @@ Stage 2 of 3 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 55
-    *scop.DrainDescriptorName
-      TableID: 56
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 56
     *scop.UpdateRelationDeps
+      TableID: 56
+    *scop.DrainDescriptorName
       TableID: 56
     *scop.MarkDescriptorAsDropped
       DescID: 57

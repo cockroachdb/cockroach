@@ -1021,3 +1021,32 @@ ORDER BY timestamp, info DESC;
 ----
 1  {"DatabaseName": "db1", "DroppedSchemaObjects": ["db1.public", "db1.sc1", "db1.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE db1 CASCADE", "User": "root"}
 1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}
+
+# Sequence related back ref test
+subtest seq-back-ref
+
+statement ok
+CREATE SEQUENCE sqbf1;
+
+statement ok
+CREATE TABLE sbt1 (test INT not null, value INT not null DEFAULT nextval('sqbf1'))
+
+statement ok
+CREATE VIEW sbv1 AS SELECT  nextval('sqbf1')
+
+statement ok
+INSERT into sbt1 VALUES(1)
+
+statement ok
+select * from sbv1
+
+statement ok
+DROP SEQUENCE sqbf1 CASCADE
+
+# Default expression is dropped so this should error out.
+statement error null value in column "value" violates not-null constraint
+INSERT into sbt1 VALUES(1)
+
+# View referencing it should also be cleaned up.
+statement error relation "sbv1" does not exist
+select * from sbv1

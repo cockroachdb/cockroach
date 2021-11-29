@@ -54,13 +54,17 @@ func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBeha
 				seq.GetName(),
 			))
 		}
-		desc := b.MustReadTable(dep.TableID)
-		for _, col := range desc.PublicColumns() {
-			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) && col.GetID() != dep.ColumnID {
-				continue
+		desc := b.MustReadTable(dep.DependedOnBy)
+		if desc.IsTable() {
+			for _, col := range desc.PublicColumns() {
+				if dep.ColumnID == descpb.ColumnID(descpb.InvalidID) || col.GetID() != dep.ColumnID {
+					continue
+				}
+				// Convert the default expression into elements.
+				decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
 			}
-			// Convert the default expression into elements.
-			decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
+		} else if desc.IsView() {
+			dropView(b, desc, tree.DropCascade)
 		}
 	})
 }

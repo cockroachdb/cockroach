@@ -129,6 +129,7 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 60, Name: t1}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 60}, PUBLIC, DROP] -> ABSENT
@@ -138,7 +139,6 @@ Stage 2 of 3 (non-revertible)
     [Column:{DescID: 60, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 60, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 60, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [DefaultExpression:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [PrimaryIndex:{DescID: 60, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Schema:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Sequence:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
@@ -148,6 +148,7 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 59, Name: t1}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 59}, PUBLIC, DROP] -> ABSENT
@@ -157,7 +158,6 @@ Stage 2 of 3 (non-revertible)
     [Column:{DescID: 59, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 59, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 59, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [DefaultExpression:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [PrimaryIndex:{DescID: 59, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
@@ -211,12 +211,12 @@ Stage 2 of 3 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 60
       TableID: 57
-    *scop.DrainDescriptorName
-      TableID: 60
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 60
     *scop.UpdateRelationDeps
+      TableID: 60
+    *scop.DrainDescriptorName
       TableID: 60
     *scop.MarkDescriptorAsDropped
       DescID: 55
@@ -229,12 +229,12 @@ Stage 2 of 3 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 58
-    *scop.DrainDescriptorName
-      TableID: 59
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 59
     *scop.UpdateRelationDeps
+      TableID: 59
+    *scop.DrainDescriptorName
       TableID: 59
     *scop.MarkDescriptorAsDropped
       DescID: 61

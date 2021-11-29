@@ -72,6 +72,8 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
@@ -83,6 +85,16 @@ Stage 2 of 3 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 54
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 56
+    *scop.UpdateRelationDeps
+      TableID: 56
 Stage 3 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
