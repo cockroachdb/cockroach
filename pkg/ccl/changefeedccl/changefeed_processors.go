@@ -184,11 +184,10 @@ func newChangeAggregatorProcessor(
 		if err != nil {
 			return nil, err
 		}
-	} else if r == `` {
-		ca.flushFrequency = 0
 	} else {
 		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
 	}
+
 	return ca, nil
 }
 
