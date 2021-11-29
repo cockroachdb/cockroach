@@ -273,7 +273,13 @@ func TestExportOrder(t *testing.T) {
 // fields below name and stmt validate some aspect of the exported parquet file.
 // If a validation field is empty, then that field will not be used in the test.
 type parquetTest struct {
+	// name is the name of the test.
 	name string
+
+	// prep contains sql commands that will execute before the stmt.
+	prep []string
+
+	// stmt contains the EXPORT PARQUET statement.
 	stmt string
 
 	// colNames provides the expected column names for the parquet file.
@@ -287,8 +293,8 @@ type parquetTest struct {
 	vals [][]interface{}
 }
 
-// validateParquetFile reads the parquet file, converts each value in the parquet file to its
-// native go type, and asserts its values match the truth.
+// validateParquetFile reads the parquet file, conducts a test related to each
+// non nil field in the parquetTest struct
 func validateParquetFile(t *testing.T, file string, test parquetTest) error {
 	r, err := os.Open(file)
 	if err != nil {
@@ -316,10 +322,8 @@ func validateParquetFile(t *testing.T, file string, test parquetTest) error {
 	}
 
 	if test.vals != nil {
-
 		require.Equal(t, len(cols), len(test.vals[0]))
 		require.Equal(t, int(fr.NumRows()), len(test.vals))
-
 		count := 0
 		for {
 			row, err := fr.NextRow()
@@ -333,36 +337,48 @@ func validateParquetFile(t *testing.T, file string, test parquetTest) error {
 			t.Logf("\n Record %v:", count)
 			for i := 0; i < len(cols); i++ {
 				if test.vals[count][i] == nil {
-					// If we expect a null value, the row created by the parquet reader will not have the
-					// associated column.
+					// If we expect a null value, the row created by the parquet reader
+					// will not have the associated column.
 					_, ok := row[cols[i].SchemaElement.Name]
 					require.Equal(t, ok, false)
 					continue
 				}
-				var decodedV interface{}
 				v := row[cols[i].SchemaElement.Name]
-				switch vv := v.(type) {
-				case []byte:
-					// the parquet exporter encodes native go strings as []byte, so an extra
-					// step is required here
-					// TODO (MB): as we add more type support, this
-					// test will be insufficient: many go native types are encoded as
-					// []byte, so in the future, each column will have to call it's own
-					// custom decoder ( this is how IMPORT Parquet will work)
-					decodedV = string(vv)
-				case int64, float64, bool:
-					decodedV = vv
-				default:
-					t.Fatalf("unexepected type: %T", vv)
-				}
+				decodedV := decodeEl(t, v)
 				t.Logf("\t %v", decodedV)
 				require.Equal(t, test.vals[count][i], decodedV)
 			}
 			count++
 		}
 	}
-
 	return nil
+}
+
+func decodeEl(t *testing.T, v interface{}) interface{} {
+	var decodedV interface{}
+	switch vv := v.(type) {
+	case []byte:
+		// The parquet exporter encodes native go strings as []byte, so an extra
+		// step is required here.
+
+		// TODO (MB): as we add more type support, this switch statement will be
+		// insufficient: many go native types are encoded as []byte, so in the
+		// future, each column will have to call it's own custom decoder ( this is
+		// how IMPORT Parquet will work).
+		decodedV = string(vv)
+	case int64, float64, bool:
+		decodedV = vv
+	case map[string]interface{}:
+		var arrDecodedV []interface{}
+		b := vv["list"].([]map[string]interface{})
+		for _, el := range b {
+			arrDecodedV = append(arrDecodedV, decodeEl(t, el["element"]))
+		}
+		decodedV = arrDecodedV
+	default:
+		t.Fatalf("unexepected type: %T", vv)
+	}
+	return decodedV
 }
 
 // TestBasicParquetTypes exports a relation with bool, int, float and string
@@ -416,10 +432,33 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 				parquet.FieldRepetitionType_REQUIRED,
 				parquet.FieldRepetitionType_OPTIONAL},
 		},
+		{
+			// TODO (mb): switch one of the values in the array to NULL once the
+			// vendor's parquet file reader bug resolves.
+			// https://github.com/fraugster/parquet-go/issues/60
+			//
+			// I already verified that the vendor's parquet writer can write arrays
+			// with null values just fine, so EXPORT PARQUET is bug free; however this
+			// roundtrip test would fail.
+			name: "arrays",
+			prep: []string{"CREATE TABLE atable (i INT PRIMARY KEY, x INT[])",
+				"INSERT INTO atable VALUES (1, ARRAY[1,2]), (2, ARRAY[2]), (3,ARRAY[1,13,5])"},
+			stmt:     `EXPORT INTO PARQUET 'nodelocal://0/arrays' FROM SELECT * FROM atable`,
+			colNames: []string{"i", "x"},
+			vals: [][]interface{}{
+				{int64(1), []interface{}{int64(1), int64(2)}},
+				{int64(2), []interface{}{int64(2)}},
+				{int64(3), []interface{}{int64(1), int64(13), int64(5)}}},
+		},
 	}
 
 	for _, test := range tests {
 		t.Logf("Test %s", test.name)
+		if test.prep != nil {
+			for _, cmd := range test.prep {
+				sqlDB.Exec(t, cmd)
+			}
+		}
 		sqlDB.Exec(t, test.stmt)
 		paths, err := filepath.Glob(filepath.Join(dir, test.name,
 			parquetExportFilePattern))

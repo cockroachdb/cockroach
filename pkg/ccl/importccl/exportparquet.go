@@ -150,8 +150,8 @@ func newParquetColumn(typ *types.T, name string, nullable bool) (parquetColumn, 
 		  cannot have null values). A column is set to required if the user
 		  specified the CRDB column as NOT NULL.
 		  - optional: 0 or 1 occurrence (i.e. same as above, but can have values)
-		  - repeated: 0 or more occurrences (the column value can be an array of values,
-		  so the value within the array will have its own repetition type)
+		  - repeated: 0 or more occurrences (the column value will be an array. A
+				value within the array will have its own repetition type)
 
 			See this blog post for more on parquet type specification:
 			https://blog.twitter.com/engineering/en_us/a/2013/dremel-made-simple-with-parquet
@@ -208,10 +208,57 @@ func newParquetColumn(typ *types.T, name string, nullable bool) (parquetColumn, 
 		}
 
 	case types.ArrayFamily:
-		// TODO(mb): Figure out how to modify the encodeFn for arrays.
-		// One possibility: recurse on type within array, define encodeFn elsewhere
-		// col.definition.Children[0] =  newParquetColumn(typ.ArrayContents(), name)
-		return col, errors.Errorf("parquet export does not support array type yet")
+
+		// Define a list such that the parquet schema in json is:
+		/*
+			required group colName (LIST){ // parent
+				repeated group list { // child
+					required colType element; //grandChild
+				}
+			}
+		*/
+
+		// First, define the grandChild definition, the schema for the array value.
+		grandChild, err := newParquetColumn(typ.ArrayContents(), "element", true)
+		if err != nil {
+			return col, err
+		}
+
+		// Next define the child definition, required by the parquet vendor.
+		child := new(parquetschema.ColumnDefinition)
+		child.SchemaElement = parquet.NewSchemaElement()
+		child.SchemaElement.RepetitionType = parquet.FieldRepetitionTypePtr(parquet.
+			FieldRepetitionType_REPEATED)
+		child.SchemaElement.Name = "list"
+		child.Children = []*parquetschema.ColumnDefinition{grandChild.definition}
+		ngc := int32(len(child.Children))
+		child.SchemaElement.NumChildren = &ngc
+
+		// Finally, define the parent definition.
+		col.definition.Children = []*parquetschema.ColumnDefinition{child}
+		nc := int32(len(col.definition.Children))
+		child.SchemaElement.NumChildren = &nc
+		col.definition.SchemaElement.ConvertedType = parquet.ConvertedTypePtr(parquet.ConvertedType_LIST)
+		col.encodeFn = func(d tree.Datum) (interface{}, error) {
+
+			datumArr := d.(*tree.DArray)
+			var els []map[string]interface{}
+			for _, elt := range datumArr.Array {
+				var el interface{}
+				if elt.ResolvedType().Family() == types.UnknownFamily {
+					el = nil
+					// skip populating the encoded array value if the datum is dNULL.
+				} else {
+					el, err = grandChild.encodeFn(elt)
+					if err != nil {
+						return col, err
+					}
+				}
+				els = append(els, map[string]interface{}{"element": el})
+			}
+			encEl := map[string]interface{}{"list": els}
+			return encEl, nil
+		}
 
 	default:
 		return col, errors.Errorf("parquet export does not support the %v type yet", typ.Family())
