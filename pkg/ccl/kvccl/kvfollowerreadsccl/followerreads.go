@@ -150,7 +150,7 @@ type followerReadOracle struct {
 
 func newFollowerReadOracle(cfg replicaoracle.Config) replicaoracle.Oracle {
 	return &followerReadOracle{
-		clusterID:  &cfg.RPCContext.ClusterID,
+		clusterID:  cfg.RPCContext.ClusterID,
 		st:         cfg.Settings,
 		clock:      cfg.RPCContext.Clock,
 		closest:    replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),

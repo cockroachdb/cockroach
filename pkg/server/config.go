@@ -121,6 +121,10 @@ type BaseConfig struct {
 	// that will contain the ID for the server to instantiate.
 	IDContainer *base.NodeIDContainer
 
+	// ClusterIDContainer is the Cluster ID container for the server to
+	// instantiate.
+	ClusterIDContainer *base.ClusterIDContainer
+
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
@@ -173,16 +177,18 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
-	var c base.NodeIDContainer
+	var nc base.NodeIDContainer
+	var cc base.ClusterIDContainer
 	baseCfg := BaseConfig{
-		Tracer:            tr,
-		IDContainer:       &c,
-		AmbientCtx:        log.AmbientContext{Tracer: tr},
-		Config:            new(base.Config),
-		Settings:          st,
-		MaxOffset:         MaxOffsetType(base.DefaultMaxClockOffset),
-		DefaultZoneConfig: zonepb.DefaultZoneConfig(),
-		StorageEngine:     storage.DefaultStorageEngine,
+		Tracer:             tr,
+		IDContainer:        &nc,
+		ClusterIDContainer: &cc,
+		AmbientCtx:         log.AmbientContext{Tracer: tr},
+		Config:             new(base.Config),
+		Settings:           st,
+		MaxOffset:          MaxOffsetType(base.DefaultMaxClockOffset),
+		DefaultZoneConfig:  zonepb.DefaultZoneConfig(),
+		StorageEngine:      storage.DefaultStorageEngine,
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID

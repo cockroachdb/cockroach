@@ -324,6 +324,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TenantID:   roachpb.SystemTenantID,
 		AmbientCtx: cfg.AmbientCtx,
 		NodeID:     cfg.IDContainer,
+		ClusterID:  cfg.ClusterIDContainer,
 		Config:     cfg.Config,
 		Clock:      clock,
 		Stopper:    stopper,
@@ -385,7 +386,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	g := gossip.New(
 		cfg.AmbientCtx,
-		&rpcContext.ClusterID,
+		rpcContext.ClusterID,
 		nodeIDContainer,
 		rpcContext,
 		grpcServer.Server,
@@ -663,7 +664,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientCtx:    &cfg.AmbientCtx,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
-		ClusterID:     rpcContext.ClusterID.Get,
+		ClusterID:     cfg.ClusterIDContainer.Get,
 		NodeID:        nodeIDContainer.Get,
 		SQLInstanceID: idContainer.SQLInstanceID,
 	}
@@ -681,7 +682,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
-		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,
+		txnMetrics, stores, nil /* execCfg */, cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
 		tenantUsage, spanConfigAccessor,
 	)
