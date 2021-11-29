@@ -77,7 +77,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec stmt",
+				"sql query",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -86,6 +86,7 @@ func TestTrace(t *testing.T) {
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 		},
 		{
@@ -137,13 +138,14 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
 				"flow",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
@@ -172,7 +174,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec stmt",
+				"sql query",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -181,6 +183,7 @@ func TestTrace(t *testing.T) {
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 		},
 		{
@@ -205,13 +208,14 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
 				"flow",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
@@ -239,7 +243,7 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
 				"flow",
 				"batch flow coordinator",
 				"colbatchscan",
@@ -247,6 +251,7 @@ func TestTrace(t *testing.T) {
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 		},
 	}
