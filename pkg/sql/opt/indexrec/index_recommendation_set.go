@@ -256,6 +256,10 @@ func (ir *indexRecommendation) indexCols() []tree.IndexElem {
 		indexCol := ir.index.Column(i)
 		colName := indexCol.Column.ColName()
 
+		if ir.index.IsInverted() && i == len(ir.index.cols)-1 {
+			colName = ir.index.tab.Column(indexCol.InvertedSourceColumnOrdinal()).ColName()
+		}
+
 		var direction tree.Direction
 		if indexCol.Descending {
 			direction = tree.Descending
@@ -305,10 +309,11 @@ func (ir *indexRecommendation) indexRecommendationString(
 	}
 
 	createCmd := tree.CreateIndex{
-		Table:   *tableName,
-		Columns: indexCols,
-		Storing: storing,
-		Unique:  unique,
+		Table:    *tableName,
+		Columns:  indexCols,
+		Storing:  storing,
+		Unique:   unique,
+		Inverted: ir.index.IsInverted(),
 	}
 	sb.WriteString(createCmd.String() + ";")
 	if len(dropCmd.IndexList) > 0 {
