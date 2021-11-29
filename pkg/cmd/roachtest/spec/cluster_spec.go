@@ -195,6 +195,10 @@ func (s *ClusterSpec) RoachprodOpts(
 		// - if no particular volume size is requested, and,
 		// - on AWS, if the machine type supports it.
 		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) {
+			// Ensure SSD count is at least 1 if UseLocalSSD is true.
+			if s.SSDs == 0 {
+				s.SSDs = 1
+			}
 			createVMOpts.SSDOpts.UseLocalSSD = true
 			createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
 		} else {
