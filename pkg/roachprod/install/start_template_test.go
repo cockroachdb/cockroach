@@ -25,8 +25,7 @@ func TestExecStartTemplate(t *testing.T) {
 echo bar $HOME`,
 		EnvVars:   []string{"ROACHPROD=1/tigtag", "COCKROACH=foo", "ROCKCOACH=17%"},
 		Binary:    "./cockroach",
-		StartCmd:  "start-single-node",
-		Args:      []string{`--log "file-defaults: {dir: '/path with spaces/logs', exit-on-error: false}"`},
+		Args:      []string{`start`, `--log`, `file-defaults: {dir: '/path with spaces/logs', exit-on-error: false}`},
 		MemoryMax: "81%",
 		Local:     true,
 	}
