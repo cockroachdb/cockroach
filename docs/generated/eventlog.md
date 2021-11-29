@@ -346,6 +346,8 @@ is directly or indirectly a member of the admin role) executes a query.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
 
 ### `sensitive_table_access`
 
@@ -380,6 +382,8 @@ a table marked as audited.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
 
 ## SQL Execution Log
 
@@ -421,6 +425,8 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
 
 ## SQL Logical Schema Changes
 
@@ -1996,6 +2002,8 @@ set to a non-zero value, AND
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
 
 ### `txn_rows_read_limit`
 
@@ -2115,6 +2123,8 @@ the "slow query" condition.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
 
 ### `txn_rows_read_limit_internal`
 
@@ -2292,6 +2302,8 @@ contains common SQL event/execution details.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
 
 ## Zone config events
 

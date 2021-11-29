@@ -1511,6 +1511,25 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 		b = strconv.AppendUint(b, uint64(m.TxnCounter), 10)
 	}
 
+	if m.CostEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CostEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.CostEstimate), 'f', -1, 32)
+	}
+
+	if m.Distribution != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Distribution\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Distribution)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 

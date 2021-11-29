@@ -294,6 +294,8 @@ func (p *planner) maybeLogStatementInternal(
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
 		TxnCounter:    uint32(txnCounter),
+		CostEstimate:  p.curPlan.instrumentation.costEstimate,
+		Distribution:  p.curPlan.instrumentation.distribution.String(),
 	}
 
 	if auditEventsDetected {
