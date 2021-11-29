@@ -10,7 +10,6 @@
 
 import assert from "assert";
 import { createMemoryHistory } from "history";
-import _ from "lodash";
 import Long from "long";
 import { RouteComponentProps } from "react-router-dom";
 import { bindActionCreators, Store } from "redux";
@@ -19,12 +18,23 @@ import {
   DatabaseTablePageData,
   DatabaseTablePageDataDetails,
   DatabaseTablePageDataStats,
+  DatabaseTablePageIndexStats,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
+import * as protos from "oss/src/js";
+import moment from "moment";
+
+type Timestamp = protos.google.protobuf.ITimestamp;
+
+function makeTimestamp(date: string): Timestamp {
+  return new protos.google.protobuf.Timestamp({
+    seconds: new Long(Date.parse(date) * 1e-3),
+  });
+}
 
 function fakeRouteComponentProps(
   k1: string,
@@ -78,15 +88,33 @@ class TestDriver {
   }
 
   assertProperties(expected: DatabaseTablePageData) {
-    assert.deepEqual(this.properties(), expected);
+    this.properties().indexStats.lastReset.isSame(
+      expected.indexStats.lastReset,
+    );
+    delete this.properties().indexStats.lastReset;
+    delete expected.indexStats.lastReset;
+    assert.deepStrictEqual(this.properties(), expected);
   }
 
   assertTableDetails(expected: DatabaseTablePageDataDetails) {
-    assert.deepEqual(this.properties().details, expected);
+    assert.deepStrictEqual(this.properties().details, expected);
   }
 
   assertTableStats(expected: DatabaseTablePageDataStats) {
-    assert.deepEqual(this.properties().stats, expected);
+    assert.deepStrictEqual(this.properties().stats, expected);
+  }
+
+  assertIndexStats(expected: DatabaseTablePageIndexStats) {
+    // Convert moments to long
+    this.properties().indexStats.stats[0].lastUsed.isSame(
+      expected.stats[0].lastUsed,
+    );
+    delete this.properties().indexStats.stats[0].lastUsed;
+    delete expected.stats[0].lastUsed;
+    this.properties().indexStats.lastReset.isSame(expected.lastReset);
+    delete this.properties().indexStats.lastReset;
+    delete expected.lastReset;
+    assert.deepStrictEqual(this.properties().indexStats, expected);
   }
 
   async refreshTableDetails() {
@@ -95,6 +123,10 @@ class TestDriver {
 
   async refreshTableStats() {
     return this.actions.refreshTableStats(this.database, this.table);
+  }
+
+  async refreshIndexStats() {
+    return this.actions.refreshIndexStats(this.database, this.table);
   }
 }
 
@@ -132,6 +164,12 @@ describe("Database Table Page", function() {
         sizeInBytes: 0,
         rangeCount: 0,
         nodesByRegionString: "",
+      },
+      indexStats: {
+        loading: false,
+        loaded: false,
+        stats: [],
+        lastReset: moment(),
       },
     });
   });
@@ -183,6 +221,48 @@ describe("Database Table Page", function() {
       sizeInBytes: 44040192,
       rangeCount: 4200,
       nodesByRegionString: "",
+    });
+  });
+
+  it("loads index stats", async function() {
+    fakeApi.stubIndexStats("DATABASE", "TABLE", {
+      statistics: [
+        {
+          statistics: {
+            key: {
+              table_id: 15,
+              index_id: 2,
+            },
+            stats: {
+              total_read_count: new Long(2),
+              last_read: makeTimestamp("2021-11-19T23:01:05.167627Z"),
+              total_rows_read: new Long(0),
+              total_write_count: new Long(0),
+              last_write: makeTimestamp("0001-01-01T00:00:00Z"),
+              total_rows_written: new Long(0),
+            },
+          },
+          index_name: "jobs_status_created_idx",
+          index_type: "secondary",
+        },
+      ],
+      last_reset: makeTimestamp("2021-11-12T20:18:22.167627Z"),
+    });
+
+    await driver.refreshIndexStats();
+
+    driver.assertIndexStats({
+      loading: false,
+      loaded: true,
+      stats: [
+        {
+          indexName: "jobs_status_created_idx",
+          totalReads: 2,
+          lastUsed: moment("2021-11-19T23:01:05.167627Z"),
+          lastUsedType: "read",
+        },
+      ],
+      lastReset: moment("2021-11-12T20:18:22.167627Z"),
     });
   });
 });

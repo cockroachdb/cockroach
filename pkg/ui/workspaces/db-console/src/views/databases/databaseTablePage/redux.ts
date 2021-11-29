@@ -19,18 +19,25 @@ import {
   refreshTableDetails,
   refreshTableStats,
   refreshNodes,
+  refreshIndexStats,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
-import { FixLong } from "src/util/fixLong";
+import { FixLong, longToInt } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
 import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
+import { TimestampToMoment } from "src/util/convert";
+import { resetIndexUsageStatsAction } from "oss/src/redux/indexUsageStats";
 
-const { TableDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
+const {
+  TableDetailsRequest,
+  TableStatsRequest,
+  TableIndexStatsRequest,
+} = cockroach.server.serverpb;
 
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
@@ -40,6 +47,7 @@ export const mapStateToProps = createSelector(
 
   state => state.cachedData.tableDetails,
   state => state.cachedData.tableStats,
+  state => state.cachedData.indexStats,
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
 
@@ -48,11 +56,36 @@ export const mapStateToProps = createSelector(
     table,
     tableDetails,
     tableStats,
+    indexUsageStats,
     nodeRegions,
     showNodeRegionsSection,
   ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
+    const indexStats = indexUsageStats[generateTableID(database, table)];
+    const lastReset = TimestampToMoment(indexStats?.data?.last_reset);
+    const indexStatsData = _.flatMap(
+      indexStats?.data?.statistics,
+      indexStat => {
+        const lastRead = TimestampToMoment(
+          indexStat.statistics?.stats?.last_read,
+        );
+        let lastUsed, lastUsedType;
+        if (lastRead.isAfter(lastReset)) {
+          lastUsed = lastRead;
+          lastUsedType = "read";
+        } else {
+          lastUsed = lastReset;
+          lastUsedType = "reset";
+        }
+        return {
+          indexName: indexStat.index_name,
+          totalReads: longToInt(indexStat.statistics?.stats?.total_read_count),
+          lastUsed: lastUsed,
+          lastUsedType: lastUsedType,
+        };
+      },
+    );
     const grants = _.flatMap(details?.data?.grants, grant =>
       _.map(grant.privileges, privilege => {
         return { user: grant.user, privilege };
@@ -81,6 +114,12 @@ export const mapStateToProps = createSelector(
         rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
         nodesByRegionString: getNodesByRegionString(nodes, nodeRegions),
       },
+      indexStats: {
+        loading: !!indexStats?.inFlight,
+        loaded: !!indexStats?.valid,
+        stats: indexStatsData,
+        lastReset: lastReset,
+      },
     };
   },
 );
@@ -93,6 +132,12 @@ export const mapDispatchToProps = {
   refreshTableStats: (database: string, table: string) => {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
+
+  refreshIndexStats: (database: string, table: string) => {
+    return refreshIndexStats(new TableIndexStatsRequest({ database, table }));
+  },
+
+  resetIndexUsageStats: resetIndexUsageStatsAction,
 
   refreshNodes,
 };

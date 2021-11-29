@@ -13,6 +13,7 @@ import { Col, Row, Tabs } from "antd";
 import classNames from "classnames/bind";
 import _ from "lodash";
 import { Tooltip } from "antd";
+import { Heading } from "@cockroachlabs/ui-components";
 
 import { Breadcrumbs } from "src/breadcrumbs";
 import { CaretRight } from "src/icon/caretRight";
@@ -25,6 +26,9 @@ import * as format from "src/util/format";
 import styles from "./databaseTablePage.module.scss";
 import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
+import moment, { Moment } from "moment";
+import { Search as IndexIcon } from "@cockroachlabs/icons";
+import { formatDate } from "antd/es/date-picker/utils";
 const cx = classNames.bind(styles);
 
 const { TabPane } = Tabs;
@@ -58,12 +62,24 @@ const { TabPane } = Tabs;
 //       rangeCount: number;
 //       nodesByRegionString: string;
 //     };
+//     indexStats: { // DatabaseTablePageIndexStats
+//       loading: boolean;
+//       loaded: boolean;
+//       stats: {
+//         indexName: string;
+//         totalReads: number;
+//         lastUsed: Moment;
+//         lastUsedType: string;
+//       }[];
+//       lastReset: Moment;
+//     };
 //   }
 export interface DatabaseTablePageData {
   databaseName: string;
   name: string;
   details: DatabaseTablePageDataDetails;
   stats: DatabaseTablePageDataStats;
+  indexStats: DatabaseTablePageIndexStats;
   showNodeRegionsSection?: boolean;
 }
 
@@ -74,6 +90,20 @@ export interface DatabaseTablePageDataDetails {
   replicaCount: number;
   indexNames: string[];
   grants: Grant[];
+}
+
+export interface DatabaseTablePageIndexStats {
+  loading: boolean;
+  loaded: boolean;
+  stats: IndexStat[];
+  lastReset: Moment;
+}
+
+interface IndexStat {
+  indexName: string;
+  totalReads: number;
+  lastUsed: Moment;
+  lastUsedType: string;
 }
 
 interface Grant {
@@ -91,7 +121,9 @@ export interface DatabaseTablePageDataStats {
 
 export interface DatabaseTablePageActions {
   refreshTableDetails: (database: string, table: string) => void;
-  refreshTableStats: (databse: string, table: string) => void;
+  refreshTableStats: (database: string, table: string) => void;
+  refreshIndexStats?: (database: string, table: string) => void;
+  resetIndexUsageStats?: (database: string, table: string) => void;
   refreshNodes?: () => void;
 }
 
@@ -103,6 +135,7 @@ interface DatabaseTablePageState {
 }
 
 class DatabaseTableGrantsTable extends SortedTable<Grant> {}
+class IndexUsageStatsTable extends SortedTable<IndexStat> {}
 
 export class DatabaseTablePage extends React.Component<
   DatabaseTablePageProps,
@@ -143,13 +176,85 @@ export class DatabaseTablePage extends React.Component<
         this.props.name,
       );
     }
+
+    if (!this.props.indexStats.loaded && !this.props.indexStats.loading) {
+      return this.props.refreshIndexStats(
+        this.props.databaseName,
+        this.props.name,
+      );
+    }
   }
+
+  minDate = moment.utc("0001-01-01"); // minimum value as per UTC
 
   private changeSortSetting(sortSetting: SortSetting) {
     this.setState({ sortSetting });
   }
 
-  private columns: ColumnDescriptor<Grant>[] = [
+  private getLastResetString() {
+    const lastReset = this.props.indexStats.lastReset;
+    if (lastReset.isSame(this.minDate)) {
+      return "Last cleared: Never";
+    } else {
+      return (
+        "Last cleared: " +
+        formatDate(lastReset, "MMM DD, YYYY [at] h:mm A [(UTC)]")
+      );
+    }
+  }
+
+  private getLastUsedString(indexStat: IndexStat) {
+    const lastReset = this.props.indexStats.lastReset;
+    switch (indexStat.lastUsedType) {
+      case "read":
+        return formatDate(
+          indexStat.lastUsed,
+          "[Last read:] MMM DD, YYYY [at] h:mm A",
+        );
+      case "reset":
+      default:
+        // TODO(lindseyjin): replace default case with create time after it's added to table_indexes
+        if (lastReset.isSame(this.minDate)) {
+          return "Last reset: Never";
+        } else {
+          return formatDate(
+            lastReset,
+            "[Last reset:] MMM DD, YYYY [at] h:mm A",
+          );
+        }
+    }
+  }
+
+  private indexStatsColumns: ColumnDescriptor<IndexStat>[] = [
+    {
+      name: "indexes",
+      title: "Indexes",
+      className: cx("index-stats-table__col-indexes"),
+      cell: indexStat => (
+        <>
+          <IndexIcon className={cx("icon--s", "icon--primary")} />
+          {indexStat.indexName}
+        </>
+      ),
+      sort: indexStat => indexStat.indexName,
+    },
+    {
+      name: "total reads",
+      title: "Total Reads",
+      cell: indexStat => indexStat.totalReads,
+      sort: indexStat => indexStat.totalReads,
+    },
+    {
+      name: "last used",
+      title: "Last Used (UTC)",
+      className: cx("index-stats-table__col-last-used"),
+      cell: indexStat => this.getLastUsedString(indexStat),
+      sort: indexStat => indexStat.lastUsed,
+    },
+    // TODO(lindseyjin): add index recommendations column
+  ];
+
+  private grantsColumns: ColumnDescriptor<Grant>[] = [
     {
       name: "user",
       title: (
@@ -200,7 +305,7 @@ export class DatabaseTablePage extends React.Component<
           </h3>
         </section>
 
-        <section className={baseHeadingClasses.wrapper}>
+        <section className={(baseHeadingClasses.wrapper, cx("tab-area"))}>
           <Tabs className={commonStyles("cockroach--tabs")}>
             <TabPane tab="Overview" key="overview">
               <Row>
@@ -247,12 +352,60 @@ export class DatabaseTablePage extends React.Component<
                   </SummaryCard>
                 </Col>
               </Row>
+              <SummaryCard
+                className={cx("summary-card", "index-stats__summary-card")}
+              >
+                <Row>
+                  <div className={cx("index-stats__header")}>
+                    <Heading type="h5">Index Stats</Heading>
+                    <div className={cx("index-stats__clear-info")}>
+                      <Tooltip
+                        placement="bottom"
+                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Clear index stats’ will reset index stats for the entire cluster."
+                      >
+                        <div
+                          className={cx(
+                            "index-stats__last-cleared",
+                            "underline",
+                          )}
+                        >
+                          {this.getLastResetString()}
+                        </div>
+                      </Tooltip>
+                      <div>
+                        <a
+                          className={cx(
+                            "action",
+                            "separator",
+                            "index-stats__clear-btn",
+                          )}
+                          onClick={() =>
+                            this.props.resetIndexUsageStats(
+                              this.props.databaseName,
+                              this.props.name,
+                            )
+                          }
+                        >
+                          Clear index stats
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                  <IndexUsageStatsTable
+                    className="index-stats-table"
+                    data={this.props.indexStats.stats}
+                    columns={this.indexStatsColumns}
+                    sortSetting={this.state.sortSetting}
+                    onChangeSortSetting={this.changeSortSetting.bind(this)}
+                    loading={this.props.indexStats.loading}
+                  />
+                </Row>
+              </SummaryCard>
             </TabPane>
-
             <TabPane tab="Grants" key="grants">
               <DatabaseTableGrantsTable
                 data={this.props.details.grants}
-                columns={this.columns}
+                columns={this.grantsColumns}
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting.bind(this)}
                 loading={this.props.details.loading}
