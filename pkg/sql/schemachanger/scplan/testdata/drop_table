@@ -38,7 +38,7 @@ CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-Stage 0
+Stage 1 of 4
   transitions:
     [Table:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
     [Column:{DescID: 55, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
@@ -53,7 +53,7 @@ Stage 0
       DescID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
-Stage 1
+Stage 2 of 4
   transitions:
     [Namespace:{DescID: 55, Name: shipments}, PUBLIC, DROP] -> ABSENT
     [Namespace:{DescID: 57, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -62,7 +62,7 @@ Stage 1
       TableID: 55
     *scop.DrainDescriptorName
       TableID: 57
-Stage 2 (non-revertible)
+Stage 3 of 4 (non-revertible)
   transitions:
     [Table:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Column:{DescID: 55, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
@@ -102,7 +102,7 @@ Stage 2 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 55
-Stage 3 (non-revertible)
+Stage 4 of 4 (non-revertible)
   transitions:
     [Table:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Column:{DescID: 55, ColumnID: 1}, DELETE_ONLY, DROP] -> ABSENT
