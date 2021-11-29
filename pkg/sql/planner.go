@@ -222,6 +222,10 @@ type planner struct {
 	// the type resolution steps will disallow resolution of types that have a
 	// parentID != contextDatabaseID when it is set.
 	contextDatabaseID descpb.ID
+
+	// indexRecommendations is a string containing index recommendations for the
+	// planned statement. This is only set for EXPLAIN statements.
+	indexRecommendations string
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
