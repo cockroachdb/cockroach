@@ -883,8 +883,8 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 	return s
 }
 
-// AddDropEvent implements scexec.EventLogger
-func (s *TestState) AddDropEvent(
+// EnqueueEvent implements scexec.EventLogger
+func (s *TestState) EnqueueEvent(
 	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
 	return nil
