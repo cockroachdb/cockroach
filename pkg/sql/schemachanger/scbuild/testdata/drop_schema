@@ -261,41 +261,49 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}
   state: PUBLIC
   details:
+    columnID: 3
     dependedOn: 57
     tableId: 56
 - DROP RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 58
     tableId: 57
 - DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 59
     tableId: 58
 - DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 60
     tableId: 58
 - DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 60}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 60
     tableId: 59
 - DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 61
     tableId: 59
 - DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 64}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 64
     tableId: 61
 - DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 65}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 65
     tableId: 61
 - DROP Schema:{DescID: 54}

@@ -374,41 +374,49 @@ DROP DATABASE db1 CASCADE
 - DROP RelationDependedOnBy:{DescID: 57, ReferencedDescID: 60}
   state: PUBLIC
   details:
+    columnID: 3
     dependedOn: 60
     tableId: 57
 - DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}
   state: PUBLIC
   details:
+    columnID: 3
     dependedOn: 59
     tableId: 58
 - DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 61
     tableId: 59
 - DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 62}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 62
     tableId: 61
 - DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 63}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 63
     tableId: 61
 - DROP RelationDependedOnBy:{DescID: 62, ReferencedDescID: 63}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 63
     tableId: 62
 - DROP RelationDependedOnBy:{DescID: 62, ReferencedDescID: 64}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 64
     tableId: 62
 - DROP RelationDependedOnBy:{DescID: 64, ReferencedDescID: 67}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 67
     tableId: 64
 - DROP Schema:{DescID: 55}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // DropSequence implements DROP SEQUENCE.
@@ -55,13 +56,22 @@ func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBeha
 				seq.GetName(),
 			))
 		}
-		desc := b.MustReadTable(dep.TableID)
-		for _, col := range desc.PublicColumns() {
-			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) && col.GetID() != dep.ColumnID {
-				continue
+		desc := b.MustReadTable(dep.DependedOnBy)
+		if desc.IsTable() {
+			for _, col := range desc.PublicColumns() {
+				if col.GetID() != dep.ColumnID {
+					continue
+				}
+				// Convert the default expression into elements.
+				decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
 			}
-			// Convert the default expression into elements.
-			decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
+		} else if desc.IsView() {
+			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) {
+				panic(errors.AssertionFailedf("views dependencies should not"+
+					"have column IDs specified (observed: %d)\n",
+					dep.ColumnID))
+			}
+			dropView(b, desc, tree.DropCascade)
 		}
 	})
 }
