@@ -80,8 +80,8 @@ select
  │         ├── [/3/3/1 - /3/3/9]
  │         └── [/3/4/1 - ]
  └── filters
-      ├── (c % 2) = 1
-      └── (c > 0) AND (c < 10)
+      ├── (c > 0) AND (c < 10)
+      └── (c % 2) = 1
 
 # Perhaps an unintuitive example. The partition constraints don't really help
 # constrain the index. None of the spans created by the partitioning are constrained
