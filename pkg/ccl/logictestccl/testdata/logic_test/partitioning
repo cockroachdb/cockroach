@@ -97,10 +97,10 @@ CREATE TABLE interleave_root (a INT PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p0 VALUES IN (0)
 )
 
-statement notice ERROR: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
+statement notice NOTICE: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE TABLE interleave_child (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a)
 
-statement notice ERROR: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
+statement notice NOTICE: creation of new interleaved tables or interleaved indexes is no longer supported and will be ignored. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations
 CREATE TABLE t (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a) PARTITION BY LIST (a) (
     PARTITION p0 VALUES IN (0)
 )
