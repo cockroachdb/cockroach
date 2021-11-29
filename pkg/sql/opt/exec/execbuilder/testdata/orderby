@@ -21,6 +21,10 @@ vectorized: true
       missing stats
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
@@ -35,6 +39,10 @@ vectorized: true
       missing stats
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b);
 
 # TODO(radu): Should set "strategy top 2" on sort node
 query T
@@ -51,6 +59,10 @@ vectorized: true
       missing stats
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
@@ -75,6 +87,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b) STORING (c);
 
 query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC
@@ -139,6 +155,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b, a) STORING (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
@@ -157,6 +177,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b, a) STORING (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
@@ -175,6 +199,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b, a) STORING (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
@@ -193,6 +221,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b, a) STORING (c);
 
 # Check that sort is skipped if the ORDER BY clause is constant.
 query T
@@ -334,6 +366,10 @@ vectorized: true
   missing stats
   table: abc@ba
   spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abc (b, a, c);
 
 # We use the WHERE condition to force the use of the index.
 query T
@@ -353,6 +389,10 @@ vectorized: true
           missing stats
           table: abc@ba
           spans: [/11 - /14]
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abc (b, a, d);
 
 # An inequality should not be enough to force the use of the index.
 query T
@@ -371,6 +411,10 @@ vectorized: true
           missing stats
           table: abc@abc_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abc (b, a, d);
 
 query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
@@ -406,6 +450,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: abc@abc_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abc (b, a, c) STORING (d);
 
 query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
@@ -518,6 +566,10 @@ vectorized: true
   missing stats
   table: abc@bc
   spans: [/2 - /2]
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abc (b);
 
 query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
@@ -529,6 +581,10 @@ vectorized: true
   missing stats
   table: abc@bc
   spans: [/2 - /2]
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abc (b);
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query T
@@ -564,6 +620,10 @@ vectorized: true
   estimated row count: 1,000 (missing stats)
   table: bar@i_bar
   spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON bar (baz, id);
 
 statement ok
 CREATE TABLE abcd (
@@ -809,6 +869,10 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: uvwxyz@ywxz
   spans: /1-/2
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON uvwxyz (y) STORING (w, x);
 
 
 statement ok
@@ -874,6 +938,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: foo@foo_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON foo (a) STORING (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
@@ -903,6 +971,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: foo@foo_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON foo (b) STORING (a);
 
 # ------------------------------------------------------------------------------
 # Check star expansion in ORDER BY.
@@ -927,6 +999,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: a@a_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON a (x, y);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
@@ -945,6 +1021,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: a@a_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON a (x, y);
 
 # ------------------------------------------------------------------------------
 # ORDER BY INDEX test cases.
@@ -1022,6 +1102,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: kv@kv_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v, k);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
@@ -1038,6 +1122,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v, k DESC);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
@@ -1054,6 +1142,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v, k DESC);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
@@ -1070,6 +1162,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v, k DESC);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
@@ -1086,6 +1182,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v, k DESC);
 
 # Check the syntax can be used with joins.
 #
@@ -1192,6 +1292,10 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: xyz@xyz_z_y_idx
           spans: /1/!NULL-/2
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON xyz (z, x, y);
 
 # ------------------------------------------------------------------------------
 # NULLS FIRST, NULLS LAST test cases.
@@ -1215,6 +1319,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
@@ -1289,6 +1397,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST, c NULLS LAST

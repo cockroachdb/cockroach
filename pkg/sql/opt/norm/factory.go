@@ -250,6 +250,9 @@ func (f *Factory) CopyAndReplace(
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
 	to := f.invokeReplace(from, replace).(memo.RelExpr)
+
+	// Rewrite the memory estimate to get rid of potential discrepancies.
+	f.mem.CopyMemEstimateFrom(from.Memo())
 	f.Memo().SetRoot(to, fromProps)
 }
 

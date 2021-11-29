@@ -84,6 +84,10 @@ vectorized: true
               spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lWGL2jAYx9_vU4QHBne7SJu09TQwcNv1mOD0VoVtDF90NhyCNl0SYSJ-99FWvVM0yXS-s63_5_nlxx-yAvV7Bgzi70-9D90-unnoDkfDr71bNIx78acRijCi6A4tMXqHHpPBF5Qv5looLdG3z3ESo5sleouI7_u36D3y0SB5iBP08QdSWgKGXGS8n865AvYTCGCggCEADCFgiGCMoZBiwpUSsvzLqgp0sz_AfAzTvFjo8vUYw0RIDmwFeqpnHBiM0l8znvA049LzAUPGdTqdVWu2gJ1CTuepXAKGYZHmiqGGR33fh_Eag1jol-FKp88cGFljd4DH6UxzyaUX7W-v3zN00yEbMYyxbn_Uqvxsfp9EoP-CMBRSc-mRg_N36N3J-cHJ-S9jhcy45NmxoUcg-qIhCo8cWEh4npUWos2BMeqQO_rqAaMOPUkZ7lES9yYQ1yZURWh4oXsdLBS7OjSvVwcLwrYO5Nw6UHfR1Fl0WIluuou2UOxE319PtAVhK5qeKzpwFx04i25Wolvuoi0UO9Gt64m2IGxFB-eKDt1Fh86iS8UNR8cWgJ3j9vUcWxC2jsP_cYkcmZ9wVYhc8b3xpyb75Q3Ds2de30hKLOSEP0kxqdbUj4MqV73IuNL1V1I_dPP6Uwn4OkyMYWoOU2M42AuTw3Bgxm6aV4fGdGQOR8awZXPzkkPfG8Mt8-aWMdw2h9uXYBNLx2wlM7eMWGpGLuoZsRQttCw3N41YqkbMXTtkH6_f_A0AAP__W-z62Q==
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON numtostr (str);
 
 # Query with a restricted span + filter.
 query T
@@ -144,6 +148,10 @@ vectorized: true
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ld-K2kAUh-_7FMO52oVZzCRR18BCSmupi9WtelEouciaqQY0k52ZgCK-e0my4KrpTNJRL_Pnm3PO94M5OxBvK_Cg_-tl-HkwQndfB9PZ9OfwHk37w_6XGdpgJCRH3ybjHyjJ1pKJtyzkFD2PB6P3F5Kj8Qht0RPalB8jwJCwiI7CNRXg_QYCGGzA4AAGFzC0IcCQcjanQjCe_7IrgEG0Ac_CECdpJvPXAYY54xS8HchYrih4MAtfV3RCw4jylgUYIirDeFWU-dCfn_J4HfItYJimYSI89ADBHgPL5PvRhxNft2gZiuXxWb4NwT7AIGS4oOCRPf6_FklVi5JX9NeyLctq2CQ5atL-Z5OHc7KE8YiWGR1OCnJS90vFpN9DsXxmcUJ5q3Pc2or-kXe-ff_E48VS3vnkHjCMM-khn2DfPZnzMINjMENFgyP2wNIWIafTVtZ2j2qT-iHbdUMuMn5ouZdNmtw26e41krbr23Zq23YL253L2rZva_vxGrad-rbd2rY7he3Hy9p2bmu7dw3bbn3b7dq2c89Nd5pKtHtb0cS69r6oqD-hImWJoLW2gZVPQKMFLY0IlvE5feFsXpQpH8cFV9zAERWy_GqXD4Ok_JQ3WB9um8BdE7hnAhOipkkDY3YzuG0Cd03gngl8YuyMtk9p6yPtqHU7Spgc-7ZOadckLDWsCUsNa8JSw5qw1LAurLZJWB0T3WpYo1sNa3SrYY1uNazT3TXR_WiiWw1rdKthjW41rNGthnW6eya6SZNleX6HNtmWTWnd5d9kXzaldc7J2fZQSg_2n_4GAAD__8eN5D4=
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON numtosquare (xsquared);
 
 query T
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
@@ -417,3 +425,7 @@ vectorized: true
           spans: [/11 - ]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU2L1EAQhu_-iqJOM9qSdObWpx13IwazyZpEVtEgbVKEQKY72x8wMuS_SxLBHWEG99hv1VPPC31C-zSgwPjLQ7pPMtjcJWVVfkq3UMZpfFtBo71ym9dbeF_k97D5k3LYl6AVranyB6ftk5eG4PFDXMRwhO8-DHcEPIS8uIsLePcVjutKC2lyn1TAwy0yVLqlTB7IoviGHGuGo9ENWavNHJ2WhaQ9oggZ9mr0bo5rho02hOKErncDocBK_hyoINmSCUJk2JKT_bCcfdbvZjT9QZpfyLAcpbICAs7fYj0x1N79vW6d7AgFn9j_Nyi1cWQCfi6_id4gw0qPHwXwuVjunYBMK7pojV5i3XedoU46bYLo3Hybf86qH0X-WG62F127l7gKsqNWls48ly6HU82Q2o7Wf7Tam4YejG4WzfrMF24JWrJunfL1kah1NBd8DvOrcHQdjq7Cu3_genr1OwAA__-JxwGY
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON numtosquare (xsquared);

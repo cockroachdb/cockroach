@@ -393,6 +393,11 @@ func (m *Memo) CopyNextRankFrom(other *Memo) {
 	m.curRank = other.curRank
 }
 
+// CopyMemEstimateFrom copies the MemoryEstimate from the other memo.
+func (m *Memo) CopyMemEstimateFrom(other *Memo) {
+	m.memEstimate= other.memEstimate
+}
+
 // RequestColStat calculates and returns the column statistic calculated on the
 // relational expression.
 func (m *Memo) RequestColStat(
