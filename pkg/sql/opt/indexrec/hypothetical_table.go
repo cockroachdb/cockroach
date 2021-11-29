@@ -14,8 +14,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -37,17 +39,31 @@ func BuildOptAndHypTableMaps(
 		var hypTable HypotheticalTable
 		hypTable.init(t)
 
-		for i, index := range indexes {
-			indexOrd := hypTable.Table.IndexCount() + i
+		for _, index := range indexes {
+			indexOrd := hypTable.Table.IndexCount() + len(hypIndexes)
+			lastKeyCol := index[len(index)-1]
+			inverted := !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType())
+			if inverted {
+				invertedCol := hypTable.addInvertedCol(lastKeyCol.Column)
+				index[len(index)-1] = cat.IndexColumn{Column: invertedCol}
+			}
 			var hypIndex hypotheticalIndex
 			hypIndex.init(
 				&hypTable,
 				tree.Name(fmt.Sprintf("_hyp_%d", indexOrd)),
 				index,
 				indexOrd,
+				inverted,
 				t.Zone().(*zonepb.ZoneConfig),
 			)
-			hypIndexes = append(hypIndexes, hypIndex)
+
+			// Do not add hypothetical inverted indexes for which there is an existing
+			// index with the same key. Inverted indexes do not have stored columns,
+			// so we should not make a recommendation if the same index already
+			// exists.
+			if !inverted || hypTable.existingRedundantIndex(&hypIndex) == nil {
+				hypIndexes = append(hypIndexes, hypIndex)
+			}
 		}
 
 		hypTable.hypotheticalIndexes = hypIndexes
@@ -63,6 +79,7 @@ func BuildOptAndHypTableMaps(
 // potentially speed up queries to this table.
 type HypotheticalTable struct {
 	cat.Table
+	invertedCols         []*cat.Column
 	primaryKeyColsOrdSet util.FastIntSet
 	hypotheticalIndexes  []hypotheticalIndex
 }
@@ -78,6 +95,20 @@ func (ht *HypotheticalTable) init(table cat.Table) {
 	for i := 0; i < numPrimaryKeyCols; i++ {
 		ht.primaryKeyColsOrdSet.Add(primaryIndex.Column(i).Ordinal())
 	}
+}
+
+// ColumnCount is part of the cat.Table interface.
+func (ht *HypotheticalTable) ColumnCount() int {
+	return ht.Table.ColumnCount() + len(ht.invertedCols)
+}
+
+// Column is part of the cat.Table interface.
+func (ht *HypotheticalTable) Column(i int) *cat.Column {
+	originalColCount := ht.Table.ColumnCount()
+	if i < originalColCount {
+		return ht.Table.Column(i)
+	}
+	return ht.invertedCols[i-originalColCount]
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -121,7 +152,14 @@ func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) ca
 		indexExists := true
 		for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
 			indexCol := existingIndex.Column(j)
-			if indexCol != indexCols[j] {
+			// If the columns are inverted, compare the source columns. Otherwise,
+			// compare the columns directly.
+			if index.IsInverted() && existingIndex.IsInverted() && j == m-1 {
+				if indexCol.InvertedSourceColumnOrdinal() != indexCols[j].InvertedSourceColumnOrdinal() {
+					indexExists = false
+					break
+				}
+			} else if indexCol != indexCols[j] {
 				indexExists = false
 				break
 			}
@@ -132,4 +170,23 @@ func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) ca
 		}
 	}
 	return nil
+}
+
+// addInvertedCol adds an inverted column corresponding to a source column to
+// the HypotheticalTable.
+func (ht *HypotheticalTable) addInvertedCol(invertedSourceCol *cat.Column) *cat.Column {
+	invertedCol := cat.Column{}
+
+	// All inverted columns have type bytes.
+	typ := types.Bytes
+	invertedCol.InitInverted(
+		ht.ColumnCount(),
+		tree.Name(string(invertedSourceCol.ColName())+"_inverted_key"),
+		typ,
+		false, /* nullable */
+		invertedSourceCol.Ordinal(),
+	)
+
+	ht.invertedCols = append(ht.invertedCols, &invertedCol)
+	return &invertedCol
 }
