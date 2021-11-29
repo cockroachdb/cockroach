@@ -180,3 +180,20 @@ SELECT s, s::a FROM strings ORDER BY 1
 ----
 (1,2)  (1,2)
 (5,6)  (5,6)
+
+query T
+SELECT '(1 , 2)'::a
+----
+(1," 2")
+
+statement error pgcode 22P02 malformed record literal
+SELECT '()'::a
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT s, s::record FROM strings ORDER BY 1
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT '()'::record
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT '(1,4)'::record
