@@ -7,8 +7,25 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal
 # tar - used by kubectl cp
 RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
-    && microdnf install tzdata hostname tar gzip xz -y \
+    && microdnf install tzdata hostname tar gzip xz git m4 make automake libtool wget -y \
     && rm -rf /var/cache/yum
+
+RUN wget http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+
+RUN tar -xzvf autoconf-2.69.tar.gz \
+    && cd autoconf-2.69 \
+    && ./configure && make && make install \
+    && cd ..
+
+
+RUN wget https://github.com/inotify-tools/inotify-tools/archive/refs/tags/3.21.9.6.tar.gz
+
+RUN tar -xzvf 3.21.9.6.tar.gz\
+    && cd inotify-tools-3.21.9.6\
+    && ./autogen.sh \
+    && ./configure --prefix=/usr \
+    && make \
+    && make install
 
 RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
 COPY cockroach.sh cockroach /cockroach/
