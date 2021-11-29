@@ -11,7 +11,6 @@
 package row
 
 import (
-	"bytes"
 	"context"
 	"time"
 
@@ -320,14 +319,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Requests = spansToRequests(f.spans, f.reverse, f.lockStrength)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		var buf bytes.Buffer
-		for i, span := range f.spans {
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(span.String())
-		}
-		log.VEventf(ctx, 2, "Scan %s", buf.String())
+		log.VEventf(ctx, 2, "Scan %s", f.spans)
 	}
 
 	monitoring := f.acc != nil

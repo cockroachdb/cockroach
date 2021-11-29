@@ -2094,3 +2094,25 @@ func TestAddIgnoredSeqNumRange(t *testing.T) {
 		require.Equal(t, tc.exp, txn.IgnoredSeqNums)
 	}
 }
+
+func TestSpansString(t *testing.T) {
+	for _, tc := range []struct {
+		spans    Spans
+		expected string
+	}{
+		{
+			spans:    Spans{},
+			expected: "",
+		},
+		{
+			spans:    Spans{{Key: Key("a"), EndKey: Key("b")}},
+			expected: "{a-b}",
+		},
+		{
+			spans:    Spans{{Key: Key("a")}, {Key: Key("c"), EndKey: Key("d")}},
+			expected: "a, {c-d}",
+		},
+	} {
+		require.Equal(t, tc.expected, tc.spans.String())
+	}
+}
