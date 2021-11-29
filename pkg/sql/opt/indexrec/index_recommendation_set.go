@@ -139,20 +139,19 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	}
 }
 
-// String returns the string index recommendation output that will be
+// Output returns a string slice of index recommendation output that will be
 // displayed below the statement plan in EXPLAIN.
-func (irs *IndexRecommendationSet) String() string {
+func (irs *IndexRecommendationSet) Output() []string {
 	indexRecCount := 0
 	for t := range irs.indexRecs {
 		indexRecCount += len(irs.indexRecs[t])
 	}
 	if indexRecCount == 0 {
-		return ""
+		return nil
 	}
-	var sb strings.Builder
-	sb.WriteString(
-		fmt.Sprintf("\n\nindex recommendations: %d\n\n", indexRecCount),
-	)
+
+	var output []string
+	output = append(output, fmt.Sprintf("index recommendations: %d", indexRecCount))
 
 	sortedTables := make([]cat.Table, 0, len(irs.indexRecs))
 	for t := range irs.indexRecs {
@@ -166,6 +165,7 @@ func (irs *IndexRecommendationSet) String() string {
 	for _, t := range sortedTables {
 		indexes := irs.indexRecs[t]
 		for _, indexRec := range indexes {
+			var sb strings.Builder
 			recTypeStr := "index creation"
 			if indexRec.existingIndex != nil {
 				recTypeStr = "index replacement"
@@ -175,9 +175,10 @@ func (irs *IndexRecommendationSet) String() string {
 			indexCols := indexRec.indexColsString()
 			storingClause := indexRec.storingClauseString()
 			sb.WriteString(indexRec.indexRecommendationString(indexCols, storingClause))
+			output = append(output, sb.String())
 		}
 	}
-	return sb.String()
+	return output
 }
 
 // indexRecommendation stores the information pertaining to a single index
@@ -299,7 +300,7 @@ func (ir *indexRecommendation) indexRecommendationString(indexCols, storingClaus
 	}
 
 	createCmd := fmt.Sprintf(
-		"CREATE INDEX ON %s (%s)%s;\n\n",
+		"CREATE INDEX ON %s (%s)%s;",
 		tableName.String(),
 		indexCols,
 		storingClause,

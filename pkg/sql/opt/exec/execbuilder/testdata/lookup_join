@@ -210,6 +210,10 @@ vectorized: true
               estimated row count: 100,000 (100% of the table; stats collected <hidden> ago)
               table: data@data_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON data (c);
 
 query T
 EXPLAIN (DISTSQL)
@@ -237,6 +241,10 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV-P0kwYxe_fT_Hkudp9M007_bMLk5iUKBvZYFkBo4lyUelkrXY7ddomGsJ3N22VpQRmKhC8nOmcnvPM7ySzwvx7ggyHHx7Gg1EAV69Gs_ns7fgaZsPx8OUc_oe76eQNXLWXUViE8P71cDqEJbwAeg2DGSQQDObvpoMx3E-qXykkn0rLcjhYtU4iwVREPAifeI7sI1IkaCNBBwm6SNDDBcFMiiXPcyGrI6taMIp-ILMIxmlWFtX2guBSSI5shUVcJBwZzsPPCZ_yMOLStJBgxIswTmqbKpGfyfgplD-R4CwL05yBYVII0wgoiOILl7hYExRl8eyQF-EjR0bXpHuKuzgpuOTS9NoRmn0GvlPdImNsFMx7By3tv7G8F3H6e26qHnwsxLcyg68iTkGkDHxKfJv4DvGry58E4N9ugP2JSHBSFu2jh1I7B1M_hy1TISMuedQKuljvmSsQhshM6u2c3O_ttrxp96rQLlUxqWHaR5RFk2NTlpvzlUVjuV0W9egXLYvdHZjdCZhtmM4RwDQ5NsBuzwdMY7kNTD36RYE53YE5nYA5hukeAUyTYwOsdz5gGsttYOrRLwrM7Q7M7QTMNUzvCGCaHBtg_fMB01huA1OP_s_ezz2ppzzPRJrzTq-jVb2vPHrkzWOci1Iu-YMUy9qmWU5qXb0R8bxovtJmMUqbT1XAbTFVim212FaKnZaY7ooddewbtbWrVHtqsacUa5xvThn6VinuqZ17SnFfLe6fEptqOqYrmbplVFMzelLPqKZorsZc3TSqqRpVd203-2L9368AAAD__3AfaVA=
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON data (c);
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
@@ -345,6 +353,10 @@ vectorized: true
                   estimated row count: 100 (100% of the table; stats collected <hidden> ago)
                   table: authors@authors_pkey
                   spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON authors (book) STORING (name);
 
 # Verify data placement.
 query TTTI colnames
@@ -384,6 +396,10 @@ vectorized: true
               spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3KW73lEheIU7opEiVggpTmRh0gLRJEw8JuULWYGe2I21CfPcpDl0bBOnoW86-3__-d77sUP_KMcTh9_txfzQBZzCaL-Zfxy7Mh-Ph7QKqeDS5XUBcmo1U-krEW4JPs-kXSKR81NCfQ-KxOuA24uwpGb7dDWdDcJzEuzKZyQluIOH1pwv9yQCcJ9mKr24Pie7hOvGu9IbyB3hvSfvtIkMhU5rEW9IY_kAPlwwLJVektVTV0c4mjNLfGHYZZqIoTXW8ZLiSijDcoa2CIS7iJKcZxSmpThcZpmTiLLeytqWoUNk2Vn-Q4byIhQ7hAzKcliaEyGORj8s9Q1ma5wraxGvC0Nuzt7nwmi4OA3rFBz_rg5_18Vy-FFKlpChtlF5W5GspJ5q5i_Xms8wEqQ5v9pLTg3Eiz71R2XpjnIi7jR5Y5LMoONuJf8lEKwOHgfonnpW_mOdYyseygJ8yEyBFCFFQuZpAxKutiz7-83j-sYNLrA0ybTKxMp2gaSzyzur33qTf-2_960v0Z6QLKTQdL8tJ5W61IZSuqd44LUu1onslV7ZMHU4tZw9S0qa-5XUwEvbK_k0vYe8CmB_DvBX2G3D3GPZb4aAdDlrhXjvca4Wvj-Dl_t3fAAAA___-ZuVx
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON authors (book) STORING (name);
 
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -414,6 +430,10 @@ vectorized: true
               estimated row count: 100 (100% of the table; stats collected <hidden> ago)
               table: authors@authors_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON authors (name) STORING (book);
 
 # Cross joins should not be planned as lookup joins.
 query T
@@ -458,6 +478,12 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr1EAQx9_9FMM8qUzbS05FFgorGjHlTGruQEHysL0d6trrTtzdgHLcd5ckPWyFHr23zH_y-8-PZIvx1wYVFt8uF-_KCp5_KJer5ZfFC1gWi-L9Cl7Cx6b-DKZPPyREKKuqaOCiLiu4ErmJOdT7p1O2LjnxcA4ZfP1UNMV-kVzaMJzvS06HGAm9WK7MLUdU3zHDlrALsuYYJQzRdnyhtL9RzQid7_o0xC3hWgKj2uLYiwpX5mrDDRvL4WyGhJaTcZux9u6k7oK7NeEPEi4746OCEyRs2FsOCjKlVFmt3hLojEDn2O4IpU__LsZkrhlVtqOnW12I83dS2UOp6bPcc1qI3PQd_BTnQbwCPSc9MHWfFOichvkV6dek3zzqlh_jVsmJdGf5A63HiufHFDccO_GRn9Q827WEbK95-t1R-rDmyyDr8cw01iM3BpZjmrbZNJR-Wg2C9-HsIJwfhvOD8Pw_uN09-xsAAP__HEsNaA==
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON authors (book) STORING (name);
+2. type: index creation
+   SQL command: CREATE INDEX ON books2 (edition) STORING (shelf);
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -555,6 +581,10 @@ vectorized: true
                   estimated row count: 100 (100% of the table; stats collected <hidden> ago)
                   table: small@small_pkey
                   spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: DROP INDEX large@bc; CREATE INDEX ON large (b) STORING (c, d);
 
 ############################
 #  LEFT OUTER LOOKUP JOIN  #
@@ -680,6 +710,10 @@ vectorized: true
                   estimated row count: 100 (100% of the table; stats collected <hidden> ago)
                   table: small@small_pkey
                   spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: DROP INDEX large@bc; CREATE INDEX ON large (b) STORING (c, d);
 
 # Left join with ON filter on covering index
 query T
@@ -704,6 +738,10 @@ vectorized: true
           estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@small_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON large (b, c);
 
 # Left join with ON filter on non-covering index
 # TODO(radu): this doesn't use lookup join yet, the current rules don't cover
@@ -739,6 +777,10 @@ vectorized: true
           estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@small_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON large (b, d);
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
@@ -780,6 +822,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (e) STORING (a, d);
 
 # Test unique version of same index. (Lookup join should not use column a.)
 statement ok
@@ -816,6 +862,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (e) STORING (a, d);
 
 # Test index with first primary key column explicit and the rest implicit.
 statement ok
@@ -850,6 +900,12 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t (e) STORING (a, b, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON u (d);
 
 # Test index with middle primary key column explicit and the rest implicit.
 statement ok
@@ -884,6 +940,12 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t (e) STORING (a, b, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON u (d);
 
 # Test index with last primary key column explicit and the rest implicit.
 statement ok
@@ -919,6 +981,12 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t (e) STORING (a, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON u (d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
@@ -1766,6 +1834,14 @@ vectorized: true
                                           estimated row count: 25 (100% of the table; stats collected <hidden> ago)
                                           table: nation@nation_pkey
                                           spans: FULL SCAN
+·
+index recommendations: 3
+1. type: index replacement
+   SQL commands: DROP INDEX lineitem@l_sk; CREATE INDEX ON lineitem (l_suppkey) STORING (l_commitdate, l_receiptdate);
+2. type: index creation
+   SQL command: CREATE INDEX ON nation (n_name);
+3. type: index replacement
+   SQL commands: DROP INDEX supplier@s_nk; CREATE INDEX ON supplier (s_nationkey) STORING (s_name);
 
 # Regression test for #50964.
 statement ok
@@ -1814,6 +1890,12 @@ vectorized: true
                       estimated row count: 10 (missing stats)
                       table: tab4@tab4_col3_col4_key
                       spans: /NULL-
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON tab4 (col3) STORING (col0);
+2. type: index creation
+   SQL command: CREATE INDEX ON tab4 (col4) STORING (col3);
 
 ###########################################################
 #  LOOKUP JOINS WITH LOOKUP EXPRESSIONS                   #
@@ -1889,6 +1971,10 @@ vectorized: true
       size: 2 columns, 3 rows
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFr2zAQ_b5fcdyXyONoo2RpgyCgbHWHi2d3sVMGIxgTi85rZnmWjN2F_Pdhu13TQcf67d679-7EO-3R_NyhQPfLtb_0AmAXXhRHn30HItd3P8TwFi5X4SdgN0t_7UbAOAEfOwRsQjDpiylBsPZ9x4FlBDWwhqB1wHcvY7gKvQB2Wt_VZaLasuoUFsIAWH3SwALsSePAMrjocNvj1kHCQmcqSH8og-IrctwQlpXeKmN01VH7XuBlLYoxYV6Ute3oDeFWVwrFHm1udwoF3qS7WpnTMRJmyqb5bpjI4T2wKWy_1cWdcXBzINS1fRpjbHqrUIwP9P-rrnRerFSaqeqUP18X35dKDHmE69hd9akg4VEu8qhOqqRN7pNfSZPkWYuEft-D7zovQBcCGGNMTmAB8uwhPMk7NHMe4RS6S45UauxICBHFKy_4SDBq1DHh_NGf93o-FkJ4QTzvDvtQPmnmsIDZI4uEYW0FSE5yQnJK8h3JGckzkuck5y8myl-T6EqZUhdGPUvz5VttCFV2q4YPYnRdbdV1pbf9mgGGva8nMmXs0OUD8Iqh1T3w2Mz_aZ78Zd4c3vwOAAD___N7_WA=
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON lookup_expr (w) STORING (x, y, z);
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
@@ -1906,3 +1992,7 @@ vectorized: true
       size: 2 columns, 3 rows
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlFr20wQfP9-xbIvvvs4Ep9N2nBgkNsorYIqp5aSBooRQlpSNapO1Z2QUuP_XiQ5jV1Iad92Zndmj9nbovleoEL37tpfegGwCy-Mwo8-h9D13bcR_A-X69UHYLdL_8YNgUkBcsoFsJmA2VDMBQQ3vs85LENogLUCOg6f3rtrF4JVBO5dbwns2LDQ-qGpYuqqutfZvYA1Jy0swJ60HJbBRY-7AXeco8BSZxQk38ig-owSNwKrWqdkjK57ajsMeFmHaiowL6vG9vRGYKprQrVFm9uCUOFtUjRkTqcoMCOb5MXoKOENsDmkX5rywXDc7ATqxj7bGJvcE6rpTvz9qiudl2tKMqpP5fG66LEiBb57GcEyiDy4WnkBCjyIxjmo4zru4sf4R9zGedahQH_owVedl6BLBYwx5sxgAc6rfXiO7NEZf4Jz6E88ocTYiVIqjNZe8E7ApKVDgv-afz3My6lSygui8_7i-_J55hwWcPbEosBVYxU4UjizF-OT_xLfmkylS0NH0b18mI1Ayu5p_A1GN3VK17VOhzUjXA26gcjI2LErR-CVY6t_4KFY_lE8-0282f33MwAA__9ovQAB
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON lookup_expr (w, x);

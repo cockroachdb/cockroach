@@ -755,6 +755,11 @@ func (tt *Table) Zone() cat.Zone {
 	return &zone
 }
 
+// LookupColumnOrdinal is part of the cat.Table interface.
+func (tt *Table) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+	panic(errors.AssertionFailedf("Column ordinal lookup is undefined for test tables."))
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {

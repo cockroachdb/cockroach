@@ -13,6 +13,7 @@ package cat
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -136,6 +137,10 @@ type Table interface {
 
 	// Zone returns a table's zone.
 	Zone() Zone
+
+	// LookupColumnOrdinal returns the ordinal of the column with the given ID. A
+	// cache makes the lookup O(1).
+	LookupColumnOrdinal(colID descpb.ColumnID) (int, error)
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check

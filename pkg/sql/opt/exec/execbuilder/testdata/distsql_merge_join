@@ -479,6 +479,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: parent1@parent1_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON parent1 (pa1);
 
 query T
 EXPLAIN (DISTSQL)
@@ -509,6 +513,10 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEldGvokYUxt_7V0zOk3THDDMDXCS5CZuu27q5q1u1aZPWB1amSuICHTDpzY3_ewPoVbk4I6XaFyJwfvON33cO8wLZXxvwYPjbl6f3ozHqfRjN5rOfnww0Gz4Nf5ij79HH6eQzSgMp4pyiT5PRGK1kEIfLdbQJGfplNhr_iHppFFID_frTcDpEvV6vvEd_bE2Ti0dEqYHejz-gk6fLR0S5YaDJFNWLB03FjBqN1bxxac4P1WlwqEWmARjiJBTj4JvIwPsdKGBggIEDBgsw2LDAkMpkKbIskUXJSwmMwr_BMzFEcbrNi8cLDMtECvBeII_yjQAP5sHXjZiKIBSSmIAhFHkQbUqZE7v8VEbfAvkMGGZpEGce6hNGLEYYYSiIQ0RRkq-FhMUOQ7LN93pHma_PaB1k63MBn8Jit8CQ5cFKgEd3-N_t2z5fdp95w55r2ztKszbSH6NNLqSQxDnXrZ57ZR_5p13ked5oPHf3ifunrXR4te-RU2xwEWOvKzZw_LIc5zXOZ69NdnjTKUF-0cbjOokMhRRhfZ13hfCxahs31ZVa9Tg-C7kSn5IoFpI8nC-7EX_mPZ--Mx5ltFpXPwHDZJt7yHew_4B9hn2OfQv79sXmsK74Vy32O076SUooq1U2a9tn2vT6meAtZplQk9hmcaVmn1CL2FZxpdaNRpvevzGoefvOYNenQ9ukc_jQ9olDLIc4xLlRLuz-ubi3j4VfH4vVamiOc9In1CW2W1ype6Nw-P8wNPT26VjXp8PapHMYlf7px62MhlXRZP9hNtb9sxnc96Rr2M1UZGkSZ-Kqc8ws_o8IV6KyKEu2cim-yGRZylS3k5Irj4dQZHn1llc3o7h6VWzwetjtAlPWhXY6SZtqmtZp85Q-37dZh1kLv1k72O0C1_xuSTudpE01zZV-W-qwLCVMuTotu8t0qGHNdKhh3XSoac10aKQ10-F0Seuhi99qWOO3Gtb5raY1fmukNX67XfwedPFbDWv8VsM6v9W0xm-NtO7r_-bwaGM4fXN4tHFcQ2ss19A6zzW4xnSduM71N0eI0vXF7rt_AgAA__-KXZo1
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON parent1 (pa1);
 
 query T
 EXPLAIN (VERBOSE)
@@ -551,6 +559,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: parent1@parent1_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON parent1 (pa1);
 
 query T
 EXPLAIN (DISTSQL)
@@ -581,6 +593,10 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEldGvokYUxt_7V0zOk3THDDMDXCS5CZuu27q5q1u1aZPWB1amSuICHTDpzY3_ewPoVbk4I6XaFyJwfvON33cO8wLZXxvwYPjbl6f3ozHqfRjN5rOfnww0Gz4Nf5ij79HH6eQzWskgDpfraBMy9GkyGqM0kCLOKfplNhr_iHppFFID_frTcDpEvV6vvEd_bE2Ti0dEqYHejz-gk6fLR0S5YaDJFNWLB03FjBqN1bxxac4P1WlwqEWmARjiJBTj4JvIwPsdKGBggIEDBgsw2LDAkMpkKbIskUXJSwmMwr_BMzFEcbrNi8cLDMtECvBeII_yjQAP5sHXjZiKIBSSmIAhFHkQbUqZE-_8VEbfAvkMGGZpEGce6hNGLEYYYSiIQ0RRkq-FhMUOQ7LN93pHma_PaB1k63MBn8Jit8CQ5cFKgEd3-N_t2z5fdh9xw55r2ztKszbSH6NNLqSQxDnXrZ57ZR_5p13ked5oPHf3ifunrXR4te-RU2xwEWOvKzZw_LIc5zXOZ69NdnjTKUF-0cbjOokMhRRhfZ13hfCxahs31ZVa9Tg-C7kSn5IoFpI8nC-7EX_mPZ--Mx5ltFpXPwHDZJt7yKfYZ9jn2Lewb2P_4WJzWFf8qxb7HSf9JCWU1Sqbte0zbXr9TPAWs0yoSWyzuFKzT6hFbKu4UutGo03v3xjUvH1nsOvToW3SOXxo-8QhlkMc4twoF3b_XNzbx8Kvj8VqNTTHOekT6hLbLa7UvVE4_H8YGnr7dKzr02Ft0jmMSv_041ZGw6posv8wG-v-2Qzue9I17GYqsjSJM3HVOWYW_0eEK1FZlCVbuRRfZLIsZarbScmVx0Mosrx6y6ubUVy9KjZ4Pex2gSnrQjudpE01Teu0eUqf79usw6yF36wd7HaBa363pJ1O0qaa5kq_LXVYlhKmXJ2W3WU61LBmOtSwbjrUtGY6NNKa6XC6pPXQxW81rPFbDev8VtMavzXSGr_dLn4PuvithjV-q2Gd32pa47dGWvf1f3N4tDGcvjk82jiuoTWWa2id5xpcY7pOXOf6myNE6fpi990_AQAA__9NRpoc
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON parent1 (pa1);
 
 query T
 EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
@@ -608,6 +624,10 @@ vectorized: true
           missing stats
           table: parent1@parent1_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON parent1 (pa1);
 
 # Join on multiple "interleaved" columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
@@ -644,6 +664,12 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsll1vo0YUhu_7K0bnKjTjDjMM2EaKxKrrbb1K8NaJ1EqtL1gztZG84AKWuory3yuMsfnwckyokr3IDYqZeeZ8vO-c8AjJPxuwYfLHp9t3U5dcvZ_eP9z_dquR-8nt5OcH8iP5MJ_dkeU62PiCTF13Mid3k_kvE_JxNnXJKvZC_7A4c8nVVf73T9vA5-SmvLx_pZF37ntSbFoGvqhtyl5pjV1Gc5ehkd9_ncwn5Koa86-drhvqhpjVQ05ryxsy1DQym5-S3edRgFycSbIgudQKdlWh5PhArSr7Ta5pQCGMfOV6X1QC9p_AgYIACgZQkEDBhAWFbRwtVZJEcbblcQ9M_X_B1ikE4XaXZq8XFJZRrMB-hDRINwpsePA-b9Rceb6KmQ4UfJV6wWYfJk_f2cbBFy_-ChTut16Y2GQAiycK0S49nHo67PNXsvaSdfUYh1NHUMeAxdOCQpJ6KwU2f6LPy5FXDy9peiZRJpgUTDBBvNAnnETpWsW17E85iS45fQg2qYpVzKxqQvl7OzOVU_KSbdtT92F0kNgpOalYOZjCKfuoRpVddMQKTpacVONkyU1H7n8Q0fhmw06n7cIo9lWs_Mp5i4wstpzbAA6_po64po5xncesC3Cn4pX6GAVhZoqaKzbq7_SqdIJ2EwerdfUVUJjtUpsUlVFHUsekjkWdIXVG1Bl_0yiyR91nKnGjQbRl3Kp36GxssxKbX35xZIeLw7jOTD17cn3AuGSmzJ5cPuMeISke79H47R41G_bS90i-4j0Sl3tZdPFy8T9gwCwmLWYx6xkuRpI7unj45uJmw17axeIVXWxc7mKz00Q-DeEB4yNmjrInHz3Dy0iKRy9z_c3MzY69tJnNVzSzvNzMRhczF4N4UP7Q2DtZ5E5OLrQykuDRyqM3Jzcb9tJONr6Tj_Qzec5Vso3CRF30Ca5nlSp_pfImJtEuXqpPcbTch8l_zvbc_mPOV0marxr5j2mYL2UJXg5zvRdt9aGHvUIjZfM6rZdpUYH1Oiw6NFx0g2sN70pbfehhr9BI2UZrw2W7WrIV5sN2ucxW2mqHrT5at8OY1giNaN1OI1ojoZGyh320HrXC43a1xn3UaocxtRAaUaudRtRCQiNl88Yk7SIXb5-kHBmlvNcsRWhMMgxHNENwRDQsOFZ6r4HKkYlqIqo1Rmon1dppVDUEx1RrxzHVkOBY6Y3B2qra4umH_wIAAP__jH5T_g==
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON grandchild2 (gcid2) STORING (gca2);
+2. type: index creation
+   SQL command: CREATE INDEX ON grandchild2 (cid2) STORING (gca2);
 
 query T
 EXPLAIN
@@ -675,6 +701,12 @@ vectorized: true
           missing stats
           table: grandchild2@grandchild2_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON grandchild2 (gcid2) STORING (gca2);
+2. type: index creation
+   SQL command: CREATE INDEX ON grandchild2 (cid2) STORING (gca2);
 
 # Aggregation over parent and child keys.
 query T
@@ -1066,6 +1098,12 @@ vectorized: true
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckUFr2zAUx-_7FOKdkqERy94ugoDGljGHzM7iHAbDB9V6TQyO5EoytAR_92K7kDokLelRT_q93_s_HcE9VMBh8W-9-h4nZPIzzrbZ39WUZIvV4seWfCa_NukfUkuL2jOyTOOEFPuyUoykCaklI3NSSAYUtFGYyAM64P-BQU6htqZA54ztSsf-QawegQcUSl03vivnFApjEfgRfOkrBA5beVfhBqVCOwuAgkIvy6pv-zKGqG15kPYJKGS11I6TL5C3FEzjT22dlzsEzlr6MTUbq4fQt5jDq-aTsNHGKrSoRrK8I997cmH839Ltl6bUaGfhePoK7_1EhNO5LXd7PxHRFCikjedEMCpCKiIqvlLx7WqY6JY1btDVRjs8D3Wxc9AlQbXDYTPONLbAtTVFrxmOac_1BYXOD7fhcIh1f9X_82uY3QCH53D4JhyN4KDN20_PAQAA__-cfREn
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON child1 (ca1);
+2. type: index creation
+   SQL command: CREATE INDEX ON parent1 (pa1);
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid2)
@@ -1109,6 +1147,12 @@ vectorized: true
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV9r2zAUxd_3KcR9aoeCLNnOH8PAY-u2lC7pmg4Gww9upCWG1PIkB1ZKvvuw3ZImzaR4Wr0Xg2z_ro7OkXTvQf9cQQRn3y4v3o4n6OT9eHY9-3JximZnF2fvrtFr9OFq-hnNl9mKM3Q-HU_QQqU5f3jxdTaefEQnRcYpRvOM-6eAIZdcTNJboSH6DhQwMMDgA4YAMISQYCiUnAutpap-ua-BMf8FkYchy4t1Wb1OMMylEhDdQ5mVKwERXKc3K3ElUi4U8QADF2WareppGj1xobLbVN0BhlmR5jpCPUg2GOS6fKi6LXZzh5apXu6WiSmOfUg2CQZdpgsBEd3gvxNIdys_ce2ASsJIwAgjDKU5RxTJcimUq3T2R-nbUutcKi6U4DvFkoq0_XJg_Z9SvTyXWS4U6e-qW4kf5Ukt8fSNyhbLxwFgmK7LCNUjHDMcBzju43iI49He-rcL8x0WdkD1RPZkQSjdt-Dg3MHO3PT4_RC02A-EeiT0qif1eoQGJAyqJw1ebnvQbrfHqLPtwY6PiLWJ6PHE9kifBH3SJ_2XC4d1G86gs3D848MJW52f7ZHpETok4bB60uHLReR3GxH1OssoOD4jv01Gj8em9_S2qwNiTUD63yYUdJvQ8L80wAOaroQuZK7FUe3Nq1Yl-EI0Lmm5VnNxqeS8nqYZTmuubhlc6LL5yprBOG8-VQKPhwcuMKUudOgCj8wwbeEYawcPXOA9x1rSoQs8MsNsH_aewr7Zbt8I012_vX06cAnLDFvCMsO2sMy0JSwzbAkrdAmr72K3GbbYbYZtdptpi91m2GL3wMXuoYvdZthitxm22W2mLXabYYvdIxe7aZtm-fwKbdMt29LWy79Nv2xLWzynz5qH0fRk8-p3AAAA__8tKxoO
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON child2 (pid1, cid3) STORING (ca2);
+2. type: index creation
+   SQL command: CREATE INDEX ON grandchild2 (pid1, cid3) STORING (gca2);
 
 # Multi-table staggered join uses merge joiner on the bottom join
 # and a lookup join on the higher join.
