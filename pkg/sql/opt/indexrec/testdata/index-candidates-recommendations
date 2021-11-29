@@ -14,21 +14,6 @@ exec-ddl
 CREATE TABLE t4 (k INT, i INT, f FLOAT, j JSONB, a INT[])
 ----
 
-# Ensure that columns that require inverted indexes do not have candidates. This
-# is temporary until we support inverted index recommendations.
-
-index-candidates
-SELECT k, f FROM t4 WHERE j IS NULL
-----
-
-index-candidates
-SELECT * FROM t4 WHERE k = 2 AND a IS NULL OR f > 2
-----
-t4:
- (f)
- (k)
- (k, f)
-
 # Ensure that index candidates are not created for virtual tables.
 index-candidates
 SELECT *
@@ -540,7 +525,7 @@ project
                 └── k:1
 
 # Test joins with more complex predicates. See rule 3 and rule 4 in
-# indexrec.FindIndexCandidates.
+# indexrec.FindIndexCandidateSet.
 
 index-candidates
 SELECT t1.f, t2.k, t2.i
@@ -621,7 +606,7 @@ left-join (cross)
       ├── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
       └── t1.s:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
 
-# Test more complex queries. See rule 5 in indexrec.FindIndexCandidates. The
+# Test more complex queries. See rule 5 in indexrec.FindIndexCandidateSet. The
 # aspects of rule 5 that are demonstrated by each test are highlighted the
 # test's comment.
 
@@ -998,7 +983,8 @@ sort (segmented)
            │                   └── 1
            └── filters (true)
 
-# Tests for set operation indexes. See rule 6 in indexrec.FindIndexCandidates.
+# Tests for set operation indexes. See rule 6 in indexrec.FindIndexCandidateSet.
+
 index-candidates
 SELECT k FROM t1 UNION SELECT i FROM t1
 ----
@@ -1195,6 +1181,294 @@ union
       ├── cost: 1094.72
       └── ordering: +9,+10
 
+# Tests for inverted index recommendations. See rule 7 of
+# indexrec.FindIndexCandidateSet.
+
+index-candidates
+SELECT k, f FROM t4 WHERE j->'a' = '1'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j->'a' = '1'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 807.393333
+ └── index-join t4
+      ├── columns: t4.k:1 f:3 j:4
+      ├── immutable
+      ├── cost: 806.262222
+      └── scan t4@_hyp_1
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /9/6
+           │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           ├── cost: 128.464444
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE j @> '{"foo": "1"}'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j @> '{"foo": "1"}'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 805.048889
+ └── index-join t4
+      ├── columns: t4.k:1 f:3 j:4!null
+      ├── immutable
+      ├── cost: 803.928889
+      └── scan t4@_hyp_1
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /9/6
+           │    └── spans: ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+           ├── cost: 128.464444
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 816.998889
+ └── select
+      ├── columns: t4.k:1 f:3 j:4
+      ├── immutable
+      ├── cost: 813.645556
+      ├── index-join t4
+      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── cost: 812.504444
+      │    └── inverted-filter
+      │         ├── columns: rowid:6!null
+      │         ├── inverted expression: /9
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x019", "7\x00\x019"]
+      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         ├── cost: 134.706667
+      │         ├── key: (6)
+      │         └── scan t4@_hyp_1
+      │              ├── columns: rowid:6!null k:9!null
+      │              ├── inverted constraint: /9/6
+      │              │    └── spans
+      │              │         ├── ["7\x00\x019", "7\x00\x019"]
+      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │              ├── cost: 133.575556
+      │              ├── key: (6)
+      │              └── fd: (6)-->(9)
+      └── filters
+           └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
+
+index-candidates
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
+----
+t4:
+ (j)
+ (k)
+ (k, j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (k, j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null f:3
+ ├── immutable
+ ├── cost: 22.11
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: t4.k:1!null f:3 j:4
+      ├── immutable
+      ├── cost: 22.0566667
+      ├── fd: ()-->(1)
+      ├── index-join t4
+      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── cost: 22.0155556
+      │    └── inverted-filter
+      │         ├── columns: rowid:6!null
+      │         ├── inverted expression: /10
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x019", "7\x00\x019"]
+      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         ├── cost: 15.2177778
+      │         ├── key: (6)
+      │         └── scan t4@_hyp_3
+      │              ├── columns: rowid:6!null k:10!null
+      │              ├── constraint: /1: [/1 - /1]
+      │              ├── inverted constraint: /10/6
+      │              │    └── spans
+      │              │         ├── ["7\x00\x019", "7\x00\x019"]
+      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │              ├── cost: 15.1866667
+      │              ├── key: (6)
+      │              └── fd: (6)-->(10)
+      └── filters
+           └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
+
+index-candidates
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
+----
+t4:
+ (i)
+ (j)
+ (k)
+ (k, i)
+ (k, i, j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (k) STORING (i, f, j);
+2. type: index creation
+   SQL command: CREATE INDEX ON t4 (i) STORING (k, f, j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null f:3
+ ├── immutable
+ ├── cost: 10.7379279
+ ├── fd: ()-->(1)
+ └── inner-join (zigzag t4@_hyp_1 t4@_hyp_2)
+      ├── columns: t4.k:1!null i:2!null f:3 j:4
+      ├── eq columns: [6] = [6]
+      ├── left fixed columns: [1] = [1]
+      ├── right fixed columns: [2] = [2]
+      ├── immutable
+      ├── cost: 10.7148919
+      ├── fd: ()-->(1,2)
+      └── filters
+           ├── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
+           ├── t4.k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+index-candidates
+SELECT k, f FROM t4 WHERE a @> ARRAY[1]
+----
+t4:
+ (a)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a @> ARRAY[1]
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (a);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 805.048889
+ └── index-join t4
+      ├── columns: t4.k:1 f:3 a:5!null
+      ├── immutable
+      ├── cost: 803.928889
+      └── scan t4@_hyp_1
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /9/6
+           │    └── spans: ["\x89", "\x89"]
+           ├── cost: 128.464444
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
+----
+t4:
+ (a)
+ (i)
+ (i, a)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (i, a);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 21.992
+ └── index-join t4
+      ├── columns: t4.k:1 i:2!null f:3 a:5!null
+      ├── immutable
+      ├── cost: 21.961
+      ├── fd: ()-->(2)
+      └── scan t4@_hyp_3
+           ├── columns: rowid:6!null
+           ├── constraint: /2: [/1 - /1]
+           ├── inverted constraint: /10/6
+           │    └── spans: ["\x89", "\x89"]
+           ├── cost: 15.1755556
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
+----
+t4:
+ (a)
+ (f)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (f) STORING (k, a);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3!null
+ ├── immutable
+ ├── cost: 381.103333
+ └── select
+      ├── columns: t4.k:1 f:3!null a:5!null
+      ├── immutable
+      ├── cost: 380.716667
+      ├── scan t4@_hyp_1
+      │    ├── columns: t4.k:1 f:3!null a:5
+      │    ├── constraint: /3/6: [/3.0000000000000004 - ]
+      │    └── cost: 377.353333
+      └── filters
+           └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+
 # Ensure that index recommendations are not made if there is an existing
 # inverted, partial, or expression index that can be used to create an
 # equivalent or better plan.
@@ -1202,25 +1476,25 @@ union
 # 1. Inverted index case:
 
 index-recommendations
-SELECT * FROM t4 WHERE k = 1 AND j->'a' = '1'
+SELECT k, j FROM t4 WHERE k = 1 AND j->'a' = '1'
 ----
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t4 (k) STORING (i, f, j, a);
+   SQL command: CREATE INVERTED INDEX ON t4 (k, j);
 --
 Optimal Plan.
-select
- ├── columns: k:1!null i:2 f:3 j:4 a:5
+index-join t4
+ ├── columns: k:1!null j:4
  ├── immutable
- ├── cost: 25.25
+ ├── cost: 21.9622222
  ├── fd: ()-->(1)
- ├── scan t4@_hyp_1
- │    ├── columns: k:1!null i:2 f:3 j:4 a:5
- │    ├── constraint: /1/6: [/1 - /1]
- │    ├── cost: 25.12
- │    └── fd: ()-->(1)
- └── filters
-      └── (j:4->'a') = '1' [outer=(4), immutable]
+ └── scan t4@_hyp_3
+      ├── columns: rowid:6!null
+      ├── constraint: /1: [/1 - /1]
+      ├── inverted constraint: /10/6
+      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      ├── cost: 15.1755556
+      └── key: (6)
 
 exec-ddl
 CREATE INVERTED INDEX inverted ON t4 (k, j)
@@ -1252,18 +1526,22 @@ DROP INDEX t4@inverted
 # 2. Partial index case:
 
 index-recommendations
-SELECT i, k, f FROM t4 WHERE i = 1 AND k > 1;
+SELECT i FROM t4 WHERE i = 1 AND k > 1;
 ----
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t4 (i, k) STORING (f);
+   SQL command: CREATE INDEX ON t4 (i, k);
 --
 Optimal Plan.
-scan t4@_hyp_3
- ├── columns: i:2!null k:1!null f:3
- ├── constraint: /2/1/6: [/1/2 - /1]
- ├── cost: 24.2866667
- └── fd: ()-->(2)
+project
+ ├── columns: i:2!null
+ ├── cost: 24.3066667
+ ├── fd: ()-->(2)
+ └── scan t4@_hyp_3
+      ├── columns: k:1!null i:2!null
+      ├── constraint: /2/1/6: [/1/2 - /1]
+      ├── cost: 24.1933333
+      └── fd: ()-->(2)
 
 exec-ddl
 CREATE INDEX partial_idx ON t4 (i) WHERE k > 1;
