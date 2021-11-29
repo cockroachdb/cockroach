@@ -273,77 +273,6 @@ func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata 
 	}
 }
 
-// Edge represents a relationship between two Nodes.
-//
-// TODO(ajwerner): Consider hiding Node pointers behind an interface to clarify
-// mutability.
-type Edge interface {
-	From() *scpb.Node
-	To() *scpb.Node
-}
-
-// OpEdge represents an edge changing the state of a target with an op.
-type OpEdge struct {
-	from, to   *scpb.Node
-	op         []scop.Op
-	typ        scop.Type
-	revertible bool
-}
-
-// From implements the Edge interface.
-func (oe *OpEdge) From() *scpb.Node { return oe.from }
-
-// To implements the Edge interface.
-func (oe *OpEdge) To() *scpb.Node { return oe.to }
-
-// Op returns the scop.Op for execution that is associated with the op edge.
-func (oe *OpEdge) Op() []scop.Op { return oe.op }
-
-// Revertible returns if the dependency edge is revertible
-func (oe *OpEdge) Revertible() bool { return oe.revertible }
-
-// Type returns the types of operations associated with this edge.
-func (oe *OpEdge) Type() scop.Type {
-	return oe.typ
-}
-
-// DepEdge represents a dependency between two nodes. A dependency
-// implies that the To() node cannot be reached before the From() node. It
-// can be reached concurrently.
-type DepEdge struct {
-	from, to *scpb.Node
-
-	// TODO(ajwerner): Deal with the possibility that multiple rules could
-	// generate the same edge.
-	rule string
-}
-
-// From implements the Edge interface.
-func (de *DepEdge) From() *scpb.Node { return de.from }
-
-// To implements the Edge interface.
-func (de *DepEdge) To() *scpb.Node { return de.to }
-
-// Name returns the name of the rule which generated this edge.
-func (de *DepEdge) Name() string { return de.rule }
-
-// compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
-func (g *Graph) compareNodes(a, b *scpb.Node) (less, eq bool) {
-	switch {
-	case a == b:
-		return false, true
-	case a == nil:
-		return true, false
-	case b == nil:
-		return false, false
-	case a.Target == b.Target:
-		return a.Status < b.Status, a.Status == b.Status
-	default:
-		aIdx, bIdx := g.targetIdxMap[a.Target], g.targetIdxMap[b.Target]
-		return aIdx < bIdx, aIdx == bIdx
-	}
-}
-
 // GetNodeRanks fetches ranks of nodes in topological order.
 func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 	defer func() {
@@ -398,4 +327,21 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 		cur = cur.Next()
 	}
 	return rank, nil
+}
+
+// compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
+func (g *Graph) compareNodes(a, b *scpb.Node) (less, eq bool) {
+	switch {
+	case a == b:
+		return false, true
+	case a == nil:
+		return true, false
+	case b == nil:
+		return false, false
+	case a.Target == b.Target:
+		return a.Status < b.Status, a.Status == b.Status
+	default:
+		aIdx, bIdx := g.targetIdxMap[a.Target], g.targetIdxMap[b.Target]
+		return aIdx < bIdx, aIdx == bIdx
+	}
 }
