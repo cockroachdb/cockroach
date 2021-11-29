@@ -2066,13 +2066,14 @@ func (ot *OptTester) IndexRecommendations() string {
 	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
 
 	optExpr, _ := ot.OptimizeWithTables(hypTables)
-	result := indexrec.FindIndexRecommendationSet(optExpr, optExpr.(memo.RelExpr).Memo().Metadata())
+	md = optExpr.(memo.RelExpr).Memo().Metadata()
+	indexRecommendations := indexrec.FindIndexRecommendationSet(optExpr, md)
+	result := indexRecommendations.Output()
 
-	formattedResult := strings.Replace(strings.TrimSpace(result.String()), "\n\n", "\n", -1)
-	if formattedResult == "" {
+	if result == nil {
 		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr))
 	}
-	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", formattedResult, ot.FormatExpr(optExpr))
+	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", strings.Join(result, "\n"), ot.FormatExpr(optExpr))
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

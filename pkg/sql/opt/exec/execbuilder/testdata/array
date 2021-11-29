@@ -105,3 +105,7 @@ vectorized: true
           missing stats
           table: t@t_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (x) STORING (y, z);

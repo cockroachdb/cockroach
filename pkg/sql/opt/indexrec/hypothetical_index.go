@@ -23,9 +23,9 @@ import (
 )
 
 // hypotheticalIndex is a dummy implementation of cat.Index, used with
-// hypotheticalTable for index recommendations.
+// HypotheticalTable for index recommendations.
 type hypotheticalIndex struct {
-	tab  *hypotheticalTable
+	tab  *HypotheticalTable
 	name tree.Name
 
 	// cols stores the index columns, in order.
@@ -50,7 +50,7 @@ type hypotheticalIndex struct {
 var _ cat.Index = &hypotheticalIndex{}
 
 func (hi *hypotheticalIndex) init(
-	tab *hypotheticalTable,
+	tab *HypotheticalTable,
 	name tree.Name,
 	cols []cat.IndexColumn,
 	indexOrd int,

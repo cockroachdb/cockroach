@@ -29,6 +29,16 @@ t4:
  (k)
  (k, f)
 
+# Ensure that index candidates are not created for virtual tables.
+index-candidates
+SELECT *
+FROM information_schema.schemata JOIN t1
+ON true
+WHERE information_schema.schemata.SCHEMA_NAME='public' AND t1.k > 3
+----
+t1:
+ (k)
+
 # Ensure that new indexes do not get recommended if an identical existing
 # index exists.
 
