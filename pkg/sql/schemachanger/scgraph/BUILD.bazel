@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scgraph",
     srcs = [
+        "dep_edge_tree.go",
         "graph.go",
         "iteration.go",
     ],
@@ -21,12 +22,17 @@ go_library(
 
 go_test(
     name = "scgraph_test",
-    srcs = ["graph_test.go"],
+    srcs = [
+        "dep_edge_tree_test.go",
+        "graph_test.go",
+    ],
+    embed = [":scgraph"],
     deps = [
-        ":scgraph",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/iterutil",
+        "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
 )
