@@ -516,7 +516,7 @@ vectorized: true
       estimated row count: 1
       into: mutation(x, rowid, y)
       size: 3 columns, 1 row
-      row 0, expr 0: crdb_internal.assignment_cast(2, NULL::INT8)
+      row 0, expr 0: 2
       row 0, expr 1: unique_rowid()
       row 0, expr 2: 10
 
@@ -538,8 +538,8 @@ vectorized: true
   estimated row count: 0 (missing stats)
   into: mutation(x, y, rowid)
   size: 3 columns, 1 row
-  row 0, expr 0: crdb_internal.assignment_cast(2, NULL::INT8)
-  row 0, expr 1: crdb_internal.assignment_cast(2, NULL::INT8)
+  row 0, expr 0: 2
+  row 0, expr 1: 2
   row 0, expr 2: unique_rowid()
 
 statement ok
@@ -644,5 +644,5 @@ vectorized: true
   FK check: t62270_parent@t62270_parent_pkey
   size: 3 columns, 1 row
   row 0, expr 0: gen_random_uuid()
-  row 0, expr 1: crdb_internal.assignment_cast(1, NULL::INT8)
+  row 0, expr 1: 1
   row 0, expr 2: unique_rowid()

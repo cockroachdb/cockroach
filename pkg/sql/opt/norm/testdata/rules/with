@@ -412,18 +412,11 @@ with &1 (foo)
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    └── values
- │         ├── columns: column1:9 i_default:10 f_default:11 s_default:12 j_default:13
+ │         ├── columns: column1:9!null i_default:10 f_default:11 s_default:12 j_default:13
  │         ├── cardinality: [1 - 1]
- │         ├── immutable
  │         ├── key: ()
  │         ├── fd: ()-->(9-13)
- │         └── tuple
- │              ├── assignment-cast: INT8
- │              │    └── 1
- │              ├── CAST(NULL AS INT8)
- │              ├── CAST(NULL AS FLOAT8)
- │              ├── CAST(NULL AS STRING)
- │              └── CAST(NULL AS JSONB)
+ │         └── (1, NULL, NULL, NULL, NULL)
  └── with-scan &1 (foo)
       ├── columns: k:14!null i:15 f:16 s:17 j:18
       ├── mapping:
@@ -558,7 +551,7 @@ with &2 (cte)
  ├── cardinality: [1 - 2]
  ├── volatile, mutations
  ├── stats: [rows=2, distinct(16)=2, null(16)=0]
- ├── cost: 1056.9375
+ ├── cost: 1056.9075
  ├── key: (16)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
@@ -569,59 +562,43 @@ with &2 (cte)
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │    ├── cost: 1056.8275
+ │    ├── cost: 1056.7975
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
- │    │    ├── columns: column1:7(int) column2:8(int)
+ │    │    ├── columns: column1:7(int!null) column2:8(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── immutable
  │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
  │    │    ├── cost: 0.02
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(7,8)
  │    │    ├── prune: (7,8)
  │    │    └── tuple [type=tuple{int, int}]
- │    │         ├── assignment-cast: INT8 [type=int]
- │    │         │    └── const: 1 [type=int]
- │    │         └── assignment-cast: INT8 [type=int]
- │    │              └── const: 1 [type=int]
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: 1 [type=int]
  │    └── f-k-checks
  │         └── f-k-checks-item: child(p) -> parent(p)
  │              └── anti-join (hash)
  │                   ├── columns: p:9(int!null)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
- │                   ├── cost: 1056.7975
+ │                   ├── cost: 1056.7675
  │                   ├── key: ()
  │                   ├── fd: ()-->(9)
  │                   ├── cte-uses
  │                   │    └── &1: count=1 used-columns=(8)
- │                   ├── select
+ │                   ├── with-scan &1
  │                   │    ├── columns: p:9(int!null)
- │                   │    ├── cardinality: [0 - 1]
+ │                   │    ├── mapping:
+ │                   │    │    └──  column2:8(int) => p:9(int)
+ │                   │    ├── cardinality: [1 - 1]
  │                   │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
- │                   │    ├── cost: 0.04
+ │                   │    ├── cost: 0.01
  │                   │    ├── key: ()
  │                   │    ├── fd: ()-->(9)
- │                   │    ├── cte-uses
- │                   │    │    └── &1: count=1 used-columns=(8)
- │                   │    ├── with-scan &1
- │                   │    │    ├── columns: p:9(int)
- │                   │    │    ├── mapping:
- │                   │    │    │    └──  column2:8(int) => p:9(int)
- │                   │    │    ├── cardinality: [1 - 1]
- │                   │    │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
- │                   │    │    ├── cost: 0.01
- │                   │    │    ├── key: ()
- │                   │    │    ├── fd: ()-->(9)
- │                   │    │    ├── prune: (9)
- │                   │    │    └── cte-uses
- │                   │    │         └── &1: count=1 used-columns=(8)
- │                   │    └── filters
- │                   │         └── is-not [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
- │                   │              ├── variable: p:9 [type=int]
- │                   │              └── null [type=unknown]
+ │                   │    ├── prune: (9)
+ │                   │    └── cte-uses
+ │                   │         └── &1: count=1 used-columns=(8)
  │                   ├── scan t.public.parent
  │                   │    ├── columns: t.public.parent.p:10(int!null)
  │                   │    ├── stats: [rows=1000, distinct(10)=1000, null(10)=0]

@@ -143,6 +143,60 @@ $input
 =>
 (PushColumnRemappingIntoValues $input $projections $passthrough)
 
+# PushAssignmentCastsIntoValues pushes assignment cast projections into Values
+# rows.
+#
+# Example:
+#
+# project
+#  ├── columns: x:2 y:3
+#  ├── values
+#  │    ├── columns: column1:1
+#  │    ├── cardinality: [2 - 2]
+#  │    ├── (1,)
+#  │    └── (2,)
+#  └── projections
+#       ├── assignment-cast: STRING [as=x:2]
+#       │    └── column1:1
+#       └── 'foo' [as=y:3]
+# =>
+# project
+#  ├── columns: x:2 y:3
+#  ├── values
+#  │    ├── columns: x:2
+#  │    ├── cardinality: [2 - 2]
+#  │    ├── tuple
+#  │    │    └── assignment-cast: STRING
+#  │    │        └── 1
+#  │    └── tuple
+#  │         └── assignment-cast: STRING
+#  │             └── 2
+#  └── projections
+#       └── 'foo' [as=y:3]
+#
+# This allows other rules to fire, with the ultimate goal of eliminating the
+# project so that the insert fast-path optimization is used in more cases and
+# uniqueness checks for gen_random_uuid() values are eliminated in more cases.
+[PushAssignmentCastsIntoValues, Normalize]
+(Project
+    $input:(Values)
+    $projections:*
+    $passthrough:* &
+        ^(ColsAreEmpty
+            $castCols:(IntersectionCols
+                (AssignmentCastCols $projections)
+                (OutputCols $input)
+            )
+        )
+)
+=>
+(PushAssignmentCastsIntoValues
+    $input
+    $projections
+    $passthrough
+    $castCols
+)
+
 # FoldTupleAccessIntoValues replaces a Values that has a single tuple column and
 # at least one row with a new Values that has a column for each tuple index.
 # This works as long as the surrounding Project does not reference the original
