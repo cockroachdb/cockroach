@@ -259,6 +259,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
+	defer sp.Finish()
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
