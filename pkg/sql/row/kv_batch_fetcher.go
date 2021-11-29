@@ -317,71 +317,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
-	keyLocking := f.lockStrength
-
-	// Detect the number of gets vs scans, so we can batch allocate all of the
-	// requests precisely.
-	nGets := 0
-	for i := range f.spans {
-		if f.spans[i].EndKey == nil {
-			nGets++
-		}
-	}
-	gets := make([]struct {
-		req   roachpb.GetRequest
-		union roachpb.RequestUnion_Get
-	}, nGets)
-
-	// curGet is incremented each time we fill in a GetRequest.
-	curGet := 0
-	if f.reverse {
-		scans := make([]struct {
-			req   roachpb.ReverseScanRequest
-			union roachpb.RequestUnion_ReverseScan
-		}, len(f.spans)-nGets)
-		for i := range f.spans {
-			if f.spans[i].EndKey == nil {
-				// A span without an EndKey indicates that the caller is requesting a
-				// single key fetch, which can be served using a GetRequest.
-				gets[curGet].req.Key = f.spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
-				gets[curGet].union.Get = &gets[curGet].req
-				ba.Requests[i].Value = &gets[curGet].union
-				curGet++
-				continue
-			}
-			curScan := i - curGet
-			scans[curScan].req.SetSpan(f.spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
-			scans[curScan].req.KeyLocking = keyLocking
-			scans[curScan].union.ReverseScan = &scans[curScan].req
-			ba.Requests[i].Value = &scans[curScan].union
-		}
-	} else {
-		scans := make([]struct {
-			req   roachpb.ScanRequest
-			union roachpb.RequestUnion_Scan
-		}, len(f.spans)-nGets)
-		for i := range f.spans {
-			if f.spans[i].EndKey == nil {
-				// A span without an EndKey indicates that the caller is requesting a
-				// single key fetch, which can be served using a GetRequest.
-				gets[curGet].req.Key = f.spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
-				gets[curGet].union.Get = &gets[curGet].req
-				ba.Requests[i].Value = &gets[curGet].union
-				curGet++
-				continue
-			}
-			curScan := i - curGet
-			scans[curScan].req.SetSpan(f.spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
-			scans[curScan].req.KeyLocking = keyLocking
-			scans[curScan].union.Scan = &scans[curScan].req
-			ba.Requests[i].Value = &scans[curScan].union
-		}
-	}
+	ba.Requests = spansToRequests(f.spans, f.reverse, f.lockStrength)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		var buf bytes.Buffer
@@ -587,4 +523,73 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.spans = nil
 	f.spansScratch = nil
 	f.acc.Clear(ctx)
+}
+
+func spansToRequests(
+	spans roachpb.Spans, reverse bool, keyLocking lock.Strength,
+) []roachpb.RequestUnion {
+	reqs := make([]roachpb.RequestUnion, len(spans))
+	// Detect the number of gets vs scans, so we can batch allocate all of the
+	// requests precisely.
+	nGets := 0
+	for i := range spans {
+		if spans[i].EndKey == nil {
+			nGets++
+		}
+	}
+	gets := make([]struct {
+		req   roachpb.GetRequest
+		union roachpb.RequestUnion_Get
+	}, nGets)
+
+	// curGet is incremented each time we fill in a GetRequest.
+	curGet := 0
+	if reverse {
+		scans := make([]struct {
+			req   roachpb.ReverseScanRequest
+			union roachpb.RequestUnion_ReverseScan
+		}, len(spans)-nGets)
+		for i := range spans {
+			if spans[i].EndKey == nil {
+				// A span without an EndKey indicates that the caller is requesting a
+				// single key fetch, which can be served using a GetRequest.
+				gets[curGet].req.Key = spans[i].Key
+				gets[curGet].req.KeyLocking = keyLocking
+				gets[curGet].union.Get = &gets[curGet].req
+				reqs[i].Value = &gets[curGet].union
+				curGet++
+				continue
+			}
+			curScan := i - curGet
+			scans[curScan].req.SetSpan(spans[i])
+			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.KeyLocking = keyLocking
+			scans[curScan].union.ReverseScan = &scans[curScan].req
+			reqs[i].Value = &scans[curScan].union
+		}
+	} else {
+		scans := make([]struct {
+			req   roachpb.ScanRequest
+			union roachpb.RequestUnion_Scan
+		}, len(spans)-nGets)
+		for i := range spans {
+			if spans[i].EndKey == nil {
+				// A span without an EndKey indicates that the caller is requesting a
+				// single key fetch, which can be served using a GetRequest.
+				gets[curGet].req.Key = spans[i].Key
+				gets[curGet].req.KeyLocking = keyLocking
+				gets[curGet].union.Get = &gets[curGet].req
+				reqs[i].Value = &gets[curGet].union
+				curGet++
+				continue
+			}
+			curScan := i - curGet
+			scans[curScan].req.SetSpan(spans[i])
+			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.KeyLocking = keyLocking
+			scans[curScan].union.Scan = &scans[curScan].req
+			reqs[i].Value = &scans[curScan].union
+		}
+	}
+	return reqs
 }
