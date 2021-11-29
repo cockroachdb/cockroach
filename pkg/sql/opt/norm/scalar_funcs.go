@@ -368,3 +368,31 @@ func (c *CustomFuncs) SplitTupleEq(lhs, rhs *memo.TupleExpr) memo.FiltersExpr {
 	}
 	return res
 }
+
+// AssignmentCastIsNoop returns true if an assignment cast from t to t is
+// guaranteed to be a no-op: it never alters the input value and never errors.
+// These conditions must hold in the unintuitive, but crucial case where a value
+// does not fit within the width of t.
+//
+// The width of a value may be wider than its type's width when executing
+// prepared statements. For example, no width validation is performed when
+// assigning a string to a placeholder that has been typed as a CHAR(1). An
+// assignment cast from a value with more than one character, even if typed as a
+// CHAR(1), to a CHAR(1) will result in an error, so it is not guaranteed to be
+// a no-op.
+//
+// Currently, AssignmentCastIsNoop returns true only for the UUID type. UUIDs
+// have no width modifier, and values assigned to UUID placeholders are
+// validated, so an assignment cast from UUID to UUID is guaranteed to be a
+// no-op.
+//
+// TODO(mgartner): There are other types for which assignment casts are
+// guaranteed no-ops. We should expand this list.
+func (c *CustomFuncs) AssignmentCastIsNoop(t *types.T) bool {
+	switch t.Family() {
+	case types.UuidFamily:
+		return true
+	default:
+		return false
+	}
+}

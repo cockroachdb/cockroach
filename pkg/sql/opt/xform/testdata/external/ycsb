@@ -107,34 +107,11 @@ insert usertable
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:25 column2:26 column3:27 column4:28 column5:29 column6:30 column7:31 column8:32 column9:33 column10:34 column11:35
+      ├── columns: column1:25!null column2:26!null column3:27!null column4:28!null column5:29!null column6:30!null column7:31!null column8:32!null column9:33!null column10:34!null column11:35!null
       ├── cardinality: [1 - 1]
-      ├── immutable
       ├── key: ()
       ├── fd: ()-->(25-35)
-      └── tuple
-           ├── assignment-cast: VARCHAR(255)
-           │    └── 'user123'
-           ├── assignment-cast: STRING
-           │    └── 'field0data'
-           ├── assignment-cast: STRING
-           │    └── 'field1data'
-           ├── assignment-cast: STRING
-           │    └── 'field2data'
-           ├── assignment-cast: STRING
-           │    └── 'field3data'
-           ├── assignment-cast: STRING
-           │    └── 'field4data'
-           ├── assignment-cast: STRING
-           │    └── 'field5data'
-           ├── assignment-cast: STRING
-           │    └── 'field6data'
-           ├── assignment-cast: STRING
-           │    └── 'field7data'
-           ├── assignment-cast: STRING
-           │    └── 'field8data'
-           └── assignment-cast: STRING
-                └── 'field9data'
+      └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data')
 
 # --------------------------------------------------
 # Workload E: Short ranges

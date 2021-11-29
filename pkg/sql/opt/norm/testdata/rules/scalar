@@ -10,6 +10,14 @@ exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, d INT)
 ----
 
+exec-ddl
+CREATE TABLE u (u UUID PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE c (c CHAR PRIMARY KEY)
+----
+
 # --------------------------------------------------
 # CommuteVar
 # --------------------------------------------------
@@ -164,7 +172,7 @@ exprnorm expect=EliminateCast
 (Root
   (Project
     (Scan [ (Table "a") (Cols "i,s,arr") ])
-    [ 
+    [
       (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
       (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
       (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
@@ -216,6 +224,92 @@ project
       ├── a.s:4::CHAR::VARCHAR [as=s:13, outer=(4), immutable]
       ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), stable]
       └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:15, outer=(2), immutable]
+
+# --------------------------------------------------
+# EliminateAssignmentCast
+# --------------------------------------------------
+
+norm expect=EliminateAssignmentCast
+INSERT INTO u VALUES ('b1621d9e-df89-4e8a-89f5-82262bca907b')
+----
+insert u
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:5 => u:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:5!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5)
+      └── ('b1621d9e-df89-4e8a-89f5-82262bca907b',)
+
+norm expect=EliminateAssignmentCast
+INSERT INTO u VALUES (gen_random_uuid())
+----
+insert u
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:5 => u:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:5
+      ├── cardinality: [1 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(5)
+      └── (gen_random_uuid(),)
+
+# Do not eliminate assignment casts when the input type does not match the target type.
+norm expect-not=EliminateAssignmentCast disable=FoldAssignmentCast
+INSERT INTO a (k, s) VALUES (1, 'b1621d9e-df89-4e8a-89f5-82262bca907b'::UUID)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:10 => k:1
+ │    ├── i_default:12 => i:2
+ │    ├── f_default:13 => f:3
+ │    ├── column2:11 => s:4
+ │    └── arr_default:14 => arr:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:10 column2:11 i_default:12 f_default:13 arr_default:14
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(10-14)
+      └── tuple
+           ├── assignment-cast: INT8
+           │    └── 1
+           ├── assignment-cast: STRING
+           │    └── 'b1621d9e-df89-4e8a-89f5-82262bca907b'
+           ├── CAST(NULL AS INT8)
+           ├── CAST(NULL AS FLOAT8)
+           └── CAST(NULL AS INT8[])
+
+# Do not eliminate assignment casts for the CHAR type.
+norm expect-not=EliminateAssignmentCast disable=FoldAssignmentCast
+INSERT INTO c VALUES ('f'::CHAR)
+----
+insert c
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:5 => c:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:5
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(5)
+      └── tuple
+           └── assignment-cast: CHAR
+                └── 'f'
 
 # --------------------------------------------------
 # NormalizeInConst
