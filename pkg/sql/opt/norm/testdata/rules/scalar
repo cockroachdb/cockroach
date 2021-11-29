@@ -164,7 +164,7 @@ exprnorm expect=EliminateCast
 (Root
   (Project
     (Scan [ (Table "a") (Cols "i,s,arr") ])
-    [ 
+    [
       (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
       (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
       (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
@@ -216,6 +216,76 @@ project
       ├── a.s:4::CHAR::VARCHAR [as=s:13, outer=(4), immutable]
       ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), stable]
       └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:15, outer=(2), immutable]
+
+# --------------------------------------------------
+# EliminateAssignmentCast
+# --------------------------------------------------
+
+norm expect=EliminateAssignmentCast
+INSERT INTO xy VALUES (1, '2'::INT)
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => x:1
+ │    └── column2:8 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:7!null column2:8!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,8)
+      └── (1, 2)
+
+# Do not eliminate assignment casts when the input type is not identical to the
+# target type.
+norm expect-not=EliminateAssignmentCast
+INSERT INTO xy VALUES (1::INT2, 2::INT4)
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => x:1
+ │    └── column2:8 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:7!null column2:8!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,8)
+      └── (1, 2)
+
+# Do not eliminate assignment casts when the input is not constant.
+norm expect-not=EliminateAssignmentCast
+INSERT INTO xy VALUES ($1, $2::INT)
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => x:1
+ │    └── column2:8 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: column1:7 column2:8
+      ├── cardinality: [1 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(7,8)
+      ├── values
+      │    ├── columns: column1:5 column2:6
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(5,6)
+      │    └── ($1, $2)
+      └── projections
+           ├── assignment-cast: INT8 [as=column1:7, outer=(5), immutable]
+           │    └── column1:5
+           └── assignment-cast: INT8 [as=column2:8, outer=(6), immutable]
+                └── column2:6
 
 # --------------------------------------------------
 # NormalizeInConst

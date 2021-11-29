@@ -1715,14 +1715,14 @@ with &1
  ├── volatile, mutations
  ├── prune: (31)
  ├── project
- │    ├── columns: uv.u:6(int) uv.v:7(int!null)
+ │    ├── columns: uv.u:6(int!null) uv.v:7(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(6,7)
  │    ├── prune: (6,7)
  │    └── insert uv
- │         ├── columns: uv.u:6(int) uv.v:7(int!null) rowid:8(int!null)
+ │         ├── columns: uv.u:6(int!null) uv.v:7(int!null) rowid:8(int!null)
  │         ├── insert-mapping:
  │         │    ├── column1:13 => uv.u:6
  │         │    ├── column2:14 => uv.v:7
@@ -1732,17 +1732,15 @@ with &1
  │         ├── key: ()
  │         ├── fd: ()-->(6-8)
  │         └── values
- │              ├── columns: column1:13(int) column2:14(int) rowid_default:15(int)
+ │              ├── columns: column1:13(int!null) column2:14(int!null) rowid_default:15(int)
  │              ├── cardinality: [1 - 1]
  │              ├── volatile
  │              ├── key: ()
  │              ├── fd: ()-->(13-15)
  │              ├── prune: (13-15)
  │              └── tuple [type=tuple{int, int, int}]
- │                   ├── assignment-cast: INT8 [type=int]
- │                   │    └── const: 1 [type=int]
- │                   ├── assignment-cast: INT8 [type=int]
- │                   │    └── const: 2 [type=int]
+ │                   ├── const: 1 [type=int]
+ │                   ├── const: 2 [type=int]
  │                   └── function: unique_rowid [type=int]
  └── project
       ├── columns: m:31(int)

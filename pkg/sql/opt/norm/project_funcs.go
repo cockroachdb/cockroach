@@ -666,6 +666,79 @@ func (c *CustomFuncs) PushColumnRemappingIntoValues(
 	return c.f.ConstructProject(newValues, newProjections, newPassthrough)
 }
 
+// ValuesHasMultipleConstRows returns true if the ValuesExpr contains two or
+// more rows and all rows have only constant datums.
+func (c *CustomFuncs) ValuesHasMultipleConstRows(v *memo.ValuesExpr) bool {
+	if len(v.Rows) < 2 {
+		return false
+	}
+	for i := range v.Rows {
+		if !memo.CanExtractConstDatum(v.Rows[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// AssignmentCastCols returns the set of column IDs that undergo an assignment
+// cast in the given projections. If any projection is not an assignment cast of
+// a variable, ok=false is returned.
+func (c *CustomFuncs) AssignmentCastCols(
+	projections memo.ProjectionsExpr,
+) (castCols opt.ColSet, ok bool) {
+	for i := range projections {
+		c, ok := projections[i].Element.(*memo.AssignmentCastExpr)
+		if !ok {
+			return opt.ColSet{}, false
+		}
+		v, ok := c.Input.(*memo.VariableExpr)
+		if !ok {
+			return opt.ColSet{}, false
+		}
+		castCols.Add(v.Col)
+	}
+	return castCols, true
+}
+
+// PushAssignmentCastsIntoValues returns a new ValuesExpr where the assignment
+// casts in the given projections are pushed down to the constant values of each
+// datum in the ValuesExpr.
+func (c *CustomFuncs) PushAssignmentCastsIntoValues(
+	values *memo.ValuesExpr, projections memo.ProjectionsExpr,
+) memo.RelExpr {
+	// Collect the output column IDs and the cast target type for each
+	// assignment cast in projections.
+	newCols := make(opt.ColList, len(values.Cols))
+	castTypes := make([]*types.T, len(values.Cols))
+	for i := range projections {
+		c := projections[i].Element.(*memo.AssignmentCastExpr)
+		v := c.Input.(*memo.VariableExpr)
+		ord, ok := values.Cols.Find(v.Col)
+		if !ok {
+			panic(errors.AssertionFailedf("could not find column %d", v.Col))
+		}
+		newCols[ord] = projections[i].Col
+		castTypes[ord] = c.Typ
+	}
+
+	// Build a list of the new rows with assignment casts pushed down to each
+	// datum.
+	newRows := make(memo.ScalarListExpr, len(values.Rows))
+	for i := range values.Rows {
+		oldRow := values.Rows[i].(*memo.TupleExpr)
+		newRow := make(memo.ScalarListExpr, len(oldRow.Elems))
+		for j := range newRow {
+			newRow[j] = c.f.ConstructAssignmentCast(oldRow.Elems[j], castTypes[j])
+		}
+		newRows[i] = c.f.ConstructTuple(newRow, types.MakeTuple(castTypes))
+	}
+
+	return c.f.ConstructValues(
+		newRows,
+		&memo.ValuesPrivate{Cols: newCols, ID: c.f.Metadata().NextUniqueID()},
+	)
+}
+
 // IsStaticTuple returns true if the given ScalarExpr is either a TupleExpr or a
 // ConstExpr wrapping a DTuple. Expressions within a static tuple can be
 // determined during planning:

@@ -143,6 +143,30 @@ $input
 =>
 (PushColumnRemappingIntoValues $input $projections $passthrough)
 
+# PushAssignmentCastsIntoValues pushes a projection containing assignment casts
+# into Values, eliminating the Project altogether. Eliminating a Project that
+# sits between a mutation and a Values expression allows the insert fast path to
+# be used in more cases.
+
+# This rule only matches when the Values expression has more than one row. In
+# the case where the Values expression has a single row, InlineProjectConstants
+# and FoldAssignmentCast eliminate the Project.
+[PushAssignmentCastsIntoValues, Normalize]
+(Project
+    $input:(Values)
+    $projections:*
+    $passthrough:* &
+        (ColsAreEmpty $passthrough) &
+        ^(ColsAreEmpty $inputCols:(OutputCols $input)) &
+        (ValuesHasMultipleConstRows $input) &
+        (Let
+            ($castCols $ok):(AssignmentCastCols $projections) $ok
+        ) &
+        (ColsAreEqual $inputCols $castCols)
+)
+=>
+(PushAssignmentCastsIntoValues $input $projections)
+
 # FoldTupleAccessIntoValues replaces a Values that has a single tuple column and
 # at least one row with a new Values that has a column for each tuple index.
 # This works as long as the surrounding Project does not reference the original

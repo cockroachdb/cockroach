@@ -814,6 +814,153 @@ values
  └── ('2017-05-10 00:00:00+00:00',)
 
 # --------------------------------------------------
+# FoldAssignmentCast
+# --------------------------------------------------
+
+norm expect=FoldAssignmentCast
+INSERT INTO a(k, i, f) VALUES (1::INT2, 2::INT4, 3.0::FLOAT4)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:12 => k:1
+ │    ├── column2:13 => i:2
+ │    ├── column3:14 => f:3
+ │    ├── s_default:15 => s:4
+ │    ├── j_default:16 => j:5
+ │    └── arr_default:17 => arr:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:12!null column2:13!null column3:14!null s_default:15 j_default:16 arr_default:17
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(12-17)
+      └── (1, 2, 3.0, NULL, NULL, NULL)
+
+norm expect-not=FoldAssignmentCast
+INSERT INTO a(k) VALUES ($1)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:10 => k:1
+ │    ├── i_default:11 => i:2
+ │    ├── f_default:12 => f:3
+ │    ├── s_default:13 => s:4
+ │    ├── j_default:14 => j:5
+ │    └── arr_default:15 => arr:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: i_default:11 f_default:12 s_default:13 j_default:14 arr_default:15 column1:10
+      ├── cardinality: [1 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(10-15)
+      ├── values
+      │    ├── columns: column1:9
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(9)
+      │    └── ($1,)
+      └── projections
+           ├── CAST(NULL AS INT8) [as=i_default:11]
+           ├── CAST(NULL AS FLOAT8) [as=f_default:12]
+           ├── CAST(NULL AS STRING) [as=s_default:13]
+           ├── CAST(NULL AS JSONB) [as=j_default:14]
+           ├── CAST(NULL AS INT8[]) [as=arr_default:15]
+           └── assignment-cast: INT8 [as=column1:10, outer=(9), immutable]
+                └── column1:9
+
+norm expect-not=FoldAssignmentCast
+INSERT INTO a(k) VALUES ($1::INT)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:10 => k:1
+ │    ├── i_default:11 => i:2
+ │    ├── f_default:12 => f:3
+ │    ├── s_default:13 => s:4
+ │    ├── j_default:14 => j:5
+ │    └── arr_default:15 => arr:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: i_default:11 f_default:12 s_default:13 j_default:14 arr_default:15 column1:10
+      ├── cardinality: [1 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(10-15)
+      ├── values
+      │    ├── columns: column1:9
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(9)
+      │    └── ($1,)
+      └── projections
+           ├── CAST(NULL AS INT8) [as=i_default:11]
+           ├── CAST(NULL AS FLOAT8) [as=f_default:12]
+           ├── CAST(NULL AS STRING) [as=s_default:13]
+           ├── CAST(NULL AS JSONB) [as=j_default:14]
+           ├── CAST(NULL AS INT8[]) [as=arr_default:15]
+           └── assignment-cast: INT8 [as=column1:10, outer=(9), immutable]
+                └── column1:9
+
+norm expect=FoldAssignmentCast
+INSERT INTO a(k, s) VALUES (1, 1.2::FLOAT)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:11 => k:1
+ │    ├── i_default:13 => i:2
+ │    ├── f_default:14 => f:3
+ │    ├── column2:12 => s:4
+ │    ├── j_default:15 => j:5
+ │    └── arr_default:16 => arr:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:11!null column2:12!null i_default:13 f_default:14 j_default:15 arr_default:16
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(11-16)
+      └── (1, '1.2', NULL, NULL, NULL, NULL)
+
+norm no-stable-folds expect-not=FoldAssignmentCast
+INSERT INTO a(k, s) VALUES (1, 1.2::FLOAT)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:11 => k:1
+ │    ├── i_default:13 => i:2
+ │    ├── f_default:14 => f:3
+ │    ├── column2:12 => s:4
+ │    ├── j_default:15 => j:5
+ │    └── arr_default:16 => arr:6
+ ├── cardinality: [0 - 0]
+ ├── stable+volatile, mutations
+ └── values
+      ├── columns: column1:11!null column2:12 i_default:13 f_default:14 j_default:15 arr_default:16
+      ├── cardinality: [1 - 1]
+      ├── stable
+      ├── key: ()
+      ├── fd: ()-->(11-16)
+      └── tuple
+           ├── 1
+           ├── assignment-cast: STRING
+           │    └── 1.2
+           ├── CAST(NULL AS INT8)
+           ├── CAST(NULL AS FLOAT8)
+           ├── CAST(NULL AS JSONB)
+           └── CAST(NULL AS INT8[])
+
+# --------------------------------------------------
 # FoldFunctionWithNullArgs
 # --------------------------------------------------
 

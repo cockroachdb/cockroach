@@ -8282,8 +8282,7 @@ with &1
  │    │         └── projections
  │    │              ├── CAST(NULL AS INT8) [as=b_default:21]
  │    │              ├── unique_rowid() [as=rowid_default:22, volatile]
- │    │              └── assignment-cast: INT8 [as="?column?":20, immutable]
- │    │                   └── 1
+ │    │              └── 1 [as="?column?":20]
  │    └── projections
  │         └── 1 [as="?column?":23]
  └── values

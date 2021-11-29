@@ -1032,6 +1032,189 @@ project
       └── x:5 [as=x:7, outer=(5)]
 
 # --------------------------------------------------
+# PushAssignmentCastsIntoValues
+# --------------------------------------------------
+
+norm expect=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y) VALUES (1, 2), (3, 4)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => x:1
+ │    ├── column2:10 => y:2
+ │    ├── f_default:11 => f:3
+ │    └── s_default:12 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: f_default:11 s_default:12 column1:9!null column2:10!null
+      ├── cardinality: [2 - 2]
+      ├── fd: ()-->(11,12)
+      ├── values
+      │    ├── columns: column1:9!null column2:10!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, 2)
+      │    └── (3, 4)
+      └── projections
+           ├── CAST(NULL AS FLOAT8) [as=f_default:11]
+           └── CAST(NULL AS STRING) [as=s_default:12]
+
+norm expect=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y) VALUES (1, 2.5), (3, 3.4)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => x:1
+ │    ├── column2:10 => y:2
+ │    ├── f_default:11 => f:3
+ │    └── s_default:12 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: f_default:11 s_default:12 column1:9!null column2:10!null
+      ├── cardinality: [2 - 2]
+      ├── fd: ()-->(11,12)
+      ├── values
+      │    ├── columns: column1:9!null column2:10!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, 3)
+      │    └── (3, 3)
+      └── projections
+           ├── CAST(NULL AS FLOAT8) [as=f_default:11]
+           └── CAST(NULL AS STRING) [as=s_default:12]
+
+norm expect=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y) VALUES (1, 2::INT2), (3, 4::INT2)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => x:1
+ │    ├── column2:10 => y:2
+ │    ├── f_default:11 => f:3
+ │    └── s_default:12 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: f_default:11 s_default:12 column1:9!null column2:10!null
+      ├── cardinality: [2 - 2]
+      ├── fd: ()-->(11,12)
+      ├── values
+      │    ├── columns: column1:9!null column2:10!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, 2)
+      │    └── (3, 4)
+      └── projections
+           ├── CAST(NULL AS FLOAT8) [as=f_default:11]
+           └── CAST(NULL AS STRING) [as=s_default:12]
+
+# Do not match when there is only one row in the VALUES clause. In this case,
+# InlineProjectConstants and FoldAssignmentCast eliminate the assignment casts.
+norm expect-not=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y) VALUES (1, 2)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:9 => x:1
+ │    ├── column2:10 => y:2
+ │    ├── f_default:11 => f:3
+ │    └── s_default:12 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:9!null column2:10!null f_default:11 s_default:12
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(9-12)
+      └── (1, 2, NULL, NULL)
+
+# Do not match if all the values are not constant.
+norm expect-not=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y, f, s) VALUES (1, 2, 3.0, 'foo'), (4, 5, $1, $2)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:11 => x:1
+ │    ├── column2:12 => y:2
+ │    ├── column3:13 => f:3
+ │    └── column4:14 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: column1:11!null column2:12!null column3:13 column4:14
+      ├── cardinality: [2 - 2]
+      ├── immutable, has-placeholder
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null column3:9 column4:10
+      │    ├── cardinality: [2 - 2]
+      │    ├── has-placeholder
+      │    ├── (1, 2, 3.0, 'foo')
+      │    └── (4, 5, $1, $2)
+      └── projections
+           ├── assignment-cast: INT8 [as=column1:11, outer=(7), immutable]
+           │    └── column1:7
+           ├── assignment-cast: INT8 [as=column2:12, outer=(8), immutable]
+           │    └── column2:8
+           ├── assignment-cast: FLOAT8 [as=column3:13, outer=(9), immutable]
+           │    └── column3:9
+           └── assignment-cast: STRING [as=column4:14, outer=(10), immutable]
+                └── column4:10
+
+# Match when placeholders are assigned.
+assign-placeholders-norm query-args=(4, 5, 6.0, 'bar') expect=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y, f, s) VALUES (1, 2, 3.0, 'foo'), ($1, $2, $3, $4)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:11 => x:1
+ │    ├── column2:12 => y:2
+ │    ├── column3:13 => f:3
+ │    └── column4:14 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null
+      ├── cardinality: [2 - 2]
+      ├── (1, 2, 3.0, 'foo')
+      └── (4, 5, 6.0, 'bar')
+
+# Do not match if there are other projections that are not assignment casts.
+norm expect-not=PushAssignmentCastsIntoValues
+INSERT INTO a(x, y, f, s) (SELECT unnest(ARRAY[1, 2, 3]:::INT8[]), 0, 2.0, 'foo')
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── unnest:11 => x:1
+ │    ├── "?column?":12 => y:2
+ │    ├── "?column?":13 => f:3
+ │    └── "?column?":14 => s:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: unnest:11!null "?column?":12!null "?column?":13!null "?column?":14!null
+      ├── cardinality: [3 - 3]
+      ├── immutable
+      ├── fd: ()-->(12-14)
+      ├── values
+      │    ├── columns: unnest:7!null
+      │    ├── cardinality: [3 - 3]
+      │    ├── (1,)
+      │    ├── (2,)
+      │    └── (3,)
+      └── projections
+           ├── assignment-cast: INT8 [as=unnest:11, outer=(7), immutable]
+           │    └── unnest:7
+           ├── 0 [as="?column?":12]
+           ├── 2.0 [as="?column?":13]
+           └── 'foo' [as="?column?":14]
+
+# --------------------------------------------------
 # FoldJSONAccessIntoValues
 # --------------------------------------------------
 

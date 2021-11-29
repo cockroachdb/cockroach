@@ -59,12 +59,33 @@ $item
 (SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
-# that's equivalent to the desired static type.
+# that's identical to the desired static type.
 #
 # Note that CastExpr removes unnecessary casts during type-checking; this rule
 # can still be helpful if some other rule creates an unnecessary CastExpr.
 [EliminateCast, Normalize]
 (Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+=>
+$input
+
+# EliminateAssignmentCast discards the assignment cast operator if its input is
+# constant and it already has a type that's identical to the desired static
+# type. The requirement for the input to be constant is needed in order to
+# prevent eliminating assigment casts that wrap placeholder values. Placeholder
+# types may differ from the type of the value assigned during execution of a
+# prepared statement, so assignment casts with input dependent on placeholders
+# cannot be eliminated.
+#
+# This rule is given a high priority so that it is guaranteed to fire before
+# FoldAssignmentCast, if possible. This is preferred because eliminating the
+# cast is cheaper than actually performing the cast operation.
+[EliminateAssignmentCast, Normalize, HighPriority]
+(AssignmentCast
+    $input:*
+    $targetTyp:* &
+        (HasColType $input $targetTyp) &
+        (IsConstValueOrGroupOfConstValues $input)
+)
 =>
 $input
 

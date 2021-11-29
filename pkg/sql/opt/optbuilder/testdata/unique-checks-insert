@@ -1683,50 +1683,33 @@ insert uniq_partial_constraint_and_index
  ├── partial index put columns: partial_index_put1:18
  ├── input binding: &1
  ├── project
- │    ├── columns: partial_index_put1:18!null column1:9 column2:10 column3:11
- │    ├── upsert-distinct-on
- │    │    ├── columns: column1:9 column2:10 column3:11 arbiter_uniq_partial_constraint_and_index_a_key_distinct:17!null
- │    │    ├── grouping columns: column2:10
- │    │    ├── project
- │    │    │    ├── columns: arbiter_uniq_partial_constraint_and_index_a_key_distinct:17!null column1:9 column2:10 column3:11
- │    │    │    ├── anti-join (hash)
- │    │    │    │    ├── columns: column1:9 column2:10 column3:11
- │    │    │    │    ├── values
- │    │    │    │    │    ├── columns: column1:9 column2:10 column3:11
- │    │    │    │    │    └── tuple
- │    │    │    │    │         ├── assignment-cast: INT8
- │    │    │    │    │         │    └── 1
- │    │    │    │    │         ├── assignment-cast: INT8
- │    │    │    │    │         │    └── 1
- │    │    │    │    │         └── assignment-cast: INT8
- │    │    │    │    │              └── 1
- │    │    │    │    ├── scan uniq_partial_constraint_and_index
- │    │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13
- │    │    │    │    │    └── partial index predicates
- │    │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
- │    │    │    │    └── filters
- │    │    │    │         └── column2:10 = uniq_partial_constraint_and_index.a:13
- │    │    │    └── projections
- │    │    │         └── true [as=arbiter_uniq_partial_constraint_and_index_a_key_distinct:17]
- │    │    └── aggregations
- │    │         ├── first-agg [as=column1:9]
- │    │         │    └── column1:9
- │    │         ├── first-agg [as=column3:11]
- │    │         │    └── column3:11
- │    │         └── const-agg [as=arbiter_uniq_partial_constraint_and_index_a_key_distinct:17]
- │    │              └── arbiter_uniq_partial_constraint_and_index_a_key_distinct:17
+ │    ├── columns: partial_index_put1:18!null column1:9!null column2:10!null column3:11!null
+ │    ├── anti-join (cross)
+ │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    │    └── (1, 1, 1)
+ │    │    ├── select
+ │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13!null
+ │    │    │    ├── scan uniq_partial_constraint_and_index
+ │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13
+ │    │    │    │    └── partial index predicates
+ │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    └── filters
+ │    │    │         └── uniq_partial_constraint_and_index.a:13 = 1
+ │    │    └── filters (true)
  │    └── projections
  │         └── true [as=partial_index_put1:18]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
            └── project
-                ├── columns: a:25
+                ├── columns: a:25!null
                 └── semi-join (hash)
-                     ├── columns: k:24 a:25 b:26!null
+                     ├── columns: k:24!null a:25!null b:26!null
                      ├── select
-                     │    ├── columns: k:24 a:25 b:26!null
+                     │    ├── columns: k:24!null a:25!null b:26!null
                      │    ├── with-scan &1
-                     │    │    ├── columns: k:24 a:25 b:26
+                     │    │    ├── columns: k:24!null a:25!null b:26!null
                      │    │    └── mapping:
                      │    │         ├──  column1:9 => k:24
                      │    │         ├──  column2:10 => a:25
@@ -1771,39 +1754,22 @@ insert uniq_constraint_and_partial_index
  │    └── column3:11 => b:3
  ├── partial index put columns: partial_index_put1:18
  └── project
-      ├── columns: partial_index_put1:18 column1:9 column2:10 column3:11
-      ├── upsert-distinct-on
-      │    ├── columns: column1:9 column2:10 column3:11 arbiter_unique_a_distinct:17!null
-      │    ├── grouping columns: column2:10
-      │    ├── project
-      │    │    ├── columns: arbiter_unique_a_distinct:17!null column1:9 column2:10 column3:11
-      │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9 column2:10 column3:11
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:9 column2:10 column3:11
-      │    │    │    │    └── tuple
-      │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │         │    └── 1
-      │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │         │    └── 1
-      │    │    │    │         └── assignment-cast: INT8
-      │    │    │    │              └── 1
-      │    │    │    ├── scan uniq_constraint_and_partial_index
-      │    │    │    │    ├── columns: a:13
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
-      │    │    │    │              └── b:14 > 0
-      │    │    │    └── filters
-      │    │    │         └── column2:10 = a:13
-      │    │    └── projections
-      │    │         └── true [as=arbiter_unique_a_distinct:17]
-      │    └── aggregations
-      │         ├── first-agg [as=column1:9]
-      │         │    └── column1:9
-      │         ├── first-agg [as=column3:11]
-      │         │    └── column3:11
-      │         └── const-agg [as=arbiter_unique_a_distinct:17]
-      │              └── arbiter_unique_a_distinct:17
+      ├── columns: partial_index_put1:18!null column1:9!null column2:10!null column3:11!null
+      ├── anti-join (cross)
+      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── values
+      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    └── (1, 1, 1)
+      │    ├── select
+      │    │    ├── columns: a:13!null
+      │    │    ├── scan uniq_constraint_and_partial_index
+      │    │    │    ├── columns: a:13
+      │    │    │    └── partial index predicates
+      │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
+      │    │    │              └── b:14 > 0
+      │    │    └── filters
+      │    │         └── a:13 = 1
+      │    └── filters (true)
       └── projections
            └── column3:11 > 0 [as=partial_index_put1:18]
 
