@@ -42,7 +42,7 @@ colbatchscan            Scan /Table/59/1/2/0
 batch flow coordinator  CPut /Table/59/1/2/0 -> /TUPLE/2:2:Int/3
 batch flow coordinator  InitPut /Table/59/2/3/0 -> /BYTES/0x8a
 batch flow coordinator  fast path completed
-exec stmt               rows affected: 1
+sql query               rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -55,7 +55,7 @@ colbatchscan            Scan /Table/59/1/1/0
 batch flow coordinator  CPut /Table/59/1/1/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/59/2/2/0 -> /BYTES/0x89
 batch flow coordinator  fast path completed
-exec stmt               rows affected: 1
+sql query               rows affected: 1
 
 statement error duplicate key value
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -70,7 +70,7 @@ colbatchscan            fetched: /kv/kv_pkey/2/v -> /3
 batch flow coordinator  Put /Table/59/1/2/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  Del /Table/59/2/3/0
 batch flow coordinator  CPut /Table/59/2/2/0 -> /BYTES/0x8a (expecting does not exist)
-exec stmt               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+sql query               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 # ---------------------------------------------------------
 # Index With Delete Preserving Encoding
