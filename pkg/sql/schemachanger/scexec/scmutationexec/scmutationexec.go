@@ -73,6 +73,9 @@ type MutationVisitorStateUpdater interface {
 
 	// AddNewGCJobForDescriptor enqueues a GC job for the given descriptor.
 	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
+
+	// AddNewGCJobForIndex enqueues a GC job for the given table index.
+	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 }
 
 // EventLogWriter encapsulates operations for generating
@@ -323,6 +326,23 @@ func (m *visitor) CreateGcJobForDescriptor(
 		return err
 	}
 	m.s.AddNewGCJobForDescriptor(desc)
+	return nil
+}
+
+func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobForIndex) error {
+	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl, err := catalog.AsTableDescriptor(desc)
+	if err != nil {
+		return err
+	}
+	idx, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return errors.AssertionFailedf("table %q (%d): could not find index %d", tbl.GetName(), tbl.GetID(), op.IndexID)
+	}
+	m.s.AddNewGCJobForIndex(tbl, idx)
 	return nil
 }
 

@@ -90,4 +90,56 @@ func init() {
 				}
 			})),
 	)
+
+	opRegistry.register(
+		(*scpb.SecondaryIndex)(nil),
+		scpb.Target_DROP,
+		scpb.Status_VALIDATED,
+		to(scpb.Status_DELETE_AND_WRITE_ONLY),
+	)
+
+	opRegistry.register(
+		(*scpb.SecondaryIndex)(nil),
+		scpb.Target_DROP,
+		scpb.Status_BACKFILLED,
+		to(scpb.Status_DELETE_AND_WRITE_ONLY),
+	)
+
+	opRegistry.register(
+		(*scpb.SecondaryIndex)(nil),
+		scpb.Target_DROP,
+		scpb.Status_PUBLIC,
+		to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			minPhase(scop.PreCommitPhase),
+			emit(func(this *scpb.SecondaryIndex) scop.Op {
+				// Most of this logic is taken from MakeMutationComplete().
+				return &scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly{
+					TableID: this.TableID,
+					IndexID: this.IndexID,
+				}
+			})),
+		to(scpb.Status_DELETE_ONLY,
+			minPhase(scop.PostCommitPhase),
+			revertible(false),
+			emit(func(this *scpb.SecondaryIndex) scop.Op {
+				return &scop.MakeDroppedIndexDeleteOnly{
+					TableID: this.TableID,
+					IndexID: this.IndexID,
+				}
+			})),
+		to(scpb.Status_ABSENT,
+			revertible(false),
+			emit(func(this *scpb.SecondaryIndex) scop.Op {
+				return &scop.MakeIndexAbsent{
+					TableID: this.TableID,
+					IndexID: this.IndexID,
+				}
+			}),
+			emit(func(this *scpb.SecondaryIndex) scop.Op {
+				return &scop.CreateGcJobForIndex{
+					TableID: this.TableID,
+					IndexID: this.IndexID,
+				}
+			})),
+	)
 }
