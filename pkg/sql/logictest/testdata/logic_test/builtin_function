@@ -2580,6 +2580,45 @@ query I
 SELECT COALESCE((SELECT ()), NULL) FROM t40297
 ----
 
+# Adding a cast shouldn't affect the type-checking.
+query I
+SELECT COALESCE((SELECT ())::record, NULL) FROM t40297
+----
+
+# Tuples must be the same length.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\) to be of type tuple, found type tuple{int}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))) FROM t40297
+
+# Adding a cast here should still work too.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\)::T to be of type tuple, found type tuple{int AS a}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))::t) FROM t40297
+
+# If a NULL is casted, then it no longer can be coerced to the right type.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple, found type tuple{int AS a}
+SELECT COALESCE((SELECT ()), NULL::t) FROM t40297
+
+# Type-checking should still work for non-empty tuples.
+query I
+SELECT COALESCE((SELECT '(1)'::t), NULL::t) FROM t40297
+----
+
+# (SELECT (1)) is interpreted as an INT.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type int, found type tuple{int AS a}
+SELECT COALESCE((SELECT (1)), NULL::t) FROM t40297
+
+# Adding ROW allows it to be interpreted as a tuple.
+query I
+SELECT COALESCE((SELECT ROW (1)), NULL::t) FROM t40297
+----
+
+# An anonymous tuple type only works if it is used with a tuple of the correct length.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple{int, int}, found type tuple{int AS a}
+SELECT COALESCE((SELECT ROW (1, 2)), NULL::t) FROM t40297
+
+# It should still type-check correctly without using a subquery.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple{int, int}, found type tuple{int AS a}
+SELECT COALESCE(ROW (1, 2), NULL::t) FROM t40297
+
 query T
 SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
 ----

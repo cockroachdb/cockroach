@@ -1064,7 +1064,7 @@ ORDER BY
 {}
 {"(1,2)","(3,4)"}
 
-statement error expected tuple \(3, 4, 5\) to have a length of 2
+statement error expected \(3, 4, 5\) to be of type tuple{int, int}, found type tuple{int, int, int}
 SELECT
   col
 FROM
