@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -170,14 +171,14 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		if j.sessionID != "" {
 			if row[3] == tree.DNull {
 				return errors.Errorf(
-					"job %d: with status '%s': expected session '%s' but found NULL",
-					j.ID(), statusString, j.sessionID)
+					"job %d: with status %q: expected session %q but found NULL",
+					j.ID(), status, j.sessionID)
 			}
 			storedSession := []byte(*row[3].(*tree.DBytes))
 			if !bytes.Equal(storedSession, j.sessionID.UnsafeBytes()) {
 				return errors.Errorf(
-					"job %d: with status '%s': expected session '%s' but found '%s'",
-					j.ID(), statusString, j.sessionID, storedSession)
+					"job %d: with status %q: expected session %q but found %q",
+					j.ID(), status, j.sessionID, sqlliveness.SessionID(storedSession))
 			}
 		} else {
 			log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
