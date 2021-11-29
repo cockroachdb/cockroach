@@ -153,10 +153,10 @@ func TestInitPut(t *testing.T) {
 	}
 }
 
-// TestTransactionConfig verifies the proper unwrapping and
-// re-wrapping of the client's sender when starting a transaction.
-// Also verifies that the UserPriority is propagated to the
-// transactional client.
+// TestTransactionConfig verifies the proper unwrapping and re-wrapping of the
+// client's sender when starting a transaction. Also verifies that the
+// UserPriority is propagated to the transactional client and that the admission
+// header is set correctly depending on how the transaction is instantiated.
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -169,14 +169,34 @@ func TestTransactionConfig(t *testing.T) {
 	db := NewDBWithContext(
 		testutils.MakeAmbientCtx(),
 		newTestTxnFactory(nil), clock, dbCtx)
-	if err := db.Txn(context.Background(), func(ctx context.Context, txn *Txn) error {
-		if txn.db.ctx.UserPriority != db.ctx.UserPriority {
-			t.Errorf("expected txn user priority %f; got %f",
-				db.ctx.UserPriority, txn.db.ctx.UserPriority)
+	for _, tc := range []struct {
+		label               string
+		txnCreator          func(context.Context, func(context.Context, *Txn) error) error
+		wantAdmissionHeader roachpb.AdmissionHeader_Source
+	}{
+		{
+			label:               "source is other",
+			txnCreator:          db.Txn,
+			wantAdmissionHeader: roachpb.AdmissionHeader_OTHER,
+		},
+		{
+			label:               "source is root kv",
+			txnCreator:          db.TxnRootKV,
+			wantAdmissionHeader: roachpb.AdmissionHeader_ROOT_KV,
+		},
+	} {
+		if err := tc.txnCreator(context.Background(), func(ctx context.Context, txn *Txn) error {
+			if txn.db.ctx.UserPriority != db.ctx.UserPriority {
+				t.Errorf("expected txn user priority %f; got %f",
+					db.ctx.UserPriority, txn.db.ctx.UserPriority)
+			}
+			if txn.admissionHeader.Source != tc.wantAdmissionHeader {
+				t.Errorf("expected txn source %d; got %d", tc.wantAdmissionHeader, txn.admissionHeader.Source)
+			}
+			return nil
+		}); err != nil {
+			t.Errorf("unexpected error on commit: %s", err)
 		}
-		return nil
-	}); err != nil {
-		t.Errorf("unexpected error on commit: %s", err)
 	}
 }
 
