@@ -67,11 +67,7 @@ var pebbleBatchPool = sync.Pool{
 
 // Instantiates a new pebbleBatch.
 func newPebbleBatch(
-	db *pebble.DB,
-	batch *pebble.Batch,
-	writeOnly bool,
-	disableSeparatedIntents bool,
-	overrideTxnDidNotUpdateMetaToFalse bool,
+	db *pebble.DB, batch *pebble.Batch, writeOnly bool, overrideTxnDidNotUpdateMetaToFalse bool,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
@@ -104,7 +100,7 @@ func newPebbleBatch(
 		// a correctness issue.
 		overrideTxnDidNotUpdateMetaToFalse: overrideTxnDidNotUpdateMetaToFalse,
 	}
-	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb, disableSeparatedIntents)
+	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb)
 	return pb
 }
 
@@ -340,12 +336,11 @@ func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
 // ClearIntent implements the Batch interface.
 func (p *pebbleBatch) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	var err error
-	var separatedIntentCountDelta int
-	p.scratch, separatedIntentCountDelta, err =
+	p.scratch, err =
 		p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-	return separatedIntentCountDelta, err
+	return err
 }
 
 // ClearEngineKey implements the Batch interface.
@@ -451,18 +446,11 @@ func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 
 // PutIntent implements the Batch interface.
 func (p *pebbleBatch) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
 	var err error
-	var separatedIntentCountDelta int
-	p.scratch, separatedIntentCountDelta, err =
-		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-	return separatedIntentCountDelta, err
+	p.scratch, err = p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, p.scratch)
+	return err
 }
 
 // PutEngineKey implements the Batch interface.

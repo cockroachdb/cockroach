@@ -238,6 +238,11 @@ func (*DummyEvalPlanner) DecodeGist(gist string) ([]string, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// ExecutorConfig is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) ExecutorConfig() interface{} {
+	return nil
+}
+
 var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

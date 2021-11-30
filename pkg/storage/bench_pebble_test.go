@@ -40,14 +40,13 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 }
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
-	return setupMVCCInMemPebbleWithSeparatedIntents(b, false /* disabledSeparatedIntents */)
+	return setupMVCCInMemPebbleWithSeparatedIntents(b)
 }
 
-func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB, disableSeparatedIntents bool) Engine {
+func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 	peb, err := Open(
 		context.Background(),
 		InMemory(),
-		SetSeparatedIntents(disableSeparatedIntents),
 		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)

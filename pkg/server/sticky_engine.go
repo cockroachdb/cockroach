@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -136,14 +135,7 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 		storage.CacheSize(cfg.CacheSize),
 		storage.MaxSize(spec.Size.InBytes),
 		storage.EncryptionAtRest(spec.EncryptionOptions),
-	}
-	// Don't randomize the separated intents if we explicitly want to disable
-	// them.
-	storeKnobs, _ := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs)
-	if storeKnobs == nil || !storeKnobs.StorageKnobs.DisableSeparatedIntents {
-		options = append(options, storage.ForStickyEngineTesting)
-	} else {
-		options = append(options, storage.SetSeparatedIntents(true))
+		storage.ForStickyEngineTesting,
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)

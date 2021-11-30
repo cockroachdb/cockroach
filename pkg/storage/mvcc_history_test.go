@@ -13,12 +13,10 @@ package storage
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -93,45 +91,12 @@ func TestMVCCHistories(t *testing.T) {
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
 
 	datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
-		// Default to random behavior wrt cluster version and separated
-		// intents.
-		enabledSeparated := rand.Intn(2) == 0
-		overridden := false
-		if strings.Contains(path, "_disallow_separated") {
-			enabledSeparated = false
-			overridden = true
-		}
-		if strings.Contains(path, "_enable_separated") {
-			enabledSeparated = true
-			overridden = true
-		}
-		if !overridden {
-			log.Infof(context.Background(),
-				"randomly setting enableSeparated: %t", enabledSeparated)
-		}
 		// We start from a clean slate in every test file.
 		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
-			SetSeparatedIntents(!enabledSeparated),
 			func(cfg *engineConfig) error {
-				if !overridden {
-					// Latest cluster version, since these tests are not ones where we
-					// are examining differences related to separated intents.
-					cfg.Settings = cluster.MakeTestingClusterSettings()
-				} else {
-					if !enabledSeparated {
-						// 21.1, which has the old code that is unaware about the changes
-						// we have made for OverrideTxnDidNotUpdateMetaToFalse. By using
-						// the latest cluster version, we effectively undo these changes.
-						cfg.Settings = cluster.MakeTestingClusterSettings()
-					} else if strings.Contains(path, "mixed_cluster") {
-						v21_1 := clusterversion.ByKey(clusterversion.V21_1)
-						cfg.Settings =
-							cluster.MakeTestingClusterSettingsWithVersions(v21_1, v21_1, true)
-					} else {
-						// Latest cluster version.
-						cfg.Settings = cluster.MakeTestingClusterSettings()
-					}
-				}
+				// Latest cluster version, since these tests are not ones where we
+				// are examining differences related to separated intents.
+				cfg.Settings = cluster.MakeTestingClusterSettings()
 				return nil
 			})
 		if err != nil {
@@ -545,21 +510,16 @@ type intentPrintingReadWriter struct {
 }
 
 func (rw intentPrintingReadWriter) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
-	rw.buf.Printf("called PutIntent(%v, _, %v, TDNUM(%t), %v)\n",
-		key, state, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
+	rw.buf.Printf("called PutIntent(%v, _, %v)\n",
+		key, txnUUID)
+	return rw.ReadWriter.PutIntent(ctx, key, value, txnUUID)
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	rw.buf.Printf("called ClearIntent(%v, %v, TDNUM(%t), %v)\n",
 		key, state, txnDidNotUpdateMeta, txnUUID)
 	return rw.ReadWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
