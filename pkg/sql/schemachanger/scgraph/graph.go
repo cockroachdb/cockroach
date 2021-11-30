@@ -50,6 +50,10 @@ type Graph struct {
 	// reached before or concurrently with this node.
 	depEdgesFrom *depEdgeTree
 
+	// sameStageDepEdgesTo maps a Node to the DepEdges with the
+	// SameStage kind incident upon the indexed node.
+	sameStageDepEdgesTo *depEdgeTree
+
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
 	opToNode map[scop.Op]*scpb.Node
@@ -91,6 +95,7 @@ func New(initial scpb.State) (*Graph, error) {
 		authorization:       initial.Authorization,
 	}
 	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
+	g.sameStageDepEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
 	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
@@ -120,6 +125,7 @@ func (g *Graph) ShallowClone() *Graph {
 		targetIdxMap:        g.targetIdxMap,
 		opEdgesFrom:         g.opEdgesFrom,
 		depEdgesFrom:        g.depEdgesFrom,
+		sameStageDepEdgesTo: g.sameStageDepEdgesTo,
 		opToNode:            g.opToNode,
 		edges:               g.edges,
 		entities:            g.entities,
@@ -230,12 +236,13 @@ var _ = (*Graph)(nil).GetNodeFromOp
 // and statuses).
 func (g *Graph) AddDepEdge(
 	rule string,
+	kind DepEdgeKind,
 	fromTarget *scpb.Target,
 	fromStatus scpb.Status,
 	toTarget *scpb.Target,
 	toStatus scpb.Status,
 ) (err error) {
-	de := &DepEdge{rule: rule}
+	de := &DepEdge{rule: rule, kind: kind}
 	if de.from, err = g.getOrCreateNode(fromTarget, fromStatus); err != nil {
 		return err
 	}
@@ -244,6 +251,9 @@ func (g *Graph) AddDepEdge(
 	}
 	g.edges = append(g.edges, de)
 	g.depEdgesFrom.insert(de)
+	if de.Kind() == SameStage {
+		g.sameStageDepEdgesTo.insert(de)
+	}
 	return nil
 }
 
@@ -284,14 +294,6 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 			err = rAsErr
 		}
 	}()
-	backCycleExists := func(n *scpb.Node, de *DepEdge) bool {
-		var foundBack bool
-		_ = g.ForEachDepEdgeFrom(de.To(), func(maybeBack *DepEdge) error {
-			foundBack = foundBack || maybeBack.To() == n
-			return nil
-		})
-		return foundBack
-	}
 	l := list.New()
 	marks := make(map[*scpb.Node]bool)
 	var visit func(n *scpb.Node)
@@ -305,18 +307,12 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 		}
 		marks[n] = false
 		_ = g.ForEachDepEdgeFrom(n, func(de *DepEdge) error {
-			// We want to eliminate cycles caused by swaps. In that
-			// case, we want to pretend that there is no edge from the
-			// add to the drop, and, in that way, the drop is ordered first.
-			if n.Direction == scpb.Target_ADD || !backCycleExists(n, de) {
-				visit(de.To())
-			}
+			visit(de.To())
 			return nil
 		})
 		marks[n] = true
 		l.PushFront(n)
 	}
-
 	_ = g.ForEachNode(func(n *scpb.Node) error {
 		visit(n)
 		return nil
