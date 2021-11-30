@@ -56,10 +56,11 @@ var (
 	waitFlag      = false
 	createVMOpts  = vm.DefaultCreateOpts()
 	startOpts     = install.StartOpts{
-		Encrypt:    false,
-		Sequential: true,
-		SkipInit:   false,
-		StoreCount: 1,
+		Sequential:      true,
+		EncryptedStores: false,
+		SkipInit:        false,
+		StoreCount:      1,
+		TenantID:        2,
 	}
 	stageOS           string
 	stageDir          string
@@ -72,6 +73,9 @@ var (
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
+
+	// hostCluster is used for multi-tenant functionality.
+	hostCluster string
 )
 
 func initFlags() {
@@ -170,18 +174,22 @@ func initFlags() {
 
 	startCmd.Flags().IntVarP(&numRacks,
 		"racks", "r", 0, "the number of racks to partition the nodes into")
-	startCmd.Flags().BoolVar(&startOpts.Sequential,
-		"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
 	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
 		"args", "a", nil, "node arguments")
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
 		"env", "e", nodeEnv, "node environment variables")
-	startCmd.Flags().BoolVar(&startOpts.Encrypt,
-		"encrypt", startOpts.Encrypt, "start nodes with encryption at rest turned on")
+	startCmd.Flags().BoolVar(&startOpts.EncryptedStores,
+		"encrypt", startOpts.EncryptedStores, "start nodes with encryption at rest turned on")
 	startCmd.Flags().BoolVar(&startOpts.SkipInit,
 		"skip-init", startOpts.SkipInit, "skip initializing the cluster")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
+
+	startTenantCmd.Flags().StringVarP(&hostCluster,
+		"host-cluster", "H", "", "host cluster")
+	_ = startTenantCmd.MarkFlagRequired("host-cluster")
+	startTenantCmd.Flags().IntVarP(&startOpts.TenantID,
+		"tenant-id", "t", startOpts.TenantID, "tenant ID")
 
 	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
@@ -232,6 +240,11 @@ func initFlags() {
 	} {
 		cmd.Flags().BoolVar(
 			&ssh.InsecureIgnoreHostKey, "insecure-ignore-host-key", true, "don't check ssh host keys")
+	}
+
+	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd} {
+		cmd.Flags().BoolVar(&startOpts.Sequential,
+			"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
 	}
 
 	for _, cmd := range []*cobra.Command{

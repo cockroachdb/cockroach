@@ -4,6 +4,7 @@ go_library(
     name = "roachprod",
     srcs = [
         "clusters_cache.go",
+        "multitenant.go",
         "roachprod.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
