@@ -410,40 +410,37 @@ func decomposeTableDescToElements(
 	}
 	// Add any constraints without indexes first.
 	for idx, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		constraintID := &scpb.ConstraintID{
-			Type:    scpb.ConstraintID_UniqueWithoutIndex,
-			Ordinal: uint32(idx),
-		}
 		constraintName := &scpb.ConstraintName{
-			TableID:      tbl.GetID(),
-			ConstraintID: constraintID,
-			Name:         constraint.Name,
+			TableID:           tbl.GetID(),
+			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
+			ConstraintOrdinal: uint32(idx),
+			Name:              constraint.Name,
 		}
 		uniqueWithoutConstraint := &scpb.UniqueConstraint{
-			ConstraintID: constraintID,
-			TableID:      tbl.GetID(),
-			IndexID:      0, // Invalid ID
-			ColumnIDs:    constraint.ColumnIDs,
+			TableID:           tbl.GetID(),
+			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
+			ConstraintOrdinal: uint32(idx),
+			IndexID:           0, // Invalid ID
+			ColumnIDs:         constraint.ColumnIDs,
 		}
 		addOrDropForDir(b, dir, uniqueWithoutConstraint)
 		addOrDropForDir(b, dir, constraintName)
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
-		constraintID := &scpb.ConstraintID{
-			Type:    scpb.ConstraintID_CheckConstraint,
-			Ordinal: uint32(idx),
-		}
 		constraintName := &scpb.ConstraintName{
-			TableID:      tbl.GetID(),
-			ConstraintID: constraintID,
-			Name:         constraint.Name,
+			TableID:           tbl.GetID(),
+			ConstraintType:    scpb.ConstraintType_Check,
+			ConstraintOrdinal: uint32(idx),
+			Name:              constraint.Name,
 		}
 		checkConstraint := &scpb.CheckConstraint{
-			TableID:   tbl.GetID(),
-			Name:      constraint.Name,
-			Validated: constraint.Validity == descpb.ConstraintValidity_Validated,
-			ColumnIDs: constraint.ColumnIDs,
+			ConstraintType:    scpb.ConstraintType_Check,
+			ConstraintOrdinal: uint32(idx),
+			TableID:           tbl.GetID(),
+			Name:              constraint.Name,
+			Validated:         constraint.Validity == descpb.ConstraintValidity_Validated,
+			ColumnIDs:         constraint.ColumnIDs,
 		}
 		addOrDropForDir(b, dir, checkConstraint)
 		addOrDropForDir(b, dir, constraintName)
