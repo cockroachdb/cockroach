@@ -1,0 +1,194 @@
+# Tests verifying that gaps between range spans or overlaps of range spans block recovery.
+
+
+# Check that ranges with perfectly matching spans are correctly detected as an overlap
+# even if they are not adjacent with respect of range ids.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min  # first range for the [/Min-/Table/3) keyspan
+  EndKey: /Table/3
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/3
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 3
+  StartKey: /Min
+  EndKey: /Table/3  # second (conflicting) range for the [/Min-/Table/3) keyspan
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 20
+  RaftCommittedIndex: 20
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+ERROR: Key space covering is not complete. Discovered following inconsistencies:
+range overlap /{Min-Table/3}
+  r1: /{Min-Table/3}
+  r3: /{Min-Table/3}
+
+
+# Check range gap where range 2 is missing leaving a hole between ranges 1 and 3.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/3  # first range ends short of the second one leaving a missing [Table/3, Table/4)
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 3
+  StartKey: /Table/4
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+ERROR: Key space covering is not complete. Discovered following inconsistencies:
+range gap /Table/{3-4}
+  r1: /{Min-Table/3}
+  r3: /{Table/4-Max}
+
+# Check range overlap with stale range in a way of newly split ones.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min  # range covers the full range which was split, but node has some stale data
+  EndKey: /Table/10
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 2}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 10
+  StartKey: /Table/10
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 2}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 3  # newer range that covers part of it parent range
+  StartKey: /Table/1
+  EndKey: /Table/3
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 3}
+  - { NodeID: 7, StoreID: 7, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 4
+  StartKey: /Table/3
+  EndKey: /Table/10  # newer range that covers part of it parent range
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 3}
+  - { NodeID: 7, StoreID: 7, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+ERROR: Key space covering is not complete. Discovered following inconsistencies:
+range overlap /Table/{1-3}
+  r1: /{Min-Table/10}
+  r3: /Table/{1-3}
+range overlap /Table/{3-10}
+  r1: /{Min-Table/10}
+  r4: /Table/{3-10}
+
+
+# Check that gaps at the start and end of keyspace are detected and reported correctly.
+# For this we will create range that start long of min and short of max.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Table/1  # range starts in the middle of keyspace
+  EndKey: /Table/99   # and ends short of Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 2}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+ERROR: Key space covering is not complete. Discovered following inconsistencies:
+range gap /{Min-Table/1}
+  r0: /Min
+  r1: /Table/{1-99}
+range gap /{Table/99-Max}
+  r1: /Table/{1-99}
+  r0: /Max{-}
+
+
+# Check that empty replica set will be correctly handled as a non covering keyset.
+replication-data
+----
+ok
+
+collect-replica-info
+----
+ok
+
+make-plan
+----
+ERROR: Key space covering is not complete. Discovered following inconsistencies:
+range gap /M{in-ax}
+  r0: /Min
+  r0: /Max{-}
+
