@@ -11,6 +11,9 @@
 package streaming
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -19,6 +22,10 @@ import (
 
 // StreamID is the ID of a replication stream.
 type StreamID int64
+
+func (s StreamID) String() string {
+	return fmt.Sprintf("%d", s)
+}
 
 // InvalidStreamID is the zero value for StreamID corresponding to no stream.
 const InvalidStreamID StreamID = 0
@@ -33,6 +40,13 @@ type ReplicationStreamManager interface {
 
 	// StartReplicationStream starts a stream replication job for the specified tenant on the producer side.
 	StartReplicationStream(evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64) (StreamID, error)
+
+	// UpdateReplicationStreamProgress updates the progress of a replication stream.
+	UpdateReplicationStreamProgress(
+		evalCtx *tree.EvalContext,
+		txn *kv.Txn,
+		streamID StreamID,
+		frontier hlc.Timestamp) (jobspb.StreamReplicationStatus, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.

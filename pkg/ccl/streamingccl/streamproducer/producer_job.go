@@ -162,11 +162,17 @@ func updateReplicationStreamProgress(
 	txn *kv.Txn,
 	streamID streaming.StreamID,
 	ts hlc.Timestamp,
-) error {
-	return registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, false,
+) (status jobspb.StreamReplicationStatus, err error) {
+	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, false,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Status != jobs.StatusRunning {
-				return errors.Errorf("job %d not running", streamID)
+			if md.Status == jobs.StatusPaused {
+				status.StreamStatus = jobspb.StreamReplicationStatus_PAUSED
+			} else if md.Status == jobs.StatusRunning {
+				status.StreamStatus = jobspb.StreamReplicationStatus_RUNNING
+			} else {
+				status.StreamStatus = jobspb.StreamReplicationStatus_STOPPED
+				// Skip checking PTS record since it might already be released
+				return nil
 			}
 
 			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecord
@@ -174,11 +180,16 @@ func updateReplicationStreamProgress(
 			if err != nil {
 				return err
 			}
+			status.ProtectedTimestamp = &ptsRecord.Timestamp
+			if status.StreamStatus != jobspb.StreamReplicationStatus_RUNNING {
+				return nil
+			}
 
 			if shouldUpdatePTS := ptsRecord.Timestamp.Less(ts); shouldUpdatePTS {
 				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, ts); err != nil {
 					return err
 				}
+				status.ProtectedTimestamp = &ts
 			}
 
 			if p := md.Progress; expiration.After(p.GetStreamReplication().Expiration) {
@@ -187,10 +198,24 @@ func updateReplicationStreamProgress(
 			}
 			return nil
 		})
+	return status, err
+}
+
+func doUpdateReplicationStreamProgress(
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID, frontier hlc.Timestamp,
+) (jobspb.StreamReplicationStatus, error) {
+
+	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
+	expirationTime := timeutil.Now().Add(timeout)
+
+	return updateReplicationStreamProgress(evalCtx.Ctx(),
+		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, txn, streamID, frontier)
 }
 
 func init() {
 	streamingccl.StartReplicationStreamHook = doStartReplicationStream
+	streamingccl.UpdateReplicationStreamProgressHook = doUpdateReplicationStreamProgress
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {

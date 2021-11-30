@@ -106,6 +106,22 @@ message StreamIngestionProgress {
 }
 
 
+message StreamReplicationStatus {
+
+  enum StreamStatus {
+    RUNNING = 0;
+    PAUSED = 1;
+    // STOPPED can mean replication is complete or stream is closed due to timeout
+    STOPPED = 2;
+  }
+
+  StreamStatus stream_status = 1;
+
+  // Current protected timestamp for spans being replicated. It is absent
+  // when the replication stream is 'STOPPED'.
+  util.hlc.Timestamp protected_timestamp = 2;
+}
+
 message StreamReplicationDetails {
   // Key spans we are replicating
   repeated roachpb.Span spans = 1;
