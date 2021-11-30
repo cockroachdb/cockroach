@@ -49,11 +49,31 @@ func (oe *OpEdge) Type() scop.Type {
 	return oe.typ
 }
 
+// DepEdgeKind indicates the kind of constraint enforced by the edge.
+type DepEdgeKind int
+
+//go:generate stringer -type DepEdgeKind
+
+const (
+	_ DepEdgeKind = iota
+
+	// HappensAfter indicates that the source (from) of the edge must not be
+	// entered until after the destination (to) has entered the state. It could
+	// be in the same stage, or it could be in a subsequent stage.
+	HappensAfter
+
+	// SameStage indicates that the source (from) of the edge must
+	// not be entered until after the destination (to) has entered the state and
+	// that both nodes must enter the state in the same stage.
+	SameStage
+)
+
 // DepEdge represents a dependency between two nodes. A dependency
 // implies that the To() node cannot be reached before the From() node. It
 // can be reached concurrently.
 type DepEdge struct {
 	from, to *scpb.Node
+	kind     DepEdgeKind
 
 	// TODO(ajwerner): Deal with the possibility that multiple rules could
 	// generate the same edge.
@@ -68,3 +88,6 @@ func (de *DepEdge) To() *scpb.Node { return de.to }
 
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }
+
+// Kind returns the kind of the DepEdge.
+func (de *DepEdge) Kind() DepEdgeKind { return de.kind }

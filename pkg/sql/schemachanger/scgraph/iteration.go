@@ -61,3 +61,9 @@ type DepEdgeIterator func(de *DepEdge) error
 func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) (err error) {
 	return g.depEdgesFrom.iterateSourceNode(n, it)
 }
+
+// ForEachSameStageDepEdgeTo iterates the dep edges in the graph of kind
+// SameStage which point to the provided node.
+func (g *Graph) ForEachSameStageDepEdgeTo(n *scpb.Node, it DepEdgeIterator) (err error) {
+	return g.sameStageDepEdgesTo.iterateSourceNode(n, it)
+}

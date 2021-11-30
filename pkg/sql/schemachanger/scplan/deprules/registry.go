@@ -26,7 +26,7 @@ func Apply(g *scgraph.Graph) error {
 			from := r.Var(dr.from).(*scpb.Node)
 			to := r.Var(dr.to).(*scpb.Node)
 			return g.AddDepEdge(
-				dr.name, from.Target, from.Status, to.Target, to.Status,
+				dr.name, dr.kind, from.Target, from.Status, to.Target, to.Status,
 			)
 		}); err != nil {
 			return err
@@ -39,15 +39,16 @@ func Apply(g *scgraph.Graph) error {
 var depRules []rule
 
 type rule struct {
-	name      string
-	from, to  rel.Var
-	q         *rel.Query
-	sameStage bool
+	name     string
+	from, to rel.Var
+	q        *rel.Query
+	kind     scgraph.DepEdgeKind
 }
 
-func register(ruleName string, from, to rel.Var, query *rel.Query) {
+func register(ruleName string, edgeKind scgraph.DepEdgeKind, from, to rel.Var, query *rel.Query) {
 	depRules = append(depRules, rule{
 		name: ruleName,
+		kind: edgeKind,
 		from: from,
 		to:   to,
 		q:    query,
