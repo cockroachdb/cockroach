@@ -236,6 +236,7 @@ nogo(
         "@org_golang_x_tools//go/analysis/passes/unsafeptr:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/unusedresult:go_default_library",
         "//pkg/testutils/lint/passes/descriptormarshal",
+        "//pkg/testutils/lint/passes/errcheck",
         "//pkg/testutils/lint/passes/errcmp",
         "//pkg/testutils/lint/passes/fmtsafe",
         "//pkg/testutils/lint/passes/grpcclientconnclose",

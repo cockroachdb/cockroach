@@ -25,6 +25,18 @@
             "_test\\.go$": "tests"
         }
     },
+    "errcheck": {
+	"exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/pkg/testutils/lint/lint_test.go": "not really sure why this is failing honestly"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
     "errcmp": {
         "exclude_files": {
             "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
