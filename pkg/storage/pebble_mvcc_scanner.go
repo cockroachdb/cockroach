@@ -17,7 +17,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -151,9 +151,8 @@ type pebbleMVCCScanner struct {
 	txnSequence       enginepb.TxnSeq
 	txnIgnoredSeqNums []enginepb.IgnoredSeqNumRange
 	// Uncertainty related fields.
-	localUncertaintyLimit  hlc.Timestamp
-	globalUncertaintyLimit hlc.Timestamp
-	checkUncertainty       bool
+	uncertainty      uncertainty.Interval
+	checkUncertainty bool
 	// Metadata object for unmarshalling intents.
 	meta enginepb.MVCCMetadata
 	// Bools copied over from MVCC{Scan,Get}Options. See the comment on the
@@ -201,7 +200,7 @@ func (p *pebbleMVCCScanner) release() {
 
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
-func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit hlc.Timestamp) {
+func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, ui uncertainty.Interval) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
 	p.curExcluded = false
 
@@ -211,12 +210,11 @@ func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit
 		p.txnSequence = txn.Sequence
 		p.txnIgnoredSeqNums = txn.IgnoredSeqNums
 
-		p.localUncertaintyLimit = localUncertaintyLimit
-		p.globalUncertaintyLimit = txn.GlobalUncertaintyLimit
-		// We must check uncertainty even if p.ts.Less(localUncertaintyLimit)
+		p.uncertainty = ui
+		// We must check uncertainty even if p.ts.Less(p.uncertainty.LocalLimit)
 		// because the local uncertainty limit cannot be applied to values with
 		// synthetic timestamps.
-		p.checkUncertainty = p.ts.Less(p.globalUncertaintyLimit)
+		p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit)
 	}
 }
 
@@ -345,18 +343,10 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	p.intents.Reset()
 }
 
-// Returns whether a value with the specified timestamp is within the
-// transaction's uncertainty interval and is considered uncertain.
-//
-// REQUIRES: p.uncertaintyCheck == true
-// REQUIRES: p.ts < ts
-func (p *pebbleMVCCScanner) isUncertainValue(ts hlc.Timestamp) bool {
-	return observedts.IsUncertain(p.localUncertaintyLimit, p.globalUncertaintyLimit, ts)
-}
-
 // Returns an uncertainty error with the specified timestamp and p.txn.
 func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
-	p.err = roachpb.NewReadWithinUncertaintyIntervalError(p.ts, ts, p.localUncertaintyLimit, p.txn)
+	p.err = roachpb.NewReadWithinUncertaintyIntervalError(
+		p.ts, ts, p.uncertainty.LocalLimit.ToTimestamp(), p.txn)
 	p.results.clear()
 	p.intents.Reset()
 	return false
@@ -407,14 +397,14 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if p.isUncertainValue(p.curUnsafeKey.Timestamp) {
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 
 			// This value is not within the reader's uncertainty window, but
 			// there could be other uncertain committed values, so seek and
-			// check uncertainty using globalUncertaintyLimit.
-			return p.seekVersion(ctx, p.globalUncertaintyLimit, true)
+			// check uncertainty using the uncertainty interval's GlobalLimit.
+			return p.seekVersion(ctx, p.uncertainty.GlobalLimit, true)
 		}
 
 		// 6. Our txn's read timestamp is greater than or equal to the
@@ -467,13 +457,13 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// we want to read the intent regardless of our read timestamp and fall
 		// into case 11 below.
 		if p.checkUncertainty {
-			if p.isUncertainValue(metaTS) {
+			if p.uncertainty.IsUncertain(metaTS) {
 				return p.uncertaintyError(metaTS)
 			}
 			// The intent is not within the uncertainty window, but there could
 			// be an uncertain committed value, so seek and check uncertainty
-			// using globalUncertaintyLimit.
-			return p.seekVersion(ctx, p.globalUncertaintyLimit, true)
+			// using the uncertainty interval's GlobalLimit.
+			return p.seekVersion(ctx, p.uncertainty.GlobalLimit, true)
 		}
 		return p.seekVersion(ctx, p.ts, false)
 	}
@@ -773,11 +763,11 @@ func (p *pebbleMVCCScanner) seekVersion(
 			// the interval, it may not be uncertainty. This is because seekTS
 			// is set to the transaction's global uncertainty limit, so we are
 			// seeking based on the worst-case uncertainty, but values with a
-			// time in the range (localUncertaintyLimit, globalUncertaintyLimit]
+			// time in the range (uncertainty.LocalLimit, uncertainty.GlobalLimit]
 			// are only uncertain if their timestamps are synthetic. Meanwhile,
-			// any value with a time in the range (ts, localUncertaintyLimit]
+			// any value with a time in the range (ts, uncertainty.LocalLimit]
 			// is uncertain.
-			if p.isUncertainValue(p.curUnsafeKey.Timestamp) {
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
 		}
@@ -797,7 +787,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty
 		// error.
-		if p.isUncertainValue(p.curUnsafeKey.Timestamp) {
+		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp) {
 			return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 		}
 		if !p.iterNext() {

@@ -100,7 +100,7 @@ correctness. It is intended to be exhaustive.
    written yet at the time that the transaction first visited the node, and by
    extension, at the time that the transaction began. This allows the
    transaction to avoid uncertainty restarts in some circumstances. For more,
-   see pkg/kv/kvserver/observedts/doc.go.
+   see pkg/kv/kvserver/uncertainty/doc.go.
 
  - Non-transactional requests (Raft + BatchRequest channels). Most KV operations
    in CockroachDB are transactional and receive their read timestamps from their

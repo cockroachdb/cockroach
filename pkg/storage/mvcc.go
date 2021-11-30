@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -780,26 +781,7 @@ type MVCCGetOptions struct {
 	Tombstones       bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
-	// LocalUncertaintyLimit is the transaction's GlobalUncertaintyLimit, reduce
-	// by any observed timestamp that the transaction has acquired from the node
-	// that holds the lease for the range that the transaction is evaluating on.
-	//
-	// The local uncertainty limit can reduce the uncertainty interval applied
-	// to most values on a range. This can lead to values that would otherwise
-	// be considered uncertain by the original global uncertainty limit to be
-	// considered "certainly concurrent", and thus not causally related, with
-	// the transaction due to observed timestamps.
-	//
-	// However, the local uncertainty limit does not apply to all values on a
-	// range. Specifically, values with "synthetic timestamps" must use the
-	// transaction's original global uncertainty limit for the purposes of
-	// uncertainty, because observed timestamps do not apply to values with
-	// synthetic timestamps.
-	//
-	// See pkg/kv/kvserver/observedts for more details.
-	//
-	// The field is only set if Txn is also set.
-	LocalUncertaintyLimit hlc.Timestamp
+	Uncertainty      uncertainty.Interval
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
 }
@@ -890,7 +872,7 @@ func mvccGet(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
+	mvccScanner.init(opts.Txn, opts.Uncertainty)
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
@@ -2451,7 +2433,7 @@ func mvccScanToBytes(
 		keyBuf:                 mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
+	mvccScanner.init(opts.Txn, opts.Uncertainty)
 
 	var res MVCCScanResult
 	var err error
@@ -2548,26 +2530,7 @@ type MVCCScanOptions struct {
 	Reverse          bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
-	// LocalUncertaintyLimit is the transaction's GlobalUncertaintyLimit, reduce
-	// by any observed timestamp that the transaction has acquired from the node
-	// that holds the lease for the range that the transaction is evaluating on.
-	//
-	// The local uncertainty limit can reduce the uncertainty interval applied
-	// to most values on a range. This can lead to values that would otherwise
-	// be considered uncertain by the original global uncertainty limit to be
-	// considered "certainly concurrent", and thus not causally related, with
-	// the transaction due to observed timestamps.
-	//
-	// However, the local uncertainty limit does not apply to all values on a
-	// range. Specifically, values with "synthetic timestamps" must use the
-	// transaction's original global uncertainty limit for the purposes of
-	// uncertainty, because observed timestamps do not apply to values with
-	// synthetic timestamps.
-	//
-	// See pkg/kv/kvserver/observedts for more details.
-	//
-	// The field is only set if Txn is also set.
-	LocalUncertaintyLimit hlc.Timestamp
+	Uncertainty      uncertainty.Interval
 	// MaxKeys is the maximum number of kv pairs returned from this operation.
 	// The zero value represents an unbounded scan. If the limit stops the scan,
 	// a corresponding ResumeSpan is returned. As a special case, the value -1

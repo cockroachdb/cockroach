@@ -608,13 +608,23 @@ func (t *Tracer) startSpanGeneric(
 		if opts.Parent.IsNoop() {
 			// This method relies on the parent, if any, not being a no-op. A no-op
 			// parent should have been optimized away by the
-			// WithParentAndAutoCollection option.
+			// WithParent option.
 			panic("invalid no-op parent")
 		}
 		if opts.Parent.IsSterile() {
 			// A sterile parent should have been optimized away by
-			// WithParentAndAutoCollection.
+			// WithParent.
 			panic("invalid sterile parent")
+		}
+		if opts.Parent.Tracer() != t {
+			// Creating a child with a different Tracer than the parent is not allowed
+			// because it would become unclear which active span registry the new span
+			// should belong to. In particular, the child could end up in the parent's
+			// registry if the parent Finish()es before the child, and then it would
+			// be leaked because Finish()ing the child would attempt to remove the
+			// span from the child tracer's registry.
+			panic(fmt.Sprintf("attempting to start span with parent from different Tracer. parent: %s, child: %s",
+				opts.Parent.OperationName(), opName))
 		}
 	}
 
@@ -691,7 +701,7 @@ func (t *Tracer) startSpanGeneric(
 		octx     optimizedContext
 		// Pre-allocated buffers for the span.
 		tagsAlloc             [3]attribute.KeyValue
-		childrenAlloc         [4]*crdbSpan
+		childrenAlloc         [4]childRef
 		structuredEventsAlloc [3]interface{}
 	}{}
 
@@ -732,7 +742,7 @@ func (t *Tracer) startSpanGeneric(
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
 			if opts.Parent.i.crdb.recordingType() != RecordingOff {
 				s.i.crdb.mu.parent = opts.Parent.i.crdb
-				opts.Parent.i.crdb.addChild(s.i.crdb)
+				opts.Parent.i.crdb.addChild(s.i.crdb, !opts.ParentDoesNotCollectRecording)
 			}
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
@@ -927,8 +937,13 @@ type RegistrySpan interface {
 	// TraceID returns an identifier for the trace that this span is part of.
 	TraceID() tracingpb.TraceID
 
-	// GetRecording returns the recording of the trace rooted at this span.
-	GetRecording(recType RecordingType) Recording
+	// GetFullRecording returns the recording of the trace rooted at this span.
+	//
+	// This includes the recording of child spans created with the
+	// WithDetachedRecording option. In other situations, the recording of such
+	// children is not included in the parent's recording but, in the case of the
+	// span registry, we want as much information as possible to be included.
+	GetFullRecording(recType RecordingType) Recording
 
 	// SetVerbose sets the verbosity of the span appropriately and
 	// recurses on its children.
@@ -997,13 +1012,14 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	if sp == nil {
 		return ctx, nil
 	}
-	collectionOpt := WithParentAndManualCollection(sp.Meta())
+	opts := make([]SpanOption, 0, 3)
 	if sp.Tracer().ShouldRecordAsyncSpans() {
-		// Using auto collection here ensures that recordings from async spans
-		// also show up at the parent.
-		collectionOpt = WithParentAndAutoCollection(sp)
+		opts = append(opts, WithParent(sp))
+	} else {
+		opts = append(opts, WithParent(sp), WithDetachedRecording())
 	}
-	return sp.Tracer().StartSpanCtx(ctx, opName, WithFollowsFrom(), collectionOpt)
+	opts = append(opts, WithFollowsFrom())
+	return sp.Tracer().StartSpanCtx(ctx, opName, opts...)
 }
 
 // EnsureForkSpan is like ForkSpan except that, if there is no span in ctx, it
@@ -1014,12 +1030,12 @@ func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Con
 	// If there's a span in ctx, we use it as a parent.
 	if sp != nil {
 		tr = sp.Tracer()
-		if !tr.ShouldRecordAsyncSpans() {
-			opts = append(opts, WithParentAndManualCollection(sp.Meta()))
+		if tr.ShouldRecordAsyncSpans() {
+			opts = append(opts, WithParent(sp))
 		} else {
 			// Using auto collection here ensures that recordings from async spans
 			// also show up at the parent.
-			opts = append(opts, WithParentAndAutoCollection(sp))
+			opts = append(opts, WithParent(sp), WithDetachedRecording())
 		}
 		opts = append(opts, WithFollowsFrom())
 	}
@@ -1038,23 +1054,11 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(ctx, opName, WithParentAndAutoCollection(sp))
-}
-
-// ChildSpanRemote is like ChildSpan but the new Span is created using
-// WithParentAndManualCollection instead of WithParentAndAutoCollection. When
-// this is used, it's the caller's duty to collect this span's recording and
-// return it to the root span of the trace.
-func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span) {
-	sp := SpanFromContext(ctx)
-	if sp == nil {
-		return ctx, nil
-	}
-	return sp.Tracer().StartSpanCtx(ctx, opName, WithParentAndManualCollection(sp.Meta()))
+	return sp.Tracer().StartSpanCtx(ctx, opName, WithParent(sp))
 }
 
 // EnsureChildSpan looks at the supplied Context. If it contains a Span, returns
-// a child span via the WithParentAndAutoCollection option; otherwise starts a
+// a child span via the WithParent option; otherwise starts a
 // new Span. In both cases, a context wrapping the Span is returned along with
 // the newly created Span.
 //
@@ -1063,7 +1067,7 @@ func EnsureChildSpan(
 	ctx context.Context, tr *Tracer, name string, os ...SpanOption,
 ) (context.Context, *Span) {
 	slp := optsPool.Get().(*[]SpanOption)
-	*slp = append(*slp, WithParentAndAutoCollection(SpanFromContext(ctx)))
+	*slp = append(*slp, WithParent(SpanFromContext(ctx)))
 	*slp = append(*slp, os...)
 	ctx, sp := tr.StartSpanCtx(ctx, name, *slp...)
 	// Clear and zero-length the slice. Note that we have to clear
