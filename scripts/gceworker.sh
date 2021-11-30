@@ -14,6 +14,13 @@ if [[ "${cmd}" ]]; then
   shift
 fi
 
+function start_and_wait() {
+    gcloud compute instances start "${1}"
+    echo "waiting for node to finish starting..."
+    # Wait for vm and sshd to start up.
+    retry gcloud compute ssh "${1}" --command=true || true
+}
+
 case "${cmd}" in
     gcloud)
     gcloud "$@"
@@ -55,10 +62,7 @@ case "${cmd}" in
 
     ;;
     start)
-    gcloud compute instances start "${NAME}"
-    echo "waiting for node to finish starting..."
-    # Wait for vm and sshd to start up.
-    retry gcloud compute ssh "${NAME}" --command=true || true
+    start_and_wait "${NAME}"
     # SSH into the node, since that's probably why we started it.
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
@@ -145,6 +149,13 @@ case "${cmd}" in
       -ignore 'Name *.d' \
       -ignore 'Name *.o' \
       -ignore 'Name zcgo_flags*.go'
+    ;;
+    vscode)
+    start_and_wait "${NAME}"
+    HOST=$(gcloud compute ssh --dry-run ${NAME} | awk '{print $NF}')
+    gcloud compute ssh ${NAME} --command 'sudo touch /.active'
+    trap "gcloud compute ssh ${NAME} --command 'sudo rm /.active'" EXIT
+    code --wait --remote ssh-remote+$HOST "$@"
     ;;
     *)
     echo "$0: unknown command: ${cmd}, use one of create, start, stop, delete, ssh, or sync"
