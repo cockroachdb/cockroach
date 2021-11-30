@@ -12,9 +12,13 @@ package scgraphviz
 
 import (
 	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -28,8 +32,65 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 )
 
+// StagesURL returns a URL to a rendering of the stages of the Plan.
+func StagesURL(p scplan.Plan) (string, error) {
+	gv, err := DrawStages(p)
+	if err != nil {
+		return "", err
+	}
+	return buildURL(gv)
+}
+
+// DependenciesURL returns a URL to a rendering of the graph used to build
+// the Plan.
+func DependenciesURL(p scplan.Plan) (string, error) {
+	gv, err := DrawDependencies(p)
+	if err != nil {
+		return "", err
+	}
+	return buildURL(gv)
+}
+
+func buildURL(gv string) (string, error) {
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	if _, err := io.WriteString(w, gv); err != nil {
+		return "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	return (&url.URL{
+		Scheme:   "https",
+		Host:     "cockroachdb.github.io",
+		Path:     "scplan/viz.html",
+		Fragment: base64.StdEncoding.EncodeToString(buf.Bytes()),
+	}).String(), nil
+}
+
+// DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
+func DecorateErrorWithPlanDetails(err error, p scplan.Plan) error {
+	if err == nil {
+		return nil
+	}
+
+	stagesURL, stagesErr := StagesURL(p)
+	if stagesErr != nil {
+		return errors.CombineErrors(err, stagesErr)
+	}
+	err = errors.WithDetailf(err, "stages: %s", stagesURL)
+
+	dependenciesURL, dependenciesErr := DependenciesURL(p)
+	if dependenciesErr != nil {
+		return errors.CombineErrors(err, dependenciesErr)
+	}
+	err = errors.WithDetailf(err, "dependencies: %s", dependenciesURL)
+
+	return err
+}
+
 // DrawStages returns a graphviz string of the stages of the Plan.
-func DrawStages(p *scplan.Plan) (string, error) {
+func DrawStages(p scplan.Plan) (string, error) {
 	gv, err := drawStages(p)
 	if err != nil {
 		return "", err
@@ -38,7 +99,7 @@ func DrawStages(p *scplan.Plan) (string, error) {
 }
 
 // DrawDependencies returns a graphviz string of graph used to build the Plan.
-func DrawDependencies(p *scplan.Plan) (string, error) {
+func DrawDependencies(p scplan.Plan) (string, error) {
 	gv, err := drawDeps(p)
 	if err != nil {
 		return "", err
@@ -46,7 +107,7 @@ func DrawDependencies(p *scplan.Plan) (string, error) {
 	return gv.String(), nil
 }
 
-func drawStages(p *scplan.Plan) (*dot.Graph, error) {
+func drawStages(p scplan.Plan) (*dot.Graph, error) {
 
 	dg := dot.NewGraph()
 	stagesSubgraph := dg.Subgraph("stages", dot.ClusterOption{})
@@ -86,12 +147,12 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 		curNodes[i] = tsn
 	}
 	for id, st := range p.Stages {
-		stage := fmt.Sprintf("stage %d", id)
+		stage := fmt.Sprintf("stage %d of %d", id+1, len(p.Stages))
 		sg := stagesSubgraph.Subgraph(stage, dot.ClusterOption{})
 		next := st.After
 		nextNodes := make([]dot.Node, len(curNodes))
 		for i, st := range next.Nodes {
-			cst := sg.Node(fmt.Sprintf("stage %d: %d", id, i))
+			cst := sg.Node(fmt.Sprintf("stage %d of %d: %d", id+1, len(p.Stages), i))
 			cst.Attr("label", targetStatusID(i, st.Status))
 			if st != cur.Nodes[i] {
 				ge := curNodes[i].Edge(cst)
@@ -112,7 +173,7 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 	return dg, nil
 }
 
-func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
+func drawDeps(p scplan.Plan) (*dot.Graph, error) {
 	dg := dot.NewGraph()
 
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})

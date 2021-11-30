@@ -9,19 +9,19 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 ops
 DROP VIEW defaultdb.v1
 ----
-Stage 0
+Stage 1 of 4
   transitions:
     [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 53
-Stage 1
+Stage 2 of 4
   transitions:
     [Namespace:{DescID: 53, Name: v1}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.DrainDescriptorName
       TableID: 53
-Stage 2 (non-revertible)
+Stage 3 of 4 (non-revertible)
   transitions:
     [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
     [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
@@ -31,7 +31,7 @@ Stage 2 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 53
       TableID: 52
-Stage 3 (non-revertible)
+Stage 4 of 4 (non-revertible)
   transitions:
     [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
   ops:
@@ -89,7 +89,7 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
-Stage 0
+Stage 1 of 4
   transitions:
     [View:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
@@ -107,7 +107,7 @@ Stage 0
       DescID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
-Stage 1
+Stage 2 of 4
   transitions:
     [Namespace:{DescID: 53, Name: v1}, PUBLIC, DROP] -> ABSENT
     [Namespace:{DescID: 54, Name: v2}, PUBLIC, DROP] -> ABSENT
@@ -125,7 +125,7 @@ Stage 1
       TableID: 56
     *scop.DrainDescriptorName
       TableID: 59
-Stage 2 (non-revertible)
+Stage 3 of 4 (non-revertible)
   transitions:
     [View:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
     [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
@@ -175,7 +175,7 @@ Stage 2 (non-revertible)
     *scop.RemoveTypeBackRef
       DescID: 59
       TypeID: 58
-Stage 3 (non-revertible)
+Stage 4 of 4 (non-revertible)
   transitions:
     [View:{DescID: 53}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 54}, DROPPED, DROP] -> ABSENT

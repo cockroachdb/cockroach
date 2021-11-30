@@ -99,11 +99,7 @@ func TestPlanDataDriven(t *testing.T) {
 						require.NoError(t, err)
 					}
 
-					plan, err = scplan.MakePlan(outputNodes,
-						scplan.Params{
-							ExecutionPhase: scop.PostCommitPhase,
-						})
-					require.NoError(t, err)
+					plan = sctestutils.MakePlan(t, outputNodes, scop.PostCommitPhase)
 				})
 
 				if d.Cmd == "ops" {
@@ -179,7 +175,7 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 func marshalOps(t *testing.T, plan *scplan.Plan) string {
 	var stages strings.Builder
 	for stageIdx, stage := range plan.Stages {
-		_, _ = fmt.Fprintf(&stages, "Stage %d", stageIdx)
+		_, _ = fmt.Fprintf(&stages, "Stage %d of %d", stageIdx+1, len(plan.Stages))
 		if !stage.Revertible {
 			stages.WriteString(" (non-revertible)")
 		}

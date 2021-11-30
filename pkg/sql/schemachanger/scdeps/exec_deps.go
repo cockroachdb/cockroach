@@ -34,13 +34,20 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// JobRegistry implements the methods the schema changer needs from the
+// job registry. Outside of tests this should always be backed by *job.Registry.
+type JobRegistry interface {
+	MakeJobID() jobspb.JobID
+	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn) (*jobs.Job, error)
+}
+
 // NewExecutorDependencies returns an scexec.Dependencies implementation built
 // from the given arguments.
 func NewExecutorDependencies(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	descsCollection *descs.Collection,
-	jobRegistry *jobs.Registry,
+	jobRegistry JobRegistry,
 	indexBackfiller scexec.IndexBackfiller,
 	indexValidator scexec.IndexValidator,
 	cclCallbacks scexec.Partitioner,
@@ -66,7 +73,7 @@ type txnDeps struct {
 	txn             *kv.Txn
 	codec           keys.SQLCodec
 	descsCollection *descs.Collection
-	jobRegistry     *jobs.Registry
+	jobRegistry     JobRegistry
 	indexValidator  scexec.IndexValidator
 	partitioner     scexec.Partitioner
 	eventLogWriter  *eventLogWriter
@@ -358,8 +365,8 @@ func newEventLogWriter(txn *kv.Txn, logEvent LogEventCallback) *eventLogWriter {
 	}
 }
 
-// AddDropEvent implements scexec.EventLogger
-func (m *eventLogWriter) AddDropEvent(
+// EnqueueEvent implements scexec.EventLogger
+func (m *eventLogWriter) EnqueueEvent(
 	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
 	eventList := m.eventStatementMap[metadata.StatementID]

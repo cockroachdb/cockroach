@@ -52,12 +52,41 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		job := jobspb.SchemaChangeGCDetails{
 			Tables: mvs.descriptorGCJobs,
 		}
-		descriptorList := strings.Builder{}
-		descriptorList.WriteString("Dropping descriptors ")
-		for _, table := range mvs.descriptorGCJobs {
-			descriptorList.WriteString(fmt.Sprintf("%d ", table.ID))
+		jobName := func() string {
+			if len(mvs.descriptorGCJobs) == 1 {
+				return fmt.Sprintf("dropping descriptor %d", mvs.descriptorGCJobs[0].ID)
+			}
+			var sb strings.Builder
+			sb.WriteString("dropping descriptors")
+			for _, table := range mvs.descriptorGCJobs {
+				sb.WriteString(fmt.Sprintf(" %d", table.ID))
+			}
+			return sb.String()
 		}
-		record := createGCJobRecord(descriptorList.String(), security.NodeUserName(), job)
+
+		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
+		if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
+			return err
+		}
+	}
+	for tableID, indexes := range mvs.indexGCJobs {
+		job := jobspb.SchemaChangeGCDetails{
+			ParentID: tableID,
+			Indexes:  indexes,
+		}
+		jobName := func() string {
+			if len(indexes) == 1 {
+				return fmt.Sprintf("dropping table %d index %d", tableID, indexes[0].IndexID)
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("dropping table %d indexes", tableID))
+			for _, index := range indexes {
+				sb.WriteString(fmt.Sprintf(" %d", index.IndexID))
+			}
+			return sb.String()
+		}
+
+		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
 		if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
 			return err
 		}
@@ -73,12 +102,14 @@ type mutationVisitorState struct {
 	checkedOutDescriptors nstree.Map
 	drainedNames          map[descpb.ID][]descpb.NameInfo
 	descriptorGCJobs      []jobspb.SchemaChangeGCDetails_DroppedID
+	indexGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
 }
 
 func newMutationVisitorState(c Catalog) *mutationVisitorState {
 	return &mutationVisitorState{
 		c:            c,
 		drainedNames: make(map[descpb.ID][]descpb.NameInfo),
+		indexGCJobs:  make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex),
 	}
 }
 
@@ -112,6 +143,17 @@ func (mvs *mutationVisitorState) AddNewGCJobForDescriptor(descriptor catalog.Des
 	mvs.descriptorGCJobs = append(mvs.descriptorGCJobs,
 		jobspb.SchemaChangeGCDetails_DroppedID{
 			ID:       descriptor.GetID(),
+			DropTime: timeutil.Now().UnixNano(),
+		})
+}
+
+func (mvs *mutationVisitorState) AddNewGCJobForIndex(
+	tbl catalog.TableDescriptor, index catalog.Index,
+) {
+	mvs.indexGCJobs[tbl.GetID()] = append(
+		mvs.indexGCJobs[tbl.GetID()],
+		jobspb.SchemaChangeGCDetails_DroppedIndex{
+			IndexID:  index.GetID(),
 			DropTime: timeutil.Now().UnixNano(),
 		})
 }

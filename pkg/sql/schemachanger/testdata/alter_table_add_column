@@ -236,7 +236,9 @@ upsert descriptor #53
 update progress of schema change job #1
 commit transaction #6
 begin transaction #7
-## stage 6 in PostCommitPhase: 1 MutationType ops
+## stage 6 in PostCommitPhase: 2 MutationType ops
+create job #2: "GC for dropping table 53 index 1"
+  descriptor IDs: [53]
 upsert descriptor #53
   ...
      id: 53

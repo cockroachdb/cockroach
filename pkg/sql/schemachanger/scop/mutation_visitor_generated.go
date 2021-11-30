@@ -28,6 +28,7 @@ type MutationVisitor interface {
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
 	CreateGcJobForDescriptor(context.Context, CreateGcJobForDescriptor) error
+	CreateGcJobForIndex(context.Context, CreateGcJobForIndex) error
 	MarkDescriptorAsDroppedSynthetically(context.Context, MarkDescriptorAsDroppedSynthetically) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
@@ -83,6 +84,11 @@ func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v
 // Visit is part of the MutationOp interface.
 func (op CreateGcJobForDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.CreateGcJobForDescriptor(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateGcJobForIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGcJobForIndex(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
