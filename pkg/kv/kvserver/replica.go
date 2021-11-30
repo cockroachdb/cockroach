@@ -1831,11 +1831,13 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 // facilitates quick command application (requests generally need to make it to
 // both the lease holder and the raft leader before being applied by other
 // replicas).
-func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
+	ctx context.Context, now hlc.ClockTimestamp,
+) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	status := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
+	status := r.leaseStatusAtRLocked(ctx, now)
 	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
 		return
 	}
