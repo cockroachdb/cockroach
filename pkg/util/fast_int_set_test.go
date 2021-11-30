@@ -19,83 +19,93 @@ import (
 )
 
 func TestFastIntSet(t *testing.T) {
-	for _, mVal := range []int{1, 8, 30, smallCutoff, 2 * smallCutoff, 4 * smallCutoff} {
-		m := mVal
-		t.Run(fmt.Sprintf("%d", m), func(t *testing.T) {
-			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
-			rng, _ := randutil.NewTestRand()
-			in := make([]bool, m)
-			forEachRes := make([]bool, m)
+	for _, minVal := range []int{-10, -1, 0, 8, smallCutoff, 2 * smallCutoff} {
+		for _, maxVal := range []int{-1, 1, 8, 30, smallCutoff, 2 * smallCutoff, 4 * smallCutoff} {
+			if maxVal <= minVal {
+				continue
+			}
+			// We are using Parallel, we need to make local instances of the loop
+			// variables.
+			minVal := minVal
+			maxVal := maxVal
+			t.Run(fmt.Sprintf("%d_%d", minVal, maxVal), func(t *testing.T) {
+				t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+				rng, _ := randutil.NewTestRand()
+				in := make(map[int]bool)
+				forEachRes := make(map[int]bool)
 
-			var s FastIntSet
-			for i := 0; i < 1000; i++ {
-				v := rng.Intn(m)
-				if rng.Intn(2) == 0 {
-					in[v] = true
-					s.Add(v)
-				} else {
-					in[v] = false
-					s.Remove(v)
-				}
-				empty := true
-				for j := 0; j < m; j++ {
-					empty = empty && !in[j]
-					if in[j] != s.Contains(j) {
-						t.Fatalf("incorrect result for Contains(%d), expected %t", j, in[j])
+				var s FastIntSet
+				for i := 0; i < 1000; i++ {
+					v := minVal + rng.Intn(maxVal-minVal)
+					if rng.Intn(2) == 0 {
+						in[v] = true
+						s.Add(v)
+					} else {
+						in[v] = false
+						s.Remove(v)
 					}
-				}
-				if empty != s.Empty() {
-					t.Fatalf("incorrect result for Empty(), expected %t", empty)
-				}
-				// Test ForEach
-				for j := range forEachRes {
-					forEachRes[j] = false
-				}
-				s.ForEach(func(j int) {
-					forEachRes[j] = true
-				})
-				for j := 0; j < m; j++ {
-					if in[j] != forEachRes[j] {
-						t.Fatalf("incorrect ForEachResult for %d (%t, expected %t)", j, forEachRes[j], in[j])
-					}
-				}
-				// Cross-check Ordered and Next().
-				var vals []int
-				for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
-					vals = append(vals, i)
-				}
-				if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
-					t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
-				}
-				assertSame := func(orig, copy FastIntSet) {
-					t.Helper()
-					if !orig.Equals(copy) || !copy.Equals(orig) {
-						t.Fatalf("expected equality: %v, %v", orig, copy)
-					}
-					if col, ok := copy.Next(0); ok {
-						copy.Remove(col)
-						if orig.Equals(copy) || copy.Equals(orig) {
-							t.Fatalf("unexpected equality: %v, %v", orig, copy)
+					empty := true
+					for j := minVal; j < maxVal; j++ {
+						empty = empty && !in[j]
+						if in[j] != s.Contains(j) {
+							t.Fatalf("incorrect result for Contains(%d), expected %t", j, in[j])
 						}
-						copy.Add(col)
+					}
+					if empty != s.Empty() {
+						t.Fatalf("incorrect result for Empty(), expected %t", empty)
+					}
+					// Test ForEach
+					for j := range forEachRes {
+						forEachRes[j] = false
+					}
+					s.ForEach(func(j int) {
+						forEachRes[j] = true
+					})
+					for j := minVal; j < maxVal; j++ {
+						if in[j] != forEachRes[j] {
+							t.Fatalf("incorrect ForEachResult for %d (%t, expected %t)", j, forEachRes[j], in[j])
+						}
+					}
+					// Cross-check Ordered and Next().
+					var vals []int
+					// Start at the minimum value, or before.
+					startVal := minVal - rng.Intn(10)
+					for i, ok := s.Next(startVal); ok; i, ok = s.Next(i + 1) {
+						vals = append(vals, i)
+					}
+					if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
+						t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
+					}
+					assertSame := func(orig, copy FastIntSet) {
+						t.Helper()
 						if !orig.Equals(copy) || !copy.Equals(orig) {
 							t.Fatalf("expected equality: %v, %v", orig, copy)
 						}
+						if col, ok := copy.Next(startVal); ok {
+							copy.Remove(col)
+							if orig.Equals(copy) || copy.Equals(orig) {
+								t.Fatalf("unexpected equality: %v, %v", orig, copy)
+							}
+							copy.Add(col)
+							if !orig.Equals(copy) || !copy.Equals(orig) {
+								t.Fatalf("expected equality: %v, %v", orig, copy)
+							}
+						}
 					}
+					// Test Copy.
+					s2 := s.Copy()
+					assertSame(s, s2)
+					// Test CopyFrom.
+					var s3 FastIntSet
+					s3.CopyFrom(s)
+					assertSame(s, s3)
+					// Make sure CopyFrom into a non-empty set still works.
+					s.Shift(100)
+					s.CopyFrom(s3)
+					assertSame(s, s3)
 				}
-				// Test Copy.
-				s2 := s.Copy()
-				assertSame(s, s2)
-				// Test CopyFrom.
-				var s3 FastIntSet
-				s3.CopyFrom(s)
-				assertSame(s, s3)
-				// Make sure CopyFrom into a non-empty set still works.
-				s.Shift(100)
-				s.CopyFrom(s3)
-				assertSame(s, s3)
-			}
-		})
+			})
+		}
 	}
 }
 
