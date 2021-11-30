@@ -142,6 +142,8 @@ type SQLServer struct {
 	// changes. It is nil on the system tenant.
 	settingsWatcher *settingswatcher.SettingsWatcher
 
+	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
+
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
 	// connManager is the connection manager to use to set up additional
@@ -911,6 +913,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		diagnosticsReporter:     reporter,
 		spanconfigMgr:           spanConfigMgr,
 		settingsWatcher:         settingsWatcher,
+		isMeta1Leaseholder:      cfg.isMeta1Leaseholder,
 	}, nil
 }
 
@@ -1119,6 +1122,12 @@ func (s *SQLServer) preStart(
 					s.execCfg,
 					sessiondatapb.SessionData{},
 				)
+			},
+			ShouldRunScheduler: func(ctx context.Context, ts hlc.ClockTimestamp) (bool, error) {
+				if s.execCfg.Codec.ForSystemTenant() {
+					return s.isMeta1Leaseholder(ctx, ts)
+				}
+				return true, nil
 			},
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
