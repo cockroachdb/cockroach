@@ -21,6 +21,7 @@ func registerTests(r *testRegistry) {
 	registerAlterPK(r)
 	registerAutoUpgrade(r)
 	registerBackup(r)
+	registerBackupMixedVersion(r)
 	registerBackupNodeShutdown(r)
 	registerCancel(r)
 	registerCDC(r)

@@ -13,15 +13,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // The following env variable names match those specified in the TeamCity
@@ -43,14 +47,18 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
-func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) string {
+func destinationName(c *cluster) string {
 	dest := c.name
-	// Randomize starting with encryption-at-rest enabled.
-	c.encryptAtRandom = true
-
-	if local {
+	if c.isLocal() {
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
+	return dest
+}
+
+func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) string {
+	dest := destinationName(c)
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 
 	c.Put(ctx, workload, "./workload")
 	c.Put(ctx, cockroach, "./cockroach")
@@ -58,17 +66,24 @@ func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *clus
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
 	c.Start(ctx, t)
+	runImportBankDataSplit(ctx, rows, ranges, t, c)
+	return dest
+}
+
+func runImportBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) {
 	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 	time.Sleep(time.Second) // wait for csv server to open listener
-
 	importArgs := []string{
 		"./workload", "fixtures", "import", "bank",
-		"--db=bank", "--payload-bytes=10240", fmt.Sprintf("--ranges=%d", ranges), "--csv-server", "http://localhost:8081",
-		fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+		"--db=bank",
+		"--payload-bytes=10240",
+		"--csv-server", "http://localhost:8081",
+		"--seed=1",
+		fmt.Sprintf("--ranges=%d", ranges),
+		fmt.Sprintf("--rows=%d", rows),
+		"{pgurl:1}",
 	}
 	c.Run(ctx, c.Node(1), importArgs...)
-
-	return dest
 }
 
 func importBankData(ctx context.Context, rows int, t *test, c *cluster) string {
@@ -135,8 +150,105 @@ func registerBackupNodeShutdown(r *testRegistry) {
 
 }
 
-func registerBackup(r *testRegistry) {
+func registerBackupMixedVersion(r *testRegistry) {
+	r.Add(testSpec{
+		Name:    "backup/mixed-version",
+		Owner:   OwnerBulkIO,
+		Cluster: makeClusterSpec(4),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			// An empty string means that the cockroach binary specified by flag
+			// `cockroach` will be used.
+			const mainVersion = ""
+			roachNodes := c.All()
+			predV, err := PredecessorVersion(r.buildVersion)
+			require.NoError(t, err)
+			c.Put(ctx, workload, "./workload")
 
+			loadBackupDataStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+				rows := rows3GiB
+				if c.isLocal() {
+					rows = 100
+				}
+				runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
+			}
+			successfulBackupStep := func(nodeID int, opts ...string) versionStep {
+				return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+					backupOpts := ""
+					if len(opts) > 0 {
+						backupOpts = fmt.Sprintf("WITH %s", strings.Join(opts, ", "))
+					}
+					backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s' %s",
+						nodeID, destinationName(c), backupOpts)
+					gatewayDB := c.Conn(ctx, nodeID)
+					defer gatewayDB.Close()
+					t.Status("Running: ", backupQuery)
+					_, err := gatewayDB.ExecContext(ctx, backupQuery)
+					require.NoError(t, err)
+				}
+			}
+
+			// workaroundForAncientData attempts to clean up a range that has data that results in a failed
+			// backup. In the v20.2 checkpoint data, we have 3 KVs for the eventlog row in the descriptor
+			// table. The following are the MVCC timestamps and modification_time in the deserialized table
+			// descriptor for these entries:
+			//
+			// | mvcc_timestamp         | modification_time   |
+			// |----------------------------------------------|
+			// | 1585824927.878520565,0 | 1585824876057272000 |
+			// | 1585824876.059029000,0 | 1585824876057272000 |
+			// | 1585824876.057140000,0 | 1585824876057272000 | <- not ok
+			//
+			// The last entry violates an invariant that the modification time should be at or before the
+			// mvcc_timestamp. Because of this, the node will crash with a fatal log message when we attempt
+			// to process this KV in getAllDescChanges in pkg/ccl/backupcc/targets.go:
+			//
+			//     sql/catalog/descpb/descriptor.go:191 ⋮ [-] 173 read table descriptor ‹"eventlog"› (12)
+			//     which has a ModificationTime after its MVCC timestamp: has 1585824876.057272000,0,
+			//     expected 1585824876.057140000,0
+			//
+			// We believe that this data is the result of a v1.0 bug that was fixed in
+			// https://github.com/cockroachdb/cockroach/pull/16842.
+			//
+			// Given this, we are comfortable working around this problem rather than explicitly handling it
+			// in the backup code. Here, we force the range containing this data through the gc queue which
+			// will GC the old revision as it is not the latest and well past the gc.ttl.
+			workaroundForAncientData := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+				t.Status("sending enqueue_range request for queue=gc and range=5")
+				req := &serverpb.EnqueueRangeRequest{
+					Queue:           "gc",
+					RangeID:         5,
+					SkipShouldQueue: true,
+				}
+				host := c.ExternalAdminUIAddr(ctx, c.Node(1))[0]
+				url := fmt.Sprintf("http://%s/_admin/v1/enqueue_range", host)
+				var resp serverpb.EnqueueRangeResponse
+				err := httputil.PostJSON(*http.DefaultClient, url, req, &resp)
+				require.NoError(t, err)
+			}
+
+			u := newVersionUpgradeTest(c,
+				uploadAndStartFromCheckpointFixture(roachNodes, predV),
+				waitForUpgradeStep(roachNodes),
+				preventAutoUpgradeStep(1),
+				loadBackupDataStep,
+				// Upgrade some of the nodes.
+				binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
+				workaroundForAncientData,
+				// Backup from new node should succeed
+				successfulBackupStep(1),
+				// Backup from new node with revision history should succeed
+				successfulBackupStep(2, "revision_history"),
+				// Backup from old node should succeed
+				successfulBackupStep(3),
+				// Backup from old node with revision history should succeed
+				successfulBackupStep(4, "revision_history"),
+			)
+			u.run(ctx, t)
+		},
+	})
+}
+
+func registerBackup(r *testRegistry) {
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
