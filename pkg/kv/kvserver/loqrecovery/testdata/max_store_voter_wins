@@ -43,8 +43,8 @@ make-plan
   NewReplica:
     NodeID: 2
     StoreID: 2
-    ReplicaID: 16
-  NextReplicaID: 17
+    ReplicaID: 6
+  NextReplicaID: 7
 
 apply-plan stores=(1,2)
 ----
@@ -69,4 +69,4 @@ dump-store stores=(1,2)
   - RangeID: 1
     StartKey: /Min
     Replicas:
-    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 16}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 6}

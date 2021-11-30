@@ -280,8 +280,9 @@ Discarded live replicas: %d
 `, report.TotalReplicas, report.HealthyReplicas, len(report.PlannedUpdates), report.DiscardedNonSurvivors)
 	for _, r := range report.PlannedUpdates {
 		_, _ = fmt.Fprintf(stderr, "Recovering range r%d:%s promoting replica r%d at store s%d to r%d. "+
-			"Discarding replicas: %s\n",
-			r.RangeID, r.StartKey, r.OldReplicaID, r.StoreID, r.ReplicaID, r.DiscardedReplicas)
+			"Discarding available replicas: [%s], Discarded dead replicas: [%s]\n",
+			r.RangeID, r.StartKey, r.OldReplicaID, r.StoreID, r.ReplicaID,
+			r.DiscardedAvailableReplicas, r.DiscardedDeadReplicas)
 	}
 
 	_, _ = fmt.Fprintf(stderr, "\nDiscovered dead stores from provided files: %s\n\n",
