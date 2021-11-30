@@ -501,8 +501,9 @@ func (r *testRunner) runWorker(
 
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
-		var success bool
-		success, err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, testRunnerLogPath, stdout, testL)
+		err = r.runTest(
+			ctx, t, testToRun.runNum, testToRun.runCount, c, testRunnerLogPath, stdout, testL,
+		)
 		if err != nil {
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
@@ -511,7 +512,7 @@ func (r *testRunner) runWorker(
 			}
 		} else {
 			msg := "test passed"
-			if !success {
+			if t.Failed() {
 				msg = fmt.Sprintf("test failed: %s (run %d)", t.Name(), testToRun.runNum)
 			}
 			l.PrintfCtx(ctx, msg)
@@ -606,9 +607,6 @@ func allStacks() []byte {
 // testRunnerLogPath: The path to the test runner's log. It will be copied to
 //  	the test's artifacts dir if the test fails and we're running under
 //  	TeamCity.
-//
-// TODO(test-eng): the `bool` should go away, instead `t.Failed()` can be consulted
-// by the caller to determine whether the test passed.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
@@ -618,9 +616,9 @@ func (r *testRunner) runTest(
 	testRunnerLogPath string,
 	stdout io.Writer,
 	l *logger.Logger,
-) (bool, error) {
+) error {
 	if t.Spec().(*registry.TestSpec).Skip != "" {
-		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
+		return fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
 	}
 
 	runID := t.Name()
@@ -748,7 +746,7 @@ func (r *testRunner) runTest(
 			minExp, c.expiration)
 		if err := c.Extend(ctx, extend, l); err != nil {
 			t.printfAndFail(0 /* skip */, "failed to extend cluster: %s", err)
-			return false, nil
+			return nil
 		}
 	}
 
@@ -782,7 +780,7 @@ func (r *testRunner) runTest(
 
 	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
-		return false, err
+		return err
 	}
 	select {
 	case <-done:
@@ -860,7 +858,7 @@ func (r *testRunner) runTest(
 			r.collectClusterLogs(ctx, c, t)
 			// We already marked the test as failing, so don't return an error here.
 			// Doing so would shut down the entire roachtest run.
-			return false, nil
+			return nil
 		}
 	}
 
@@ -886,9 +884,8 @@ func (r *testRunner) runTest(
 
 	if t.Failed() {
 		r.collectClusterLogs(ctx, c, t)
-		return false, nil
 	}
-	return true, nil
+	return nil
 }
 
 func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
