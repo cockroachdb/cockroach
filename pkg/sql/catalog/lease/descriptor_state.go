@@ -78,7 +78,7 @@ type descriptorState struct {
 //
 // This returns errRenewLease when there is no descriptor cached
 // or the latest descriptor version's ModificationTime satisfies the
-// timestamp while it's expiration time doesn't satisfy the timestamp.
+// timestamp while its expiration time doesn't satisfy the timestamp.
 // This is an optimistic strategy betting that in all likelihood a
 // higher layer renewing the lease on the descriptor and populating
 // descriptorState will satisfy the timestamp on a subsequent call.

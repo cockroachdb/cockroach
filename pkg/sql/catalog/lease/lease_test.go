@@ -223,6 +223,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			cfgCpy.RangeFeedFactory,
+			nil,
 		)
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
 		mgr.PeriodicallyRefreshSomeLeases(ctx)

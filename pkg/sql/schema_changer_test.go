@@ -104,6 +104,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
+		nil,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
