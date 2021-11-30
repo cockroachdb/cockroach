@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,6 +59,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -3133,6 +3135,94 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
 	}
+}
+
+// TestSnapshotReservationQueueTimeoutAvoidsStarvation verifies that the
+// snapshot reservation queue applies a tighter queueing timeout than overall
+// operation timeout to incoming snapshot requests, which enables it to avoid
+// starvation even with its FIFO queueing policy under high concurrency.
+func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	// Run each snapshot with a 100-millisecond timeout, a 50-millisecond queue
+	// timeout, and a 15-millisecond process time.
+	const timeout = 100 * time.Millisecond
+	const maxQueueTimeout = 50 * time.Millisecond
+	const timeoutFrac = float64(maxQueueTimeout) / float64(timeout)
+	const processTime = 15 * time.Millisecond
+	// Run 8 workers that are each trying to perform snapshots for 3 seconds.
+	const workers = 8
+	const duration = 3 * time.Second
+	// We expect that roughly duration / processTime snapshots "succeed". To avoid
+	// flakiness, we assert half of this.
+	const expSuccesses = int(duration / processTime)
+	const assertSuccesses = expSuccesses / 2
+	// Sanity check config. If workers*processTime < timeout, then the queue time
+	// will never be large enough to create starvation. If timeout-maxQueueTimeout
+	// < processTime then most snapshots won't have enough time to complete.
+	require.Greater(t, workers*processTime, timeout)
+	require.Greater(t, timeout-maxQueueTimeout, processTime)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tsc := TestStoreConfig(nil)
+	// Set the concurrency to 1 explicitly, in case the default ever changes.
+	tsc.concurrentSnapshotApplyLimit = 1
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, stopper, tsc)
+	s := tc.store
+	snapshotReservationQueueTimeoutFraction.Override(ctx, &s.ClusterSettings().SV, timeoutFrac)
+
+	var done int64
+	var successes int64
+	var g errgroup.Group
+	for i := 0; i < workers; i++ {
+		g.Go(func() error {
+			for atomic.LoadInt64(&done) == 0 {
+				if err := func() error {
+					snapCtx, cancel := context.WithTimeout(ctx, timeout)
+					defer cancel()
+					cleanup, _, err := s.reserveSnapshot(snapCtx, &SnapshotRequest_Header{RangeSize: 1})
+					if err != nil {
+						if errors.Is(err, context.DeadlineExceeded) {
+							return nil
+						}
+						return err
+					}
+					defer cleanup()
+					if atomic.LoadInt64(&done) != 0 {
+						// If the test has ended, don't process.
+						return nil
+					}
+					// Process...
+					time.Sleep(processTime)
+					// Check for sufficient processing time. If we hit a timeout, don't
+					// count the process attempt as a success. We could make this more
+					// reactive and terminate the sleep as soon as the ctx is canceled,
+					// but let's assume the worst case.
+					if err := snapCtx.Err(); err != nil {
+						t.Logf("hit %v while processing", err)
+					} else {
+						atomic.AddInt64(&successes, 1)
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	time.Sleep(duration)
+	atomic.StoreInt64(&done, 1)
+	require.NoError(t, g.Wait())
+	require.GreaterOrEqual(t, int(atomic.LoadInt64(&successes)), assertSuccesses)
 }
 
 func TestSnapshotRateLimit(t *testing.T) {
