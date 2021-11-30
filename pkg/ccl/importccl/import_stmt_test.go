@@ -7008,6 +7008,29 @@ func TestDetachedImport(t *testing.T) {
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
 }
 
+func TestImportRowErrorLargeRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	connDB := tc.Conns[0]
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+	// Our input file has an 8MB row
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft.command.max_size = '4MiB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+	sqlDB.Exec(t, "CREATE TABLE simple (s string)")
+	defer sqlDB.Exec(t, "DROP table simple")
+
+	inputFile := fmt.Sprintf("nodelocal://0/%s", "column-mismatch-with-long-lines.csv")
+	importIntoQuery := `IMPORT INTO simple CSV DATA ($1)`
+	// Without truncation this would fail with:
+	// pq: job 715036628973879297: could not mark as reverting: job-update: command is too large: 33561185 bytes (max: 4194304)
+	sqlDB.ExpectErr(t, ".*error parsing row 2: expected 1 fields, got 4.*-- TRUNCATED", importIntoQuery, inputFile)
+}
+
 func TestImportJobEventLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
