@@ -403,10 +403,22 @@ func (s *Store) reserveSnapshot(
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if header.RangeSize != 0 {
+		queueCtx := ctx
+		if deadline, ok := queueCtx.Deadline(); ok {
+			// Enforce a more strict timeout for acquiring the snapshot reservation to
+			// ensure that if the reservation is acquired, the snapshot has sufficient
+			// time to complete. See the comment on snapshotQueueTimeoutFraction and
+			// TestReserveSnapshotQueueTimeout.
+			timeoutFrac := snapshotQueueTimeoutFraction.Get(&s.ClusterSettings().SV)
+			timeout := time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
+			var cancel func()
+			queueCtx, cancel = context.WithTimeout(queueCtx, timeout)
+			defer cancel()
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		case <-queueCtx.Done():
+			return nil, errors.Wrap(queueCtx.Err(), "acquiring snapshot reservation")
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
 		}
@@ -709,6 +721,26 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 	"size of key-value batches sent over the network during snapshots",
 	256<<10, // 256 KB
 	settings.PositiveInt,
+).WithSystemOnly()
+
+// snapshotQueueTimeoutFraction is the maximum fraction of a Range snapshot's
+// total timeout that it is allowed to spend queued on the receiver waiting for
+// a reservation.
+//
+// Enforcement of this snapshotApplySem-scoped timeout is intended to prevent
+// starvation of snapshots in cases where a queue of snapshots waiting for
+// reservations builds and no single snapshot acquires the semaphore with
+// sufficient time to complete, but each holds the semaphore long enough to
+// ensure that later snapshots in the queue encounter this same situation. This
+// is a case of FIFO queuing + timeouts leading to starvation. By rejecting
+// snapshot attempts earlier, we ensure that those that do acquire the semaphore
+// have sufficient time to complete.
+var snapshotQueueTimeoutFraction = settings.RegisterFloatSetting(
+	"kv.snapshot_receiver.queue_timeout_fraction",
+	"the fraction of a snapshot's total timeout that it is allowed to spend "+
+		"queued on the receiver waiting for a reservation.",
+	0.5,
+	settings.PositiveFloat,
 ).WithSystemOnly()
 
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
