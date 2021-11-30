@@ -791,6 +791,9 @@ func (expr *CoalesceExpr) TypeCheck(
 ) (TypedExpr, error) {
 	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, semaCtx, desired, expr.Exprs...)
 	if err != nil {
+		if expr.Name == "COALESCE" {
+			fmt.Println()
+		}
 		return nil, decorateTypeCheckError(err, "incompatible %s expressions", log.Safe(expr.Name))
 	}
 
@@ -2234,9 +2237,9 @@ func TypeCheckSameTypedExprs(
 	}
 
 	// Handle tuples, which will in turn call into this function recursively for each element.
-	if _, ok := exprs[0].(*Tuple); ok {
-		return typeCheckSameTypedTupleExprs(ctx, semaCtx, desired, exprs...)
-	}
+	//if _, ok := exprs[0].(*Tuple); ok {
+	//	return typeCheckSameTypedTupleExprs(ctx, semaCtx, desired, exprs...)
+	//}
 
 	// Hold the resolved type expressions of the provided exprs, in order.
 	// TODO(nvanbenschoten): Look into reducing allocations here.
@@ -2474,16 +2477,25 @@ func typeCheckSameTypedTupleExprs(
 	// Hold the resolved type expressions of the provided exprs, in order.
 	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
+	for i, expr := range exprs {
+		typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.Any)
+		if err != nil {
+			return nil, nil, err
+		}
+		typedExprs[i] = typedExpr
+	}
 
 	// All other exprs must be tuples.
 	first := exprs[0].(*Tuple)
-	if err := checkAllExprsAreTuplesOrNulls(ctx, semaCtx, exprs[1:]); err != nil {
+	if err := checkAllExprsAreTuplesOrNulls(ctx, semaCtx, typedExprs[1:]); err != nil {
+		//if err := checkAllExprsAreTuplesOrNulls(ctx, semaCtx, exprs[1:]); err != nil {
 		return nil, nil, err
 	}
 
 	// All tuples must have the same length.
 	firstLen := len(first.Exprs)
-	if err := checkAllTuplesHaveLength(exprs[1:], firstLen); err != nil {
+	if err := checkAllTuplesHaveLength(typedExprs[1:], firstLen); err != nil {
+		//if err := checkAllTuplesHaveLength(exprs[1:], firstLen); err != nil {
 		return nil, nil, err
 	}
 
@@ -2517,17 +2529,18 @@ func typeCheckSameTypedTupleExprs(
 		}
 		resTypes.TupleContents()[elemIdx] = resType
 	}
-	for tupleIdx, expr := range exprs {
-		if expr != DNull {
-			expr.(*Tuple).typ = resTypes
-		}
-		typedExprs[tupleIdx] = expr.(TypedExpr)
-	}
+	//for tupleIdx, expr := range exprs {
+	//	if expr != DNull {
+	//		expr.(*Tuple).typ = resTypes
+	//	}
+	//	typedExprs[tupleIdx] = expr.(TypedExpr)
+	//}
 	return typedExprs, resTypes, nil
 }
 
 // checkAllExprsAreTuplesOrNulls checks that all expressions in exprs are
 // either tuples or nulls.
+/*
 func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, exprs []Expr) error {
 	for _, expr := range exprs {
 		_, isTuple := expr.(*Tuple)
@@ -2537,7 +2550,27 @@ func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, ex
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError(expr, types.AnyTuple, typedExpr.ResolvedType())
+			if typedExpr.ResolvedType().Family() != types.TupleFamily {
+				return unexpectedTypeError(expr, types.AnyTuple, typedExpr.ResolvedType())
+			}
+		}
+	}
+	return nil
+}
+*/
+func checkAllExprsAreTuplesOrNulls(
+	ctx context.Context, semaCtx *SemaContext, exprs []TypedExpr,
+) error {
+	for _, expr := range exprs {
+		_, isTuple := expr.(*Tuple)
+		isTuple = isTuple || expr.ResolvedType().Family() == types.TupleFamily
+		isNull := expr == DNull
+		if !(isTuple || isNull) {
+			//typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.Any)
+			//if err != nil {
+			//	return err
+			//}
+			return unexpectedTypeError(expr, types.AnyTuple, expr.ResolvedType())
 		}
 	}
 	return nil
@@ -2545,21 +2578,27 @@ func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, ex
 
 // checkAllTuplesHaveLength checks that all tuples in exprs have the expected
 // length. Note that all nulls are skipped in this check.
-func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
+func checkAllTuplesHaveLength(exprs []TypedExpr, expectedLen int) error {
 	for _, expr := range exprs {
 		if expr == DNull {
 			continue
 		}
-		if err := checkTupleHasLength(expr.(*Tuple), expectedLen); err != nil {
+		if err := checkTupleHasLength(expr, expectedLen); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func checkTupleHasLength(t *Tuple, expectedLen int) error {
-	if len(t.Exprs) != expectedLen {
-		return pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple %v to have a length of %d", t, expectedLen)
+func checkTupleHasLength(expr TypedExpr, expectedLen int) error {
+	var length int
+	if tuple, ok := expr.(*Tuple); ok {
+		length = len(tuple.Exprs)
+	} else {
+		length = len(expr.ResolvedType().TupleContents())
+	}
+	if length != expectedLen {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple %v to have a length of %d", expr, expectedLen)
 	}
 	return nil
 }
