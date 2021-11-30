@@ -49,6 +49,7 @@ func registerPebbleYCSB(r registry.Registry) {
 				name += fmt.Sprintf("/duration=%d", dur)
 			}
 
+			d := dur
 			r.Add(registry.TestSpec{
 				Name:    name,
 				Owner:   registry.OwnerStorage,
@@ -56,7 +57,7 @@ func registerPebbleYCSB(r registry.Registry) {
 				Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 				Tags:    []string{tag},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runPebbleYCSB(ctx, t, c, size, pebble, dur)
+					runPebbleYCSB(ctx, t, c, size, pebble, d)
 				},
 			})
 		}
