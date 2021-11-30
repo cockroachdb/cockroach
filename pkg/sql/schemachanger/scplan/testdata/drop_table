@@ -149,7 +149,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP TABLE defaultdb.shipments CASCADE
         TargetMetadata:
-          SourceElementID: 2
+          SourceElementID: 3
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor

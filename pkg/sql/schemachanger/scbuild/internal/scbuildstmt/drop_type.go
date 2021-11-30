@@ -38,6 +38,10 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		if typ == nil {
 			continue
 		}
+		// If the descriptor is already being dropped, nothing to do.
+		if checkIfDescOrElementAreDropped(b, typ.GetID()) {
+			return
+		}
 		dropType(b, typ, n.DropBehavior)
 		b.IncrementSubWorkID()
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,4 +97,33 @@ func secondaryIndexElemFromDescriptor(
 			IndexID: indexDesc.ID,
 			Name:    indexDesc.Name,
 		}
+}
+
+// checkIfDescOrElementAreDropped determines if either the descriptor or any
+// associated element for it are being dropped.
+func checkIfDescOrElementAreDropped(b BuildCtx, id descpb.ID) bool {
+	// First check if the descriptor is already marked as dropped.
+	desc := b.CatalogReader().MustReadDescriptor(b.EvalCtx().Context, id)
+	if desc.Dropped() {
+		return true
+	}
+	// Next check for any elements that indicate that this object is considered
+	// as being dropped in this transaction during the build phase.
+	// Note: This should only happen if multiple objects are dropped in a single
+	// statement for example DROP TABLE A, B. Otherwise, the statement phase
+	// should have marked the descriptor already.
+	matches := false
+	b.ForEachNode(func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
+		if matches {
+			return
+		}
+		if dir == scpb.Target_DROP && screl.GetDescID(elem) == id {
+			switch elem.(type) {
+			case *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.Type,
+				*scpb.Database, *scpb.Schema:
+				matches = true
+			}
+		}
+	})
+	return matches
 }
