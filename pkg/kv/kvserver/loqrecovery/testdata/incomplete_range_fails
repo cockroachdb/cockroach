@@ -1,0 +1,77 @@
+# Tests verifying that gaps or overlaps in ranges block recovery.
+
+# Check range gap where range 2 is missing leaving a hole between ranges 1 and 2
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/3  # First range end short of the second one leaving a missing Table/3
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 3
+  StartKey: /Table/4
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+key range is incomplete. discovered inconsistencies: range gap /Table/{3-4} between ranges r1 and r3
+
+# Check range overlap with stale range in a way of newly split ones.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min  # Range covers the full range which was split, but node has some stale data.
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 2}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 3  # Newer range that covers part of it parent range
+  StartKey: /Table/1
+  EndKey: /Table/3
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 3}
+  - { NodeID: 7, StoreID: 7, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 4
+  StartKey: /Table/3
+  EndKey: /Max  # Newer range that covers part of it parent range
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 3}
+  - { NodeID: 7, StoreID: 7, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+key range is incomplete. discovered inconsistencies: range overlap /{Table/1-Max} between ranges r1 and r3, range overlap /{Table/3-Max} between ranges r1 and r4

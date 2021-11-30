@@ -75,7 +75,8 @@ dump-store stores=(1,2)
 
 # Second use case where we can't make a decision and leave replica as is
 # Only a single learner is left, there is no way to recover.
-
+# TODO(olef): This needs to be fixed as new algorithm will choose learner in absence
+# absence of proper replicas instead of reporting failure of key coverage
 replication-data
 - StoreID: 1
   RangeID: 1

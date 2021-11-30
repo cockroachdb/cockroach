@@ -12,6 +12,9 @@ package loqrecovery
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -77,18 +80,23 @@ type PlanningReport struct {
 	UpdatedNodes map[roachpb.NodeID][]roachpb.StoreID
 }
 
+func (r *PlanningReport) addUpdate(rr ReplicaUpdateReport) {
+	r.PlannedUpdates = append(r.PlannedUpdates, rr)
+}
+
 // ReplicaUpdateReport contains detailed info about changes planned for particular replica
 // that was chosen as a designated survivor for the range.
 // This information is more detailed than update plan and collected for reporting purposes.
 // While information in update plan is meant for loqrecovery components, Report is meant for
 // cli interaction to keep user informed of changes.
 type ReplicaUpdateReport struct {
-	RangeID           roachpb.RangeID
-	StartKey          roachpb.RKey
-	Replica           roachpb.ReplicaDescriptor
-	OldReplica        roachpb.ReplicaDescriptor
-	StoreID           roachpb.StoreID
-	DiscardedReplicas roachpb.ReplicaSet
+	RangeID                    roachpb.RangeID
+	StartKey                   roachpb.RKey
+	Replica                    roachpb.ReplicaDescriptor
+	OldReplica                 roachpb.ReplicaDescriptor
+	StoreID                    roachpb.StoreID
+	DiscardedAvailableReplicas roachpb.ReplicaSet
+	DiscardedDeadReplicas      roachpb.ReplicaSet
 }
 
 // PlanReplicas analyzes captured replica information to determine which replicas could serve
@@ -111,108 +119,30 @@ func PlanReplicas(
 	report.PresentStores = storeListFromSet(availableStoreIDs)
 	report.MissingStores = storeListFromSet(missingStores)
 
+	replicasByRangeID := groupReplicasByRangeID(replicas)
+	// proposedWinners contain decisions for all ranges in keyspace. it contains ranges
+	// that lost quorum as well as the ones that didn't.
+	var proposedWinners []proposedDecision
+	for _, rangeReplicas := range replicasByRangeID {
+		proposedWinners = append(proposedWinners, pickPotentialWinningReplica(rangeReplicas))
+	}
+	if err = checkRangeCompleteness(proposedWinners); err != nil {
+		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
+	}
+
 	var plan []loqrecoverypb.ReplicaUpdate
-	// Find ranges that lost quorum and create updates for them.
-	// This approach is only using local info stored in each replica independently.
-	// It is inherited in unchanged form from existing recovery operation
-	// `debug unsafe-remove-dead-replicas`.
-	// TODO(oleg): #73662 Use additional field and information about all replicas of
-	// range to determine winner.
-	for _, rangeDesc := range replicas {
-		report.TotalReplicas++
-		numDeadPeers := 0
-		desc := rangeDesc.Desc
-		allReplicas := desc.Replicas().Descriptors()
-		maxLiveVoter := roachpb.StoreID(-1)
-		var winningReplica roachpb.ReplicaDescriptor
-		for _, rep := range allReplicas {
-			if _, ok := availableStoreIDs[rep.StoreID]; !ok {
-				numDeadPeers++
-				continue
-			}
-			// The designated survivor will be the voter with the highest storeID.
-			// Note that an outgoing voter cannot be designated, as the only
-			// replication change it could make is to turn itself into a learner, at
-			// which point the range is completely messed up.
-			//
-			// Note: a better heuristic might be to choose the leaseholder store, not
-			// the largest store, as this avoids the problem of requests still hanging
-			// after running the tool in a rolling-restart fashion (when the lease-
-			// holder is under a valid epoch and was ont chosen as designated
-			// survivor). However, this choice is less deterministic, as leaseholders
-			// are more likely to change than replication configs. The hanging would
-			// independently be fixed by the below issue, so staying with largest store
-			// is likely the right choice. See:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/33007
-			if rep.IsVoterNewConfig() && rep.StoreID > maxLiveVoter {
-				maxLiveVoter = rep.StoreID
-				winningReplica = rep
-			}
+	for _, p := range proposedWinners {
+		report.TotalReplicas += len(p.others) + 1
+		u, ok := makeReplicaUpdateIfNeeded(ctx, p, availableStoreIDs)
+		if ok {
+			plan = append(plan, u)
+			report.DiscardedNonSurvivors += len(p.others)
+			report.addUpdate(makeReplicaUpdateReport(p, u))
+			updatedLocations.add(u.NodeID(), u.StoreID())
+			log.Infof(ctx, "Replica has lost quorum, recovering: %s -> %s", p.winner.Desc, u)
+		} else {
+			log.Infof(ctx, "Range r%d didn't lose quorum", &p.winner.Desc.RangeID)
 		}
-
-		// If there's no dead peer in this group (so can't hope to fix
-		// anything by rewriting the descriptor) or the current store is not the
-		// one we want to turn into the sole voter, don't do anything.
-		if numDeadPeers == 0 {
-			continue
-		}
-
-		// The replica thinks it can make progress anyway, so we leave it alone.
-		if desc.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
-			_, ok := availableStoreIDs[rep.StoreID]
-			return ok
-		}) {
-			log.Infof(ctx, "Replica has not lost quorum, skipping: %s", desc)
-			continue
-		}
-
-		if rangeDesc.StoreID != maxLiveVoter {
-			log.Infof(ctx, "Not designated survivor, skipping: %s", desc)
-			report.DiscardedNonSurvivors++
-			continue
-		}
-
-		// We're the designated survivor and the range needs to be recovered.
-		//
-		// Rewrite the range as having a single replica. The winning replica is
-		// picked arbitrarily: the one with the highest store ID. This is not always
-		// the best option: it may lose writes that were committed on another
-		// surviving replica that had applied more of the raft log. However, in
-		// practice when we have multiple surviving replicas but still need this
-		// tool (because the replication factor was 4 or higher), we see that the
-		// logs are nearly always in sync and the choice doesn't matter. Correctly
-		// picking the replica with the longer log would complicate the use of this
-		// tool.
-		// Rewrite the replicas list. Bump the replica ID so that in case there are
-		// other surviving nodes that were members of the old incarnation of the
-		// range, they no longer recognize this revived replica (because they are
-		// not in sync with it).
-		update := loqrecoverypb.ReplicaUpdate{
-			RangeID:      rangeDesc.Desc.RangeID,
-			StartKey:     loqrecoverypb.RecoveryKey(desc.StartKey),
-			OldReplicaID: winningReplica.ReplicaID,
-			NewReplica: &roachpb.ReplicaDescriptor{
-				NodeID:    rangeDesc.NodeID,
-				StoreID:   rangeDesc.StoreID,
-				ReplicaID: desc.NextReplicaID + nextReplicaIDIncrement,
-			},
-			NextReplicaID: desc.NextReplicaID + nextReplicaIDIncrement + 1,
-		}
-		log.Infof(ctx, "Replica has lost quorum, recovering: %s -> %s", desc, update)
-		plan = append(plan, update)
-
-		discarded := desc.Replicas().DeepCopy()
-		discarded.RemoveReplica(rangeDesc.NodeID, rangeDesc.StoreID)
-		report.PlannedUpdates = append(report.PlannedUpdates, ReplicaUpdateReport{
-			RangeID:           desc.RangeID,
-			StartKey:          desc.StartKey,
-			Replica:           *update.NewReplica,
-			OldReplica:        winningReplica,
-			StoreID:           rangeDesc.StoreID,
-			DiscardedReplicas: discarded,
-		})
-		updatedLocations.add(rangeDesc.NodeID, rangeDesc.StoreID)
 	}
 	report.UpdatedNodes = updatedLocations.asMapOfSlices()
 	return loqrecoverypb.ReplicaUpdatePlan{Updates: plan}, report, nil
@@ -273,4 +203,233 @@ func validateReplicaSets(
 			joinStoreIDs(missingButNotDeadStoreIDs))
 	}
 	return availableStoreIDs, missingStoreIDs, nil
+}
+
+func groupReplicasByRangeID(
+	descriptors []loqrecoverypb.ReplicaInfo,
+) map[roachpb.RangeID][]loqrecoverypb.ReplicaInfo {
+	groupedRanges := make(map[roachpb.RangeID][]loqrecoverypb.ReplicaInfo)
+	for _, descriptor := range descriptors {
+		groupedRanges[descriptor.Desc.RangeID] = append(groupedRanges[descriptor.Desc.RangeID], descriptor)
+	}
+	return groupedRanges
+}
+
+// proposedDecision contains replica resolution details e.g. preferred replica as
+// well as extra info to produce a report of the planned action.
+type proposedDecision struct {
+	winner loqrecoverypb.ReplicaInfo
+	others []loqrecoverypb.ReplicaInfo
+}
+
+func (p *proposedDecision) StartKey() roachpb.RKey {
+	return p.winner.Desc.StartKey
+}
+
+func (p *proposedDecision) EndKey() roachpb.RKey {
+	return p.winner.Desc.EndKey
+}
+
+func (p *proposedDecision) RangeID() roachpb.RangeID {
+	return p.winner.Desc.RangeID
+}
+
+// pickPotentialWinningReplica given a slice of replicas for the range from all live stores, pick one to survive recovery.
+// if progress can be made, still pick one replica so that it could be used to do key completeness validation.
+// Note that descriptors argument would be sorted in process of picking a winner
+func pickPotentialWinningReplica(replicas []loqrecoverypb.ReplicaInfo) proposedDecision {
+	// Maybe that's too expensive to compute multiple times per replica?
+	isVoter := func(desc loqrecoverypb.ReplicaInfo) int {
+		for _, replica := range desc.Desc.InternalReplicas {
+			if replica.StoreID == desc.StoreID {
+				if replica.IsVoterNewConfig() {
+					return 1
+				}
+				return 0
+			}
+		}
+		// This is suspicious, our descriptor is not in replicas. Panic maybe?
+		return 0
+	}
+	sort.Slice(replicas, func(i, j int) bool {
+		// When finding the best suitable replica evaluate 3 conditions in order:
+		//  - replica is a voter
+		//  - replica has the higher range committed index
+		//  - replica has the higher store id
+		//
+		// Note: that an outgoing voter cannot be designated, as the only
+		// replication change it could make is to turn itself into a learner, at
+		// which point the range is completely messed up.
+		//
+		// Note: a better heuristic might be to choose the leaseholder store, not
+		// the largest store, as this avoids the problem of requests still hanging
+		// after running the tool in a rolling-restart fashion (when the lease-
+		// holder is under a valid epoch and was ont chosen as designated
+		// survivor). However, this choice is less deterministic, as leaseholders
+		// are more likely to change than replication configs. The hanging would
+		// independently be fixed by the below issue, so staying with largest store
+		// is likely the right choice. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/33007
+		voterI := isVoter(replicas[i])
+		voterJ := isVoter(replicas[j])
+		return voterI > voterJ ||
+			(voterI == voterJ &&
+				(replicas[i].RaftAppliedIndex > replicas[j].RaftAppliedIndex ||
+					(replicas[i].RaftAppliedIndex == replicas[j].RaftAppliedIndex && replicas[i].StoreID > replicas[j].StoreID)))
+	})
+	// We could be returning a non-voting replica if all voters are gone. Is this acceptable or we need to filter?
+	return proposedDecision{winner: replicas[0], others: replicas[1:]}
+}
+
+type anomaly struct {
+	span    roachpb.Span
+	range1  roachpb.RangeID
+	range2  roachpb.RangeID
+	overlap bool
+}
+
+func (i anomaly) String() string {
+	if i.overlap {
+		return fmt.Sprintf("range overlap %v between ranges r%d and r%d", i.span, i.range1, i.range2)
+	}
+	return fmt.Sprintf("range gap %v between ranges r%d and r%d", i.span, i.range1, i.range2)
+}
+
+// checkRangeCompleteness given slice of all survivor ranges, checks that full keyspace is covered.
+// Note that slice would be sorted in process of the check.
+func checkRangeCompleteness(replicas []proposedDecision) error {
+	sort.Slice(replicas, func(i, j int) bool {
+		return replicas[i].StartKey().Less(replicas[j].StartKey())
+	})
+	var anomalies []anomaly
+	lastKey := roachpb.RKeyMin
+	prevRange := roachpb.RangeID(0)
+	// We validate that first range starts at min key, last range ends at max key and that for
+	// every range start key is equal to end key of previous range. If any of those conditions
+	// fail, we record this as anomaly to indicate there's a gap between ranges or an overlap
+	// between two or more ranges.
+	for _, desc := range replicas {
+		switch {
+		case desc.StartKey().Less(lastKey):
+			anomalies = append(anomalies, anomaly{
+				span:    roachpb.Span{Key: roachpb.Key(desc.StartKey()), EndKey: roachpb.Key(lastKey)},
+				range1:  prevRange,
+				range2:  desc.RangeID(),
+				overlap: true,
+			})
+			if lastKey.Less(desc.EndKey()) {
+				prevRange = desc.RangeID()
+				lastKey = desc.EndKey()
+			}
+		case lastKey.Less(desc.StartKey()):
+			anomalies = append(anomalies, anomaly{
+				span:    roachpb.Span{Key: roachpb.Key(lastKey), EndKey: roachpb.Key(desc.StartKey())},
+				range1:  prevRange,
+				range2:  desc.RangeID(),
+				overlap: false,
+			})
+			prevRange = desc.RangeID()
+			lastKey = desc.EndKey()
+		default:
+			prevRange = desc.RangeID()
+			lastKey = desc.EndKey()
+		}
+	}
+	if !lastKey.Equal(roachpb.RKeyMax) {
+		anomalies = append(anomalies, anomaly{
+			span:    roachpb.Span{Key: roachpb.Key(lastKey), EndKey: roachpb.Key(roachpb.RKeyMax)},
+			range1:  prevRange,
+			range2:  roachpb.RangeID(0),
+			overlap: false,
+		})
+	}
+
+	if len(anomalies) > 0 {
+		descriptions := make([]string, 0, len(anomalies))
+		for _, id := range anomalies {
+			descriptions = append(descriptions, fmt.Sprintf("%v", id))
+		}
+		return errors.Newf("key range is incomplete. discovered inconsistencies: %s", strings.Join(descriptions, ", "))
+	}
+	return nil
+}
+
+// makeReplicaUpdateIfNeeded if candidate range can't make progress, create an update using preferred
+// replica.
+// Returns a replica update and a flag indicating if update needs to be performed.
+// For replicas that can make progress return empty update and false to exclude range from update plan.
+func makeReplicaUpdateIfNeeded(
+	ctx context.Context, p proposedDecision, liveStoreIDs storeIDSet,
+) (loqrecoverypb.ReplicaUpdate, bool) {
+	if !p.winner.Desc.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
+		_, ok := liveStoreIDs[rep.StoreID]
+		return ok
+	}) {
+		// We want to have replicaID which is greater or equal nextReplicaID across
+		// all available replicas. We want to ensure that there would be no conflict
+		// without bumping it by arbitrary number.
+		nextReplicaID := p.winner.Desc.NextReplicaID
+		for _, r := range p.others {
+			if r.Desc.NextReplicaID > nextReplicaID {
+				nextReplicaID = r.Desc.NextReplicaID
+			}
+		}
+
+		replica, err := p.winner.Replica()
+		if err != nil {
+			log.Fatalf(ctx, "replica descriptor doesn't contain replica for its own store: %s", p.winner.Desc)
+		}
+
+		// The range needs to be recovered and this replica is a designated survivor.
+		// To recover the range rewrite it as having a single replica:
+		// - Rewrite the replicas list.
+		// - Bump the replica ID so that in case there are other surviving nodes that
+		//   were members of the old incarnation of the range, they no longer recognize
+		//   this revived replica (because they are not in sync with it).
+		return loqrecoverypb.ReplicaUpdate{
+			RangeID:      p.winner.Desc.RangeID,
+			StartKey:     loqrecoverypb.RecoveryKey(p.winner.Desc.StartKey),
+			OldReplicaID: replica.ReplicaID,
+			NewReplica: &roachpb.ReplicaDescriptor{
+				NodeID:    p.winner.NodeID,
+				StoreID:   p.winner.StoreID,
+				ReplicaID: nextReplicaID + nextReplicaIDIncrement,
+			},
+			NextReplicaID: nextReplicaID + nextReplicaIDIncrement + 1,
+		}, true
+	}
+	return loqrecoverypb.ReplicaUpdate{}, false
+}
+
+// makeReplicaUpdateReport creates a detailed report of changes that needs to
+// be performed on range. It uses decision as well as information about all replicas
+// of range to provide information about what is being discarded and how new replica
+// would be configured.
+func makeReplicaUpdateReport(
+	p proposedDecision, update loqrecoverypb.ReplicaUpdate,
+) ReplicaUpdateReport {
+	oldReplica, _ := p.winner.Replica()
+
+	// Replicas that belonged to unavailable nodes based on winning range descriptor.
+	discardedDead := p.winner.Desc.Replicas()
+	discardedDead.RemoveReplica(update.NodeID(), update.StoreID())
+	// Replicas that we collected info about for the range, but decided they are not
+	// preferred choice.
+	discardedAvailable := roachpb.ReplicaSet{}
+	for _, replica := range p.others {
+		discardedDead.RemoveReplica(replica.NodeID, replica.StoreID)
+		r, _ := replica.Desc.GetReplicaDescriptor(replica.StoreID)
+		discardedAvailable.AddReplica(r)
+	}
+
+	return ReplicaUpdateReport{
+		RangeID:                    p.winner.Desc.RangeID,
+		StartKey:                   p.winner.Desc.StartKey,
+		OldReplica:                 oldReplica,
+		Replica:                    *update.NewReplica,
+		StoreID:                    p.winner.StoreID,
+		DiscardedDeadReplicas:      discardedDead,
+		DiscardedAvailableReplicas: discardedAvailable,
+	}
 }
