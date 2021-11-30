@@ -38,6 +38,11 @@ type TestingKnobs struct {
 	// may invoke directly, bypassing normal job scheduler daemon logic.
 	TakeOverJobsScheduling func(func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error)
 
+	// CaptureJobScheduler is a function which will be passed a fully constructed job scheduler.
+	// The scheduler is passed in as interface{} because jobScheduler is an unexported type.
+	// This testing knob is useful only for job scheduler tests.
+	CaptureJobScheduler func(scheduler interface{})
+
 	// CaptureJobExecutionConfig is a callback invoked with a job execution config
 	// which will be used when executing job schedules.
 	// The reason this callback exists is due to a circular dependency issues that exists

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -221,22 +222,23 @@ func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	sv, cleanup := getScopedSettings()
 	defer cleanup()
 
+	var schedulerEnabled func(context.Context) bool
 	noJitter := func(d time.Duration) time.Duration { return d }
 
 	schedulerEnabledSetting.Override(ctx, sv, false)
 
 	// When disabled, we wait 5 minutes before rechecking.
-	require.EqualValues(t, 5*time.Minute, getWaitPeriod(ctx, sv, noJitter, nil))
+	require.EqualValues(t, 5*time.Minute, getWaitPeriod(ctx, sv, schedulerEnabled, noJitter, nil))
 	schedulerEnabledSetting.Override(ctx, sv, true)
 
 	// When pace is too low, we use something more reasonable.
 	schedulerPaceSetting.Override(ctx, sv, time.Nanosecond)
-	require.EqualValues(t, minPacePeriod, getWaitPeriod(ctx, sv, noJitter, nil))
+	require.EqualValues(t, minPacePeriod, getWaitPeriod(ctx, sv, schedulerEnabled, noJitter, nil))
 
 	// Otherwise, we use user specified setting.
 	pace := 42 * time.Second
 	schedulerPaceSetting.Override(ctx, sv, pace)
-	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, noJitter, nil))
+	require.EqualValues(t, pace, getWaitPeriod(ctx, sv, schedulerEnabled, noJitter, nil))
 }
 
 type recordScheduleExecutor struct {
@@ -761,4 +763,66 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 	// Reload schedule -- verify it doesn't have any errors in its status.
 	updated := h.loadSchedule(t, schedule.ScheduleID())
 	require.Equal(t, "", updated.ScheduleStatus())
+}
+
+func TestSchedulerCanBeRestrictedToSingleNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	for _, enableSingleNode := range []bool{true, false} {
+		t.Run(fmt.Sprintf("runs-on-single-node=%t", enableSingleNode), func(t *testing.T) {
+			schedulers := struct {
+				syncutil.Mutex
+				schedulers []*jobScheduler
+			}{}
+			knobs := &TestingKnobs{
+				CaptureJobScheduler: func(s interface{}) {
+					schedulers.Lock()
+					defer schedulers.Unlock()
+					schedulers.schedulers = append(schedulers.schedulers, s.(*jobScheduler))
+				},
+			}
+
+			args := base.TestServerArgs{
+				Knobs: base.TestingKnobs{JobsTestingKnobs: knobs},
+			}
+
+			tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{ServerArgs: args})
+			defer tc.Stopper().Stop(context.Background())
+
+			testutils.SucceedsSoon(t, func() error {
+				schedulers.Lock()
+				defer schedulers.Unlock()
+				if len(schedulers.schedulers) == numNodes {
+					return nil
+				}
+				return errors.Newf("want %d schedules, got %d", numNodes, len(schedulers.schedulers))
+			})
+
+			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.scheduler.single_node_scheduler.enabled=$1", enableSingleNode)
+
+			schedulers.Lock()
+			defer schedulers.Unlock()
+			expectedEnabled := numNodes
+			if enableSingleNode {
+				expectedEnabled = 1
+			}
+
+			testutils.SucceedsSoon(t, func() error {
+				numEnabled := 0
+				for _, s := range schedulers.schedulers {
+					if s.schedulerEnabledOnThisNode(context.Background()) {
+						numEnabled++
+					}
+				}
+				if numEnabled == expectedEnabled {
+					return nil
+				}
+				return errors.Newf("expecting %d enabled, found %d", expectedEnabled, numEnabled)
+			})
+
+		})
+	}
 }
