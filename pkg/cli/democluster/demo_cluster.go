@@ -393,13 +393,14 @@ func (c *transientCluster) Start(
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
 				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 				c.infoLog(ctx, "starting tenant node %d", i)
+				stopper := stop.NewStopper()
 				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
 					TenantID:         roachpb.MakeTenantID(uint64(i + 2)),
-					Stopper:          c.stopper,
+					Stopper:          stopper,
 					ForceInsecure:    c.demoCtx.Insecure,
 					SSLCertsDir:      c.demoDir,
 					StartingSQLPort:  c.demoCtx.SQLPort - 2,
@@ -414,6 +415,13 @@ func (c *transientCluster) Start(
 						},
 					},
 				})
+				c.stopper.AddCloser(stop.CloserFn(func() {
+					stopCtx := context.Background()
+					if ts != nil {
+						stopCtx = ts.AnnotateCtx(stopCtx)
+					}
+					stopper.Stop(stopCtx)
+				}))
 				if err != nil {
 					return err
 				}
@@ -595,7 +603,14 @@ func (c *transientCluster) startNodeAsync(
 	serv := c.servers[idx]
 	tag := fmt.Sprintf("start-n%d", idx+1)
 	return c.stopper.RunAsyncTask(ctx, tag, func(ctx context.Context) {
+		// We call Start() with context.Background() because we don't want the
+		// tracing span corresponding to the task started just above to leak into
+		// the new server. Server's have their own Tracers, different from the one
+		// used by this transientCluster, and so traces inside the Server can't be
+		// combined with traces from outside it.
+		ctx = logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 		ctx = logtags.AddTag(ctx, tag, nil)
+
 		err := serv.Start(ctx)
 		if err != nil {
 			c.warnLog(ctx, "server %d failed to start: %v", idx, err)
@@ -1257,8 +1272,6 @@ func (c *transientCluster) runWorkload(
 						c.warnLog(ctx, "error running workload query: %+v", err)
 					}
 					select {
-					case <-c.firstServer.Stopper().ShouldQuiesce():
-						return
 					case <-ctx.Done():
 						c.warnLog(ctx, "workload terminating from context cancellation: %v", ctx.Err())
 						return
@@ -1270,10 +1283,9 @@ func (c *transientCluster) runWorkload(
 				}
 			}
 		}
-		// As the SQL shell is tied to `c.firstServer`, this means we want to tie the workload
-		// onto this as we want the workload to stop when the server dies,
-		// rather than the cluster. Otherwise, interrupts on cockroach demo hangs.
-		if err := c.firstServer.Stopper().RunAsyncTask(ctx, "workload", workloadFun(workerFn)); err != nil {
+		// By running under the cluster's stopper, we ensure that, on shutdown, the
+		// workload is stopped before any servers or tenants are stopped.
+		if err := c.stopper.RunAsyncTask(ctx, "workload", workloadFun(workerFn)); err != nil {
 			return err
 		}
 	}
