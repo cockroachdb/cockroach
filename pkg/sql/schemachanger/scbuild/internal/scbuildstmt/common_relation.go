@@ -410,7 +410,7 @@ func decomposeTableDescToElements(
 	}
 	// Add any constraints without indexes first.
 	for idx, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		constraintID := &scpb.ConstraintID{
+		constraintID := scpb.ConstraintID{
 			Type:    scpb.ConstraintID_UniqueWithoutIndex,
 			Ordinal: uint32(idx),
 		}
@@ -430,7 +430,7 @@ func decomposeTableDescToElements(
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
-		constraintID := &scpb.ConstraintID{
+		constraintID := scpb.ConstraintID{
 			Type:    scpb.ConstraintID_CheckConstraint,
 			Ordinal: uint32(idx),
 		}
