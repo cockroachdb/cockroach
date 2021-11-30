@@ -1,0 +1,23 @@
+# Test verifies that if we have replicas with incorrect descriptors that makes them
+# impossible to process, we detect that and don't produce bad results.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:  # this replica is bad, it doesn't contain itself in the replicas set
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 1}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+invalid replica info: its own store s1 is not present in descriptor replicas r1:/M{in-ax} [(n2,s2):2, (n3,s3):3, (n4,s4):1, next=4, gen=3]
