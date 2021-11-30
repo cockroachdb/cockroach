@@ -1,18 +1,21 @@
-# Test operations where the spans overlap with the existing ones.
+# Test operations where the spans overlap with the existing ones. Only a single
+# update is applied at a time.
 
-set span=[b,h) conf=A
+apply
+set [b,h):A
 ----
 added [b,h):A
 
 
 # Check that writing a span with a partial overlap first deletes the existing
 # entry and adds three new ones.
-set span=[d,f) conf=B
+apply
+set [d,f):B
 ----
 deleted [b,h)
 added [b,d):A
-added [f,h):A
 added [d,f):B
+added [f,h):A
 
 overlapping span=[b,h)
 ----
@@ -24,13 +27,14 @@ overlapping span=[b,h)
 # Check that writing a span that partially overlaps with multiple existing
 # entries deletes all of them, and re-adds the right non-overlapping fragments
 # with the right configs.
-set span=[c,e) conf=C
+apply
+set [c,e):C
 ----
 deleted [b,d)
 deleted [d,f)
 added [b,c):A
-added [e,f):B
 added [c,e):C
+added [e,f):B
 
 overlapping span=[b,h)
 ----
@@ -41,7 +45,8 @@ overlapping span=[b,h)
 
 # Check that when a span being written to entirely envelopes an existing entry,
 # that entry is deleted in its entirety.
-delete span=[d,g)
+apply
+delete [d,g)
 ----
 deleted [c,e)
 deleted [e,f)
@@ -64,7 +69,8 @@ compute-split span=[b,h)
 ----
 key=c
 
-set span=[b,g) conf=A
+apply
+set [b,g):A
 ----
 deleted [b,c)
 deleted [c,d)
