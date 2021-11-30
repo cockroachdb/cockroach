@@ -51,7 +51,8 @@ message ReplicaUpdate {
   int32 old_replica_id = 3 [(gogoproto.customname) = "OldReplicaID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
     (gogoproto.moretags) = "yaml:\"OldReplicaID\""];
-  roachpb.ReplicaDescriptor new_replica = 4 [(gogoproto.moretags) = "yaml:\"NewReplica\""];
+  roachpb.ReplicaDescriptor new_replica = 4 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = "yaml:\"NewReplica\""];
   int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
     (gogoproto.moretags) = "yaml:\"NextReplicaID\""];

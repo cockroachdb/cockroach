@@ -1,9 +1,8 @@
-# Test verifying that voter with max StoreID would be designated survivor.
+# Tests verifying that voter with max StoreID would be designated survivor.
 
-# First use case where we can successfully resolve replica by store ID
+# First use case where we can successfully resolve replica by store ID.
 # With two out of five replicas remaining, check that replica with highest
 # store ID is chosen as a survivor.
-# Note: for replica type codes, see metadata.proto
 
 replication-data
 - StoreID: 1
@@ -11,7 +10,7 @@ replication-data
   StartKey: /Min
   EndKey: /Max
   Replicas:
-  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # This replica is identical to one in store 2 but has lower storeID 1
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # this replica is identical to one in store 2 but has lower storeID 1
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
@@ -24,7 +23,7 @@ replication-data
   EndKey: /Max
   Replicas:
   - { NodeID: 1, StoreID: 1, ReplicaID: 1}
-  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # This replica has the same state n1 but has higher storeID so it wins
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID so it wins
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
   - { NodeID: 5, StoreID: 5, ReplicaID: 5}
@@ -76,11 +75,10 @@ dump-store stores=(1,2)
 # Second use case where stale replica which remained from before split
 # on store with higher ID will conflict with later one spanning smaller range.
 # We have a stale replica in s2 which still remembers group across s3 and s4
-# which are not available anymore. While LHS and RHS across s1, s4, s5 are now
-# more recent. But they can't win against old version as we don't analyze enough
-# info.
+# but they are not available anymore. While LHS and RHS across s1, s4, s5 are
+# now more recent. Stale replica loses based on raft applied index being lower.
 replication-data
-- StoreID: 1  # This is a LHS post split
+- StoreID: 1  # this is the LHS replica post split
   RangeID: 1
   StartKey: /Min
   EndKey: /Table/1
@@ -90,7 +88,7 @@ replication-data
   - { NodeID: 6, StoreID: 6, ReplicaID: 7}
   RangeAppliedIndex: 15
   RaftCommittedIndex: 15
-- StoreID: 1  # This is RHS replica post split
+- StoreID: 1  # this is the RHS replica post split
   RangeID: 2
   StartKey: /Table/1
   EndKey: /Max
@@ -101,7 +99,7 @@ replication-data
   RangeAppliedIndex: 15
   RaftCommittedIndex: 15
 - StoreID: 2
-  RangeID: 1  # This is an old version of range which got lost
+  RangeID: 1  # this is the old version of range which got stale
   StartKey: /Min
   EndKey: /Max
   Replicas:
@@ -111,7 +109,7 @@ replication-data
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 - StoreID: 5
-  RangeID: 1  # This is a LHS post split
+  RangeID: 1  # this is the LHS replica post split
   StartKey: /Min
   EndKey: /Table/1
   Replicas:
@@ -121,7 +119,7 @@ replication-data
   RangeAppliedIndex: 15
   RaftCommittedIndex: 15
 - StoreID: 5
-  RangeID: 2  # This is RHS replica post split
+  RangeID: 2  # this is the RHS replica post split
   StartKey: /Table/1
   EndKey: /Max
   Replicas:
@@ -131,7 +129,7 @@ replication-data
   RangeAppliedIndex: 15
   RaftCommittedIndex: 15
 - StoreID: 6
-  RangeID: 1  # This is a LHS post split
+  RangeID: 1  # this is the LHS replica post split
   StartKey: /Min
   EndKey: /Table/1
   Replicas:
@@ -141,7 +139,7 @@ replication-data
   RangeAppliedIndex: 15
   RaftCommittedIndex: 15
 - StoreID: 6
-  RangeID: 2  # This is RHS replica post split
+  RangeID: 2  # this is the RHS replica post split
   StartKey: /Table/1
   EndKey: /Max
   Replicas:
@@ -159,14 +157,7 @@ ok
 
 make-plan
 ----
-- RangeID: 1
-  StartKey: /Min
-  OldReplicaID: 2
-  NewReplica:
-    NodeID: 2
-    StoreID: 2
-    ReplicaID: 15
-  NextReplicaID: 16
+[]
 
 apply-plan stores=(1,2,5,6)
 ----
@@ -195,7 +186,9 @@ dump-store stores=(1,2,5,6)
   - RangeID: 1
     StartKey: /Min
     Replicas:
-    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 15}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
 - NodeID: 5
   StoreID: 5
   Descriptors:

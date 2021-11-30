@@ -280,8 +280,9 @@ Discarded live replicas: %d
 `, report.TotalReplicas, len(report.PlannedUpdates), report.DiscardedNonSurvivors)
 	for _, r := range report.PlannedUpdates {
 		_, _ = fmt.Fprintf(stderr, "Recovering range r%d:%s updating replica %s to %s. "+
-			"Discarding replicas: %s\n",
-			r.RangeID, r.StartKey, r.OldReplica, r.Replica, r.DiscardedReplicas)
+			"Discarding available replicas: [%s], discarding dead replicas: [%s].\n",
+			r.RangeID, r.StartKey, r.OldReplica, r.Replica,
+			r.DiscardedAvailableReplicas, r.DiscardedDeadReplicas)
 	}
 
 	deadStoreMsg := fmt.Sprintf("\nDiscovered dead stores from provided files: %s",
