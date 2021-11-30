@@ -21,7 +21,6 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )

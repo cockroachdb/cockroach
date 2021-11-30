@@ -486,7 +486,6 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 func startTenant(
 	ctx context.Context, srv serverutils.TestServerInterface, id uint64,
 ) (*tenantdirsvr.Process, error) {
-	log.TestingClearServerIdentifiers()
 	tenantStopper := tenantdirsvr.NewSubStopper(srv.Stopper())
 	t, err := srv.StartTenant(
 		ctx,

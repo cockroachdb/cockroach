@@ -461,16 +461,6 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 	return c
 }
 
-// TestingClearServerIdentifiers clears the server identity from the
-// logging system. This is for use in tests that start multiple
-// servers with conflicting identities subsequently.
-// See discussion here: https://github.com/cockroachdb/cockroach/issues/58938
-func TestingClearServerIdentifiers() {
-	logging.idMu.Lock()
-	logging.idMu.idPayload = idPayload{}
-	logging.idMu.Unlock()
-}
-
 // TestingResetActive clears the active bit. This is for use in tests
 // that use stderr redirection alongside other tests that use
 // logging.

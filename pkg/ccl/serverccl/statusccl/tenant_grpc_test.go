@@ -91,7 +91,6 @@ func TestTenantGRPCServices(t *testing.T) {
 	sqlRunner.Exec(t, "CREATE TABLE test (id int)")
 	sqlRunner.Exec(t, "INSERT INTO test VALUES (1)")
 
-	log.TestingClearServerIdentifiers()
 	tenant2, connTenant2 := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID:     tenantID,
 		Existing:     true,
@@ -110,7 +109,6 @@ func TestTenantGRPCServices(t *testing.T) {
 		require.Contains(t, string(body), "INSERT INTO test VALUES")
 	})
 
-	log.TestingClearServerIdentifiers()
 	tenant3, connTenant3 := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID:     roachpb.MakeTenantID(11),
 		TestingKnobs: testingKnobs,

@@ -160,10 +160,6 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	// destination directory.
 	cfg := getTestConfig(&sc.logDir, mostlyInline)
 
-	// Reset the server identifiers, so that new servers
-	// can report their IDs through logging.
-	TestingClearServerIdentifiers()
-
 	// Switch to the new configuration.
 	TestingResetActive()
 	sc.cleanupFn, err = ApplyConfig(cfg)

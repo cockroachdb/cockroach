@@ -54,6 +54,10 @@ type AmbientContext struct {
 	// Tracer is used to open spans (see AnnotateCtxWithSpan).
 	Tracer *tracing.Tracer
 
+	// ServerIDs will be embedded into contexts that don't already have
+	// one.
+	ServerIDs ServerIdentificationPayload
+
 	// eventLog will be embedded into contexts that don't already have an event
 	// log or an open span (if not nil).
 	eventLog *ctxEventLog
@@ -136,6 +140,9 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		if ac.tags != nil {
 			ctx = logtags.WithTags(ctx, ac.tags)
 		}
+		if ac.ServerIDs != nil {
+			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+		}
 		return ctx
 	}
 }
@@ -146,6 +153,9 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 	}
 	if ac.tags != nil {
 		ctx = logtags.AddTags(ctx, ac.tags)
+	}
+	if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+		ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 	}
 	return ctx
 }
@@ -170,6 +180,9 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	default:
 		if ac.tags != nil {
 			ctx = logtags.AddTags(ctx, ac.tags)
+		}
+		if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 		}
 	}
 

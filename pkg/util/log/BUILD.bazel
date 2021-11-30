@@ -37,6 +37,7 @@ go_library(
         "log_flush.go",
         "redact.go",
         "registry.go",
+        "server_ident.go",
         "sinks.go",
         "stderr_redirect.go",
         "stderr_redirect_unix.go",

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
@@ -90,8 +89,6 @@ func TestTenantUpgrade(t *testing.T) {
 			TestingKnobs: base.TestingKnobs{},
 			Settings:     settings,
 		}
-		// Prevent a logging assertion that the server ID is initialized multiple times.
-		log.TestingClearServerIdentifiers()
 		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 		return connectToTenant(t, tenant.SQLAddr())
@@ -130,7 +127,6 @@ func TestTenantUpgrade(t *testing.T) {
 		// Restart the tenant and ensure that the version is correct.
 		cleanup()
 		{
-			log.TestingClearServerIdentifiers()
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
 				TenantID: roachpb.MakeTenantID(initialTenantID),
 				Existing: true,
@@ -156,7 +152,6 @@ func TestTenantUpgrade(t *testing.T) {
 		// Restart the new tenant and ensure it has the right version.
 		cleanup()
 		{
-			log.TestingClearServerIdentifiers()
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
 				TenantID: roachpb.MakeTenantID(postUpgradeTenantID),
 				Existing: true,
@@ -286,8 +281,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			},
 			Settings: settings,
 		}
-		// Prevent a logging assertion that the server ID is initialized multiple times.
-		log.TestingClearServerIdentifiers()
 		return &tenantInfo{tenantArgs: &tenantArgs,
 			v2onMigrationStopper: v2onMigrationStopper}
 	}
@@ -334,7 +327,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Restart the tenant and ensure that the version is correct.
 		cleanup()
 		{
-			log.TestingClearServerIdentifiers()
 			tca, cleanup := startAndConnectToTenant(t, tenantInfo)
 			defer cleanup()
 			initialTenantRunner = sqlutils.MakeSQLRunner(tca)
