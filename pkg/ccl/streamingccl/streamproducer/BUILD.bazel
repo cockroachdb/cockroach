@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/streaming",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",

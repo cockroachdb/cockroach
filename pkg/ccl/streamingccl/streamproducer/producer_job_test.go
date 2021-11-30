@@ -167,27 +167,13 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		})
 		return r, err
 	}
-	resetConstructor := func() {
-		jobs.RegisterConstructor(
-			jobspb.TypeStreamReplication,
-			func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-				ts := timeutil.DefaultTimeSource{}
-				return &producerJobResumer{
-					job:        job,
-					timeSource: ts,
-					timer:      ts.NewTimer(),
-				}
-			},
-		)
-	}
 
 	t.Run("producer-job", func(t *testing.T) {
 		{ // Job times out at the beginning
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			ptsID := uuid.MakeV4()
 			jr := makeProducerJobRecord(registry, 10, timeout, username, ptsID)
-			//defer jobs.ResetConstructors()()
-			defer resetConstructor()
+			defer jobs.ResetConstructors()()
 			_, _, _, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(1 * time.Millisecond))
 
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
@@ -199,11 +185,14 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			_, err := getPTSRecord(ptsID)
 			require.Error(t, err, "protected timestamp record does not exist")
 
-			require.Errorf(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return updateReplicationStreamProgress(
-					ctx, timeutil.Now(), ptp, registry, txn, streaming.StreamID(jr.JobID),
-					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-			}), "job %d not running", jr.JobID)
+			var status jobspb.StreamReplicationStatus
+			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				status, err = updateReplicationStreamProgress(
+					ctx, timeutil.Now(), ptp, registry, streaming.StreamID(jr.JobID),
+					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn)
+				return err
+			}))
+			require.Equal(t, jobspb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		}
 
 		{ // Job starts running and eventually fails after it's timed out
@@ -212,8 +201,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ptsID := uuid.MakeV4()
 
 			jr := makeProducerJobRecord(registry, 20, timeout, username, ptsID)
-			//defer jobs.ResetConstructors()()
-			defer resetConstructor()
+			defer jobs.ResetConstructors()()
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
 
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
@@ -226,13 +214,18 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			}
 
 			// Set expiration to a new time in the future
+			var streamStatus jobspb.StreamReplicationStatus
+			var err error
 			expire := expirationTime(jr).Add(10 * time.Millisecond)
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return updateReplicationStreamProgress(
+				streamStatus, err = updateReplicationStreamProgress(
 					ctx, expire,
-					ptp, registry, txn, streaming.StreamID(jr.JobID), updatedFrontier,
-				)
+					ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn)
+				return err
 			}))
+			require.Equal(t, jobspb.StreamReplicationStatus_STREAM_ACTIVE, streamStatus.StreamStatus)
+			require.Equal(t, updatedFrontier, *streamStatus.ProtectedTimestamp)
+
 			r, err := getPTSRecord(ptsID)
 			require.NoError(t, err)
 			// Ensure the timestamp is updated on the PTS record
