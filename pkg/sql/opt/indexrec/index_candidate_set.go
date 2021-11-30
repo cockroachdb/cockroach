@@ -11,6 +11,7 @@
 package indexrec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -338,6 +339,13 @@ func addIndexToCandidates(
 	currTable cat.Table,
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) {
+	// Do not add candidates that require inverted indexes.
+	for _, indexCol := range newIndex {
+		if !colinfo.ColumnTypeIsIndexable(indexCol.Column.DatumType()) {
+			return
+		}
+	}
+
 	// Do not add duplicate indexes.
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {
