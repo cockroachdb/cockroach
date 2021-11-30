@@ -74,7 +74,9 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
+	rows, err := ie.QueryBuffered(
 		ctx, "scrub-fk", params.p.txn, checkQuery,
 	)
 	if err != nil {
@@ -93,7 +95,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+		rows, err := ie.QueryBuffered(
 			ctx, "scrub-fk", params.p.txn, checkNullsQuery,
 		)
 		if err != nil {

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -820,13 +821,14 @@ func backupPlanHook(
 
 		var spans []roachpb.Span
 		var tenants []descpb.TenantInfoWithUsage
+		ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 		if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
 
 			tenantInfo, err := retrieveSingleTenantMetadata(
-				ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn, backupStmt.Targets.Tenant,
+				ctx, ie, p.ExtendedEvalContext().Txn, backupStmt.Targets.Tenant,
 			)
 			if err != nil {
 				return err
@@ -842,7 +844,7 @@ func backupPlanHook(
 			if p.ExecCfg().Codec.ForSystemTenant() && backupStmt.Coverage() == tree.AllDescriptors {
 				// Include all tenants.
 				tenants, err = retrieveAllTenantsMetadata(
-					ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
+					ctx, ie, p.ExtendedEvalContext().Txn,
 				)
 				if err != nil {
 					return err
@@ -1185,7 +1187,7 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	scheduleID int64,
 ) (*jobs.ScheduledJob, *ScheduledBackupExecutionArgs, error) {
 	// Load the schedule that has spawned this job.
@@ -1224,8 +1226,9 @@ func planSchedulePTSChaining(
 		return nil
 	}
 
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env,
-		p.ExtendedEvalContext().Txn, p.ExecCfg().InternalExecutor, backupStmt.CreatedByInfo.ID)
+		p.ExtendedEvalContext().Txn, ie, backupStmt.CreatedByInfo.ID)
 	if err != nil {
 		return err
 	}
@@ -1244,7 +1247,7 @@ func planSchedulePTSChaining(
 		}
 
 		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env,
-			p.ExtendedEvalContext().Txn, p.ExecCfg().InternalExecutor, args.DependentScheduleID)
+			p.ExtendedEvalContext().Txn, ie, args.DependentScheduleID)
 		if err != nil {
 			// If we are unable to resolve the dependent incremental schedule (it
 			// could have been dropped) we do not need to perform any chaining.

@@ -105,11 +105,12 @@ func TestTraceAnalyzer(t *testing.T) {
 		rowexecTraceAnalyzer *execstats.TraceAnalyzer
 		colexecTraceAnalyzer *execstats.TraceAnalyzer
 	)
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
 		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.AmbientCtx.Tracer, t.Name())
 		defer finishAndCollect()
-		ie := execCfg.InternalExecutor
-		ie.SetSessionData(
+		ie.(*sql.InternalExecutor).SetSessionData(
 			&sessiondata.SessionData{
 				SessionData: sessiondatapb.SessionData{
 					VectorizeMode: vectorizeMode,

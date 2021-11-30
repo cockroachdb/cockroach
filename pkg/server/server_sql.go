@@ -782,7 +782,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			internalMemMetrics,
 			cfg.Settings,
 		)
-		ie.SetSessionData(sessionData)
+		if sessionData != nil {
+			ie.SetSessionData(sessionData)
+		}
 		return &ie
 	}
 
@@ -806,7 +808,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(
 		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
-	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,

@@ -2586,7 +2586,9 @@ func forEachRole(
 	// logic test fail in 3node-tenant config with 'txn already encountered an
 	// error' (because of the context cancellation), so we buffer all roles
 	// first.
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	rows, err := ie.QueryBuffered(
 		ctx, "read-roles", p.txn, query,
 	)
 	if err != nil {
@@ -2621,7 +2623,9 @@ func forEachRoleMembership(
 	ctx context.Context, p *planner, fn func(role, member security.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	it, err := ie.QueryIterator(
 		ctx, "read-members", p.txn, query,
 	)
 	if err != nil {

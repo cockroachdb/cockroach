@@ -891,7 +891,7 @@ func allocateDescriptorRewrites(
 // restore.
 func dropDefaultUserDBs(ctx context.Context, execCfg *sql.ExecutorConfig) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		ie := execCfg.InternalExecutor
+		ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
 		_, err := ie.Exec(ctx, "drop-defaultdb", nil, "DROP DATABASE IF EXISTS defaultdb")
 		if err != nil {
 			return err
@@ -1894,8 +1894,9 @@ func doRestorePlan(
 		if !p.ExecCfg().Codec.ForSystemTenant() {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can restore other tenants")
 		}
+		ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 		for _, i := range tenants {
-			res, err := p.ExecCfg().InternalExecutor.QueryRow(
+			res, err := ie.QueryRow(
 				ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
 				`SELECT active FROM system.tenants WHERE id = $1`, i.ID,
 			)

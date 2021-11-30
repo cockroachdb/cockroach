@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -430,7 +431,7 @@ func doCreateBackupSchedules(
 		return err
 	}
 
-	ex := p.ExecCfg().InternalExecutor
+	ex := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 
 	unpauseOnSuccessID := jobs.InvalidScheduleID
 
@@ -509,7 +510,7 @@ func doCreateBackupSchedules(
 
 func setDependentSchedule(
 	ctx context.Context,
-	ex *sql.InternalExecutor,
+	ex sqlutil.InternalExecutor,
 	scheduleExecutionArgs *ScheduledBackupExecutionArgs,
 	schedule *jobs.ScheduledJob,
 	dependentID int64,
@@ -659,8 +660,8 @@ func emitSchedule(
 func checkScheduleAlreadyExists(
 	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
 ) (bool, error) {
-
-	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	row, err := ie.QueryRowEx(ctx, "check-sched",
 		p.ExtendedEvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
 			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))

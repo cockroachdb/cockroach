@@ -43,13 +43,15 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 	var rows []tree.Datums
 	var cols colinfo.ResultColumns
 
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
 	if n.ScheduleID != nil {
 		sjID, err := strconv.Atoi(n.ScheduleID.String())
 		if err != nil {
 			return nil, err
 		}
 
-		datums, columns, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
+		datums, columns, err := ie.QueryRowExWithCols(
 			params.ctx,
 			"load-schedules",
 			params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -61,7 +63,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		rows = append(rows, datums)
 		cols = columns
 	} else {
-		datums, columns, err := params.ExecCfg().InternalExecutor.QueryBufferedExWithCols(
+		datums, columns, err := ie.(*InternalExecutor).QueryBufferedExWithCols(
 			params.ctx,
 			"load-schedules",
 			params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -106,6 +108,8 @@ func (p *planner) ShowCreateSchedule(
 				return nil, err
 			}
 
+			ie := p.MakeInternalExecutor(ctx)
+			ie.Close(ctx)
 			var rows []tree.Datums
 			for _, sj := range scheduledJobs {
 				ex, err := jobs.GetScheduledJobExecutor(sj.ExecutorType())
@@ -114,7 +118,7 @@ func (p *planner) ShowCreateSchedule(
 				}
 
 				createStmtStr, err := ex.GetCreateScheduleStatement(ctx,
-					scheduledjobs.ProdJobSchedulerEnv, p.Txn(), sj, p.ExecCfg().InternalExecutor)
+					scheduledjobs.ProdJobSchedulerEnv, p.Txn(), sj, ie)
 				if err != nil {
 					return nil, err
 				}

@@ -54,8 +54,10 @@ func (p *planner) CommentOnDatabase(
 }
 
 func (n *commentOnDatabaseNode) startExec(params runParams) error {
+	ie := params.p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"set-db-comment",
 			params.p.Txn(),
@@ -68,7 +70,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"delete-db-comment",
 			params.p.Txn(),

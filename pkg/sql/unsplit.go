@@ -107,6 +107,7 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 		indexName = n.index.GetName()
 	}
 	ie := params.p.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
 	it, err := ie.QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
 		statement,

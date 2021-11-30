@@ -67,8 +67,10 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 }
 
 func (n *commentOnSchemaNode) startExec(params runParams) error {
+	ie := params.p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"set-schema-comment",
 			params.p.Txn(),

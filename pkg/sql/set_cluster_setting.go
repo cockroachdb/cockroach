@@ -173,11 +173,13 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	execCfg := params.extendedEvalCtx.ExecCfg
 	var expectedEncodedValue string
 	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
+		ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+		defer ie.Close(ctx)
 		var reportedValue string
 		if n.value == nil {
 			reportedValue = "DEFAULT"
 			expectedEncodedValue = n.setting.EncodedDefault()
-			if _, err := execCfg.InternalExecutor.ExecEx(
+			if _, err := ie.ExecEx(
 				ctx, "reset-setting", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"DELETE FROM system.settings WHERE name = $1", n.name,
@@ -193,7 +195,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			var prev tree.Datum
 			_, isSetVersion := n.setting.(*settings.VersionSetting)
 			if isSetVersion {
-				datums, err := execCfg.InternalExecutor.QueryRowEx(
+				datums, err := ie.QueryRowEx(
 					ctx, "retrieve-prev-setting", txn,
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					"SELECT value FROM system.settings WHERE name = $1", n.name,
@@ -244,7 +246,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 					}
 					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 						// Confirm if the version has actually changed on us.
-						datums, err := execCfg.InternalExecutor.QueryRowEx(
+						datums, err := ie.QueryRowEx(
 							ctx, "retrieve-prev-setting", txn,
 							sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 							"SELECT value FROM system.settings WHERE name = $1", n.name,
@@ -260,7 +262,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 						}
 						// Only if the version has changed alter the setting.
 						if versionIsDifferent {
-							_, err = execCfg.InternalExecutor.ExecEx(
+							_, err = ie.ExecEx(
 								ctx, "update-setting", txn,
 								sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 								`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
@@ -276,7 +278,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 					return err
 				}
 			} else {
-				if _, err = execCfg.InternalExecutor.ExecEx(
+				if _, err = ie.ExecEx(
 					ctx, "update-setting", txn,
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,

@@ -340,7 +340,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg.SQLStatsTestingKnobs,
 	)
 	reportedSQLStatsController :=
-		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
+		reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -2724,11 +2724,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
-
+		ie := ex.server.cfg.InternalExecutorFactory(ex.Ctx(), ex.sessionData())
+		defer ie.Close(ex.Ctx())
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
-			ex.server.cfg.InternalExecutor,
+			ie,
 			ex.extraTxnState.jobs); err != nil {
 			handleErr(err)
 		}

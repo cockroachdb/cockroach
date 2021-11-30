@@ -710,7 +710,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			connType:        connType,
 			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
+			ie:              s.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */),
 			auth:            hbaConf,
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,

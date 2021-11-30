@@ -70,7 +70,9 @@ func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterReg
 		User: security.RootUserName(),
 	}
 
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	it, err := ie.QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
 		p.ExtendedEvalContext().Txn,
@@ -757,8 +759,10 @@ func applyZoneConfigForMultiRegionDatabase(
 		zonepb.MultiRegionZoneConfigFields,
 	)
 	// If the new zone config is the same as a blank zone config, delete it.
+	ie := execConfig.InternalExecutorFactory(ctx, nil)
+	defer ie.Close(ctx)
 	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
-		_, err = execConfig.InternalExecutor.Exec(
+		_, err = ie.Exec(
 			ctx,
 			"delete-zone-multiregion-database",
 			txn,

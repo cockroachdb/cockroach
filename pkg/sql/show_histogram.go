@@ -44,7 +44,9 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		columns: showHistogramColumns,
 
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+			ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+			defer ie.Close(ctx)
+			row, err := ie.QueryRowEx(
 				ctx,
 				"read-histogram",
 				p.txn,

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -177,7 +178,7 @@ type Node struct {
 	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
 	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
 	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
-	sqlExec      *sql.InternalExecutor    // For event logging
+	sqlExec      sqlutil.InternalExecutor // For event logging
 	stores       *kvserver.Stores         // Access to node-local stores
 	metrics      nodeMetrics
 	recorder     *status.MetricsRecorder
@@ -324,9 +325,9 @@ func NewNode(
 	tenantUsage multitenant.TenantUsageServer,
 	spanConfigAccessor spanconfig.KVAccessor,
 ) *Node {
-	var sqlExec *sql.InternalExecutor
+	var sqlExec sqlutil.InternalExecutor
 	if execCfg != nil {
-		sqlExec = execCfg.InternalExecutor
+		sqlExec = execCfg.InternalExecutorFactory(nil, nil /* sessionData */)
 	}
 	n := &Node{
 		storeCfg:            cfg,
@@ -348,7 +349,7 @@ func NewNode(
 
 // InitLogger needs to be called if a nil execCfg was passed to NewNode().
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
-	n.sqlExec = execCfg.InternalExecutor
+	n.sqlExec = execCfg.InternalExecutorFactory(nil, nil /* sessionData */)
 }
 
 // String implements fmt.Stringer.

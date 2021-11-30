@@ -68,8 +68,9 @@ func (n *saveTableNode) startExec(params runParams) error {
 		def.Nullable.Nullability = tree.SilentNull
 		create.Defs = append(create.Defs, def)
 	}
-
-	_, err := params.p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+	ie := params.p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
+	_, err := ie.Exec(
 		params.ctx,
 		"create save table",
 		nil, /* txn */
@@ -81,8 +82,10 @@ func (n *saveTableNode) startExec(params runParams) error {
 // issue inserts rows into the target table of the saveTableNode.
 func (n *saveTableNode) issue(params runParams) error {
 	if v := &n.run.vals; len(v.Rows) > 0 {
+		ie := params.p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+		defer ie.Close(params.ctx)
 		stmt := fmt.Sprintf("INSERT INTO %s %s", n.target.String(), v.String())
-		if _, err := params.p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		if _, err := ie.Exec(
 			params.ctx,
 			"insert into save table",
 			nil, /* txn */

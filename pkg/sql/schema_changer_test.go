@@ -93,12 +93,15 @@ func TestSchemaChangeProcess(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
 	require.NoError(t, err)
+	ctx := context.Background()
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
 	leaseMgr := lease.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		execCfg.NodeID,
 		execCfg.DB,
 		execCfg.Clock,
-		execCfg.InternalExecutor,
+		ie,
 		execCfg.Settings,
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},

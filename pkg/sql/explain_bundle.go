@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
@@ -115,7 +116,7 @@ type diagnosticsBundle struct {
 func buildStatementBundle(
 	ctx context.Context,
 	db *kv.DB,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	plan *planTop,
 	planString string,
 	trace tracing.Recording,
@@ -173,7 +174,7 @@ func (bundle *diagnosticsBundle) insert(
 // stmtBundleBuilder is a helper for building a statement bundle.
 type stmtBundleBuilder struct {
 	db *kv.DB
-	ie *InternalExecutor
+	ie sqlutil.InternalExecutor
 
 	plan         *planTop
 	trace        tracing.Recording
@@ -184,7 +185,7 @@ type stmtBundleBuilder struct {
 
 func makeStmtBundleBuilder(
 	db *kv.DB,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	plan *planTop,
 	trace tracing.Recording,
 	placeholders *tree.PlaceholderInfo,
@@ -424,10 +425,10 @@ func (b *stmtBundleBuilder) finalize() (*bytes.Buffer, error) {
 // schema, table statistics.
 type stmtEnvCollector struct {
 	ctx context.Context
-	ie  *InternalExecutor
+	ie  sqlutil.InternalExecutor
 }
 
-func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvCollector {
+func makeStmtEnvCollector(ctx context.Context, ie sqlutil.InternalExecutor) stmtEnvCollector {
 	return stmtEnvCollector{ctx: ctx, ie: ie}
 }
 

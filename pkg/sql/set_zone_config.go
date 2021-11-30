@@ -1085,11 +1085,13 @@ func writeZoneConfig(
 func writeZoneConfigUpdate(
 	ctx context.Context, txn *kv.Txn, execCfg *ExecutorConfig, update *zoneConfigUpdate,
 ) (numAffected int, _ error) {
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
 	if update.value == nil {
-		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
+		return ie.Exec(ctx, "delete-zone", txn,
 			"DELETE FROM system.zones WHERE id = $1", update.id)
 	}
-	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,
+	return ie.Exec(ctx, "update-zone", txn,
 		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", update.id, update.value)
 }
 

@@ -122,6 +122,8 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 		memberStmt = `DELETE FROM system.role_members WHERE "role" = $1 AND "member" = $2`
 	}
 
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
 	var rowsAffected int
 	for _, r := range n.roles {
 		for _, m := range n.members {
@@ -131,7 +133,7 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 					"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					security.RootUser, security.AdminRole)
 			}
-			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			affected, err := ie.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,

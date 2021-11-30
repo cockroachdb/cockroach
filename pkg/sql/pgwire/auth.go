@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -59,7 +60,7 @@ type authOptions struct {
 	identMap *identmap.Conf
 	// ie is the server-wide internal executor, used to
 	// retrieve entries from system.users.
-	ie *sql.InternalExecutor
+	ie sqlutil.InternalExecutor
 
 	// The following fields are only used by tests.
 

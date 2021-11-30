@@ -63,7 +63,9 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 
 	// Load schedule expression.  This is needed for resume command, but we
 	// also use this query to check for the schedule existence.
-	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
+	datums, cols, err := ie.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
 		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -89,9 +91,11 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 
 // updateSchedule executes update for the schedule.
 func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
 	return schedule.Update(
 		params.ctx,
-		params.ExecCfg().InternalExecutor,
+		ie,
 		params.EvalContext().Txn,
 	)
 }
@@ -99,7 +103,9 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 // deleteSchedule deletes specified schedule.
 func deleteSchedule(params runParams, scheduleID int64) error {
 	env := jobSchedulerEnv(params)
-	_, err := params.ExecCfg().InternalExecutor.ExecEx(
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
+	_, err := ie.ExecEx(
 		params.ctx,
 		"delete-schedule",
 		params.EvalContext().Txn,
@@ -115,6 +121,8 @@ func deleteSchedule(params runParams, scheduleID int64) error {
 
 // startExec implements planNode interface.
 func (n *controlSchedulesNode) startExec(params runParams) error {
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
 	for {
 		ok, err := n.rows.Next(params)
 		if err != nil {
@@ -154,7 +162,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			}
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
-					params.ExecCfg().ProtectedTimestampProvider, params.ExecCfg().InternalExecutor)
+					params.ExecCfg().ProtectedTimestampProvider, ie)
 				if err := controller.OnDrop(params.ctx, scheduleControllerEnv,
 					scheduledjobs.ProdJobSchedulerEnv, schedule,
 					params.extendedEvalCtx.Txn); err != nil {

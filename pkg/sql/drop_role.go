@@ -274,6 +274,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 	}
+	ie := params.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+	defer ie.Close(params.ctx)
 
 	// All safe - do the work.
 	var numRoleMembershipsDeleted, numRoleSettingsRowsDeleted int
@@ -290,7 +292,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Check if user owns any scheduled jobs.
-		numSchedulesRow, err := params.ExecCfg().InternalExecutor.QueryRow(
+		numSchedulesRow, err := ie.QueryRow(
 			params.ctx,
 			"check-user-schedules",
 			params.p.txn,
@@ -310,7 +312,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				normalizedUsername, numSchedules)
 		}
 
-		numUsersDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		numUsersDeleted, err := ie.Exec(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -326,7 +328,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Drop all role memberships involving the user/role.
-		rowsDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowsDeleted, err := ie.Exec(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
@@ -338,7 +340,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 		numRoleMembershipsDeleted += rowsDeleted
 
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		_, err = ie.Exec(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -354,7 +356,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 		// TODO(rafi): Remove this condition in 21.2.
 		if params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
-			rowsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			rowsDeleted, err = ie.Exec(
 				params.ctx,
 				opName,
 				params.p.txn,

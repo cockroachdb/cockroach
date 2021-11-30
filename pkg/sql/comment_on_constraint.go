@@ -89,12 +89,14 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	case descpb.ConstraintTypeCheck:
 		constraintDesc := constraint.CheckConstraint
 		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-
 	}
+
+	ie := params.p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
 	// Setting the comment to NULL is the
 	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"set-constraint-comment",
 			params.p.Txn(),
@@ -108,7 +110,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"delete-constraint-comment",
 			params.p.Txn(),

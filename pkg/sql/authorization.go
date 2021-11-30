@@ -314,10 +314,12 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member security.SQLUsername,
 ) (map[security.SQLUsername]bool, error) {
+	ie := p.MakeInternalExecutor(ctx)
+	defer ie.Close(ctx)
 	return MemberOfWithAdminOption(
 		ctx,
 		p.execCfg,
-		p.ExecCfg().InternalExecutor,
+		ie,
 		p.Descriptors(),
 		p.Txn(),
 		member,
@@ -492,7 +494,9 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+	ie := p.MakeInternalExecutor(ctx)
+	defer ie.Close(ctx)
+	hasRolePrivilege, err := ie.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
@@ -722,4 +726,11 @@ func (p *planner) HasOwnershipOnSchema(
 	}
 
 	return hasOwnership, nil
+}
+
+// MakeInternalExecutor makes an InternalExecutor using the
+// InternalExecutorFactory on planner's ExecCfg.
+// The caller of MakeInternalExecutor must call Close on the InternalExecutor.
+func (p *planner) MakeInternalExecutor(ctx context.Context) sqlutil.InternalExecutor {
+	return p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 }

@@ -2542,7 +2542,7 @@ func (s *Server) Decommission(
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return sql.InsertEventRecord(
 					ctx,
-					s.sqlServer.execCfg.InternalExecutor,
+					s.sqlServer.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */),
 					txn,
 					int32(s.NodeID()), /* reporting ID: the node where the event is logged */
 					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */

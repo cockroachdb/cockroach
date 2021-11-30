@@ -61,7 +61,9 @@ func (p *planner) CreateJoinToken(ctx context.Context) (string, error) {
 	}
 	expiration := timeutil.Now().Add(security.JoinTokenExpiration)
 	err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err = p.ExecCfg().InternalExecutor.Exec(
+		ie := p.MakeInternalExecutor(ctx)
+		defer ie.Close(ctx)
+		_, err = ie.Exec(
 			ctx, "insert-join-token", txn,
 			"insert into system.join_tokens(id, secret, expiration) "+
 				"values($1, $2, $3)",

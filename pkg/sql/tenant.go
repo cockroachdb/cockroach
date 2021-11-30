@@ -82,7 +82,9 @@ func CreateTenantRecord(
 	}
 
 	// Insert into the tenant table and detect collisions.
-	if num, err := execCfg.InternalExecutor.ExecEx(
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	if num, err := ie.ExecEx(
 		ctx, "create-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`,
 		tenID, active, infoBytes,
@@ -100,7 +102,7 @@ func CreateTenantRecord(
 		if err != nil {
 			return errors.Wrap(err, "marshaling tenant usage data")
 		}
-		if num, err := execCfg.InternalExecutor.ExecEx(
+		if num, err := ie.ExecEx(
 			ctx, "create-tenant-usage", txn, sessiondata.NodeUserSessionDataOverride,
 			`INSERT INTO system.tenant_usage (
 			  tenant_id, instance_id, next_instance_id, last_update,
@@ -129,7 +131,9 @@ func CreateTenantRecord(
 func GetTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
 ) (*descpb.TenantInfo, error) {
-	row, err := execCfg.InternalExecutor.QueryRowEx(
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	row, err := ie.QueryRowEx(
 		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`SELECT info FROM system.tenants WHERE id = $1`, tenID,
 	)
@@ -158,7 +162,9 @@ func updateTenantRecord(
 		return err
 	}
 
-	if num, err := execCfg.InternalExecutor.ExecEx(
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	if num, err := ie.ExecEx(
 		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`,
 		tenID, active, infoBytes,
@@ -373,7 +379,9 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 	}
 
 	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if num, err := execCfg.InternalExecutor.ExecEx(
+		ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+		defer ie.Close(ctx)
+		if num, err := ie.ExecEx(
 			ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.tenants WHERE id = $1`, info.ID,
 		); err != nil {
@@ -382,7 +390,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 			log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 		}
 
-		if _, err := execCfg.InternalExecutor.ExecEx(
+		if _, err := ie.ExecEx(
 			ctx, "delete-tenant-usage", txn, sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.tenant_usage WHERE tenant_id = $1`, info.ID,
 		); err != nil {

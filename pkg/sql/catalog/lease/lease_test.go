@@ -212,12 +212,15 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		// different node id.
 		cfgCpy := t.server.ExecutorConfig().(sql.ExecutorConfig)
 		cfgCpy.NodeInfo.NodeID = nc
+		ieCtx := context.Background()
+		ie := cfgCpy.InternalExecutorFactory(ieCtx, nil)
+		defer ie.Close(ieCtx)
 		mgr = lease.NewLeaseManager(
 			log.AmbientContext{Tracer: tracing.NewTracer()},
 			nc,
 			cfgCpy.DB,
 			cfgCpy.Clock,
-			cfgCpy.InternalExecutor,
+			ie,
 			cfgCpy.Settings,
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,

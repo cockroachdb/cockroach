@@ -152,7 +152,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if the user/role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
+	row, err := ie.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -172,7 +174,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
-	rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	rowsAffected, err := ie.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -214,7 +216,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			}
 		}
 
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err = ie.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,

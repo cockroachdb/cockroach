@@ -58,7 +58,8 @@ func maybeUpdateSchedulePTSRecord(
 	return exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// We cannot rely on b.job containing created_by_id because on job
 		// resumption the registry does not populate the resumers' CreatedByInfo.
-		datums, err := exec.InternalExecutor.QueryRowEx(
+		ie := exec.InternalExecutorFactory(ctx, nil)
+		datums, err := ie.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
 			txn,
@@ -78,7 +79,7 @@ func maybeUpdateSchedulePTSRecord(
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-			exec.InternalExecutor, scheduleID)
+			ie, scheduleID)
 		if err != nil {
 			return errors.Wrap(err, "load scheduled job")
 		}
@@ -134,8 +135,9 @@ func manageFullBackupPTSChaining(
 ) error {
 	// Let's resolve the dependent incremental schedule as the first step. If the
 	// schedule has been dropped then we can avoid doing unnecessary work.
+	ie := exec.InternalExecutorFactory(ctx, nil)
 	incSj, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-		exec.InternalExecutor, args.DependentScheduleID)
+		ie, args.DependentScheduleID)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "could not find dependent schedule with id %d",
@@ -180,7 +182,7 @@ func manageFullBackupPTSChaining(
 		return err
 	}
 	incSj.SetExecutionDetails(incSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
-	return incSj.Update(ctx, exec.InternalExecutor, txn)
+	return incSj.Update(ctx, ie, txn)
 }
 
 // manageIncrementalBackupPTSChaining is invoked on successful completion of an

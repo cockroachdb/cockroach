@@ -250,11 +250,13 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		return err
 	}
 
+	ie := t.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
 	// If there are any names to drain, then do so.
 	if len(typeDesc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
 			ctx, typeDesc.GetID(), t.execCfg.CollectionFactory, t.execCfg.DB,
-			t.execCfg.InternalExecutor, codec, nil,
+			ie, codec, nil,
 		); err != nil {
 			return err
 		}
@@ -767,6 +769,8 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	member *descpb.TypeDescriptor_EnumMember,
 	descsCol *descs.Collection,
 ) error {
+	ie := t.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
 		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{})
 		if err != nil {
@@ -936,7 +940,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				User:     security.RootUserName(),
 				Database: dbDesc.GetName(),
 			}
-			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
+			rows, err := ie.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 			}
@@ -1100,6 +1104,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 ) error {
+	ie := t.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
 	const validationErr = "could not validate removal of enum value %q"
 	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
 		id := arrayTypeDesc.GetReferencingDescriptorID(i)
@@ -1164,7 +1170,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			User:     security.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
-		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
+		rows, err := ie.QueryRowEx(
 			ctx,
 			"count-array-type-value-usage",
 			txn,
@@ -1297,9 +1303,11 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 			return err
 		}
 
+		ie := tc.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+		defer ie.Close(ctx)
 		if err := drainNamesForDescriptor(
 			ctx, tc.typeID, tc.execCfg.CollectionFactory, tc.execCfg.DB,
-			tc.execCfg.InternalExecutor, tc.execCfg.Codec,
+			ie, tc.execCfg.Codec,
 			nil, /* beforeDrainNames */
 		); err != nil {
 			return err

@@ -4460,7 +4460,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn))
 	t.Run("cloudstorage", cloudStorageTest(testFn))
 	t.Run("kafka", kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn)
 }
 
 func TestChangefeedBackfillCheckpoint(t *testing.T) {

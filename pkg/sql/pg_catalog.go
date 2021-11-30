@@ -1478,7 +1478,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 // as a datum row, containing object id, sub id (column id in the case of
 // columns), comment text, and comment type (keys.FooCommentType).
 func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
-	return p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	return ie.QueryBuffered(
 		ctx,
 		"select-comments",
 		p.EvalContext().Txn,
@@ -3144,7 +3146,9 @@ var pgCatalogDbRoleSettingTable = virtualSchemaTable{
 https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 	schema: vtable.PgCatalogDbRoleSetting,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		rows, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBufferedEx(
+		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+		defer ie.Close(ctx)
+		rows, err := ie.QueryBufferedEx(
 			ctx,
 			"select-db-role-settings",
 			p.EvalContext().Txn,
@@ -3396,7 +3400,9 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 	schema: vtable.PgCatalogStatisticExt,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		query := `SELECT "statisticID", name, "tableID", "columnIDs" FROM system.table_statistics;`
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+		ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+		defer ie.Close(ctx)
+		rows, err := ie.QueryBuffered(
 			ctx, "read-statistics-objects", p.txn, query,
 		)
 		if err != nil {

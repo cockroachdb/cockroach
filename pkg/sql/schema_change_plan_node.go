@@ -87,6 +87,8 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 	}
 
 	everySecond := log.Every(time.Second)
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	defer ie.Close(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		now := p.ExecCfg().Clock.Now()
 		if everySecond.ShouldLog() {
@@ -94,7 +96,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 		}
 		blocked := false
 		if err := p.ExecCfg().CollectionFactory.Txn(
-			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
+			ctx, ie, p.ExecCfg().DB,
 			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 					return err

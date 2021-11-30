@@ -53,8 +53,10 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 }
 
 func (n *commentOnTableNode) startExec(params runParams) error {
+	ie := params.p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"set-table-comment",
 			params.p.Txn(),
@@ -67,7 +69,7 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := ie.ExecEx(
 			params.ctx,
 			"delete-table-comment",
 			params.p.Txn(),

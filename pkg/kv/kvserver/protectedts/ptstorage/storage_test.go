@@ -808,3 +808,7 @@ func (ie *wrappedInternalExecutor) WithSyntheticDescriptors(
 ) error {
 	panic("not implemented")
 }
+
+func (ie *wrappedInternalExecutor) Close(ctx context.Context) {
+	panic("not implemented")
+}

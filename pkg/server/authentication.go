@@ -257,7 +257,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
-		s.server.sqlServer.execCfg.InternalExecutor,
+		s.server.sqlServer.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */),
 		username,
 		"", /* databaseName */
 	)
@@ -420,7 +420,7 @@ func (s *authenticationServer) verifyPassword(
 	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
-		s.server.sqlServer.execCfg.InternalExecutor,
+		s.server.sqlServer.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */),
 		username,
 		"", /* databaseName */
 	)

@@ -420,21 +420,24 @@ func internalExtendedEvalCtx(
 	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsController tree.SQLStatsController
 	var indexUsageStatsController tree.IndexUsageStatsController
-	if execCfg.InternalExecutor != nil {
-		if execCfg.InternalExecutor.s != nil {
-			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
-			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
-			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
-		} else {
-			// If the indexUsageStats is nil from the sql.Server, we create a dummy
-			// index usage stats collector. The sql.Server in the ExecutorConfig
-			// is only nil during tests.
-			indexUsageStats = idxusage.NewLocalIndexUsageStats(&idxusage.Config{
-				Setting: execCfg.Settings,
-			})
-			sqlStatsController = &persistedsqlstats.Controller{}
-			indexUsageStatsController = &idxusage.Controller{}
-		}
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */).(*InternalExecutor)
+	defer ie.Close(ctx)
+	// TODO(richardjcai): I think this is now inaccurate.
+	// This is likely invalid now that we don't have a single global IE on the
+	// execCfg.
+	if ie != nil {
+		indexUsageStats = ie.s.indexUsageStats
+		sqlStatsController = ie.s.sqlStatsController
+		indexUsageStatsController = ie.s.indexUsageStatsController
+	} else {
+		// If the indexUsageStats is nil from the sql.Server, we create a dummy
+		// index usage stats collector. The sql.Server in the ExecutorConfig
+		// is only nil during tests.
+		indexUsageStats = idxusage.NewLocalIndexUsageStats(&idxusage.Config{
+			Setting: execCfg.Settings,
+		})
+		sqlStatsController = &persistedsqlstats.Controller{}
+		indexUsageStatsController = &idxusage.Controller{}
 	}
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -826,6 +829,7 @@ func (p *planner) QueryRowEx(
 	qargs ...interface{},
 ) (tree.Datums, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	defer ie.Close(ctx)
 	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
 }
 
@@ -844,6 +848,7 @@ func (p *planner) QueryIteratorEx(
 	qargs ...interface{},
 ) (tree.InternalRows, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	defer ie.Close(ctx)
 	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	return rows.(tree.InternalRows), err
 }

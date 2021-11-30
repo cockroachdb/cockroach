@@ -116,7 +116,9 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colNames(pkColumns), colNames(otherColumns), o.tableDesc.GetID(), o.index.GetID(),
 	)
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
+	rows, err := ie.QueryBuffered(
 		ctx, "scrub-index", params.p.txn, checkQuery,
 	)
 	if err != nil {

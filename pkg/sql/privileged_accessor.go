@@ -35,7 +35,9 @@ func (p *planner) LookupNamespaceID(
 		`SELECT id FROM [%d AS namespace] WHERE "parentID" = $1 AND "parentSchemaID" IN (0, 29) AND name = $2`,
 		keys.NamespaceTableID,
 	)
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	r, err := ie.QueryRowEx(
 		ctx,
 		"crdb-internal-get-descriptor-id",
 		p.txn,
@@ -66,7 +68,9 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 	}
 
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	r, err := ie.QueryRowEx(
 		ctx,
 		"crdb-internal-get-zone",
 		p.txn,

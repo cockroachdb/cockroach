@@ -777,10 +777,12 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
+	ie := ex.server.cfg.InternalExecutorFactory(ex.Ctx(), ex.sessionData())
+	defer ie.Close(ex.Ctx())
 	retryErr, err := descs.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
-		ex.server.cfg.InternalExecutor,
+		ie,
 		&ex.extraTxnState.descCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,

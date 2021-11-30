@@ -89,8 +89,7 @@ func defaultSystemTableRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
-
+	executor := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	opName := systemTableName + "-data-deletion"
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
@@ -117,8 +116,7 @@ func defaultSystemTableRestoreFunc(
 func jobsMigrationFunc(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, tempTableName string,
 ) (err error) {
-	executor := execCfg.InternalExecutor
-
+	executor := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
 	const statesToRevert = `('` + string(jobs.StatusRunning) + `', ` +
 		`'` + string(jobs.StatusPauseRequested) + `', ` +
 		`'` + string(jobs.StatusPaused) + `')`
@@ -191,8 +189,7 @@ func jobsRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
-
+	executor := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
 	// When restoring jobs, don't clear the existing table.
 
 	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s) ON CONFLICT DO NOTHING;",
@@ -212,8 +209,7 @@ func settingsRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
-
+	executor := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version'", systemTableName)
 	opName := systemTableName + "-data-deletion"
 	log.Eventf(ctx, "clearing data from system table %s with query %q",

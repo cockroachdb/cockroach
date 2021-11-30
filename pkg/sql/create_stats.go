@@ -174,9 +174,11 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 
 	if err := job.AwaitCompletion(ctx); err != nil {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
+			ie := n.p.MakeInternalExecutor(ctx)
+			defer ie.Close(ctx)
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
-			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
+			if _ /* cols */, delErr := ie.Exec(
 				ctx, "delete-job", nil /* txn */, stmt, jobID,
 			); delErr != nil {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
@@ -670,7 +672,9 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	if job != nil {
 		jobID = job.ID()
 	}
-	exists, err := jobs.RunningJobExists(ctx, jobID, p.ExecCfg().InternalExecutor, nil /* txn */, func(payload *jobspb.Payload) bool {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	defer ie.Close(ctx)
+	exists, err := jobs.RunningJobExists(ctx, jobID, ie, nil /* txn */, func(payload *jobspb.Payload) bool {
 		return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
 	})
 

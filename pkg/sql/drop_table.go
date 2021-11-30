@@ -618,7 +618,9 @@ func removeMatchingReferences(
 }
 
 func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	_, err := ie.ExecEx(
 		ctx,
 		"delete-table-comments",
 		p.txn,

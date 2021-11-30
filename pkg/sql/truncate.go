@@ -418,7 +418,9 @@ func (p *planner) copySplitPointsToNewIndexes(
 	if preservedSplitsMultiple <= 0 {
 		return nil
 	}
-	row, err := p.execCfg.InternalExecutor.QueryRowEx(
+	ie := p.execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	row, err := ie.QueryRowEx(
 		// Run as Root, since ordinary users can't select from this table.
 		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"SELECT count(*) FROM crdb_internal.kv_node_status")
@@ -552,7 +554,9 @@ func (p *planner) reassignIndexComments(
 	ctx context.Context, table *tabledesc.Mutable, indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
 	// Check if there are any index comments that need to be updated.
-	row, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	row, err := ie.QueryRowEx(
 		ctx,
 		"update-table-comments",
 		p.txn,
@@ -569,7 +573,7 @@ func (p *planner) reassignIndexComments(
 	}
 	if int(tree.MustBeDInt(row[0])) > 0 {
 		for old, new := range indexIDMapping {
-			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+			if _, err := ie.ExecEx(
 				ctx,
 				"update-table-comments",
 				p.txn,

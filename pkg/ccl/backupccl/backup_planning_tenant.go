@@ -13,9 +13,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -76,7 +76,7 @@ func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) 
 }
 
 func retrieveSingleTenantMetadata(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
+	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
 ) (descpb.TenantInfoWithUsage, error) {
 	row, err := ie.QueryRow(
 		ctx, "backup-lookup-tenant", txn,
@@ -96,7 +96,7 @@ func retrieveSingleTenantMetadata(
 }
 
 func retrieveAllTenantsMetadata(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn,
 ) ([]descpb.TenantInfoWithUsage, error) {
 	rows, err := ie.QueryBuffered(
 		ctx, "backup-lookup-tenants", txn,

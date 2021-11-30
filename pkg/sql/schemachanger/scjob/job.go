@@ -70,7 +70,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
-		execCfg.InternalExecutor,
+		execCfg.InternalExecutorFactory(ctx, nil /* sessionData */),
 		execCfg.IndexBackfiller,
 		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
 			return sql.LogEventForSchemaChanger(ctx, execCtx.ExecCfg(), txn, depth, descID, metadata, event)

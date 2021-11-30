@@ -312,7 +312,8 @@ func (ih *instrumentationHelper) Finish(
 
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
-		ie := p.extendedEvalCtx.ExecCfg.InternalExecutor
+		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+		defer ie.Close(ctx)
 		phaseTimes := statsCollector.PhaseTimes()
 		if ih.stmtDiagnosticsRecorder.IsExecLatencyConditionMet(
 			ih.diagRequestID, ih.diagRequest, phaseTimes.GetServiceLatencyNoOverhead(),

@@ -94,6 +94,10 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 	return run()
 }
 
+func (ie *InternalExecutor) Close(ctx context.Context) {
+	ie.mon.Stop(ctx)
+}
+
 // MakeInternalExecutor creates an InternalExecutor.
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,

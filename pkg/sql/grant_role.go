@@ -174,10 +174,12 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		memberStmt += ` DO NOTHING`
 	}
 
+	ie := params.extendedEvalCtx.ExecCfg.InternalExecutorFactory(params.ctx, nil /* sessionData */)
+	defer ie.Close(params.ctx)
 	var rowsAffected int
 	for _, r := range n.roles {
 		for _, m := range n.members {
-			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			affected, err := ie.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,

@@ -71,7 +71,7 @@ import (
 func GetUserSessionInitInfo(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	username security.SQLUsername,
 	databaseName string,
 ) (
@@ -84,7 +84,7 @@ func GetUserSessionInitInfo(
 	err error,
 ) {
 	// We may be operating with a timeout.
-	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
+	timeout := userLoginTimeout.Get(&ie.(*InternalExecutor).s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
 	// (4.5 seconds to not exceed the default 5s timeout configured in many clients.)
 	const maxRootTimeout = 4*time.Second + 500*time.Millisecond
@@ -176,7 +176,7 @@ func GetUserSessionInitInfo(
 func retrieveSessionInitInfoWithCache(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	ie *InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	username security.SQLUsername,
 	databaseName string,
 ) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
@@ -379,7 +379,9 @@ var userLoginTimeout = settings.RegisterDurationSetting(
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error) {
 	query := `SELECT username FROM system.users`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	it, err := ie.QueryIteratorEx(
 		ctx, "read-users", p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query)
@@ -410,7 +412,9 @@ func RoleExists(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
 ) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
-	row, err := execCfg.InternalExecutor.QueryRowEx(
+	ie := execCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+	defer ie.Close(ctx)
+	row, err := ie.QueryRowEx(
 		ctx, "read-users", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query, role,

@@ -53,8 +53,10 @@ func (p *planner) showVersionSetting(
 
 			// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() error {
+				ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+				defer ie.Close(ctx)
 				return p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+					datums, err := ie.QueryRowEx(
 						ctx, "read-setting",
 						txn,
 						sessiondata.InternalExecutorOverride{User: security.RootUserName()},

@@ -67,7 +67,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
-			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+			ie := p.ExtendedEvalContext().ExecCfg.InternalExecutorFactory(ctx, nil /* sessionData */)
+			defer ie.Close(ctx)
+			rows, err := ie.QueryBuffered(
 				ctx,
 				"read-table-stats",
 				p.txn,
