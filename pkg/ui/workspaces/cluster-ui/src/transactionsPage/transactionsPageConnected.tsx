@@ -25,14 +25,12 @@ import {
   selectTransactionsLastError,
   selectTxnColumns,
   selectSortSetting,
+  selectFilters,
+  selectSearch,
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import {
-  selectDateRange,
-  selectFilters,
-  selectSearch,
-} from "src/statementsPage/statementsPage.selectors";
+import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
 import { Filters } from "../queryFilter";
