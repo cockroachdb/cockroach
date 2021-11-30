@@ -993,6 +993,38 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		)
 	}
 
+	// Start scheduled jobs daemon.
+	jobs.StartJobSchedulerDaemon(
+		ctx,
+		cfg.stopper,
+		cfg.registry,
+		&scheduledjobs.JobExecutionConfig{
+			Settings:         cfg.Settings,
+			InternalExecutor: cfg.circularInternalExecutor,
+			DB:               execCfg.DB,
+			TestingKnobs:     cfg.TestingKnobs.JobsTestingKnobs,
+			PlanHookMaker: func(opName string, txn *kv.Txn, user security.SQLUsername) (interface{}, func()) {
+				// This is a hack to get around a Go package dependency cycle. See comment
+				// in sql/jobs/registry.go on planHookMaker.
+				return sql.NewInternalPlanner(
+					opName,
+					txn,
+					user,
+					&sql.MemoryMetrics{},
+					execCfg,
+					sessiondatapb.SessionData{},
+				)
+			},
+			ShouldRunScheduler: func(ctx context.Context, ts hlc.ClockTimestamp) (bool, error) {
+				if codec.ForSystemTenant() {
+					return cfg.isMeta1Leaseholder(ctx, ts)
+				}
+				return true, nil
+			},
+		},
+		scheduledjobs.ProdJobSchedulerEnv,
+	)
+
 	return &SQLServer{
 		ambientCtx:              cfg.BaseConfig.AmbientCtx,
 		stopper:                 cfg.stopper,
@@ -1214,32 +1246,6 @@ func (s *SQLServer) preStart(
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
-
-	// Start scheduled jobs daemon.
-	jobs.StartJobSchedulerDaemon(
-		ctx,
-		stopper,
-		s.metricsRegistry,
-		&scheduledjobs.JobExecutionConfig{
-			Settings:         s.execCfg.Settings,
-			InternalExecutor: s.internalExecutor,
-			DB:               s.execCfg.DB,
-			TestingKnobs:     knobs.JobsTestingKnobs,
-			PlanHookMaker: func(opName string, txn *kv.Txn, user security.SQLUsername) (interface{}, func()) {
-				// This is a hack to get around a Go package dependency cycle. See comment
-				// in sql/jobs/registry.go on planHookMaker.
-				return sql.NewInternalPlanner(
-					opName,
-					txn,
-					user,
-					&sql.MemoryMetrics{},
-					s.execCfg,
-					sessiondatapb.SessionData{},
-				)
-			},
-		},
-		scheduledjobs.ProdJobSchedulerEnv,
-	)
 
 	return nil
 }
