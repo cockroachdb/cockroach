@@ -11,12 +11,7 @@
 package sql
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
-	"io"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -72,30 +67,16 @@ func (n *explainDDLNode) startExec(params runParams) error {
 	if err != nil {
 		return pgerror.Wrap(err, pgcode.FeatureNotSupported, "new schema changer failed executing this operation.")
 	}
-	var out string
+	var vizURL string
 	if n.options.Flags[tree.ExplainFlagDeps] {
-		if out, err = scgraphviz.DrawDependencies(&sc); err != nil {
+		if vizURL, err = scgraphviz.DependenciesURL(sc); err != nil {
 			return err
 		}
 	} else {
-		if out, err = scgraphviz.DrawStages(&sc); err != nil {
+		if vizURL, err = scgraphviz.StagesURL(sc); err != nil {
 			return err
 		}
 	}
-	var buf bytes.Buffer
-	w := gzip.NewWriter(&buf)
-	if _, err := io.WriteString(w, out); err != nil {
-		return err
-	}
-	if err := w.Close(); err != nil {
-		return err
-	}
-	vizURL := (&url.URL{
-		Scheme:   "https",
-		Host:     "cockroachdb.github.io",
-		Path:     "scplan/viz.html",
-		Fragment: base64.StdEncoding.EncodeToString(buf.Bytes()),
-	}).String()
 	n.values = tree.Datums{
 		tree.NewDString(vizURL),
 	}

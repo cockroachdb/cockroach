@@ -78,7 +78,7 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## stage 1 in PostCommitPhase: 2 MutationType ops
-create job #2: "GC for Dropping descriptors 55 "
+create job #2: "GC for dropping descriptor 55"
   descriptor IDs: [55]
 update progress of schema change job #1
 commit transaction #2
@@ -524,7 +524,7 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## stage 1 in PostCommitPhase: 22 MutationType ops
-create job #2: "GC for Dropping descriptors 60 63 61 62 64 65 66 67 70 "
+create job #2: "GC for dropping descriptors 60 63 61 62 64 65 66 67 70"
   descriptor IDs: [60 63 61 62 64 65 66 67 70]
 delete database namespace entry {0 0 db1} -> 58
 delete schema namespace entry {58 0 sc1} -> 59

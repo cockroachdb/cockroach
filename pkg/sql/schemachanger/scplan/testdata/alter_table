@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
-Stage 0
+Stage 1 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
@@ -61,7 +61,7 @@ Stage 0
       IndexID: 2
       Name: new_primary_key
       TableID: 52
-Stage 1
+Stage 2 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -72,21 +72,21 @@ Stage 1
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 52
-Stage 2
+Stage 3 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
-Stage 3
+Stage 4 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
-Stage 4
+Stage 5 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
@@ -101,25 +101,28 @@ Stage 4
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 52
-Stage 5 (non-revertible)
+Stage 6 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 52
-Stage 6 (non-revertible)
+Stage 7 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 52
+    *scop.CreateGcJobForIndex
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-Stage 0
+Stage 1 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
@@ -177,7 +180,7 @@ Stage 0
       IndexID: 2
       Name: new_primary_key
       TableID: 52
-Stage 1
+Stage 2 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -188,21 +191,21 @@ Stage 1
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 52
-Stage 2
+Stage 3 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
-Stage 3
+Stage 4 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
-Stage 4
+Stage 5 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
@@ -217,18 +220,21 @@ Stage 4
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 52
-Stage 5 (non-revertible)
+Stage 6 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 52
-Stage 6 (non-revertible)
+Stage 7 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
+    *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 52
 
@@ -236,7 +242,7 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-Stage 0
+Stage 1 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 52, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
@@ -334,7 +340,7 @@ Stage 0
       ColumnID: 3
       Name: k
       TableID: 52
-Stage 1
+Stage 2 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -349,21 +355,21 @@ Stage 1
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 3
       TableID: 52
-Stage 2
+Stage 3 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
-Stage 3
+Stage 4 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
-Stage 4
+Stage 5 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
@@ -382,25 +388,28 @@ Stage 4
     *scop.MakeColumnPublic
       ColumnID: 3
       TableID: 52
-Stage 5 (non-revertible)
+Stage 6 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 52
-Stage 6 (non-revertible)
+Stage 7 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 52
+    *scop.CreateGcJobForIndex
+      IndexID: 1
+      TableID: 52
 
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-Stage 0
+Stage 1 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 52, ColumnID: 2, Name: a}, ABSENT, ADD] -> PUBLIC
@@ -458,7 +467,7 @@ Stage 0
       IndexID: 2
       Name: new_primary_key
       TableID: 52
-Stage 1
+Stage 2 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -469,21 +478,21 @@ Stage 1
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 2
       TableID: 52
-Stage 2
+Stage 3 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 52
-Stage 3
+Stage 4 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 52
-Stage 4
+Stage 5 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
@@ -498,18 +507,21 @@ Stage 4
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 52
-Stage 5 (non-revertible)
+Stage 6 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 52
-Stage 6 (non-revertible)
+Stage 7 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 52
+    *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 52
 
@@ -522,7 +534,7 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-Stage 0
+Stage 1 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 52, ColumnID: 2, Name: a}, ABSENT, ADD] -> PUBLIC
@@ -633,7 +645,7 @@ Stage 0
       IndexID: 2
       Name: new_primary_key
       TableID: 53
-Stage 1
+Stage 2 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -652,7 +664,7 @@ Stage 1
     *scop.MakeAddedColumnDeleteAndWriteOnly
       ColumnID: 3
       TableID: 53
-Stage 2
+Stage 3 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
     [PrimaryIndex:{DescID: 53, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
@@ -663,7 +675,7 @@ Stage 2
     *scop.BackfillIndex
       IndexID: 2
       TableID: 53
-Stage 3
+Stage 4 of 7
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
     [PrimaryIndex:{DescID: 53, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
@@ -674,7 +686,7 @@ Stage 3
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 53
-Stage 4
+Stage 5 of 7
   transitions:
     [Column:{DescID: 52, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
@@ -701,7 +713,7 @@ Stage 4
     *scop.MakeColumnPublic
       ColumnID: 3
       TableID: 53
-Stage 5 (non-revertible)
+Stage 6 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [PrimaryIndex:{DescID: 53, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
@@ -712,7 +724,7 @@ Stage 5 (non-revertible)
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
       TableID: 53
-Stage 6 (non-revertible)
+Stage 7 of 7 (non-revertible)
   transitions:
     [PrimaryIndex:{DescID: 52, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
     [PrimaryIndex:{DescID: 53, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
@@ -720,6 +732,12 @@ Stage 6 (non-revertible)
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 52
+    *scop.CreateGcJobForIndex
+      IndexID: 1
+      TableID: 52
     *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 53
+    *scop.CreateGcJobForIndex
       IndexID: 1
       TableID: 53

@@ -73,12 +73,15 @@ type MutationVisitorStateUpdater interface {
 
 	// AddNewGCJobForDescriptor enqueues a GC job for the given descriptor.
 	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
+
+	// AddNewGCJobForIndex enqueues a GC job for the given table index.
+	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 }
 
 // EventLogWriter encapsulates operations for generating
 // event log entries.
 type EventLogWriter interface {
-	AddDropEvent(
+	EnqueueEvent(
 		ctx context.Context,
 		descID descpb.ID,
 		metadata *scpb.ElementMetadata,
@@ -323,6 +326,23 @@ func (m *visitor) CreateGcJobForDescriptor(
 		return err
 	}
 	m.s.AddNewGCJobForDescriptor(desc)
+	return nil
+}
+
+func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobForIndex) error {
+	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl, err := catalog.AsTableDescriptor(desc)
+	if err != nil {
+		return err
+	}
+	idx, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return errors.AssertionFailedf("table %q (%d): could not find index %d", tbl.GetName(), tbl.GetID(), op.IndexID)
+	}
+	m.s.AddNewGCJobForIndex(tbl, idx)
 	return nil
 }
 
@@ -801,68 +821,77 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 }
 
 func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
+	event, err := asEventPayload(ctx, op, m)
+	if err != nil {
+		return err
+	}
+	return m.ev.EnqueueEvent(ctx, op.DescID, &op.Metadata, event)
+}
+
+func asEventPayload(
+	ctx context.Context, op scop.LogEvent, m *visitor,
+) (eventpb.EventPayload, error) {
 	descID := screl.GetDescID(op.Element.Element())
 	fullName, err := m.cr.GetFullyQualifiedName(ctx, descID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if op.Direction == scpb.Target_DROP {
 		switch op.Element.GetValue().(type) {
 		case *scpb.Table:
-			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
-				&eventpb.DropTable{
-					TableName: fullName,
-				},
-			)
+			return &eventpb.DropTable{TableName: fullName}, nil
 		case *scpb.View:
-			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
-				&eventpb.DropView{
-					ViewName: fullName,
-				},
-			)
+			return &eventpb.DropView{ViewName: fullName}, nil
 		case *scpb.Sequence:
-			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
-				&eventpb.DropSequence{
-					SequenceName: fullName,
-				},
-			)
+			return &eventpb.DropSequence{SequenceName: fullName}, nil
 		case *scpb.Database:
-			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
-				&eventpb.DropDatabase{
-					DatabaseName: fullName,
-				},
-			)
+			return &eventpb.DropDatabase{DatabaseName: fullName}, nil
 		case *scpb.Schema:
-			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
-				&eventpb.DropSchema{
-					SchemaName: fullName,
-				},
-			)
-		default:
-			panic("unknown element type")
-		}
-	} else if op.Direction == scpb.Target_ADD {
-		switch element := op.Element.GetValue().(type) {
-		case *scpb.Column:
-			table, err := m.checkOutTable(ctx, op.DescID)
-			if err != nil {
-				return err
-			}
-			mutation, err := descriptorutils.FindMutation(table,
-				descriptorutils.MakeColumnIDMutationSelector(element.ColumnID))
-			if err != nil {
-				return err
-			}
-			return m.ev.AddDropEvent(ctx, op.DescID, &op.Metadata,
-				&eventpb.AlterTable{
-					TableName:  fullName,
-					MutationID: uint32(mutation.MutationID()),
-				})
-		default:
-			panic("unknown element type")
+			return &eventpb.DropSchema{SchemaName: fullName}, nil
+		case *scpb.Type:
+			return &eventpb.DropType{TypeName: fullName}, nil
 		}
 	}
-	return nil
+	switch e := op.Element.GetValue().(type) {
+	case *scpb.Column:
+		tbl, err := m.checkOutTable(ctx, op.DescID)
+		if err != nil {
+			return nil, err
+		}
+		mutation, err := descriptorutils.FindMutation(tbl, descriptorutils.MakeColumnIDMutationSelector(e.ColumnID))
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.AlterTable{
+			TableName:  fullName,
+			MutationID: uint32(mutation.MutationID()),
+		}, nil
+	case *scpb.SecondaryIndex:
+		tbl, err := m.checkOutTable(ctx, op.DescID)
+		if err != nil {
+			return nil, err
+		}
+		mutation, err := descriptorutils.FindMutation(tbl, descriptorutils.MakeIndexIDMutationSelector(e.IndexID))
+		if err != nil {
+			return nil, err
+		}
+		switch op.Direction {
+		case scpb.Target_ADD:
+			return &eventpb.AlterTable{
+				TableName:  fullName,
+				MutationID: uint32(mutation.MutationID()),
+			}, nil
+		case scpb.Target_DROP:
+			return &eventpb.DropIndex{
+				TableName:  fullName,
+				IndexName:  mutation.AsIndex().GetName(),
+				MutationID: uint32(mutation.MutationID()),
+			}, nil
+		default:
+			return nil, errors.AssertionFailedf("unknown direction %s", op.Direction)
+		}
+	}
+	return nil, errors.AssertionFailedf("unknown %s element type %T", op.Direction.String(), op.Element.GetValue())
 }
 
 func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {
