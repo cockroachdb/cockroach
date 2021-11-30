@@ -10,6 +10,25 @@ exec-ddl
 CREATE TABLE t3 (k INT, i INT, f FLOAT)
 ----
 
+exec-ddl
+CREATE TABLE t4 (k INT, f FLOAT, j JSONB, a INT[])
+----
+
+# Ensure that columns that require inverted indexes do not have candidates. This
+# is temporary until we support inverted index recommendations.
+
+index-candidates
+SELECT k, f FROM t4 WHERE j IS NULL
+----
+
+index-candidates
+SELECT * FROM t4 WHERE k = 2 AND a IS NULL OR f > 2
+----
+t4:
+ (f)
+ (k)
+ (k, f)
+
 # Ensure that new indexes do not get recommended if an identical existing
 # index exists.
 

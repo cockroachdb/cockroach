@@ -11,6 +11,7 @@
 package indexrec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -192,7 +193,7 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 		1,
 		"k",
 		cat.Ordinary,
-		nil,
+		types.Bool,
 		false,
 		cat.Visible,
 		nil, /* defaultExpr */
@@ -204,7 +205,7 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 		2,
 		"i",
 		cat.Ordinary,
-		nil,
+		types.Bool,
 		false,
 		cat.Visible,
 		nil, /* defaultExpr */
@@ -216,7 +217,7 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 		3,
 		"j",
 		cat.Ordinary,
-		nil,
+		types.Bool,
 		false,
 		cat.Visible,
 		nil, /* defaultExpr */
