@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -338,6 +339,13 @@ func addIndexToCandidates(
 	currTable cat.Table,
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) {
+	// Do not add candidates that require inverted indexes.
+	for _, indexCol := range newIndex {
+		if requiresInvertedIndex(indexCol.Column) {
+			return
+		}
+	}
+
 	// Do not add duplicate indexes.
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {
@@ -357,4 +365,12 @@ func addIndexToCandidates(
 	}
 	// Index does not exist already, so add it.
 	indexCandidates[currTable] = append(indexCandidates[currTable], newIndex)
+}
+
+func requiresInvertedIndex(c *cat.Column) bool {
+	colFamily := c.DatumType().Family()
+	return colFamily == types.ArrayFamily ||
+		colFamily == types.JsonFamily ||
+		colFamily == types.GeometryFamily ||
+		colFamily == types.GeographyFamily
 }
