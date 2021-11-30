@@ -876,7 +876,7 @@ type Transaction struct {
 	// observed timestamp. This reduced uncertainty limit is reflected in the
 	// local_uncertainty_limit variable at the time of request evaluation.
 	//
-	// See pkg/kv/kvserver/observedts for more details.
+	// See pkg/kv/kvserver/uncertainty for more details.
 	//
 	// The case global_uncertainty_limit < read_timestamp is possible for
 	// transactions which have been pushed or have refreshed; in this case,
@@ -890,7 +890,7 @@ type Transaction struct {
 	// establishing a lower local_uncertainty_limit when evaluating a request on
 	// a node in the list.
 	//
-	// See pkg/kv/kvserver/observedts for more details.
+	// See pkg/kv/kvserver/uncertainty for more details.
 	//
 	// The slice of observed timestamps is kept sorted by NodeID. Use
 	// Transaction.UpdateObservedTimestamp to maintain the sorted order. The

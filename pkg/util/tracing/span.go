@@ -42,8 +42,8 @@ const (
 // The CockroachDB-internal Span (crdbSpan) is more complex because
 // rather than reporting to some external sink, the caller's "owner"
 // must propagate the trace data back across process boundaries towards
-// the root of the trace span tree; see WithParentAndAutoCollection
-// and WithParentAndManualCollection, respectively.
+// the root of the trace span tree; see WithParent
+// and WithRemoteParent, respectively.
 //
 // Additionally, the internal span type also supports turning on, stopping,
 // and restarting its data collection (see Span.StartRecording), and this is
@@ -131,8 +131,8 @@ func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 
 // Meta returns the information which needs to be propagated across process
 // boundaries in order to derive child spans from this Span. This may return
-// nil, which is a valid input to `WithParentAndManualCollection`, if the Span
-// has been optimized out.
+// nil, which is a valid input to WithRemoteParent, if the Span has been
+// optimized out.
 func (sp *Span) Meta() SpanMeta {
 	// It shouldn't be done in practice, but it is allowed to call Meta on
 	// a finished span.

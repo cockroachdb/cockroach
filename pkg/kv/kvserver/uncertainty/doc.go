@@ -8,11 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package observedts contains logic and documentation related to the observed
+// Package uncertainty contains logic and documentation related to transaction
+// uncertainty intervals, which are time windows following readers' timestamps
+// within which a reading transaction cannot make real-time ordering guarantees.
+// The use of uncertainty intervals allows CockroachDB to guarantee single-key
+// linearizability even with only loose (but bounded) clock synchronization.
+//
+// The package also contains logic and documentation related to the observed
 // timestamp system, which allows transactions to track causality between
 // themselves and other, possibly-concurrent, transactions in order to avoid
 // uncertainty related restarts.
-package observedts
+package uncertainty
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -30,11 +36,22 @@ var D1 = roachpb.Transaction{}.GlobalUncertaintyLimit
 
 // D2 ————————————————————————————————————————————————
 //
+// Interval
+//
+// When the transaction sends a request to a replica, an uncertainty interval
+// is computed. This interval consists of a global and a local component. The
+// global uncertainty limit is pulled directly from the transaction. The local
+// uncertainty limit is an optional tighter bound established through HLC clock
+// observations on individual nodes in the system.
+var D2 = Interval{}
+
+// D3 ————————————————————————————————————————————————
+//
 // ReadWithinUncertaintyIntervalError
 //
 // While reading, if a transaction encounters a value above its read timestamp
-// but equal to or below its max timestamp, it triggers a read within
-// uncertainty interval error.
+// but equal to or below its global limit, it triggers a read within uncertainty
+// interval error.
 //
 // This error forces the transaction to increase its read timestamp, either
 // through a refresh or a retry, in order to ensure that the transaction
@@ -42,9 +59,9 @@ var D1 = roachpb.Transaction{}.GlobalUncertaintyLimit
 // guaranteed to observe any value written by any other transaction with a
 // happened-before relation to it, which is paramount to ensure single-key
 // linearizability and avoid stale reads.
-var D2 = roachpb.ReadWithinUncertaintyIntervalError{}
+var D3 = roachpb.ReadWithinUncertaintyIntervalError{}
 
-// D3 ————————————————————————————————————————————————
+// D4 ————————————————————————————————————————————————
 //
 // ObservedTimestamp
 //
@@ -56,17 +73,17 @@ var D2 = roachpb.ReadWithinUncertaintyIntervalError{}
 // promise that any later clock reading from the same node will have a larger
 // value. Similarly, they are a promise that any prior update to the clock was
 // given a smaller value.
-var D3 = roachpb.ObservedTimestamp{}
+var D4 = roachpb.ObservedTimestamp{}
 
-// D4 ————————————————————————————————————————————————
+// D5 ————————————————————————————————————————————————
 //
 // Transaction.UpdateObservedTimestamp
 //
 // A transaction collects observed timestamps as it visits nodes in the cluster
 // when performing reads and writes.
-var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
+var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 
-// D5 ————————————————————————————————————————————————
+// D6 ————————————————————————————————————————————————
 //
 // Transaction.ObservedTimestamps
 //
@@ -171,11 +188,11 @@ var D4 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 // being served from a different replica in the range, the observed timestamp
 // still places a bound on the values in the range that may have been written
 // before the transaction began.
-var D5 = roachpb.Transaction{}.ObservedTimestamps
+var D6 = roachpb.Transaction{}.ObservedTimestamps
 
-// D6 ————————————————————————————————————————————————
+// D7 ————————————————————————————————————————————————
 //
-// ComputeLocalUncertaintyLimit
+// ComputeInterval
 //
 // Observed timestamps allow transactions to avoid uncertainty related restarts
 // because they allow transactions to bound their uncertainty limit when reading
@@ -183,7 +200,7 @@ var D5 = roachpb.Transaction{}.ObservedTimestamps
 // Similarly, observed timestamps can also assist a transaction even on its
 // first visit to a node in cases where it gets stuck waiting on locks for long
 // periods of time.
-var D6 = ComputeLocalUncertaintyLimit
+var D7 = ComputeInterval
 
 // Ignore unused warnings.
-var _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6
+var _, _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6, D7

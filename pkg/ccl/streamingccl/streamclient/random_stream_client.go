@@ -276,7 +276,8 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 	}
 
 	// Generate namespace entry.
-	key := catalogkeys.MakePublicObjectNameKey(keys.TODOSQLCodec, 50, testTable.Name)
+	codec := keys.MakeSQLCodec(config.tenantID)
+	key := catalogkeys.MakePublicObjectNameKey(codec, 50, testTable.Name)
 	k := rekey(config.tenantID, key)
 	var value roachpb.Value
 	value.SetInt(int64(testTable.GetID()))
@@ -287,7 +288,7 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 	}
 
 	// Generate descriptor entry.
-	descKey := catalogkeys.MakeDescMetadataKey(keys.TODOSQLCodec, testTable.GetID())
+	descKey := catalogkeys.MakeDescMetadataKey(codec, testTable.GetID())
 	descKey = rekey(config.tenantID, descKey)
 	descDesc := testTable.DescriptorProto()
 	var descValue roachpb.Value

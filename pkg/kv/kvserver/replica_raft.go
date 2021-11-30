@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -81,12 +82,12 @@ func (r *Replica) evalAndPropose(
 	ba *roachpb.BatchRequest,
 	g *concurrency.Guard,
 	st kvserverpb.LeaseStatus,
-	lul hlc.Timestamp,
+	ui uncertainty.Interval,
 	tok TrackedRequestToken,
 ) (chan proposalResult, func(), kvserverbase.CmdIDKey, *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, st, lul, g.LatchSpans())
+	proposal, pErr := r.requestToProposal(ctx, idKey, ba, st, ui, g.LatchSpans())
 	log.Event(proposal.ctx, "evaluated request")
 
 	// If the request hit a server-side concurrency retry error, immediately

@@ -65,7 +65,7 @@ func TestRecordingString(t *testing.T) {
 	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
 
-	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireSpanMeta))
+	remoteChild := tr2.StartSpan("remote child", WithRemoteParent(wireSpanMeta), WithDetachedRecording())
 	root.Record("root 2")
 	remoteChild.Record("remote child 1")
 
@@ -74,7 +74,7 @@ func TestRecordingString(t *testing.T) {
 
 	root.Record("root 3")
 
-	ch2 := tr.StartSpan("local child", WithParentAndAutoCollection(root))
+	ch2 := tr.StartSpan("local child", WithParent(root))
 	root.Record("root 4")
 	ch2.Record("local child 1")
 	ch2.Finish()
@@ -154,11 +154,11 @@ func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
 	root := tr.StartSpan("root", WithRecording(RecordingVerbose))
-	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithRecording(RecordingVerbose))
+	child := tr.StartSpan("child", WithParent(root), WithRecording(RecordingVerbose))
 	// The remote grandchild is also recording, however since it's remote the spans
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
-	grandChild := tr.StartSpan("grandchild", WithParentAndManualCollection(child.Meta()))
+	grandChild := tr.StartSpan("grandchild", WithParent(child), WithDetachedRecording())
 	child.ImportRemoteSpans(grandChild.FinishAndGetRecording(RecordingVerbose))
 	childRec := child.FinishAndGetRecording(RecordingVerbose)
 	require.NoError(t, CheckRecordedSpans(childRec, `
@@ -191,7 +191,7 @@ func TestImportRemoteSpans(t *testing.T) {
 		t.Run(fmt.Sprintf("%s=%t", "verbose-child=", verbose), func(t *testing.T) {
 			tr := NewTracerWithOpt(context.Background())
 			sp := tr.StartSpan("root", WithRecording(RecordingStructured))
-			ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
+			ch := tr.StartSpan("child", WithParent(sp), WithDetachedRecording())
 			ch.RecordStructured(&types.Int32Value{Value: 4})
 			if verbose {
 				sp.SetVerbose(true)
@@ -332,11 +332,11 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	tr := NewTracer()
 	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
-	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
+	ch := tr.StartSpan("child", WithParent(sp))
 	defer ch.Finish()
 	children := sp.i.crdb.mu.recording.openChildren
 	require.Len(t, children, 1)
-	require.Equal(t, ch.i.crdb, children[0])
+	require.Equal(t, ch.i.crdb, children[0].crdbSpan)
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child's structured event is in the recording.
 	rec := sp.GetRecording(RecordingStructured)
@@ -351,7 +351,7 @@ func TestSpanMaxChildren(t *testing.T) {
 	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
 	for i := 0; i < maxChildrenPerSpan+123; i++ {
-		tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp))
+		tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
 		exp := i + 1
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
@@ -475,8 +475,8 @@ func TestStructureRecording(t *testing.T) {
 				t.Run(fmt.Sprintf("finish2=%t", finishCh2), func(t *testing.T) {
 					tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
 					sp := tr.StartSpan("root", WithRecording(RecordingStructured))
-					ch1 := tr.StartSpan("child", WithParentAndAutoCollection(sp))
-					ch2 := tr.StartSpan("grandchild", WithParentAndAutoCollection(ch1))
+					ch1 := tr.StartSpan("child", WithParent(sp))
+					ch2 := tr.StartSpan("grandchild", WithParent(ch1))
 					for i := int32(0); i < 5; i++ {
 						sp.RecordStructured(&types.Int32Value{Value: i})
 						ch1.RecordStructured(&types.Int32Value{Value: i})

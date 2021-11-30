@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -668,8 +669,11 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
-	if e.hasArg("localUncertaintyLimit") {
-		opts.LocalUncertaintyLimit = e.getTsWithName(nil, "localUncertaintyLimit")
+	if opts.Txn != nil {
+		opts.Uncertainty = uncertainty.Interval{
+			GlobalLimit: txn.GlobalUncertaintyLimit,
+			LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		}
 	}
 	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
 	// NB: the error is returned below. This ensures the test can
@@ -767,8 +771,11 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
-	if e.hasArg("localUncertaintyLimit") {
-		opts.LocalUncertaintyLimit = e.getTsWithName(nil, "localUncertaintyLimit")
+	if opts.Txn != nil {
+		opts.Uncertainty = uncertainty.Interval{
+			GlobalLimit: txn.GlobalUncertaintyLimit,
+			LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		}
 	}
 	if e.hasArg("max") {
 		var n int

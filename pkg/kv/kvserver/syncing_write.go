@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
 
@@ -32,7 +33,10 @@ const bulkIOWriteBurst = 512 << 10 // 512 KB
 
 const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
 
-func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) {
+// limitBulkIOWrite blocks until the provided limiter permits the specified cost
+// to happen. It returns an error if the Context is canceled or the expected
+// wait time exceeds the Context's Deadline.
+func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) error {
 	// The limiter disallows anything greater than its burst (set to
 	// BulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
 	//
@@ -47,13 +51,14 @@ func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) {
 
 	begin := timeutil.Now()
 	if err := limiter.WaitN(ctx, cost); err != nil {
-		log.Errorf(ctx, "error rate limiting bulk io write: %+v", err)
+		return errors.Wrapf(err, "error rate limiting bulk io write")
 	}
 
 	if d := timeutil.Since(begin); d > bulkIOWriteLimiterLongWait {
 		log.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
 			d, bulkIOWriteLimiterLongWait, debug.Stack())
 	}
+	return nil
 }
 
 // sstWriteSyncRate wraps "kv.bulk_sst.sync_size". 0 disables syncing.
@@ -101,14 +106,16 @@ func writeFileSyncing(
 		}
 		chunk := data[i:end]
 
-		// rate limit
-		limitBulkIOWrite(ctx, limiter, len(chunk))
-		_, err = f.Write(chunk)
-		if err == nil && sync {
-			err = f.Sync()
-		}
-		if err != nil {
+		if err = limitBulkIOWrite(ctx, limiter, len(chunk)); err != nil {
 			break
+		}
+		if _, err = f.Write(chunk); err != nil {
+			break
+		}
+		if sync {
+			if err = f.Sync(); err != nil {
+				break
+			}
 		}
 	}
 

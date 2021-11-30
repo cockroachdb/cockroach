@@ -72,20 +72,20 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start a child span on "node 1".
-	child := t1.StartSpan("root.child", tracing.WithParentAndAutoCollection(root))
+	child := t1.StartSpan("root.child", tracing.WithParent(root))
 
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting is not deterministic.
 	time.Sleep(10 * time.Millisecond)
 
 	// Start a remote child span on "node 2".
-	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithParentAndManualCollection(child.Meta()))
+	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParent(child.Meta()))
 	childRemoteChild.RecordStructured(newTestStructured("root.child.remotechild"))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 2" that we finish.
-	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithParentAndManualCollection(child.Meta()))
+	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParent(child.Meta()))
 	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
 
 	// Start a root span on "node 2".
@@ -93,14 +93,14 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 	root2.RecordStructured(newTestStructured("root2"))
 
 	// Start a child span on "node 2".
-	child2 := t2.StartSpan("root2.child", tracing.WithParentAndAutoCollection(root2))
+	child2 := t2.StartSpan("root2.child", tracing.WithParent(root2))
 	// Start a remote child span on "node 1".
-	child2RemoteChild := t1.StartSpan("root2.child.remotechild", tracing.WithParentAndManualCollection(child2.Meta()))
+	child2RemoteChild := t1.StartSpan("root2.child.remotechild", tracing.WithRemoteParent(child2.Meta()))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 1".
-	anotherChild2RemoteChild := t1.StartSpan("root2.child.remotechild2", tracing.WithParentAndManualCollection(child2.Meta()))
+	anotherChild2RemoteChild := t1.StartSpan("root2.child.remotechild2", tracing.WithRemoteParent(child2.Meta()))
 	return root.TraceID(), root2.TraceID(), func() {
 		for _, span := range []*tracing.Span{root, child, childRemoteChild, root2, child2,
 			child2RemoteChild, anotherChild2RemoteChild} {

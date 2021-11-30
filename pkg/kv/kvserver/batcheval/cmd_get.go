@@ -53,11 +53,11 @@ func Get(
 	var intent *roachpb.Intent
 	var err error
 	val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
-		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
-		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
+		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:              h.Txn,
+		FailOnMoreRecent: args.KeyLocking != lock.None,
+		Uncertainty:      cArgs.Uncertainty,
+		MemoryAccount:    cArgs.EvalCtx.GetResponseMemoryAccount(),
 	})
 	if err != nil {
 		return result.Result{}, err

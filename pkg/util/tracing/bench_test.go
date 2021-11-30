@@ -52,10 +52,10 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 			WithForceRealSpan(), WithLogTags(&staticLogTags),
 		}},
 		{"real,autoparent", []SpanOption{
-			WithForceRealSpan(), WithParentAndAutoCollection(parSp),
+			WithForceRealSpan(), WithParent(parSp),
 		}},
 		{"real,manualparent", []SpanOption{
-			WithForceRealSpan(), WithParentAndManualCollection(parSp.Meta()),
+			WithForceRealSpan(), WithParent(parSp), WithDetachedRecording(),
 		}},
 	} {
 		b.Run(fmt.Sprintf("opts=%s", tc.name), func(b *testing.B) {
@@ -91,7 +91,7 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 		run(b, sp)
 	})
 
-	child := tr.StartSpan("bar", WithParentAndAutoCollection(sp), WithForceRealSpan())
+	child := tr.StartSpan("bar", WithParent(sp), WithForceRealSpan())
 	b.Run("child-only", func(b *testing.B) {
 		run(b, child)
 	})
@@ -110,7 +110,7 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		root := tr.StartSpan("foo")
 		root.RecordStructured(ev)
-		child := tr.StartSpan("bar", WithParentAndAutoCollection(root))
+		child := tr.StartSpan("bar", WithParent(root))
 		child.RecordStructured(ev)
 		child.Finish()
 		_ = root.GetRecording(RecordingStructured)

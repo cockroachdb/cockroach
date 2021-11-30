@@ -834,7 +834,12 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
-	return tracing.ChildSpanRemote(ctx, name)
+	sp := tracing.SpanFromContext(ctx)
+	if sp == nil {
+		return ctx, nil
+	}
+	return sp.Tracer().StartSpanCtx(ctx, name,
+		tracing.WithParent(sp), tracing.WithDetachedRecording())
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the

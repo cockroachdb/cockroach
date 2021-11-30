@@ -2414,12 +2414,16 @@ func (s *adminServer) DataDistribution(
 			if err := kv.ValueProto(&rangeDesc); err != nil {
 				return err
 			}
-
-			_, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
+			// TODO(embrown): Tables can use one codec since they
+			// seem to all share the same id.
+			_, tenID, err := keys.DecodeTenantPrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {
 				return err
 			}
-
+			_, tableID, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
+			if err != nil {
+				return err
+			}
 			for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
 				tableInfo, found := tableInfosByTableID[tableID]
 				if !found {

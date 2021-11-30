@@ -46,11 +46,11 @@ func TestSetTraceSpansVerbosityBuiltin(t *testing.T) {
 	defer root.Finish()
 	require.False(t, root.IsVerbose())
 
-	child := tr.StartSpan("root.child", tracing.WithParentAndAutoCollection(root))
+	child := tr.StartSpan("root.child", tracing.WithParent(root))
 	defer child.Finish()
 	require.False(t, child.IsVerbose())
 
-	childChild := tr.StartSpan("root.child.child", tracing.WithParentAndAutoCollection(child))
+	childChild := tr.StartSpan("root.child.child", tracing.WithParent(child))
 	defer childChild.Finish()
 	require.False(t, childChild.IsVerbose())
 
@@ -79,7 +79,7 @@ func TestSetTraceSpansVerbosityBuiltin(t *testing.T) {
 	require.False(t, childChild.IsVerbose())
 
 	// New child of verbose child span should also be verbose by default.
-	newChild := tr.StartSpan("root.child.newchild", tracing.WithParentAndAutoCollection(root))
+	newChild := tr.StartSpan("root.child.newchild", tracing.WithParent(root))
 	defer newChild.Finish()
 	require.True(t, newChild.IsVerbose())
 

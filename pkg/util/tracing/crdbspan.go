@@ -55,6 +55,14 @@ type crdbSpan struct {
 	mu crdbSpanMu
 }
 
+type childRef struct {
+	*crdbSpan
+	// collectRecording is set if this child's recording should be included in the
+	// parent's recording. This is usually the case, except for children created
+	// with the WithDetachedRecording() option.
+	collectRecording bool
+}
+
 type crdbSpanMu struct {
 	syncutil.Mutex
 
@@ -94,7 +102,7 @@ type crdbSpanMu struct {
 		// the respective child moves to finishedChildren.
 		//
 		// The spans are not maintained in a particular order.
-		openChildren []*crdbSpan
+		openChildren []childRef
 		// finishedChildren contains the recordings of finished children (and
 		// grandchildren recursively). This includes remote child span recordings
 		// that were manually imported, as well as recordings from local children
@@ -166,7 +174,9 @@ func (s *crdbSpan) finish() bool {
 
 		// Shallow-copy the children so they can be processed outside the lock.
 		children = make([]*crdbSpan, len(s.mu.recording.openChildren))
-		copy(children, s.mu.recording.openChildren)
+		for i, c := range s.mu.recording.openChildren {
+			children[i] = c.crdbSpan
+		}
 
 		// We'll operate on the parent outside of the child's lock.
 		parent = s.mu.parent
@@ -223,11 +233,19 @@ func (s *crdbSpan) TraceID() tracingpb.TraceID {
 
 // GetRecording is part of the RegistrySpan interface.
 func (s *crdbSpan) GetRecording(recType RecordingType) Recording {
+	return s.getRecordingImpl(recType, false /* includeDetachedChildren */)
+}
+
+func (s *crdbSpan) GetFullRecording(recType RecordingType) Recording {
+	return s.getRecordingImpl(recType, true /* includeDetachedChildren */)
+}
+
+func (s *crdbSpan) getRecordingImpl(recType RecordingType, includeDetachedChildren bool) Recording {
 	switch recType {
 	case RecordingVerbose:
-		return s.getVerboseRecording()
+		return s.getVerboseRecording(includeDetachedChildren)
 	case RecordingStructured:
-		return s.getStructuredRecording()
+		return s.getStructuredRecording(includeDetachedChildren)
 	case RecordingOff:
 		return nil
 	default:
@@ -236,7 +254,7 @@ func (s *crdbSpan) GetRecording(recType RecordingType) Recording {
 }
 
 // getVerboseRecording returns the Span's recording, including its children.
-func (s *crdbSpan) getVerboseRecording() Recording {
+func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool) Recording {
 	if s == nil {
 		return nil // noop span
 	}
@@ -249,7 +267,9 @@ func (s *crdbSpan) getVerboseRecording() Recording {
 	result = append(result, s.mu.recording.finishedChildren...)
 
 	for _, child := range s.mu.recording.openChildren {
-		result = append(result, child.getVerboseRecording()...)
+		if child.collectRecording || includeDetachedChildren {
+			result = append(result, child.getVerboseRecording(includeDetachedChildren)...)
+		}
 	}
 	s.mu.Unlock()
 
@@ -271,7 +291,7 @@ func (s *crdbSpan) getVerboseRecording() Recording {
 // this span (even if the events had been recorded on different spans).
 //
 // The caller does not take ownership of the events.
-func (s *crdbSpan) getStructuredRecording() Recording {
+func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recording {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	buffer := make([]*tracingpb.StructuredRecord, 0, 3)
@@ -281,7 +301,9 @@ func (s *crdbSpan) getStructuredRecording() Recording {
 		}
 	}
 	for _, c := range s.mu.recording.openChildren {
-		buffer = c.getStructuredEventsRecursively(buffer)
+		if c.collectRecording || includeDetachedChildren {
+			buffer = c.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+		}
 	}
 
 	if len(buffer) == 0 && s.mu.recording.structured.Len() == 0 {
@@ -449,13 +471,15 @@ func (s *crdbSpan) recordInternalLocked(payload memorySizable, buffer *sizeLimit
 // getStructuredEventsRecursively returns the structured events accumulated by
 // this span and its finished and still-open children.
 func (s *crdbSpan) getStructuredEventsRecursively(
-	buffer []*tracingpb.StructuredRecord,
+	buffer []*tracingpb.StructuredRecord, includeDetachedChildren bool,
 ) []*tracingpb.StructuredRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	buffer = s.getStructuredEventsLocked(buffer)
 	for _, c := range s.mu.recording.openChildren {
-		buffer = c.getStructuredEventsRecursively(buffer)
+		if c.collectRecording || includeDetachedChildren {
+			buffer = c.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+		}
 	}
 	for _, c := range s.mu.recording.finishedChildren {
 		for i := range c.StructuredRecords {
@@ -563,7 +587,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	return rs
 }
 
-func (s *crdbSpan) addChild(child *crdbSpan) {
+func (s *crdbSpan) addChild(child *crdbSpan, collectChildRec bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.recordingType() == RecordingOff {
@@ -574,7 +598,10 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 	}
 
 	if len(s.mu.recording.openChildren) < maxChildrenPerSpan {
-		s.mu.recording.openChildren = append(s.mu.recording.openChildren, child)
+		s.mu.recording.openChildren = append(
+			s.mu.recording.openChildren,
+			childRef{crdbSpan: child, collectRecording: collectChildRec},
+		)
 	}
 }
 
@@ -588,46 +615,57 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 // This is only called if the respective child had been linked to the parent -
 // i.e. only if the parent was recording when the child started.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
-	// Collect the recording outside of s' lock, to avoid locking the parent and
-	// the child at the same time (to not have to think about deadlocks).
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var childIdx int
+	found := false
+	for i, c := range s.mu.recording.openChildren {
+		if c.crdbSpan == child {
+			childIdx = i
+			found = true
+			break
+		}
+	}
+	if !found {
+		panic("child not present in parent")
+	}
+
+	collectChildRec := s.mu.recording.openChildren[childIdx].collectRecording
+
+	// Unlink the child.
+	l := len(s.mu.recording.openChildren)
+	s.mu.recording.openChildren[childIdx] = s.mu.recording.openChildren[l-1]
+	s.mu.recording.openChildren[l-1].crdbSpan = nil // Make the child available to GC.
+	s.mu.recording.openChildren = s.mu.recording.openChildren[:l-1]
+
+	// Collect the child's recording.
+
+	if s.recordingType() == RecordingOff || !collectChildRec {
+		return
+	}
+
 	var rec Recording
 	var events []*tracingpb.StructuredRecord
 	var verbose bool
-	var structured bool
 	switch s.recordingType() {
 	case RecordingOff:
+		panic("should have been handled above")
 	case RecordingVerbose:
 		verbose = true
 		rec = child.GetRecording(RecordingVerbose)
 	case RecordingStructured:
-		structured = true
 		events = make([]*tracingpb.StructuredRecord, 0, 3)
-		events = child.getStructuredEventsRecursively(events)
+		events = child.getStructuredEventsRecursively(events, false /* includeDetachedChildren */)
 	default:
 		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if verbose {
 		s.recordFinishedChildrenLocked(rec)
-	} else if structured {
+	} else {
 		for i := range events {
 			s.recordInternalLocked(events[i], &s.mu.recording.structured)
 		}
-	}
-
-	// Unlink the child.
-	l := len(s.mu.recording.openChildren)
-	for i, c := range s.mu.recording.openChildren {
-		if c != child {
-			continue
-		}
-		s.mu.recording.openChildren[i] = s.mu.recording.openChildren[l-1]
-		s.mu.recording.openChildren[l-1] = nil
-		s.mu.recording.openChildren = s.mu.recording.openChildren[:l-1]
-		break
 	}
 }
 

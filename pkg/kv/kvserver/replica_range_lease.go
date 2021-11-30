@@ -329,7 +329,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		ctx, sp = tr.StartSpanCtx(
 			ctx,
 			opName,
-			tracing.WithParentAndAutoCollection(parentSp),
+			tracing.WithParent(parentSp),
 			tracing.WithFollowsFrom(),
 			tagsOpt,
 		)
