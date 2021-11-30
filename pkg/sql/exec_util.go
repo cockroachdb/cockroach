@@ -977,6 +977,12 @@ var (
 		Measurement: "SQL Stats Cleanup",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLTxnStatsCollectionOverhead = metric.Metadata{
+		Name:        "sql.stats.txn_stats_collection.duration",
+		Help:        "Time took in nanoseconds to collect transaction stats",
+		Measurement: "SQL Transaction Stats Collection Overhead",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaTxnRowsWrittenLog = metric.Metadata{
 		Name:        "sql.guardrails.transaction_rows_written_log.count",
 		Help:        "Number of transactions logged because of transaction_rows_written_log guardrail",

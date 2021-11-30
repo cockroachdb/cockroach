@@ -54,6 +54,7 @@ go_library(
 go_test(
     name = "persistedsqlstats_test",
     srcs = [
+        "bench_test.go",
         "compaction_test.go",
         "controller_test.go",
         "datadriven_test.go",
@@ -89,6 +90,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
