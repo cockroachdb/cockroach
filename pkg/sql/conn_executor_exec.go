@@ -1984,6 +1984,14 @@ func (ex *connExecutor) recordTransaction(
 		// meaningful.
 		return nil
 	}
+	recordingStart := timeutil.Now()
+	defer func() {
+		recordingOverhead := timeutil.Since(recordingStart)
+		ex.server.
+			ServerMetrics.
+			StatsMetrics.
+			SQLTxnStatsCollectionOverhead.RecordValue(recordingOverhead.Nanoseconds())
+	}()
 
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
