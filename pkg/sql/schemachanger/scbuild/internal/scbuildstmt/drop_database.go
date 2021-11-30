@@ -34,6 +34,10 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	{
 		c := b.WithNewSourceElementID()
 		doSchema := func(schema catalog.SchemaDescriptor) {
+			// Sanity: Check if the descriptor is already dropped.
+			if schema.Dropped() {
+				return
+			}
 			// For public and temporary schemas the drop logic
 			// will only drop the underlying objects and return
 			// if that no drop schema node was added (nodeAdded).

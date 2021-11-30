@@ -543,7 +543,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 4
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -557,7 +557,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 5
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -571,7 +571,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 6
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -585,7 +585,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 6
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -599,7 +599,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 8
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
