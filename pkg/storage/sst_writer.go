@@ -157,14 +157,9 @@ func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
-	return 0, fw.put(MVCCKey{Key: key}, value)
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
+	return fw.put(MVCCKey{Key: key}, value)
 }
 
 // PutEngineKey implements the Writer interface.
@@ -222,7 +217,7 @@ func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
 // called.
 func (fw *SSTWriter) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	panic("ClearIntent is unsupported")
 }
 

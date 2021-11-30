@@ -176,11 +176,6 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
-// IsCurIntentSeparated implements the MVCCIterator interface.
-func (i *MVCCIterator) IsCurIntentSeparated() bool {
-	return i.i.IsCurIntentSeparated()
-}
-
 // ComputeStats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
@@ -540,9 +535,9 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
 
 func (s spanSetWriter) ClearIntent(
 	key roachpb.Key, state storage.PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	if err := s.checkAllowed(key); err != nil {
-		return 0, err
+		return err
 	}
 	return s.w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
 }
@@ -632,17 +627,12 @@ func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 }
 
 func (s spanSetWriter) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state storage.PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
 	if err := s.checkAllowed(key); err != nil {
-		return 0, err
+		return err
 	}
-	return s.w.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID)
+	return s.w.PutIntent(ctx, key, value, txnUUID)
 }
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {

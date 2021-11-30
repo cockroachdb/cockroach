@@ -6161,18 +6161,16 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:   101,
-		KeyBytes:    28,
-		ValBytes:    73,
-		IntentBytes: 23,
-		LiveCount:   2,
-		KeyCount:    2,
-		ValCount:    2,
-		IntentCount: 1,
+		LiveBytes:            101,
+		KeyBytes:             28,
+		ValBytes:             73,
+		IntentBytes:          23,
+		LiveCount:            2,
+		KeyCount:             2,
+		ValCount:             2,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
 	})
-	if tc.engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-		expMS.SeparatedIntentCount++
-	}
 	if !tc.engine.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
 		expMS.LiveBytes += 2
 		expMS.ValBytes += 2
