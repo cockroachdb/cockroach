@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +57,6 @@ func newTestTenant(
 	tenantParams.Existing = existing
 	tenantParams.TestingKnobs = knobs
 
-	log.TestingClearServerIdentifiers()
 	tenant, tenantConn := serverutils.StartTenant(t, server, tenantParams)
 	sqlDB := sqlutils.MakeSQLRunner(tenantConn)
 	status := tenant.StatusServer().(serverpb.SQLStatusServer)

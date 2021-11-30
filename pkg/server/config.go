@@ -16,7 +16,9 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -117,6 +120,10 @@ type BaseConfig struct {
 
 	Tracer *tracing.Tracer
 
+	// idProvider is an interface that makes the logging package
+	// able to peek into the server IDs defined by this configuration.
+	idProvider *idProvider
+
 	// IDContainer is the Node ID / SQL Instance ID container
 	// that will contain the ID for the server to instantiate.
 	IDContainer *base.NodeIDContainer
@@ -177,11 +184,17 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
+	idsProvider := &idProvider{
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	}
+
 	baseCfg := BaseConfig{
 		Tracer:             tr,
-		IDContainer:        &base.NodeIDContainer{},
-		ClusterIDContainer: &base.ClusterIDContainer{},
-		AmbientCtx:         log.AmbientContext{Tracer: tr},
+		idProvider:         idsProvider,
+		IDContainer:        idsProvider.serverID,
+		ClusterIDContainer: idsProvider.clusterID,
+		AmbientCtx:         log.AmbientContext{Tracer: tr, ServerIDs: idsProvider},
 		Config:             new(base.Config),
 		Settings:           st,
 		MaxOffset:          MaxOffsetType(base.DefaultMaxClockOffset),
@@ -759,4 +772,84 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 		}
 	}
 	return roachpb.Attributes{Attrs: filtered}
+}
+
+// idProvider connects the server ID containers in this
+// package to the logging package.
+type idProvider struct {
+	clusterID *base.ClusterIDContainer
+	clusterS  atomic.Value
+
+	isTenant bool
+	tenantID roachpb.TenantID
+	tenantS  atomic.Value
+
+	serverID *base.NodeIDContainer
+	serverS  atomic.Value
+}
+
+var _ log.ServerIdentificationPayload = (*idProvider)(nil)
+
+// ServerIdentityString implements the log.ServerIdentificationPayload interface.
+func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) string {
+	switch key {
+	case log.IdentifyClusterID:
+		c := s.clusterS.Load()
+		cs, ok := c.(string)
+		if !ok {
+			cid := s.clusterID.Get()
+			if cid != uuid.Nil {
+				cs = cid.String()
+				s.clusterS.Store(cs)
+			}
+		}
+		return cs
+
+	case log.IdentifyTenantID:
+		t := s.tenantS.Load()
+		ts, ok := t.(string)
+		if !ok {
+			tid := s.tenantID
+			var defaultT roachpb.TenantID
+			if tid != defaultT {
+				ts = strconv.FormatUint(tid.ToUint64(), 10)
+				s.tenantS.Store(ts)
+			}
+		}
+		return ts
+
+	case log.IdentifyInstanceID:
+		if !s.isTenant {
+			return ""
+		}
+		return s.maybeMemoizeServerID()
+
+	case log.IdentifyNodeID:
+		if s.isTenant {
+			return ""
+		}
+		return s.maybeMemoizeServerID()
+	}
+
+	return ""
+}
+
+// SetTenant informs the provider that it provides data for
+// a SQL server.
+func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
+	s.isTenant = true
+	s.tenantID = tenantID
+}
+
+func (s *idProvider) maybeMemoizeServerID() string {
+	si := s.serverS.Load()
+	sis, ok := si.(string)
+	if !ok {
+		sid := s.serverID.Get()
+		if sid != 0 {
+			sis = strconv.FormatUint(uint64(sid), 10)
+			s.serverS.Store(sis)
+		}
+	}
+	return sis
 }
