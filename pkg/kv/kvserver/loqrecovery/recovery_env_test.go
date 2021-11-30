@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"gopkg.in/yaml.v2"
 )
@@ -129,6 +131,13 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
 	}
 	if err != nil {
+		// This is a special case of error. Coverage errors provide properly
+		// formatted report as a separate function to better separate processing
+		// from presentation.
+		details := errors.GetAllDetails(err)
+		if len(details) > 0 {
+			return strings.Join(details, "\n")
+		}
 		return err.Error()
 	}
 	if len(out) > 0 {
@@ -209,14 +218,10 @@ func buildReplicaDescriptorFromTestData(
 		DeprecatedGenerationComparable: nil,
 		StickyBit:                      nil,
 	}
-	localReplica, ok := desc.GetReplicaDescriptor(replica.StoreID)
-	if !ok {
-		t.Fatalf("invalid test data descriptor on replica doesn't contain itself")
-	}
 	lease := roachpb.Lease{
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),
 		Expiration:      nil,
-		Replica:         localReplica,
+		Replica:         desc.InternalReplicas[0],
 		ProposedTS:      nil,
 		Epoch:           0,
 		Sequence:        0,
