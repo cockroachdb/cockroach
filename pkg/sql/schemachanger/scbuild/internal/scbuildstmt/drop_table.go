@@ -56,19 +56,42 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 			dropView(c, dependentDesc, behavior)
 			return nil
 		}))
-		// Detect if foreign keys will end up preventing this drop behavior.
+		// Detect if foreign key back refs will end up preventing this drop behavior.
 		scpb.ForEachForeignKeyBackReference(c,
 			func(_ scpb.Status,
 				_ scpb.Target_Direction,
 				fk *scpb.ForeignKeyBackReference) {
 				dependentTable := c.MustReadTable(fk.ReferenceID)
-				if fk.OriginID == tbl.GetID() {
-					if behavior != tree.DropCascade {
-						panic(pgerror.Newf(
-							pgcode.DependentObjectsStillExist,
-							"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
-					}
+				if fk.OriginID == tbl.GetID() &&
+					behavior != tree.DropCascade {
+					panic(pgerror.Newf(
+						pgcode.DependentObjectsStillExist,
+						"%q is referenced by foreign key from table %q",
+						tbl.GetName(),
+						dependentTable.GetName()))
 				}
+				// Add a foreign key for clean up.
+				b.EnqueueDropIfNotExists(&scpb.ForeignKey{
+					Name:             fk.Name,
+					OriginID:         fk.ReferenceID,
+					OriginColumns:    fk.ReferenceColumns,
+					ReferenceID:      fk.OriginID,
+					ReferenceColumns: fk.OriginColumns,
+				})
+			})
+		// Clean up any foreign keys next.
+		scpb.ForEachForeignKey(c,
+			func(_ scpb.Status,
+				_ scpb.Target_Direction,
+				fk *scpb.ForeignKey) {
+				// Add a back reference for clean up.
+				b.EnqueueDropIfNotExists(&scpb.ForeignKeyBackReference{
+					Name:             fk.Name,
+					OriginID:         fk.ReferenceID,
+					OriginColumns:    fk.ReferenceColumns,
+					ReferenceID:      fk.OriginID,
+					ReferenceColumns: fk.OriginColumns,
+				})
 			})
 		// Detect any sequence ownerships and prevent clean up if cascades
 		// are disallowed.
@@ -79,13 +102,7 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 				return
 			}
 			sequence := c.MustReadTable(sequenceOwnedBy.SequenceID)
-			if behavior != tree.DropCascade {
-				panic(pgerror.Newf(
-					pgcode.DependentObjectsStillExist,
-					"cannot drop table %s because other objects depend on it",
-					sequence.GetName(),
-				))
-			}
+			dropSequence(b, sequence, tree.DropCascade)
 		})
 	}
 }
