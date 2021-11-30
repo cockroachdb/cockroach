@@ -119,3 +119,25 @@ func TestRangeDescriptorStringRedact(t *testing.T) {
 		redact.Sprint(desc),
 	)
 }
+
+func TestSpansString(t *testing.T) {
+	for _, tc := range []struct {
+		spans    roachpb.Spans
+		expected string
+	}{
+		{
+			spans:    roachpb.Spans{},
+			expected: "",
+		},
+		{
+			spans:    roachpb.Spans{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
+			expected: "{a-b}",
+		},
+		{
+			spans:    roachpb.Spans{{Key: roachpb.Key("a")}, {Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
+			expected: "a, {c-d}",
+		},
+	} {
+		require.Equal(t, tc.expected, tc.spans.String())
+	}
+}
