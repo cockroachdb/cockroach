@@ -55,7 +55,6 @@ def lint_binary(name, test):
             "@co_honnef_go_tools//cmd/staticcheck",
             "@com_github_client9_misspell//cmd/misspell:misspell",
             "@com_github_cockroachdb_crlfmt//:crlfmt",
-            "@com_github_kisielk_errcheck//:errcheck",
             "@go_sdk//:bin/go",
             "@org_golang_x_lint//golint:golint",
         ],
