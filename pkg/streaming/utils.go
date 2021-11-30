@@ -11,6 +11,7 @@
 package streaming
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,6 +34,13 @@ type ReplicationStreamManager interface {
 
 	// StartReplicationStream starts a stream replication job for the specified tenant on the producer side.
 	StartReplicationStream(evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64) (StreamID, error)
+
+	// UpdateReplicationStreamProgress updates the progress of a replication stream.
+	UpdateReplicationStreamProgress(
+		evalCtx *tree.EvalContext,
+		streamID StreamID,
+		frontier hlc.Timestamp,
+		txn *kv.Txn) (jobspb.StreamReplicationStatus, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.

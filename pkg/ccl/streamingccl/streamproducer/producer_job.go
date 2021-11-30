@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -159,14 +160,26 @@ func updateReplicationStreamProgress(
 	expiration time.Time,
 	ptsProvider protectedts.Provider,
 	registry *jobs.Registry,
-	txn *kv.Txn,
 	streamID streaming.StreamID,
 	ts hlc.Timestamp,
-) error {
-	return registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, false,
+	txn *kv.Txn,
+) (status jobspb.StreamReplicationStatus, err error) {
+	const useReadLock = false
+	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Status != jobs.StatusRunning {
-				return errors.Errorf("job %d not running", streamID)
+			if md.Status == jobs.StatusRunning {
+				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_ACTIVE
+			} else if md.Status == jobs.StatusPaused {
+				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_PAUSED
+			} else if md.Status.Terminal() {
+				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
+			} else {
+				status.StreamStatus = jobspb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY
+			}
+			// Skip checking PTS record in cases that it might already be released
+			if status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_ACTIVE &&
+				status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_PAUSED {
+				return nil
 			}
 
 			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecord
@@ -174,11 +187,16 @@ func updateReplicationStreamProgress(
 			if err != nil {
 				return err
 			}
+			status.ProtectedTimestamp = &ptsRecord.Timestamp
+			if status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_ACTIVE {
+				return nil
+			}
 
 			if shouldUpdatePTS := ptsRecord.Timestamp.Less(ts); shouldUpdatePTS {
 				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, ts); err != nil {
 					return err
 				}
+				status.ProtectedTimestamp = &ts
 			}
 
 			if p := md.Progress; expiration.After(p.GetStreamReplication().Expiration) {
@@ -187,10 +205,30 @@ func updateReplicationStreamProgress(
 			}
 			return nil
 		})
+
+	if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
+		status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
+		err = nil
+	}
+
+	return status, err
+}
+
+func doUpdateReplicationStreamProgress(
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
+) (jobspb.StreamReplicationStatus, error) {
+
+	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
+	expirationTime := timeutil.Now().Add(timeout)
+
+	return updateReplicationStreamProgress(evalCtx.Ctx(),
+		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, streamID, frontier, txn)
 }
 
 func init() {
 	streamingccl.StartReplicationStreamHook = doStartReplicationStream
+	streamingccl.UpdateReplicationStreamProgressHook = doUpdateReplicationStreamProgress
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
