@@ -761,9 +761,9 @@ func (r *testRunner) runTest(
 	// t.Fatal() which kills the goroutine, and also because we want to enforce a
 	// timeout.
 	success := false
-	done := make(chan struct{})
+	testReturnedCh := make(chan struct{})
 	go func() {
-		defer close(done) // closed only after we've grabbed the debug info below
+		defer close(testReturnedCh) // closed only after we've grabbed the debug info below
 
 		// This is the call to actually run the test.
 		defer func() {
@@ -783,7 +783,7 @@ func (r *testRunner) runTest(
 		return err
 	}
 	select {
-	case <-done:
+	case <-testReturnedCh:
 		s := "success"
 		if t.Failed() {
 			s = "failure"
@@ -839,7 +839,7 @@ func (r *testRunner) runTest(
 		t.printfAndFail(0 /* skip */, "test timed out (%s)", timeout)
 		t.setTimedOut()
 		select {
-		case <-done:
+		case <-testReturnedCh:
 			if success {
 				panic("expected success=false after a timeout")
 			}
