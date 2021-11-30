@@ -65,6 +65,10 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
+	// Inform the server identity provider that we're operating
+	// for a tenant server.
+	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
+
 	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
@@ -260,17 +264,6 @@ func StartTenant(
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return nil, "", "", err
-	}
-
-	if knobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); !ok || !knobs.DisableLogTags {
-		// Register the server's identifiers so that log events are
-		// decorated with the server's identity. This helps when gathering
-		// log events from multiple servers into the same log collector.
-		//
-		// We do this only here, as the identifiers may not be known before this point.
-		clusterID := args.rpcContext.ClusterID.Get().String()
-		log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
-		log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
