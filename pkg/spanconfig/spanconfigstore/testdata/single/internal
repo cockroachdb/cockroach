@@ -1,13 +1,16 @@
-# Test the store's internal view of overlapping span configs.
+# Test the store's internal view of overlapping span configs. Only a single
+# update is applied at a time.
 
 overlapping span=[a,z)
 ----
 
-set span=[b,d) conf=A
+apply
+set [b,d):A
 ----
 added [b,d):A
 
-set span=[f,g) conf=B
+apply
+set [f,g):B
 ----
 added [f,g):B
 
@@ -30,7 +33,8 @@ overlapping span=[a,j)
 [b,d):A
 [f,g):B
 
-delete span=[f,g)
+apply
+delete [f,g)
 ----
 deleted [f,g)
 

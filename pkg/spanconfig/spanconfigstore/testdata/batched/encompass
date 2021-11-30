@@ -1,0 +1,79 @@
+# Test semantics of batched updates that overlap with and/or encompass
+# spans already present.
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state
+# set        [-A)  [-B|-C)  [--D--)
+# ====================================
+# result     [-A)  [-B|-C)  [--D--)
+apply
+set [b,c):A
+set [d,e):B
+set [e,f):C
+set [g,i):D
+----
+added [b,c):A
+added [d,e):B
+added [e,f):C
+added [g,i):D
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X--------)
+# ====================================
+# result  [--------X--------|--D--)
+apply dryrun
+set [a,g):X
+----
+deleted [b,c)
+deleted [d,e)
+deleted [e,f)
+added [a,g):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X--|----Y---)
+# ====================================
+# result  [--------X--|----Y---|-D)
+apply dryrun
+set [a,e):X
+set [e,h):Y
+----
+deleted [b,c)
+deleted [d,e)
+deleted [e,f)
+deleted [g,i)
+added [a,e):X
+added [e,h):Y
+added [h,i):D
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X-----------)
+# ====================================
+# result  [--------X-----------|-D)
+apply dryrun
+set [a,h):X
+----
+deleted [b,c)
+deleted [d,e)
+deleted [e,f)
+deleted [g,i)
+added [a,h):X
+added [h,i):D
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X-----|xxxxx)
+# ====================================
+# result  [--------X-----)     [-D)
+apply dryrun
+set [a,f):X
+delete [f,h)
+----
+deleted [b,c)
+deleted [d,e)
+deleted [e,f)
+deleted [g,i)
+added [a,f):X
+added [h,i):D

@@ -173,10 +173,10 @@ type Store interface {
 
 // StoreWriter is the write-only portion of the Store interface.
 type StoreWriter interface {
-	// Apply applies the given update[1]. It also returns the existing spans that
-	// were deleted and entries that were newly added to make room for the
-	// update. The deleted list can double as a list of overlapping spans in the
-	// Store, provided the update is not a no-op[2].
+	// Apply applies a batch of non-overlapping updates atomically[1] and
+	// returns (i) the existing spans that were deleted, and (ii) the entries
+	// that were newly added to make room for the batch. The deleted list can
+	// also double as a list of overlapping spans in the Store[2].
 	//
 	// Span configs are stored in non-overlapping fashion. When an update
 	// overlaps with existing configs, the existing configs are deleted. If the
@@ -184,7 +184,8 @@ type StoreWriter interface {
 	// configs are re-added. If the update itself is adding an entry, that too
 	// is added. This is best illustrated with the following example:
 	//
-	//                                         [--- X --) is a span with config X
+	//                                        [--- X --) is a span with config X
+	//                                        [xxxxxxxx) is a span being deleted
 	//
 	//  Store    | [--- A ----)[------------- B -----------)[---------- C -----)
 	//  Update   |             [------------------ D -------------)
@@ -192,6 +193,15 @@ type StoreWriter interface {
 	//  Deleted  |             [------------- B -----------)[---------- C -----)
 	//  Added    |             [------------------ D -------------)[--- C -----)
 	//  Store*   | [--- A ----)[------------------ D -------------)[--- C -----)
+	//
+	// Generalizing to multiple updates:
+	//
+	//  Store    | [--- A ----)[------------- B -----------)[---------- C -----)
+	//  Updates  |             [--- D ----)        [xxxxxxxxx)       [--- E ---)
+	//           |
+	//  Deleted  |             [------------- B -----------)[---------- C -----)
+	//  Added    |             [--- D ----)[-- B --)         [-- C -)[--- E ---)
+	//  Store*   | [--- A ----)[--- D ----)[-- B --)         [-- C -)[--- E ---)
 	//
 	// TODO(irfansharif): We'll make use of the dryrun option in a future PR
 	// when wiring up the reconciliation job to use the KVAccessor. Since the
@@ -236,7 +246,7 @@ type StoreWriter interface {
 	//      against a StoreWriter (populated using KVAccessor contents) using
 	//      the descriptor's span config entry would return empty lists,
 	//      indicating a no-op.
-	Apply(ctx context.Context, update Update, dryrun bool) (
+	Apply(ctx context.Context, dryrun bool, updates ...Update) (
 		deleted []roachpb.Span, added []roachpb.SpanConfigEntry,
 	)
 }
