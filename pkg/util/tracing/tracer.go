@@ -13,7 +13,6 @@ package tracing
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -674,9 +674,9 @@ func (t *Tracer) startSpanGeneric(
 
 	traceID := opts.parentTraceID()
 	if traceID == 0 {
-		traceID = tracingpb.TraceID(rand.Int63())
+		traceID = tracingpb.TraceID(randutil.FastInt63())
 	}
-	spanID := tracingpb.SpanID(rand.Int63())
+	spanID := tracingpb.SpanID(randutil.FastInt63())
 	goroutineID := uint64(goid.Get())
 
 	// Now allocate the main *Span and contained crdbSpan.

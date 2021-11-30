@@ -42,7 +42,8 @@ func TestApplier(t *testing.T) {
 	a := MakeApplier(env, db, db)
 	check := func(t *testing.T, s Step, expected string) {
 		t.Helper()
-		require.NoError(t, a.Apply(ctx, &s))
+		_ /* trace */, err := a.Apply(ctx, &s)
+		require.NoError(t, err)
 		actual := s.String()
 		// Trim out the txn stuff. It has things like timestamps in it that are not
 		// stable from run to run.
@@ -53,7 +54,8 @@ func TestApplier(t *testing.T) {
 		t.Helper()
 		cancelledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
-		require.NoError(t, a.Apply(cancelledCtx, &s))
+		_ /* trace */, err := a.Apply(cancelledCtx, &s)
+		require.NoError(t, err)
 		actual := s.String()
 		// Trim out context canceled location, which can be non-deterministic.
 		// The wrapped string around the context canceled error depends on where
@@ -64,7 +66,8 @@ func TestApplier(t *testing.T) {
 
 	checkPanics := func(t *testing.T, s Step, expectedPanic string) {
 		t.Helper()
-		require.EqualError(t, a.Apply(ctx, &s), fmt.Sprintf("panic applying step %s: %v", s, expectedPanic))
+		_ /* trace */, err := a.Apply(ctx, &s)
+		require.EqualError(t, err, fmt.Sprintf("panic applying step %s: %v", s, expectedPanic))
 	}
 
 	// Basic operations

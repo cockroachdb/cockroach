@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/netutil/addr",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/ring",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

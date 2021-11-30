@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/protobuf/proto"
 )
@@ -49,19 +50,21 @@ func MakeApplier(env *Env, dbs ...*kv.DB) *Applier {
 // Apply executes the given Step and mutates it with the result of execution. An
 // error is only returned from Apply if there is an internal coding error within
 // Applier, errors from a Step execution are saved in the Step itself.
-func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
+func (a *Applier) Apply(ctx context.Context, step *Step) (trace tracing.Recording, retErr error) {
 	var db *kv.DB
 	db, step.DBID = a.getNextDBRoundRobin()
 
 	step.Before = db.Clock().Now()
+	recCtx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, db.Tracer, "txn step")
 	defer func() {
 		step.After = db.Clock().Now()
 		if p := recover(); p != nil {
 			retErr = errors.Errorf(`panic applying step %s: %v`, step, p)
 		}
+		trace = collectAndFinish()
 	}()
-	applyOp(ctx, a.env, db, &step.Op)
-	return nil
+	applyOp(recCtx, a.env, db, &step.Op)
+	return collectAndFinish(), nil
 }
 
 func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
