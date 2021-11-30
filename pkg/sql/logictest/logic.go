@@ -1542,9 +1542,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				Existing:          i > 0,
 			}
 
-			// Prevent a logging assertion that the server ID is initialized multiple times.
-			log.TestingClearServerIdentifiers()
-
 			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)

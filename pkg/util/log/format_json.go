@@ -274,26 +274,23 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		escapeString(buf, entry.clusterID)
 		buf.WriteByte('"')
 	}
-	if entry.nodeID != 0 {
+	if entry.nodeID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['N'].tags[tags])
 		buf.WriteString(`":`)
-		n = buf.someDigits(0, int(entry.nodeID))
-		buf.Write(buf.tmp[:n])
+		buf.WriteString(entry.nodeID)
 	}
 	if entry.tenantID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['T'].tags[tags])
-		buf.WriteString(`":"`)
-		escapeString(buf, entry.tenantID)
-		buf.WriteByte('"')
+		buf.WriteString(`":`)
+		buf.WriteString(entry.tenantID)
 	}
-	if entry.sqlInstanceID != 0 {
+	if entry.sqlInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])
 		buf.WriteString(`":`)
-		n = buf.someDigits(0, int(entry.sqlInstanceID))
-		buf.Write(buf.tmp[:n])
+		buf.WriteString(entry.sqlInstanceID)
 	}
 
 	// The binary version.

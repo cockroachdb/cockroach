@@ -21,12 +21,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // logging is the global state of the logging setup.
@@ -102,26 +100,8 @@ type loggingT struct {
 		firstUseStack string
 	}
 
-	idMu struct {
-		syncutil.RWMutex
-		idPayload
-	}
-
 	allSinkInfos sinkInfoRegistry
 	allLoggers   loggerRegistry
-}
-
-type idPayload struct {
-	// the Cluster ID is reported on every new log file so as to ease
-	// the correlation of panic reports with self-reported log files.
-	clusterID string
-	// the node ID is reported like the cluster ID, for the same reasons.
-	// We avoid using roahcpb.NodeID to avoid a circular reference.
-	nodeID int32
-	// ditto for the tenant ID.
-	tenantID string
-	// ditto for the SQL instance ID.
-	sqlInstanceID int32
 }
 
 func init() {
@@ -221,12 +201,6 @@ func FatalChan() <-chan struct{} {
 	return logging.mu.fatalCh
 }
 
-func (l *loggingT) idPayload() idPayload {
-	l.idMu.RLock()
-	defer l.idMu.RUnlock()
-	return l.idMu.idPayload
-}
-
 // s ignalFatalCh signals the listeners of l.mu.fatalCh by closing the
 // channel.
 // l.mu is not held.
@@ -240,50 +214,6 @@ func (l *loggingT) signalFatalCh() {
 	default:
 		close(l.mu.fatalCh)
 	}
-}
-
-// SetNodeIDs stores the Node and Cluster ID for further reference.
-func SetNodeIDs(clusterID string, nodeID int32) {
-	// Ensure that the IDs are logged with the same format as for
-	// new log files, even on the first log file. This ensures that grep
-	// will always find it.
-	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
-	if nodeID != 0 {
-		logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%d", nodeID)
-	}
-
-	// Perform the change proper.
-	logging.idMu.Lock()
-	defer logging.idMu.Unlock()
-
-	if logging.idMu.clusterID != "" {
-		panic("clusterID already set")
-	}
-
-	logging.idMu.clusterID = clusterID
-	logging.idMu.nodeID = nodeID
-}
-
-// SetTenantIDs stores the tenant ID and instance ID for further reference.
-func SetTenantIDs(tenantID string, sqlInstanceID int32) {
-	// Ensure that the IDs are logged with the same format as for
-	// new log files, even on the first log file. This ensures that grep
-	// will always find it.
-	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "tenantID: %s", tenantID)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "instanceID: %d", sqlInstanceID)
-
-	// Perform the change proper.
-	logging.idMu.Lock()
-	defer logging.idMu.Unlock()
-
-	if logging.idMu.tenantID != "" {
-		panic("tenantID already set")
-	}
-
-	logging.idMu.tenantID = tenantID
-	logging.idMu.sqlInstanceID = sqlInstanceID
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes

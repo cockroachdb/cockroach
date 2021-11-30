@@ -410,7 +410,6 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 func startTestTenant(
 	t testing.TB, options feedTestOptions,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	log.TestingClearServerIdentifiers()
 	ctx := context.Background()
 
 	kvServer, _, cleanup := startTestFullServer(t, options)

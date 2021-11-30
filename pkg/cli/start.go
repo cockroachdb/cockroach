@@ -745,9 +745,8 @@ If problems persist, please see %s.`
 				buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
 			}
 
-			// Remember the cluster ID for log file rotation.
+			// Report the server identifiers.
 			clusterID := s.ClusterID().String()
-			log.SetNodeIDs(clusterID, int32(nodeID))
 			buf.Printf("clusterID:\t%s\n", clusterID)
 			buf.Printf("nodeID:\t%d\n", nodeID)
 
