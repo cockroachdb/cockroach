@@ -129,6 +129,12 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
 	}
 	if err != nil {
+		// This is a special case of error. Coverage errors provide properly
+		// formatted report as a separate function to better separate processing
+		// from presentation.
+		if cerr, ok := err.(KeyspaceCoverageError); ok {
+			return cerr.GetReport()
+		}
 		return err.Error()
 	}
 	if len(out) > 0 {
