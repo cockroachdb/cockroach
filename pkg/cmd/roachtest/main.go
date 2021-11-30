@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
@@ -357,7 +358,9 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	}
 	register(&r)
 	cr := newClusterRegistry()
-	runner := newTestRunner(cr, r.buildVersion)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	runner := newTestRunner(cr, stopper, r.buildVersion)
 
 	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster

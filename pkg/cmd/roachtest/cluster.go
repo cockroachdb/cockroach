@@ -1296,35 +1296,21 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
 	})
 }
 
-// FailOnDeadNodes fails the test if nodes that have a populated data dir are
-// found to be not running. It prints both to t.L() and the test output.
-func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t test.Test) {
+// checkNoDeadNode reports an error (via `t.Error`) if nodes that have a populated
+// data dir are found to be not running. It prints both to t.L() and the test
+// output.
+func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return
 	}
 
-	// Don't hang forever.
-	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
-		messages, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
-		// If there's an error, it means either that the monitor command failed
-		// completely, or that it found a dead node worth complaining about.
-		if err != nil {
-			if ctx.Err() != nil {
-				// Don't fail if we timed out.
-				return nil
-			}
-			// TODO(tbg): remove this type assertion.
-			t.(*testImpl).printfAndFail(0 /* skip */, "dead node detection: %s", err)
-		}
-		for msg := range messages {
-			if msg.Err != nil {
-				msg.Msg += "error: " + msg.Err.Error()
-				return errors.Newf("%d: %s", msg.Node, msg.Msg)
-			}
-		}
-		return nil
-	})
+	_, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
+	// If there's an error, it means either that the monitor command failed
+	// completely, or that it found a dead node worth complaining about.
+	if err != nil {
+		t.Errorf("dead node detection: %s", err)
+	}
 }
 
 // CheckReplicaDivergenceOnDB runs a fast consistency check of the whole keyspace
@@ -1412,12 +1398,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t test.Test) 
 			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
 	); err != nil {
-		// NB: we don't call t.Fatal() here because this method is
-		// for use by the test harness beyond the point at which
-		// it can interpret `t.Fatal`.
-		//
-		// TODO(tbg): remove this type assertion.
-		t.(*testImpl).printAndFail(0, err)
+		t.Errorf("consistency check failed: %v", err)
 	}
 }
 
@@ -1932,6 +1913,9 @@ func (c *clusterImpl) StopE(
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StopE")
+	}
+	if c.spec.NodeCount == 0 {
+		return nil // unit tests
 	}
 	c.setStatusForClusterOpt("stopping", stopOpts.RoachtestOpts.Worker, nodes...)
 	defer c.clearStatusForClusterOpt(stopOpts.RoachtestOpts.Worker)

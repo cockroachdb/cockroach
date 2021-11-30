@@ -97,18 +97,6 @@ type testImpl struct {
 	versionsBinaryOverride map[string]string
 }
 
-func (t *testImpl) timedOut() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.mu.timeout
-}
-
-func (t *testImpl) setTimedOut() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.timeout = true
-}
-
 // BuildVersion exposes the build version of the cluster
 // in this test.
 func (t *testImpl) BuildVersion() *version.Version {

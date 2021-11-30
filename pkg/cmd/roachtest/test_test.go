@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -132,10 +133,13 @@ func TestRunnerRun(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			tests := testsToRun(ctx, r, registry.NewTestFilter(c.filters))
 			cr := newClusterRegistry()
-			runner := newTestRunner(cr, r.buildVersion)
 
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			runner := newTestRunner(cr, stopper, r.buildVersion)
+
+			var stdout syncedBuffer
+			var stderr syncedBuffer
 			lopt := loggingOpt{
 				l:            nilLogger(),
 				tee:          logger.NoTee,
@@ -182,9 +186,10 @@ func (b *syncedBuffer) String() string {
 
 func TestRunnerTestTimeout(t *testing.T) {
 	ctx := context.Background()
-
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	cr := newClusterRegistry()
-	runner := newTestRunner(cr, version.Version{})
+	runner := newTestRunner(cr, stopper, version.Version{})
 
 	var buf syncedBuffer
 	lopt := loggingOpt{
@@ -280,7 +285,9 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	ctx := context.Background()
 	t.Helper()
 	cr := newClusterRegistry()
-	runner := newTestRunner(cr, version.Version{})
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	runner := newTestRunner(cr, stopper, version.Version{})
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
 		Name:    "boom",
