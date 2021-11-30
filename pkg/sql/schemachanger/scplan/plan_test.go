@@ -156,6 +156,8 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 				screl.ElementString(de.From().Element()), de.From().Status)
 			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
 				screl.ElementString(de.To().Element()), de.To().Status)
+			fmt.Fprintf(&deps, "  kind: %s\n", de.Kind())
+			fmt.Fprintf(&deps, "  rule: %s\n", de.Name())
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})

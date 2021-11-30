@@ -120,32 +120,21 @@ func FullTranslate(
 
 // SQLWatcher watches for events on system.zones and system.descriptors.
 type SQLWatcher interface {
-	// WatchForSQLUpdates watches for updates to zones and descriptors starting at
-	// the given timestamp (exclusive), informing callers using the handler
-	// callback.
+	// WatchForSQLUpdates watches for updates to zones and descriptors starting
+	// at the given timestamp (exclusive), informing callers periodically using
+	// the given handler[1] and a checkpoint timestamp. The handler is invoked:
+	// - serially, in the same thread where WatchForSQLUpdates was called;
+	// - with a monotonically increasing timestamp;
+	// - with updates from the last provided timestamp (exclusive) to the
+	//   current one (inclusive).
 	//
-	// The handler callback[1] is invoked from time to time with a list of updates
-	// and a checkpointTS. Invocations of the handler callback provide the
-	// following semantics:
-	// 	1. Calls to the handler are serial.
-	// 	2. The timestamp supplied to the handler is monotonically increasing.
-	// 	3. The list of DescriptorUpdates supplied to handler includes all events
-	//	in the window (prevInvocationCheckpointTS, checkpointTS].
-	// 	4. No further calls to the handler are made if a call to the handler
-	// 	returns an error.
+	// If the handler errors out, it's not invoked subsequently (and internal
+	// processes are wound down accordingly). Callers are free to persist the
+	// checkpoint timestamps and use it to re-establish the watcher without
+	// missing any updates.
 	//
-	// These guarantees mean that users of this interface are free to persist the
-	// checkpointTS and later use it to re-establish a SQLWatcher without missing
-	// any updates.
+	// [1]: Users should avoid doing expensive work in the handler.
 	//
-	// WatchForSQLUpdates can only ever be called once, effectively making the
-	// SQLWatcher a single use interface.
-	//
-	// WatchForSQLUpdates may run out of memory and return an error if it is
-	// tracking too many events between two checkpoints.
-	//
-	// [1] Users of this interface should not intend to do expensive work in the
-	// handler callback.
 	// TODO(arul): Possibly get rid of this limitation.
 	WatchForSQLUpdates(
 		ctx context.Context,
@@ -165,22 +154,14 @@ type DescriptorUpdate struct {
 	DescriptorType catalog.DescriptorType
 }
 
-// SQLWatcherFactory is used to construct new SQLWatchers.
-type SQLWatcherFactory interface {
-	// New returns a new SQLWatcher.
-	New() SQLWatcher
-}
-
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
 // configurations.
 type ReconciliationDependencies interface {
 	KVAccessor
-
 	SQLTranslator
-
-	SQLWatcherFactory
+	SQLWatcher
 }
 
 // Store is a data structure used to store spans and their corresponding

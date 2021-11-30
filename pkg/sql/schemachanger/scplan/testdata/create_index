@@ -60,8 +60,12 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
 ----
 - from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: index name is assigned once the index is created
 - from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
   to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+  kind: HappensAfter
+  rule: index needs a name to be assigned
 
 ops
 CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
@@ -123,8 +127,12 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
 ----
 - from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: index name is assigned once the index is created
 - from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
   to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+  kind: HappensAfter
+  rule: index needs a name to be assigned
 
 ops
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
@@ -199,7 +207,13 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
 ----
 - from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: index name is assigned once the index is created
 - from: [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: partitioning information needs the basic index as created
 - from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
   to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+  kind: HappensAfter
+  rule: index needs a name to be assigned

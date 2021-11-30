@@ -68,14 +68,20 @@ Stage 1
 Stage 2 (non-revertible)
   transitions:
     [Sequence:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 52
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 53
+      TableID: 52
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 54
+      TableID: 52
 Stage 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 52}, DROPPED, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 52
@@ -91,12 +97,6 @@ Stage 3 (non-revertible)
         Username: root
     *scop.CreateGcJobForDescriptor
       DescID: 52
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 53
-      TableID: 52
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 54
-      TableID: 52
 
 
 deps
@@ -104,17 +104,17 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 - from: [Namespace:{DescID: 52, Name: sq1}, ABSENT]
   to:   [Sequence:{DescID: 52}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
-  to:   [Sequence:{DescID: 52}, ABSENT]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
 - from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
   to:   [Sequence:{DescID: 52}, DROPPED]
-- from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, ABSENT]
-  to:   [Sequence:{DescID: 52}, ABSENT]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
 - from: [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, ABSENT]
   to:   [Sequence:{DescID: 52}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
 - from: [Sequence:{DescID: 52}, ABSENT]
   to:   [Namespace:{DescID: 52, Name: sq1}, ABSENT]
-- from: [Sequence:{DescID: 52}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}, ABSENT]
-- from: [Sequence:{DescID: 52}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 52, ReferencedDescID: 54}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained

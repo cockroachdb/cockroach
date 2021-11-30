@@ -52,12 +52,12 @@ func TestBuffer(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	buffer := newBuffer(10 /* limit */)
+	buffer := newBuffer(10 /* limit */, ts(1))
 
 	// Sanity check the newly initialized event buffer.
 	updates, combinedFrontierTS, err := buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(0), combinedFrontierTS)
+	require.Equal(t, ts(1), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
 	// Add a few events without advancing any of the frontiers. We don't expect
@@ -69,7 +69,7 @@ func TestBuffer(t *testing.T) {
 	require.NoError(t, err)
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(0), combinedFrontierTS)
+	require.Equal(t, ts(1), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
 	// Advance the zones frontier. We expect flush to still not return any results
@@ -77,7 +77,7 @@ func TestBuffer(t *testing.T) {
 	buffer.advance(zonesRangefeed, ts(11))
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(0), combinedFrontierTS)
+	require.Equal(t, ts(1), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
 	// Advance the descriptors frontier to a lower timestamp than the zones
@@ -150,7 +150,6 @@ func TestBuffer(t *testing.T) {
 func TestBufferCombinesDescriptorTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	buffer := newBuffer(10 /* limit */)
 	ctx := context.Background()
 
 	ts := func(nanos int) hlc.Timestamp {
@@ -158,6 +157,8 @@ func TestBufferCombinesDescriptorTypes(t *testing.T) {
 			WallTime: int64(nanos),
 		}
 	}
+	buffer := newBuffer(10 /* limit */, ts(0))
+
 	makeEvent := func(descID int, descType catalog.DescriptorType, timestamp hlc.Timestamp) event {
 		return event{
 			update: spanconfig.DescriptorUpdate{

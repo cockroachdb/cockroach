@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scopt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -111,24 +112,59 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	cur := init
 	fulfilled := map[*scpb.Node]struct{}{}
 	filterUnsatisfiedEdgesStep := func(edges []*scgraph.OpEdge) ([]*scgraph.OpEdge, bool) {
-		candidates := make(map[*scpb.Node]struct{})
+		candidates := make(map[*scpb.Node]*scgraph.OpEdge)
 		for _, e := range edges {
-			candidates[e.To()] = struct{}{}
+			candidates[e.To()] = e
 		}
 		// Check to see if the current set of edges will have their dependencies met
 		// if they are all run. Any which will not must be pruned. This greedy
 		// algorithm works, but a justification is in order.
 		failed := map[*scgraph.OpEdge]struct{}{}
 		for _, e := range edges {
-			_ = g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
+			if err := g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
 				_, isFulfilled := fulfilled[de.To()]
 				_, isCandidate := candidates[de.To()]
+				if de.Kind() == scgraph.SameStage && isFulfilled {
+					// This is bad, we have a happens-after relationship, and it has
+					// already happened.
+					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
+						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+				}
 				if isFulfilled || isCandidate {
 					return nil
 				}
 				failed[e] = struct{}{}
 				return iterutil.StopIteration()
-			})
+			}); err != nil {
+				panic(err)
+			}
+		}
+		// Ensure that all SameStage DepEdges are met appropriately.
+		for _, e := range edges {
+			if err := g.ForEachSameStageDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
+				if _, isFulfilled := fulfilled[de.From()]; isFulfilled {
+					// This is bad, we have a happens-after relationship, and it has
+					// already happened.
+					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
+						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+				}
+				fromCandidate, fromIsCandidate := candidates[de.From()]
+				if !fromIsCandidate {
+					failed[e] = struct{}{}
+					return iterutil.StopIteration()
+				}
+				_, fromIsFailed := failed[fromCandidate]
+				if fromIsFailed {
+					failed[e] = struct{}{}
+					return iterutil.StopIteration()
+				}
+				if _, eIsFailed := failed[e]; eIsFailed {
+					failed[fromCandidate] = struct{}{}
+				}
+				return nil
+			}); err != nil {
+				panic(err)
+			}
 		}
 		if len(failed) == 0 {
 			return edges, true

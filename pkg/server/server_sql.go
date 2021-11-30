@@ -857,12 +857,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
-		sqlWatcherFactory := spanconfigsqlwatcher.NewFactory(
+		sqlWatcher := spanconfigsqlwatcher.New(
 			codec,
 			cfg.Settings,
 			cfg.rangeFeedFactory,
 			1<<20, /* 1 MB bufferMemLimit */
 			cfg.stopper,
+			// TODO(irfansharif): What should this no-op cadence be?
+			30*time.Second, /* checkpointNoopsEvery */
 			spanConfigKnobs,
 		)
 		spanConfigMgr = spanconfigmanager.New(
@@ -872,7 +874,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			cfg.Settings,
 			cfg.spanConfigAccessor,
-			sqlWatcherFactory,
+			sqlWatcher,
 			sqlTranslator,
 			spanConfigKnobs,
 		)
