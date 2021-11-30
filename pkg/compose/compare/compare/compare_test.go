@@ -139,7 +139,6 @@ func TestCompare(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer conn.Close()
 				for _, init := range uri.init {
 					if err := conn.Exec(ctx, init); err != nil {
 						t.Fatalf("%s: %v", testCn.name, err)
@@ -151,6 +150,7 @@ func TestCompare(t *testing.T) {
 					t.Fatalf("%s: %v", testCn.name, err)
 				}
 				conns[testCn.name] = conn
+				conn.Close(ctx)
 			}
 			smither, err := sqlsmith.NewSmither(conns[config.conns[0].name].DB(), rng, config.opts...)
 			if err != nil {
@@ -182,10 +182,10 @@ func TestCompare(t *testing.T) {
 					ignoredErrCount++
 				}
 				totalQueryCount++
-				// Make sure we can still ping on a connection. If we can't we may have
+				// Make sure we can still ping on a connection. If we can't, we may have
 				// crashed something.
 				for name, conn := range conns {
-					if err := conn.Ping(); err != nil {
+					if err := conn.Ping(ctx); err != nil {
 						t.Log(query)
 						t.Fatalf("%s: ping: %v", name, err)
 					}
