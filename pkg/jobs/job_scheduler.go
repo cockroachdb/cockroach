@@ -351,6 +351,16 @@ func (s *jobScheduler) executeSchedules(
 	return err
 }
 
+// An internal, safety valve setting to revert scheduler execution to distributed mode.
+// This setting should be removed once scheduled job system no longer locks tables for excessive
+// periods of time.
+var schedulerRunsOnSingleNode = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"jobs.scheduler.single_node_scheduler.enabled",
+	"execute scheduler on a single node in a cluster",
+	true,
+)
+
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
@@ -360,14 +370,27 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 			log.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
 
+		schedulerEnabledOnThisNode := func() bool {
+			if s.ShouldRunScheduler == nil || !schedulerRunsOnSingleNode.Get(&s.Settings.SV) {
+				return true
+			}
+
+			enabled, err := s.ShouldRunScheduler(ctx, s.DB.Clock().NowAsClockTimestamp())
+			if err != nil {
+				log.Errorf(ctx, "error determining if the scheduler enabled: %v; will recheck after %s",
+					err, recheckEnabledAfterPeriod)
+				return false
+			}
+			return enabled
+		}
+
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
-			getWaitPeriod(ctx, &s.Settings.SV, jitter, s.TestingKnobs)) {
+			getWaitPeriod(ctx, &s.Settings.SV, schedulerEnabledOnThisNode, jitter, s.TestingKnobs)) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Info(ctx, "scheduled job daemon disabled")
+				if !schedulerEnabledSetting.Get(&s.Settings.SV) || !schedulerEnabledOnThisNode() {
 					continue
 				}
 
@@ -388,7 +411,7 @@ var schedulerEnabledSetting = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"jobs.scheduler.enabled",
 	"enable/disable job scheduler",
-	true,
+	false,
 )
 
 var schedulerPaceSetting = settings.RegisterDurationSetting(
@@ -427,13 +450,21 @@ type jitterFn func(duration time.Duration) time.Duration
 
 // Returns duration to wait before scanning system.scheduled_jobs.
 func getWaitPeriod(
-	ctx context.Context, sv *settings.Values, jitter jitterFn, knobs base.ModuleTestingKnobs,
+	ctx context.Context,
+	sv *settings.Values,
+	enabledOnThisNode func() bool,
+	jitter jitterFn,
+	knobs base.ModuleTestingKnobs,
 ) time.Duration {
 	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonScanDelay != nil {
 		return k.SchedulerDaemonScanDelay()
 	}
 
 	if !schedulerEnabledSetting.Get(sv) {
+		return recheckEnabledAfterPeriod
+	}
+
+	if enabledOnThisNode != nil && !enabledOnThisNode() {
 		return recheckEnabledAfterPeriod
 	}
 
