@@ -1959,6 +1959,15 @@ func (ex *connExecutor) recordTransaction(
 	implicit bool,
 	txnStart time.Time,
 ) error {
+	recordingStart := timeutil.Now()
+	defer func() {
+		recordingOverhead := timeutil.Now().Sub(recordingStart)
+		ex.server.
+			ServerMetrics.
+			StatsMetrics.
+			SQLTxnStatsCollectionOverhead.RecordValue(recordingOverhead.Nanoseconds())
+	}()
+
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)

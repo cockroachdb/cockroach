@@ -13,16 +13,19 @@ package bench
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -1231,4 +1235,58 @@ func BenchmarkNameResolution(b *testing.B) {
 		}
 		b.StopTimer()
 	})
+}
+
+func BenchmarkConcurrentSelect1(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	for _, numOfConcurrentConn := range []int{24, 48, 64} {
+		b.Run(fmt.Sprintf("concurrentConn=%d", numOfConcurrentConn), func(b *testing.B) {
+			s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+			sqlServer := s.SQLServer().(*sql.Server)
+			defer s.Stopper().Stop(context.TODO())
+
+			starter := make(chan struct{})
+			latencyChan := make(chan float64, numOfConcurrentConn)
+			defer close(latencyChan)
+
+			var wg sync.WaitGroup
+			for i := 0; i < numOfConcurrentConn; i++ {
+				sqlConn, err := db.Conn(context.Background())
+				if err != nil {
+					b.Fatalf("unexpected error creating db conn: %s", err)
+				}
+				wg.Add(1)
+
+				go func(conn *gosql.Conn, idx int) {
+					defer wg.Done()
+					runner := sqlutils.MakeSQLRunner(conn)
+					<-starter
+
+					start := timeutil.Now()
+					for i := 0; i < b.N; i++ {
+						runner.Exec(b, "SELECT 1")
+					}
+					duration := timeutil.Now().Sub(start)
+					latencyChan <- float64(duration.Milliseconds()) / float64(b.N)
+				}(sqlConn, i)
+			}
+
+			close(starter)
+			wg.Wait()
+
+			var totalLat float64
+			for i := 0; i < numOfConcurrentConn; i++ {
+				totalLat += <-latencyChan
+			}
+			b.ReportMetric(totalLat/float64(numOfConcurrentConn), "ms/op")
+			b.ReportMetric(
+				sqlServer.ServerMetrics.
+					StatsMetrics.
+					SQLTxnStatsCollectionOverhead.
+					Snapshot().Mean(),
+				"overhead(ns/op)")
+		})
+	}
 }
