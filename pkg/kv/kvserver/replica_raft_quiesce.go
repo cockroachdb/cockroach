@@ -150,8 +150,10 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap liveness.IsLiveMap) bool {
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().NowAsClockTimestamp(), livenessMap)
+func (r *Replica) maybeQuiesceLocked(
+	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap,
+) bool {
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap)
 	if !ok {
 		return false
 	}
