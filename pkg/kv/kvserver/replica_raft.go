@@ -998,11 +998,13 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(ctx, livenessMap) {
+
+	now := r.store.Clock().NowAsClockTimestamp()
+	if r.maybeQuiesceLocked(ctx, now, livenessMap) {
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update
