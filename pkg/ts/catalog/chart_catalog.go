@@ -1854,6 +1854,10 @@ var charts = []sectionDescription{
 				Title:   "Number of stale statement/transaction roles removed by cleanup job",
 				Metrics: []string{"sql.stats.cleanup.rows_removed"},
 			},
+			{
+				Title:   "Time took in nanoseconds to collect transaction stats",
+				Metrics: []string{"sql.stats.txn_stats_collection.duration"},
+			},
 		},
 	},
 	{
