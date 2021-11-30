@@ -105,17 +105,28 @@ func TestRunnerRun(t *testing.T) {
 		},
 		Cluster: r.MakeClusterSpec(0),
 	})
+	r.Add(registry.TestSpec{
+		Name:  "errors",
+		Owner: OwnerUnitTest,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Errorf("first %s", "error")
+			t.Errorf("second error")
+		},
+		Cluster: r.MakeClusterSpec(0),
+	})
 
 	testCases := []struct {
 		filters []string
 		expErr  string
+		expOut  string
 	}{
-		{nil, "some tests failed"},
-		{[]string{"pass"}, ""},
-		{[]string{"fail"}, "some tests failed"},
-		{[]string{"pass|fail"}, "some tests failed"},
-		{[]string{"pass", "fail"}, "some tests failed"},
-		{[]string{"notests"}, "no test"},
+		{filters: nil, expErr: "some tests failed"},
+		{filters: []string{"pass"}},
+		{filters: []string{"fail"}, expErr: "some tests failed"},
+		{filters: []string{"pass|fail"}, expErr: "some tests failed"},
+		{filters: []string{"pass", "fail"}, expErr: "some tests failed"},
+		{filters: []string{"notests"}, expErr: "no test"},
+		{filters: []string{"errors"}, expErr: "some tests failed", expOut: "second error"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -123,11 +134,13 @@ func TestRunnerRun(t *testing.T) {
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
 
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
 			lopt := loggingOpt{
 				l:            nilLogger(),
 				tee:          logger.NoTee,
-				stdout:       ioutil.Discard,
-				stderr:       ioutil.Discard,
+				stdout:       &stdout,
+				stderr:       &stderr,
 				artifactsDir: "",
 			}
 			copt := clustersOpt{
@@ -141,6 +154,10 @@ func TestRunnerRun(t *testing.T) {
 
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, but found %v. Filters: %s", c.expErr, err, c.filters)
+			}
+			out := stdout.String() + "\n" + stderr.String()
+			if exp := c.expOut; exp != "" && !strings.Contains(out, exp) {
+				t.Fatalf("'%s' not found in output:\n%s", exp, out)
 			}
 		})
 	}
