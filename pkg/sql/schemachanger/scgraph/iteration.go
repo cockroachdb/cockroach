@@ -13,7 +13,6 @@ package scgraph
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/google/btree"
 )
 
 // NodeIterator is used to iterate nodes. Return iterutil.StopIteration to
@@ -60,29 +59,11 @@ type DepEdgeIterator func(de *DepEdge) error
 
 // ForEachDepEdgeFrom iterates the dep edges in the graph.
 func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) (err error) {
-	g.nodeDepEdgesFrom.AscendGreaterOrEqual(&edgeTreeEntry{
-		g: g,
-		edge: &DepEdge{
-			from: n,
-			to:   nil,
-			rule: "",
-		},
-		order: fromTo,
-	},
-		func(i btree.Item) bool {
-			e := i.(*edgeTreeEntry)
-			// End the iteration once the from nodes
-			// stop matching.
-			if e.edge.From() != n {
-				return false
-			}
-			if err = it(e.edge.(*DepEdge)); err != nil {
-				if iterutil.Done(err) {
-					err = nil
-				}
-				return false
-			}
-			return true
-		})
-	return err
+	return g.depEdgesFrom.iterateSourceNode(n, it)
+}
+
+// ForEachSameStageDepEdgeTo iterates the dep edges in the graph of kind
+// SameStage which point to the provided node.
+func (g *Graph) ForEachSameStageDepEdgeTo(n *scpb.Node, it DepEdgeIterator) (err error) {
+	return g.sameStageDepEdgesTo.iterateSourceNode(n, it)
 }

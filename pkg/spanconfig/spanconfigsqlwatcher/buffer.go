@@ -71,11 +71,15 @@ const (
 	numRangefeeds int = iota
 )
 
-// newBuffer constructs and returns a new buffer.
-func newBuffer(limit int) *buffer {
+// newBuffer constructs a new buffer initialized with a starting frontier
+// timestamp.
+func newBuffer(limit int, initialFrontierTS hlc.Timestamp) *buffer {
 	rangefeedBuffer := rangefeedbuffer.New(limit)
 	eventBuffer := &buffer{}
 	eventBuffer.mu.buffer = rangefeedBuffer
+	for i := range eventBuffer.mu.rangefeedFrontiers {
+		eventBuffer.mu.rangefeedFrontiers[i].Forward(initialFrontierTS)
+	}
 	return eventBuffer
 }
 

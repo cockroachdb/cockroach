@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 )
 
 // Graph is a graph whose nodes are *scpb.Nodes. Graphs are constructed during
@@ -42,19 +41,18 @@ type Graph struct {
 	// Maps a target to its index in targetNodes.
 	targetIdxMap map[*scpb.Target]int
 
-	// nodeOpEdgesFrom maps a Node to an opEdge that proceeds
+	// opEdgesFrom maps a Node to an opEdge that proceeds
 	// from it. A Node may have at most one opEdge from it.
-	nodeOpEdgesFrom map[*scpb.Node]*OpEdge
+	opEdgesFrom map[*scpb.Node]*OpEdge
 
-	// nodeDepEdgesFrom maps a Node from its dependencies.
+	// depEdgesFrom maps a Node from its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	nodeDepEdgesFrom *btree.BTree
+	depEdgesFrom *depEdgeTree
 
-	// nodeDepEdgesTo maps a Node to its dependencies.
-	// A Node dependency is another target node which must be
-	// reached before or concurrently with this node.
-	nodeDepEdgesTo *btree.BTree
+	// sameStageDepEdgesTo maps a Node to the DepEdges with the
+	// SameStage kind incident upon the indexed node.
+	sameStageDepEdgesTo *depEdgeTree
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -89,15 +87,15 @@ func New(initial scpb.State) (*Graph, error) {
 	}
 	g := Graph{
 		targetIdxMap:        map[*scpb.Target]int{},
-		nodeOpEdgesFrom:     map[*scpb.Node]*OpEdge{},
-		nodeDepEdgesFrom:    btree.New(2),
-		nodeDepEdgesTo:      btree.New(2),
+		opEdgesFrom:         map[*scpb.Node]*OpEdge{},
 		optimizedOutOpEdges: map[*OpEdge]bool{},
 		opToNode:            map[scop.Op]*scpb.Node{},
 		entities:            db,
 		statements:          initial.Statements,
 		authorization:       initial.Authorization,
 	}
+	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
+	g.sameStageDepEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
 	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
@@ -125,9 +123,9 @@ func (g *Graph) ShallowClone() *Graph {
 		authorization:       g.authorization,
 		targetNodes:         g.targetNodes,
 		targetIdxMap:        g.targetIdxMap,
-		nodeOpEdgesFrom:     g.nodeOpEdgesFrom,
-		nodeDepEdgesFrom:    g.nodeDepEdgesFrom,
-		nodeDepEdgesTo:      g.nodeDepEdgesTo,
+		opEdgesFrom:         g.opEdgesFrom,
+		depEdgesFrom:        g.depEdgesFrom,
+		sameStageDepEdgesTo: g.sameStageDepEdgesTo,
 		opToNode:            g.opToNode,
 		edges:               g.edges,
 		entities:            g.entities,
@@ -185,7 +183,7 @@ var _ = (*Graph)(nil).containsTarget
 // GetOpEdgeFrom returns the unique outgoing op edge from the specified node,
 // if one exists.
 func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
-	oe, ok := g.nodeOpEdgesFrom[n]
+	oe, ok := g.opEdgesFrom[n]
 	return oe, ok
 }
 
@@ -204,7 +202,7 @@ func (g *Graph) AddOpEdges(
 	if oe.to, err = g.getOrCreateNode(t, to); err != nil {
 		return err
 	}
-	if existing, exists := g.nodeOpEdgesFrom[oe.from]; exists {
+	if existing, exists := g.opEdgesFrom[oe.from]; exists {
 		return errors.Errorf("duplicate outbound op edge %v and %v",
 			oe, existing)
 	}
@@ -219,7 +217,7 @@ func (g *Graph) AddOpEdges(
 		}
 	}
 	oe.typ = typ
-	g.nodeOpEdgesFrom[oe.from] = oe
+	g.opEdgesFrom[oe.from] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
 		g.opToNode[op] = oe.To()
@@ -238,12 +236,13 @@ var _ = (*Graph)(nil).GetNodeFromOp
 // and statuses).
 func (g *Graph) AddDepEdge(
 	rule string,
+	kind DepEdgeKind,
 	fromTarget *scpb.Target,
 	fromStatus scpb.Status,
 	toTarget *scpb.Target,
 	toStatus scpb.Status,
 ) (err error) {
-	de := &DepEdge{rule: rule}
+	de := &DepEdge{rule: rule, kind: kind}
 	if de.from, err = g.getOrCreateNode(fromTarget, fromStatus); err != nil {
 		return err
 	}
@@ -251,16 +250,10 @@ func (g *Graph) AddDepEdge(
 		return err
 	}
 	g.edges = append(g.edges, de)
-	g.nodeDepEdgesFrom.ReplaceOrInsert(&edgeTreeEntry{
-		g:     g,
-		edge:  de,
-		order: fromTo,
-	})
-	g.nodeDepEdgesTo.ReplaceOrInsert(&edgeTreeEntry{
-		g:     g,
-		edge:  de,
-		order: toFrom,
-	})
+	g.depEdgesFrom.insert(de)
+	if de.Kind() == SameStage {
+		g.sameStageDepEdgesTo.insert(de)
+	}
 	return nil
 }
 
@@ -290,60 +283,6 @@ func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata 
 	}
 }
 
-// Edge represents a relationship between two Nodes.
-//
-// TODO(ajwerner): Consider hiding Node pointers behind an interface to clarify
-// mutability.
-type Edge interface {
-	From() *scpb.Node
-	To() *scpb.Node
-}
-
-// OpEdge represents an edge changing the state of a target with an op.
-type OpEdge struct {
-	from, to   *scpb.Node
-	op         []scop.Op
-	typ        scop.Type
-	revertible bool
-}
-
-// From implements the Edge interface.
-func (oe *OpEdge) From() *scpb.Node { return oe.from }
-
-// To implements the Edge interface.
-func (oe *OpEdge) To() *scpb.Node { return oe.to }
-
-// Op returns the scop.Op for execution that is associated with the op edge.
-func (oe *OpEdge) Op() []scop.Op { return oe.op }
-
-// Revertible returns if the dependency edge is revertible
-func (oe *OpEdge) Revertible() bool { return oe.revertible }
-
-// Type returns the types of operations associated with this edge.
-func (oe *OpEdge) Type() scop.Type {
-	return oe.typ
-}
-
-// DepEdge represents a dependency between two nodes. A dependency
-// implies that the To() node cannot be reached before the From() node. It
-// can be reached concurrently.
-type DepEdge struct {
-	from, to *scpb.Node
-
-	// TODO(ajwerner): Deal with the possibility that multiple rules could
-	// generate the same edge.
-	rule string
-}
-
-// From implements the Edge interface.
-func (de *DepEdge) From() *scpb.Node { return de.from }
-
-// To implements the Edge interface.
-func (de *DepEdge) To() *scpb.Node { return de.to }
-
-// Name returns the name of the rule which generated this edge.
-func (de *DepEdge) Name() string { return de.rule }
-
 // GetNodeRanks fetches ranks of nodes in topological order.
 func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 	defer func() {
@@ -355,14 +294,6 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 			err = rAsErr
 		}
 	}()
-	backCycleExists := func(n *scpb.Node, de *DepEdge) bool {
-		var foundBack bool
-		_ = g.ForEachDepEdgeFrom(de.To(), func(maybeBack *DepEdge) error {
-			foundBack = foundBack || maybeBack.To() == n
-			return nil
-		})
-		return foundBack
-	}
 	l := list.New()
 	marks := make(map[*scpb.Node]bool)
 	var visit func(n *scpb.Node)
@@ -376,18 +307,12 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 		}
 		marks[n] = false
 		_ = g.ForEachDepEdgeFrom(n, func(de *DepEdge) error {
-			// We want to eliminate cycles caused by swaps. In that
-			// case, we want to pretend that there is no edge from the
-			// add to the drop, and, in that way, the drop is ordered first.
-			if n.Direction == scpb.Target_ADD || !backCycleExists(n, de) {
-				visit(de.To())
-			}
+			visit(de.To())
 			return nil
 		})
 		marks[n] = true
 		l.PushFront(n)
 	}
-
 	_ = g.ForEachNode(func(n *scpb.Node) error {
 		visit(n)
 		return nil
@@ -400,42 +325,8 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 	return rank, nil
 }
 
-// edgeTreeOrder order in which the edge tree is sorted,
-// either based on from/to node indexes.
-type edgeTreeOrder bool
-
-const (
-	fromTo edgeTreeOrder = true
-	toFrom edgeTreeOrder = false
-)
-
-// edgeTreeEntry BTree items for tracking edges
-// in an ordered manner.
-type edgeTreeEntry struct {
-	g     *Graph
-	edge  Edge
-	order edgeTreeOrder
-}
-
-// Less implements btree.Item
-func (e *edgeTreeEntry) Less(other btree.Item) bool {
-	o := other.(*edgeTreeEntry)
-	var a1, b1, a2, b2 *scpb.Node
-	switch e.order {
-	case fromTo:
-		a1, b1, a2, b2 = e.edge.From(), o.edge.From(), e.edge.To(), o.edge.To()
-	case toFrom:
-		a1, b1, a2, b2 = e.edge.To(), o.edge.To(), e.edge.From(), o.edge.From()
-	}
-	less, eq := compareNodes(e.g, a1, b1)
-	if eq {
-		less, _ = compareNodes(e.g, a2, b2)
-	}
-	return less
-}
-
 // compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
-func compareNodes(g *Graph, a, b *scpb.Node) (less, eq bool) {
+func (g *Graph) compareNodes(a, b *scpb.Node) (less, eq bool) {
 	switch {
 	case a == b:
 		return false, true
