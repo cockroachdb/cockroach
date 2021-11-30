@@ -102,7 +102,7 @@ func PrepareUpdateReplicas(
 	}
 
 	if len(missing) > 0 {
-		report.MissingStores = storeListFromSet(missing)
+		report.MissingStores = storeSliceFromSet(missing)
 	}
 	return report, nil
 }
@@ -113,7 +113,7 @@ func applyReplicaUpdate(
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	report := PrepareReplicaReport{
 		RangeID:  update.RangeID,
-		Replica:  *update.NewReplica,
+		Replica:  update.NewReplica,
 		StartKey: update.StartKey.AsRKey(),
 	}
 
