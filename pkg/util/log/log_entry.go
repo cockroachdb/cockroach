@@ -191,7 +191,7 @@ func makeUnsafePayload(m string) entryPayload {
 
 // makeEntry creates a logEntry.
 func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
-	ids := logging.idPayload()
+	ids := getIdentificationPayload(ctx)
 
 	res = logEntry{
 		idPayload: ids,
@@ -284,20 +284,6 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 		makeStartLine(f, "binary: %s", Safe(build.GetInfo().Short())),
 		makeStartLine(f, "arguments: %s", os.Args),
 	)
-
-	ids := logging.idPayload()
-	if ids.clusterID != "" {
-		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.idMu.clusterID))
-	}
-	if ids.nodeID != 0 {
-		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.idMu.nodeID))
-	}
-	if ids.tenantID != "" {
-		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.idMu.tenantID))
-	}
-	if ids.sqlInstanceID != 0 {
-		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.idMu.sqlInstanceID))
-	}
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
