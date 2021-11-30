@@ -38,7 +38,7 @@ CREATE VIEW v1 AS (SELECT customer_id, carrier FROM defaultdb.shipments)
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [Table:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
     [Column:{DescID: 57, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
@@ -50,12 +50,16 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
     [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
+    [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
-PreCommitPhase non-revertible stage 1 of 1 with 11 MutationType ops
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 58
+PreCommitPhase non-revertible stage 1 of 1 with 15 MutationType ops
   transitions:
     [Table:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 57, Name: shipments}, PUBLIC, DROP] -> ABSENT
@@ -76,6 +80,14 @@ PreCommitPhase non-revertible stage 1 of 1 with 11 MutationType ops
     [UserPrivileges:{DescID: 59, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: root}, PUBLIC, DROP] -> ABSENT
+    [ForeignKeyBackReference:{DescID: 54, ReferencedDescID: 57, Name: fk_customers}, PUBLIC, DROP] -> ABSENT
+    [ForeignKeyBackReference:{DescID: 55, ReferencedDescID: 57, Name: fk_orders}, PUBLIC, DROP] -> ABSENT
+    [Sequence:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 58, Name: sq1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 58}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 57
@@ -86,6 +98,8 @@ PreCommitPhase non-revertible stage 1 of 1 with 11 MutationType ops
       TableID: 57
     *scop.UpdateRelationDeps
       TableID: 57
+    *scop.MarkDescriptorAsDropped
+      DescID: 58
     *scop.RemoveSequenceOwnedBy
       TableID: 58
     *scop.RemoveColumnDefaultExpression
@@ -103,7 +117,15 @@ PreCommitPhase non-revertible stage 1 of 1 with 11 MutationType ops
       TableID: 57
     *scop.DrainDescriptorName
       TableID: 59
-PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
+    *scop.DropForeignKeyRef
+      Name: fk_customers
+      TableID: 54
+    *scop.DropForeignKeyRef
+      Name: fk_orders
+      TableID: 55
+    *scop.DrainDescriptorName
+      TableID: 58
+PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
   transitions:
     [Table:{DescID: 57}, DROPPED, DROP] -> ABSENT
     [ColumnName:{DescID: 57, ColumnID: 1, Name: tracking_number}, PUBLIC, DROP] -> ABSENT
@@ -119,6 +141,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
     [PrimaryIndex:{DescID: 57, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
     [IndexName:{DescID: 57, IndexID: 1, Name: shipments_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
+    [Sequence:{DescID: 58}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 57
@@ -148,6 +171,20 @@ PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
         Username: root
     *scop.CreateGcJobForDescriptor
       DescID: 59
+    *scop.LogEvent
+      DescID: 58
+      Direction: 2
+      Element:
+        sequence:
+          sequenceId: 58
+      Metadata:
+        Statement: DROP TABLE defaultdb.shipments CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 58
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;
@@ -168,8 +205,20 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 57}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [ForeignKeyBackReference:{DescID: 54, ReferencedDescID: 57, Name: fk_customers}, ABSENT]
+  to:   [Table:{DescID: 57}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [ForeignKeyBackReference:{DescID: 55, ReferencedDescID: 57, Name: fk_orders}, ABSENT]
+  to:   [Table:{DescID: 57}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
 - from: [Namespace:{DescID: 57, Name: shipments}, ABSENT]
   to:   [Table:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [Namespace:{DescID: 58, Name: sq1}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
 - from: [Namespace:{DescID: 59, Name: v1}, ABSENT]
@@ -178,6 +227,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: namespace needs descriptor to be dropped
 - from: [Owner:{DescID: 57}, ABSENT]
   to:   [Table:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 58}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DROPPED]
   kind: HappensAfter
   rule: table deps removal happens after table marked as dropped
 - from: [Owner:{DescID: 59}, ABSENT]
@@ -196,6 +249,14 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [View:{DescID: 59}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [Sequence:{DescID: 58}, ABSENT]
+  to:   [Namespace:{DescID: 58, Name: sq1}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [SequenceOwnedBy:{DescID: 58, ReferencedDescID: 57}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
 - from: [Table:{DescID: 57}, ABSENT]
   to:   [Namespace:{DescID: 57, Name: shipments}, ABSENT]
   kind: HappensAfter
@@ -210,6 +271,18 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: table deps removal happens after table marked as dropped
 - from: [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
   to:   [Table:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DROPPED]
   kind: HappensAfter
   rule: table deps removal happens after table marked as dropped
 - from: [UserPrivileges:{DescID: 59, Username: admin}, ABSENT]
