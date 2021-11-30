@@ -382,7 +382,9 @@ func decomposeTableDescToElements(
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
 		}
-		addOrDropForDir(b, dir, &outBoundFk)
+		if !b.HasTarget(dir, &outBoundFk) {
+			addOrDropForDir(b, dir, &outBoundFk)
+		}
 		return nil
 	})
 	if err != nil {
@@ -398,7 +400,9 @@ func decomposeTableDescToElements(
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
 		}
-		addOrDropForDir(b, dir, &inBoundFk)
+		if !b.HasTarget(dir, &inBoundFk) {
+			addOrDropForDir(b, dir, &inBoundFk)
+		}
 		return nil
 	})
 	if err != nil {
