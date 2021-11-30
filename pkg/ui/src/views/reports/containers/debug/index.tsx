@@ -171,8 +171,8 @@ export default function Debug() {
           />
           <DebugTableLink
             name="Store LSM details on this node"
-            url="/debug/lsm/1"
-            note="/debug/lsm/[store_id]"
+            url="debug/lsm/1"
+            note="debug/lsm/[store_id]"
           />
         </DebugTableRow>
         <DebugTableRow title="Security">
@@ -205,37 +205,37 @@ export default function Debug() {
         <DebugTableRow title="Closed timestamps">
           <DebugTableLink
             name="Sender on this node"
-            url="/debug/closedts-sender"
+            url="debug/closedts-sender"
           />
           <DebugTableLink
             name="Receiver on this node"
-            url="/debug/closedts-receiver"
+            url="debug/closedts-receiver"
           />
         </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">
-          <DebugTableLink name="Requests" url="/debug/requests" />
-          <DebugTableLink name="Events" url="/debug/events" />
+          <DebugTableLink name="Requests" url="debug/requests" />
+          <DebugTableLink name="Events" url="debug/events" />
           <DebugTableLink
             name="Logs (JSON)"
-            url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=0"
-            note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
+            url="debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=0"
+            note="debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
           />
           <DebugTableLink
             name="Logs (text)"
-            url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=1"
-            note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]&amp;flatten=1"
+            url="debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=1"
+            note="debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]&amp;flatten=1"
           />
           <DebugTableLink
             name="Logs (text, high verbosity; IMPACTS PERFORMANCE)"
-            url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=1&vmodule=*=2"
-            note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]&amp;flatten=[0/1]&amp;vmodule=[vmodule]"
+            url="debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=1&vmodule=*=2"
+            note="debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]&amp;flatten=[0/1]&amp;vmodule=[vmodule]"
           />
           <DebugTableLink
             name="VModule setting"
-            url="/debug/vmodule"
-            note="/debug/vmodule?duration=[duration]&amp;vmodule=[vmodule]"
+            url="debug/vmodule"
+            note="debug/vmodule?duration=[duration]&amp;vmodule=[vmodule]"
           />
         </DebugTableRow>
         <DebugTableRow title="Enqueue Range">
@@ -246,159 +246,156 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Stopper">
-          <DebugTableLink name="Active Tasks" url="/debug/stopper" />
+          <DebugTableLink name="Active Tasks" url="debug/stopper" />
         </DebugTableRow>
         <DebugTableRow title="Profiling UI/pprof">
-          <DebugTableLink name="Heap" url="/debug/pprof/ui/heap/" />
+          <DebugTableLink name="Heap" url="debug/pprof/ui/heap/" />
           <DebugTableLink
             name="Heap (recent allocs)"
-            url="/debug/pprof/ui/heap/?seconds=5&amp;si=alloc_objects"
+            url="debug/pprof/ui/heap/?seconds=5&amp;si=alloc_objects"
           />
           <DebugTableLink
             name="Profile"
-            url="/debug/pprof/ui/profile/?seconds=5&amp;labels=true"
+            url="debug/pprof/ui/profile/?seconds=5&amp;labels=true"
           />
-          <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
-          <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />
+          <DebugTableLink name="Block" url="debug/pprof/ui/block/" />
+          <DebugTableLink name="Mutex" url="debug/pprof/ui/mutex/" />
           <DebugTableLink
             name="Thread Create"
-            url="/debug/pprof/ui/threadcreate/"
+            url="debug/pprof/ui/threadcreate/"
           />
-          <DebugTableLink name="Goroutines" url="/debug/pprof/ui/goroutine/" />
+          <DebugTableLink name="Goroutines" url="debug/pprof/ui/goroutine/" />
         </DebugTableRow>
         <DebugTableRow title="Goroutines">
-          <DebugTableLink name="UI" url="/debug/pprof/goroutineui" />
+          <DebugTableLink name="UI" url="debug/pprof/goroutineui" />
           <DebugTableLink
             name="UI (count)"
-            url="/debug/pprof/goroutineui?sort=count"
+            url="debug/pprof/goroutineui?sort=count"
           />
           <DebugTableLink
             name="UI (wait)"
-            url="/debug/pprof/goroutineui?sort=wait"
+            url="debug/pprof/goroutineui?sort=wait"
           />
-          <DebugTableLink name="Raw" url="/debug/pprof/goroutine?debug=2" />
+          <DebugTableLink name="Raw" url="debug/pprof/goroutine?debug=2" />
         </DebugTableRow>
         <DebugTableRow title="Threads">
-          <DebugTableLink name="Raw" url="/debug/threads" />
+          <DebugTableLink name="Raw" url="debug/threads" />
         </DebugTableRow>
         <DebugTableRow title="Runtime Trace">
-          <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
+          <DebugTableLink name="Trace" url="debug/pprof/trace?debug=1" />
         </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Raw Status Endpoints (JSON)">
         <DebugTableRow title="Logs (single node only)">
           <DebugTableLink
             name="On a Specific Node"
-            url="/_status/logs/local"
-            note="/_status/logs/[node_id]"
+            url="_status/logs/local"
+            note="_status/logs/[node_id]"
           />
           <DebugTableLink
             name="Log Files"
-            url="/_status/logfiles/local"
-            note="/_status/logfiles/[node_id]"
+            url="_status/logfiles/local"
+            note="_status/logfiles/[node_id]"
           />
           <DebugTableLink
             name="Specific Log File"
-            url="/_status/logfiles/local/cockroach.log"
-            note="/_status/logfiles/[node_id]/[filename]"
+            url="_status/logfiles/local/cockroach.log"
+            note="_status/logfiles/[node_id]/[filename]"
           />
         </DebugTableRow>
         <DebugTableRow title="Metrics">
-          <DebugTableLink name="Variables" url="/debug/metrics" />
-          <DebugTableLink name="Prometheus" url="/_status/vars" />
+          <DebugTableLink name="Variables" url="debug/metrics" />
+          <DebugTableLink name="Prometheus" url="_status/vars" />
         </DebugTableRow>
         <DebugTableRow title="Node Status">
           <DebugTableLink
             name="All Nodes"
-            url="/_status/nodes"
-            note="/_status/nodes"
+            url="_status/nodes"
+            note="_status/nodes"
           />
           <DebugTableLink
             name="Single node status"
-            url="/_status/nodes/local"
-            note="/_status/nodes/[node_id]"
+            url="_status/nodes/local"
+            note="_status/nodes/[node_id]"
           />
         </DebugTableRow>
         <DebugTableRow title="Hot Ranges">
           <DebugTableLink
             name="All Nodes"
-            url="/_status/hotranges"
-            note="/_status/hotranges"
+            url="_status/hotranges"
+            note="_status/hotranges"
           />
           <DebugTableLink
             name="Single node's ranges"
-            url="/_status/hotranges?node_id=local"
-            note="/_status/hotranges?node_id=[node_id]"
+            url="_status/hotranges?node_id=local"
+            note="_status/hotranges?node_id=[node_id]"
           />
         </DebugTableRow>
         <DebugTableRow title="Single Node Specific">
           <DebugTableLink
             name="Stores"
-            url="/_status/stores/local"
-            note="/_status/stores/[node_id]"
+            url="_status/stores/local"
+            note="_status/stores/[node_id]"
           />
           <DebugTableLink
             name="Gossip"
-            url="/_status/gossip/local"
-            note="/_status/gossip/[node_id]"
+            url="_status/gossip/local"
+            note="_status/gossip/[node_id]"
           />
           <DebugTableLink
             name="Ranges"
-            url="/_status/ranges/local"
-            note="/_status/ranges/[node_id]"
+            url="_status/ranges/local"
+            note="_status/ranges/[node_id]"
           />
           <DebugTableLink
             name="Stacks"
-            url="/_status/stacks/local"
-            note="/_status/stacks/[node_id]"
+            url="_status/stacks/local"
+            note="_status/stacks/[node_id]"
           />
           <DebugTableLink
             name="Engine Stats"
-            url="/_status/enginestats/local"
-            note="/_status/enginestats/[node_id]"
+            url="_status/enginestats/local"
+            note="_status/enginestats/[node_id]"
           />
           <DebugTableLink
             name="Certificates"
-            url="/_status/certificates/local"
-            note="/_status/certificates/[node_id]"
+            url="_status/certificates/local"
+            note="_status/certificates/[node_id]"
           />
           <DebugTableLink
             name="Diagnostics Reporting Data"
-            url="/_status/diagnostics/local"
-            note="/_status/diagnostics/[node_id]"
+            url="_status/diagnostics/local"
+            note="_status/diagnostics/[node_id]"
           />
         </DebugTableRow>
         <DebugTableRow title="Sessions">
-          <DebugTableLink name="Local Sessions" url="/_status/local_sessions" />
-          <DebugTableLink name="All Sessions" url="/_status/sessions" />
+          <DebugTableLink name="Local Sessions" url="_status/local_sessions" />
+          <DebugTableLink name="All Sessions" url="_status/sessions" />
         </DebugTableRow>
         <DebugTableRow title="Cluster Wide">
-          <DebugTableLink name="Raft" url="/_status/raft" />
+          <DebugTableLink name="Raft" url="_status/raft" />
           <DebugTableLink
             name="Range"
-            url="/_status/range/1"
-            note="/_status/range/[range_id]"
+            url="_status/range/1"
+            note="_status/range/[range_id]"
           />
-          <DebugTableLink
-            name="Range Log"
-            url="/_admin/v1/rangelog?limit=100"
-          />
+          <DebugTableLink name="Range Log" url="_admin/v1/rangelog?limit=100" />
           <DebugTableLink
             name="Range Log for Specific Range"
-            url="/_admin/v1/rangelog/1?limit=100"
-            note="/_admin/v1/rangelog/[range_id]?limit=100"
+            url="_admin/v1/rangelog/1?limit=100"
+            note="_admin/v1/rangelog/[range_id]?limit=100"
           />
         </DebugTableRow>
         <DebugTableRow title="Allocator">
           <DebugTableLink
             name="Simulated Allocator Runs on a Specific Node"
-            url="/_status/allocator/node/local"
-            note="/_status/allocator/node/[node_id]"
+            url="_status/allocator/node/local"
+            note="_status/allocator/node/[node_id]"
           />
           <DebugTableLink
             name="Simulated Allocator Runs on a Specific Range"
-            url="/_status/allocator/range/1"
-            note="/_status/allocator/range/[range_id]"
+            url="_status/allocator/range/1"
+            note="_status/allocator/range/[range_id]"
           />
         </DebugTableRow>
       </DebugTable>
