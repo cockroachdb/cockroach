@@ -22,7 +22,12 @@ import (
 
 // DropTable implements DROP TABLE.
 func DropTable(b BuildCtx, n *tree.DropTable) {
+	type tblDropCtx struct {
+		tbl      catalog.TableDescriptor
+		buildCtx BuildCtx
+	}
 	// Find the table first.
+	tables := make([]tblDropCtx, 0, len(n.Names))
 	for _, name := range n.Names {
 		_, tbl := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
@@ -31,14 +36,40 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		if tbl == nil {
 			continue
 		}
-		dropTable(b, tbl, n.DropBehavior)
+		// Only decompose the tables first into elements, next we will check for
+		// dependent objects, in case they are all dropped *together*.
+		newCtx := dropTableBasic(b, tbl)
+		tables = append(tables, tblDropCtx{
+			tbl:      tbl,
+			buildCtx: newCtx,
+		})
 		b.IncrementSubWorkID()
+	}
+	// Validate if the dependent objects need to be dropped, if necessary
+	// this will cascade.
+	for _, tblCtx := range tables {
+		dropTableDependents(tblCtx.buildCtx, tblCtx.tbl, n.DropBehavior)
 	}
 }
 
+// dropTable drops a table and its dependencies, if the cascade behavior is not
+// specified the appropriate error will be generated.
 func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavior) {
+	dropTableDependents(dropTableBasic(b, tbl), tbl, behavior)
+}
+
+// dropTableBasic drops the table descriptor and does not validate or deal with
+// any objects that may need to be dealt with when cascading. The BuildCtx for
+// cascaded drops is returned.
+func dropTableBasic(b BuildCtx, tbl catalog.TableDescriptor) BuildCtx {
+	decomposeTableDescToElements(b, tbl, scpb.Target_DROP)
+	return b.WithNewSourceElementID()
+}
+
+// dropTableDependents drops any dependent objects for the table if possible,
+// if a cascade is not specified an appropriate error is returned.
+func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavior) {
 	{
-		decomposeTableDescToElements(b, tbl, scpb.Target_DROP)
 		// Drop dependent views
 		c := b.WithNewSourceElementID()
 		onErrPanic(tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
@@ -62,7 +93,8 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 				_ scpb.Target_Direction,
 				fk *scpb.ForeignKeyBackReference) {
 				dependentTable := c.MustReadTable(fk.ReferenceID)
-				if fk.OriginID == tbl.GetID() {
+				if fk.OriginID == tbl.GetID() &&
+					!checkIfDescOrElementAreDropped(b, fk.ReferenceID) {
 					if behavior != tree.DropCascade {
 						panic(pgerror.Newf(
 							pgcode.DependentObjectsStillExist,
@@ -79,7 +111,8 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 				return
 			}
 			sequence := c.MustReadTable(sequenceOwnedBy.SequenceID)
-			if behavior != tree.DropCascade {
+			if behavior != tree.DropCascade &&
+				!checkIfDescOrElementAreDropped(b, sequenceOwnedBy.SequenceID) {
 				panic(pgerror.Newf(
 					pgcode.DependentObjectsStillExist,
 					"cannot drop table %s because other objects depend on it",
