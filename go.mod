@@ -97,7 +97,7 @@ require (
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordanlewis/gcassert v0.0.0-20210709222130-81f5df3faab8
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
-	github.com/kisielk/errcheck v1.5.0
+	github.com/kisielk/errcheck v1.6.1-0.20210625163953-8ddee489636a
 	github.com/kisielk/gotool v1.0.0
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
@@ -341,3 +341,4 @@ replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-0
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 replace github.com/maruel/panicparse/v2 => github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e
+

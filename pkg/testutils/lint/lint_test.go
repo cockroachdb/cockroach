@@ -1593,7 +1593,9 @@ func TestLint(t *testing.T) {
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 68498, "Generated files not placed in the workspace via Bazel build")
+		if bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "the errcheck tests are run during the bazel build")
+		}
 		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
 		if err != nil {
 			t.Fatal(err)
