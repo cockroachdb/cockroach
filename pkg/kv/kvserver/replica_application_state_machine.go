@@ -475,7 +475,6 @@ func (b *replicaAppBatch) Stage(
 	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
 	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-		var err error
 		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
 			err = wrapWithNonDeterministicFailure(err, "unable to acquire split lock")
 		} else {
