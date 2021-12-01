@@ -380,6 +380,8 @@ func (p *planner) maybeLogStatementInternal(
 			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{
 				CommonSQLExecDetails: execDetails,
 				SkippedQueries:       skippedQueries,
+				CostEstimate:         p.curPlan.instrumentation.costEstimate,
+				Distribution:         p.curPlan.instrumentation.distribution.String(),
 			}})
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
