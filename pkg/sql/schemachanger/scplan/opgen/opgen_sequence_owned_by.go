@@ -16,17 +16,24 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.SequenceOwnedBy)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.SequenceOwnedBy) scop.Op {
-				return &scop.RemoveSequenceOwnedBy{
-					TableID: this.SequenceID,
-				}
-			})),
+	opRegistry.register((*scpb.SequenceOwnedBy)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.SequenceOwnedBy) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.SequenceOwnedBy) scop.Op {
+					return &scop.RemoveSequenceOwnedBy{
+						TableID: this.SequenceID,
+					}
+				}),
+			),
+		),
 	)
 }

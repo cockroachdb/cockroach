@@ -16,37 +16,47 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.Type)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_TXN_DROPPED,
-			minPhase(scop.StatementPhase),
-			emit(func(this *scpb.Type) scop.Op {
-				return &scop.MarkDescriptorAsDroppedSynthetically{
-					DescID: this.TypeID,
-				}
-			})),
-		to(scpb.Status_DROPPED,
-			// TODO(ajwerner): The move to DELETE_ONLY should be marked
-			// non-revertible.
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.Type) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					DescID: this.TypeID,
-				}
-			}),
+	opRegistry.register((*scpb.Type)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.Type) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
+			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): The move to DELETE_ONLY should be marked
-			// non-revertible.
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.Type) scop.Op {
-				return &scop.DrainDescriptorName{
-					TableID: this.TypeID,
-				}
-			})),
+		drop(
+			to(scpb.Status_TXN_DROPPED,
+				minPhase(scop.StatementPhase),
+				emit(func(this *scpb.Type) scop.Op {
+					return &scop.MarkDescriptorAsDroppedSynthetically{
+						DescID: this.TypeID,
+					}
+				}),
+			),
+			to(scpb.Status_DROPPED,
+				// TODO(ajwerner): The move to DELETE_ONLY should be marked
+				// non-revertible.
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Type) scop.Op {
+					return &scop.MarkDescriptorAsDropped{
+						DescID: this.TypeID,
+					}
+				}),
+			),
+			to(scpb.Status_ABSENT,
+				// TODO(ajwerner): The move to DELETE_ONLY should be marked
+				// non-revertible.
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Type) scop.Op {
+					return &scop.DrainDescriptorName{
+						TableID: this.TypeID,
+					}
+				}),
+			),
+		),
 	)
 }

@@ -160,6 +160,10 @@ func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mut
 	return mut, nil
 }
 
+func (m *visitor) NotImplemented(_ context.Context, op scop.NotImplemented) error {
+	return nil
+}
+
 func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteAndWriteOnly,
 ) error {
@@ -512,32 +516,24 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 }
 
 func (m *visitor) SetColumnName(ctx context.Context, op scop.SetColumnName) error {
-	table, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	mutations := table.GetMutations()
-	var columnMutation *descpb.ColumnDescriptor
-	for _, mutation := range mutations {
-		columnMutation = mutation.GetColumn()
-		if columnMutation != nil {
-			if columnMutation.ID == op.ColumnID {
+	col, err := tbl.FindColumnWithID(op.ColumnID)
+	if err != nil {
+		return errors.AssertionFailedf("column %d not found in table %q (%d)", op.ColumnID, tbl.GetName(), tbl.GetID())
+	}
+	col.ColumnDesc().Name = op.Name
+	return tbl.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		for j, colID := range family.ColumnIDs {
+			if colID == op.ColumnID {
+				family.ColumnNames[j] = op.Name
 				break
 			}
 		}
-	}
-	// Update the name inside the entry.
-	columnMutation.Name = op.Name
-	// Update the name inside the column families for
-	// this column ID.
-	for _, family := range table.GetFamilies() {
-		for columnIdx, columnID := range family.ColumnIDs {
-			if columnID == op.ColumnID {
-				family.ColumnNames[columnIdx] = op.Name
-			}
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func (m *visitor) MakeAddedColumnDeleteOnly(

@@ -11,6 +11,7 @@ Stage 1 of 7
     [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}, ABSENT, ADD] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -60,6 +61,10 @@ Stage 1 of 7
     *scop.SetIndexName
       IndexID: 2
       Name: new_primary_key
+      TableID: 54
+    *scop.SetIndexName
+      IndexID: 1
+      Name: foo_pkey
       TableID: 54
 Stage 2 of 7
   transitions:
@@ -128,6 +133,7 @@ Stage 1 of 7
     [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}, ABSENT, ADD] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -179,6 +185,10 @@ Stage 1 of 7
     *scop.SetIndexName
       IndexID: 2
       Name: new_primary_key
+      TableID: 54
+    *scop.SetIndexName
+      IndexID: 1
+      Name: foo_pkey
       TableID: 54
 Stage 2 of 7
   transitions:
@@ -248,6 +258,7 @@ Stage 1 of 7
     [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}, ABSENT, ADD] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 54, ColumnID: 3}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 54, ColumnID: 3, Name: k}, ABSENT, ADD] -> PUBLIC
   ops:
@@ -336,6 +347,10 @@ Stage 1 of 7
       IndexID: 2
       Name: new_primary_key
       TableID: 54
+    *scop.SetIndexName
+      IndexID: 1
+      Name: foo_pkey
+      TableID: 54
     *scop.SetColumnName
       ColumnID: 3
       Name: k
@@ -415,6 +430,7 @@ Stage 1 of 7
     [ColumnName:{DescID: 54, ColumnID: 2, Name: a}, ABSENT, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}, ABSENT, ADD] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -466,6 +482,10 @@ Stage 1 of 7
     *scop.SetIndexName
       IndexID: 2
       Name: new_primary_key
+      TableID: 54
+    *scop.SetIndexName
+      IndexID: 1
+      Name: foo_pkey
       TableID: 54
 Stage 2 of 7
   transitions:
@@ -540,10 +560,12 @@ Stage 1 of 7
     [ColumnName:{DescID: 54, ColumnID: 2, Name: a}, ABSENT, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}, ABSENT, ADD] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 55, ColumnID: 3}, ABSENT, ADD] -> DELETE_ONLY
     [ColumnName:{DescID: 55, ColumnID: 3, Name: b}, ABSENT, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 55, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 55, IndexID: 2, Name: new_primary_key}, ABSENT, ADD] -> PUBLIC
+    [IndexName:{DescID: 55, IndexID: 1, Name: bar_pkey}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -593,6 +615,10 @@ Stage 1 of 7
     *scop.SetIndexName
       IndexID: 2
       Name: new_primary_key
+      TableID: 54
+    *scop.SetIndexName
+      IndexID: 1
+      Name: foo_pkey
       TableID: 54
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 3
@@ -644,6 +670,10 @@ Stage 1 of 7
     *scop.SetIndexName
       IndexID: 2
       Name: new_primary_key
+      TableID: 55
+    *scop.SetIndexName
+      IndexID: 1
+      Name: bar_pkey
       TableID: 55
 Stage 2 of 7
   transitions:

@@ -12,9 +12,7 @@ package opgen
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/errors"
 )
 
 type registry struct {
@@ -24,15 +22,12 @@ type registry struct {
 var opRegistry = &registry{}
 
 // BuildGraph constructs a graph with operation edges populated from an initial
-// state and phase.
-//
-// TODO(ajwerner): Generate the stages for all of the phases as it will make
-// debugging easier.
-func BuildGraph(currentPhase scop.Phase, initial scpb.State) (*scgraph.Graph, error) {
-	return opRegistry.buildGraph(currentPhase, initial)
+// state.
+func BuildGraph(initial scpb.State) (*scgraph.Graph, error) {
+	return opRegistry.buildGraph(initial)
 }
 
-func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scgraph.Graph, error) {
+func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
 	g, err := scgraph.New(initial)
 	if err != nil {
 		return nil, err
@@ -51,30 +46,6 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 			var in bool
 			for _, op := range t.transitions {
 				if in = in || op.from == n.Status; in {
-
-					// TODO(ajwerner): Consider moving this code out into the transition
-					// construction rather than here at runtime. This should not be
-					// possible to hit.
-					if op.to == scpb.Status_UNKNOWN {
-						return errors.AssertionFailedf(
-							"illegal transition to %s on (%T, %v) to %v",
-							scpb.Status_UNKNOWN, n.Target.Element(), n.Target.Direction, op.from,
-						)
-					}
-
-					// Note that if this phase is not yet possible, we still want a node
-					// in the graph in order to make the dependency rules work out. This
-					// is very subtle. For now, we rewrite the transition to construct a
-					// node which is unreachable.
-					//
-					// TODO(ajwerner): Figure out something more elegant here by moving
-					// the min-phase checking up to the planning layer rather than the
-					// operation generation layer.
-					if op.minPhase > currentPhase {
-						// make this a no-op edge but add the node
-						op.from = op.to
-						op.ops = func(element scpb.Element, data *scpb.ElementMetadata) []scop.Op { return nil }
-					}
 					edgesToAdd = append(edgesToAdd, toAdd{
 						transition: op,
 						n:          n,
@@ -88,7 +59,7 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 		for _, op := range edgesToAdd {
 			metadata := g.GetMetadataFromTarget(op.n.Target)
 			if err := g.AddOpEdges(
-				op.n.Target, op.from, op.to, op.revertible, op.ops(op.n.Element(), &metadata)...,
+				op.n.Target, op.from, op.to, op.revertible, op.minPhase, op.ops(op.n.Element(), &metadata)...,
 			); err != nil {
 				return nil, err
 			}
@@ -96,12 +67,4 @@ func (r *registry) buildGraph(currentPhase scop.Phase, initial scpb.State) (*scg
 
 	}
 	return g, nil
-}
-
-// register constructs the rules for a given target.
-// Intending to be called during init, register panics on any error.
-func (r *registry) register(
-	e scpb.Element, dir scpb.Target_Direction, initialStatus scpb.Status, specs ...transitionSpec,
-) {
-	r.targets = append(r.targets, makeTarget(e, dir, initialStatus, specs...))
 }

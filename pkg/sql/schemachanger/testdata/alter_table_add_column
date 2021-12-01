@@ -94,7 +94,7 @@ upsert descriptor #56
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## stage 1 in PostCommitPhase: 2 MutationType ops
+## stage 1 in PostCommitPhase: 3 MutationType ops
 upsert descriptor #56
   ...
        direction: ADD
