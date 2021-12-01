@@ -2691,6 +2691,10 @@ func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
 	m.data.DisablePlanGists = val
 }
 
+func (m *sessionDataMutator) SetDisableIndexRecommendations(val bool) {
+	m.data.DisableIndexRecommendations = val
+}
+
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondatapb.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }

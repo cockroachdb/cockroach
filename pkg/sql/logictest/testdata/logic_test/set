@@ -558,6 +558,12 @@ SET disable_plan_gists = 'true'
 statement ok
 SET disable_plan_gists = 'false'
 
+statement ok
+SET disable_index_recommendations = 'true'
+
+statement ok
+SET disable_index_recommendations = 'false'
+
 query T
 SHOW LC_COLLATE
 ----
