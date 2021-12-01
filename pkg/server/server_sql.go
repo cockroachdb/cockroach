@@ -432,7 +432,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	leaseMgrMetrics := leaseMgr.MetricsStruct(leaseMetrics.CurBytesCount, leaseMetrics.MaxBytesHist)
 	cfg.registry.AddMetricStruct(leaseMgrMetrics)
 	leaseMgrMonitor.SetMetrics(leaseMgrMetrics.CurBytesCount, leaseMgrMetrics.MaxBytesHist)
-	leaseMgrMonitor.Start(context.Background(), cfg.monitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
+	leaseMgrMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())

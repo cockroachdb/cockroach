@@ -180,7 +180,7 @@ func (v TableImplicitRecordType) DescriptorProto() *descpb.Descriptor {
 
 // ByteSize implements the Descriptor interface.
 func (v TableImplicitRecordType) ByteSize() int64 {
-	mem := int64(v.desc.ByteSize())
+	mem := v.desc.ByteSize()
 	if v.typ != nil {
 		mem += int64(v.typ.Size())
 	}

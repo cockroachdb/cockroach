@@ -549,7 +549,7 @@ func purgeOldVersions(
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
 			//TODO(james): shrink memory monitored for leases. Confirm.
-			int64(unsafe.Sizeof(l))
+			//int64(unsafe.Sizeof(l))
 		}
 	}
 
@@ -684,6 +684,7 @@ func NewLeaseManager(
 
 	lm.draining.Store(false)
 
+	// move it into the tests
 	if monitor == nil {
 		monitor = mon.NewMonitor(
 			"LeaseMgr monitor",
@@ -695,6 +696,7 @@ func NewLeaseManager(
 			settings,
 		)
 		// Start the monitor
+		monitor.Start(context.Background(), nil, mon.BoundAccount{})
 	}
 	lm.mon = monitor
 	lm.boundAccount = lm.mon.MakeBoundAccount()
@@ -934,9 +936,10 @@ type LeasedDescriptor interface {
 func (m *Manager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (LeasedDescriptor, error) {
-	//if err := m.boundAccount.Grow(ctx, 10); err != nil {
-	//	log.Warningf(ctx, "Unable to grow leaseMgr bound account for id %d", id)
-	//}
+	if err := m.boundAccount.Grow(ctx, 10); err != nil {
+		//return nil, err
+		log.Warningf(ctx, "Unable to grow leaseMgr bound account for id %d", id)
+	}
 	for {
 		t := m.findDescriptorState(id, true /*create*/)
 		desc, latest, err := t.findForTimestamp(ctx, timestamp)
