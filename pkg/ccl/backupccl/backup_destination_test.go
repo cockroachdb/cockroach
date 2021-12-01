@@ -140,7 +140,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						false /* nested */, false, /* appendToLatest */
 						defaultDest, localitiesDest,
 						externalStorageFromURI, endTime,
-						to, incrementalFrom, "", /* subdir */
+						to, incrementalFrom, "", nil,
 					)
 					require.NoError(t, err)
 
@@ -209,7 +209,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						false /* nested */, false, /* appendToLatest */
 						dest, localitiesDest,
 						externalStorageFromURI, endTime,
-						to, nil /* incrementalFrom */, "", /* subdir */
+						to, nil /* incrementalFrom */, "", nil,
 					)
 					require.NoError(t, err)
 
@@ -281,15 +281,23 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			// - BACKUP INTO collection
 			// - BACKUP INTO LATEST IN collection
 			// - BACKUP INTO full1 IN collection
+			// - BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
+			// - BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
+			// - BACKUP INTO LATEST IN collection, incremental_storage = inc_storage_path
 			t.Run("collection", func(t *testing.T) {
 				collectionLoc := fmt.Sprintf("nodelocal://1/%s/?AUTH=implicit", t.Name())
 				collectionTo := localizeURI(t, collectionLoc, localities)
+				incrementalStorageLoc := fmt.Sprintf("nodelocal://2/incremental/%s/?AUTH=implicit", t.Name())
+				incrementalTo := localizeURI(t, incrementalStorageLoc, localities)
 				fullTime := time.Date(2020, 12, 25, 6, 0, 0, 0, time.UTC)
 				inc1Time := fullTime.Add(time.Minute * 30)
 				inc2Time := inc1Time.Add(time.Minute * 30)
 				full2Time := inc2Time.Add(time.Minute * 30)
 				inc3Time := full2Time.Add(time.Minute * 30)
 				inc4Time := inc3Time.Add(time.Minute * 30)
+				inc5Time := inc4Time.Add(time.Minute * 30)
+				inc6Time := inc5Time.Add(time.Minute * 30)
+				inc7Time := inc6Time.Add(time.Minute * 30)
 
 				// firstBackupChain is maintained throughout the tests as the history of
 				// backups that were taken based on the initial full backup.
@@ -298,24 +306,36 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				// X IN Y. Otherwise, it should be empty string.
 				noExplicitSubDir := ""
 
+				// An explicit path(s) is used for incremental backups that live in a
+				// separate path relative to the full backup in their chain. Otherwise,
+				// it should be an empty array of strings
+				noIncrementalStorage := []string(nil)
+
+				firstRemoteBackupChain := []string(nil)
+
 				testCollectionBackup := func(t *testing.T, backupTime time.Time,
 					expectedDefault, expectedSuffix, expectedIncDir string, expectedPrevBackups []string,
-					appendToLatest bool, subdir string) {
+					appendToLatest bool, subdir string, incrementalTo []string) {
 
 					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
 					incrementalFrom := []string(nil)
 
 					defaultCollection, localityCollections, err := getURIsByLocalityKV(collectionTo, "")
 					require.NoError(t, err)
+
+					if len(incrementalTo) > 0 {
+						_, localityCollections, err = getURIsByLocalityKV(incrementalTo, "")
+						require.NoError(t, err)
+					}
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
 						ctx, security.RootUserName(),
 						true /* nested */, appendToLatest,
 						defaultCollection, localityCollections,
 						externalStorageFromURI, endTime,
-						collectionTo, incrementalFrom, subdir,
+						collectionTo, incrementalFrom, subdir, incrementalTo,
 					)
-
 					require.NoError(t, err)
+
 					localityDests := make(map[string]string, len(localityCollections))
 					for locality, localityDest := range localityCollections {
 						u, err := url.Parse(localityDest)
@@ -341,8 +361,9 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 					testCollectionBackup(t, fullTime,
 						expectedDefault, expectedSuffix, expectedIncDir, firstBackupChain,
-						false /* intoLatest */, noExplicitSubDir)
+						false /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
 					firstBackupChain = append(firstBackupChain, expectedDefault)
+					firstRemoteBackupChain = append(firstRemoteBackupChain, expectedDefault)
 					writeManifest(t, expectedDefault)
 					// We also wrote a new full backup, so let's update the latest.
 					writeLatest(t, collectionLoc, expectedSuffix)
@@ -357,7 +378,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 					testCollectionBackup(t, inc1Time,
 						expectedDefault, expectedSuffix, expectedIncDir, firstBackupChain,
-						true /* intoLatest */, noExplicitSubDir)
+						true /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
 					firstBackupChain = append(firstBackupChain, expectedDefault)
 					writeManifest(t, expectedDefault)
 				}
@@ -371,7 +392,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 					testCollectionBackup(t, inc2Time,
 						expectedDefault, expectedSuffix, expectedIncDir, firstBackupChain,
-						true /* intoLatest */, noExplicitSubDir)
+						true /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
 					firstBackupChain = append(firstBackupChain, expectedDefault)
 					writeManifest(t, expectedDefault)
 				}
@@ -386,7 +407,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 					testCollectionBackup(t, full2Time,
 						expectedDefault, expectedSuffix, expectedIncDir, []string(nil),
-						false /* intoLatest */, noExplicitSubDir)
+						false /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
 					writeManifest(t, expectedDefault)
 					// We also wrote a new full backup, so let's update the latest.
 					writeLatest(t, collectionLoc, expectedSuffix)
@@ -401,7 +422,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 					testCollectionBackup(t, inc3Time,
 						expectedDefault, expectedSuffix, expectedIncDir, []string{backup2Location},
-						true /* intoLatest */, noExplicitSubDir)
+						true /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
 					writeManifest(t, expectedDefault)
 				}
 
@@ -414,9 +435,61 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 					testCollectionBackup(t, inc4Time,
 						expectedDefault, expectedSuffix, expectedIncDir, firstBackupChain,
-						false /* intoLatest */, expectedSubdir)
+						false /* intoLatest */, expectedSubdir, noIncrementalStorage)
 					writeManifest(t, expectedDefault)
 				}
+
+				// A remote incremental into the first full: BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
+				{
+					expectedSuffix := "/2020/12/25-060000.00"
+					expectedIncDir := "/20201225/090000.00"
+					expectedSubdir := expectedSuffix
+
+					expectedDefault := fmt.Sprintf("nodelocal://2/incremental/%s%s%s?AUTH=implicit",
+						t.Name(),
+						expectedSuffix, expectedIncDir)
+
+					testCollectionBackup(t, inc5Time,
+						expectedDefault, expectedSuffix, expectedIncDir, firstRemoteBackupChain,
+						false /* intoLatest */, expectedSubdir, incrementalTo)
+					writeManifest(t, expectedDefault)
+
+					firstRemoteBackupChain = append(firstRemoteBackupChain, expectedDefault)
+				}
+
+				// Another remote incremental into the first full: BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
+				{
+					expectedSuffix := "/2020/12/25-060000.00"
+					expectedIncDir := "/20201225/093000.00"
+					expectedSubdir := expectedSuffix
+
+					expectedDefault := fmt.Sprintf("nodelocal://2/incremental/%s%s%s?AUTH=implicit",
+						t.Name(),
+						expectedSuffix, expectedIncDir)
+
+					testCollectionBackup(t, inc6Time,
+						expectedDefault, expectedSuffix, expectedIncDir, firstRemoteBackupChain,
+						false /* intoLatest */, expectedSubdir, incrementalTo)
+					writeManifest(t, expectedDefault)
+				}
+
+				// A remote incremental into the second full backup: BACKUP INTO LATEST IN collection,
+				//incremental_storage = inc_storage_path
+				{
+					expectedSuffix := "/2020/12/25-073000.00"
+					expectedIncDir := "/20201225/100000.00"
+					expectedSubdir := expectedSuffix
+
+					expectedDefault := fmt.Sprintf("nodelocal://2/incremental/%s%s%s?AUTH=implicit",
+						t.Name(),
+						expectedSuffix, expectedIncDir)
+
+					testCollectionBackup(t, inc7Time,
+						expectedDefault, expectedSuffix, expectedIncDir, []string{backup2Location},
+						true /* intoLatest */, expectedSubdir, incrementalTo)
+					writeManifest(t, expectedDefault)
+				}
+
 			})
 		})
 	}

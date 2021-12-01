@@ -17,7 +17,6 @@ set -euo pipefail
 LOCAL=#{if .Local#}true#{end#}
 LOG_DIR=#{shesc .LogDir#}
 BINARY=#{shesc .Binary#}
-START_CMD=#{shesc .StartCmd#}
 KEY_CMD=#{.KeyCmd#}
 MEMORY_MAX=#{.MemoryMax#}
 ARGS=(
@@ -46,7 +45,7 @@ if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
   # NB: ENV_VARS is never empty.
   export "${ENV_VARS[@]}"
   CODE=0
-  "${BINARY}" "${START_CMD}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
+  "${BINARY}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
   if [[ -z "${LOCAL}" || "${CODE}" -ne 0 ]]; then
     echo "cockroach exited with code ${CODE}: $(date)" | tee -a "${LOG_DIR}"/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi

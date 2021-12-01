@@ -209,15 +209,6 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
 }
 
-// StartOpts houses the options needed by Start().
-type StartOpts struct {
-	Encrypt    bool
-	Sequential bool
-	SkipInit   bool
-	StoreCount int
-	ExtraArgs  []string
-}
-
 func (c *SyncedCluster) newSession(node Node) (session, error) {
 	if c.IsLocal() {
 		return newLocalSession(), nil
