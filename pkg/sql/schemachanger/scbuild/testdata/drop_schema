@@ -102,6 +102,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     name: val
     tableId: 57
+- DROP DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    schemaId: 54
 - DROP DefaultExpression:{DescID: 57, ColumnID: 3}
   state: PUBLIC
   details:
@@ -190,6 +195,20 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     descriptorId: 61
     name: v4
     schemaId: 50
+- DROP Namespace:{DescID: 62, Name: typ}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    descriptorId: 62
+    name: typ
+    schemaId: 54
+- DROP Namespace:{DescID: 63, Name: _typ}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    descriptorId: 63
+    name: _typ
+    schemaId: 54
 - DROP Namespace:{DescID: 64, Name: v5}
   state: PUBLIC
   details:

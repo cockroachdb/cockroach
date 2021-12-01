@@ -41,8 +41,8 @@ Stage 3 of 3 (non-revertible)
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 54
+    *scop.CreateGcJobForTable
+      TableID: 54
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
@@ -99,8 +99,8 @@ Stage 3 of 3 (non-revertible)
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 54
+    *scop.CreateGcJobForTable
+      TableID: 54
 
 
 deps

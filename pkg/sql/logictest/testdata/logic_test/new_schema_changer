@@ -626,7 +626,7 @@ statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
 
 statement error database "db1" has a non-empty schema "public" and CASCADE was not specified
-DROP DATABASE db1
+DROP DATABASE db1 RESTRICT
 
 statement ok
 SET experimental_use_new_schema_changer = 'unsafe_always'
@@ -660,9 +660,22 @@ SELECT 'a'::db1.sc1.typ::string
 statement ok
 SET experimental_use_new_schema_changer = 'unsafe'
 
+let $desc_count_pre_drop
+select count(*) from system.descriptor
+
 # Actually drop the database now.
 statement ok
 DROP DATABASE db1 CASCADE
+
+let $desc_count_post_drop
+select count(*) from system.descriptor
+
+# Excluding anything that needs GC, we should drop by 4 (2 types [array and
+# normal], 2 schema's)
+query I
+select $desc_count_pre_drop-$desc_count_post_drop
+----
+4
 
 # Tests for computed column rewrites.
 statement ok

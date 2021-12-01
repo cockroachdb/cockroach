@@ -48,25 +48,42 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-	if len(mvs.descriptorGCJobs) > 0 {
-		job := jobspb.SchemaChangeGCDetails{
-			Tables: mvs.descriptorGCJobs,
+	// Any databases being GCed should have an entry even if none of its tables
+	// are being dropped. This entry will be used to generate the GC jobs below.
+	for _, dbID := range mvs.dbGCJobs.Ordered() {
+		if _, ok := mvs.descriptorGCJobs[dbID]; !ok {
+			mvs.descriptorGCJobs[dbID] = nil
 		}
-		jobName := func() string {
-			if len(mvs.descriptorGCJobs) == 1 {
-				return fmt.Sprintf("dropping descriptor %d", mvs.descriptorGCJobs[0].ID)
+	}
+	if len(mvs.descriptorGCJobs) > 0 ||
+		mvs.dbGCJobs.Len() > 0 {
+		for parentID := range mvs.descriptorGCJobs {
+			job := jobspb.SchemaChangeGCDetails{
+				Tables: mvs.descriptorGCJobs[parentID],
 			}
-			var sb strings.Builder
-			sb.WriteString("dropping descriptors")
-			for _, table := range mvs.descriptorGCJobs {
-				sb.WriteString(fmt.Sprintf(" %d", table.ID))
+			// Check if the database is also being cleaned up at the same time.
+			if mvs.dbGCJobs.Contains(parentID) {
+				job.ParentID = parentID
 			}
-			return sb.String()
-		}
-
-		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
-			return err
+			jobName := func() string {
+				if len(mvs.descriptorGCJobs[parentID]) == 1 &&
+					job.ParentID == descpb.InvalidID {
+					return fmt.Sprintf("dropping descriptor %d", mvs.descriptorGCJobs[parentID][0].ID)
+				}
+				var sb strings.Builder
+				sb.WriteString("dropping descriptors")
+				for _, table := range mvs.descriptorGCJobs[parentID] {
+					sb.WriteString(fmt.Sprintf(" %d", table.ID))
+				}
+				if job.ParentID != descpb.InvalidID {
+					sb.WriteString(fmt.Sprintf(" and parent database %d", job.ParentID))
+				}
+				return sb.String()
+			}
+			record := createGCJobRecord(jobName(), security.NodeUserName(), job)
+			if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
+				return err
+			}
 		}
 	}
 	for tableID, indexes := range mvs.indexGCJobs {
@@ -94,6 +111,11 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	if err := deps.EventLogger().ProcessAndSubmitEvents(ctx); err != nil {
 		return err
 	}
+	for _, id := range mvs.descriptorsToDelete.Ordered() {
+		if err := b.DeleteDescriptor(ctx, id); err != nil {
+			return err
+		}
+	}
 	return b.ValidateAndRun(ctx)
 }
 
@@ -101,15 +123,18 @@ type mutationVisitorState struct {
 	c                     Catalog
 	checkedOutDescriptors nstree.Map
 	drainedNames          map[descpb.ID][]descpb.NameInfo
-	descriptorGCJobs      []jobspb.SchemaChangeGCDetails_DroppedID
+	descriptorsToDelete   catalog.DescriptorIDSet
+	descriptorGCJobs      map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
+	dbGCJobs              catalog.DescriptorIDSet
 	indexGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
 }
 
 func newMutationVisitorState(c Catalog) *mutationVisitorState {
 	return &mutationVisitorState{
-		c:            c,
-		drainedNames: make(map[descpb.ID][]descpb.NameInfo),
-		indexGCJobs:  make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex),
+		c:                c,
+		drainedNames:     make(map[descpb.ID][]descpb.NameInfo),
+		indexGCJobs:      make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex),
+		descriptorGCJobs: make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID),
 	}
 }
 
@@ -131,6 +156,10 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 	return mut, nil
 }
 
+func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
+	mvs.descriptorsToDelete.Add(id)
+}
+
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {
 	if _, ok := mvs.drainedNames[id]; !ok {
 		mvs.drainedNames[id] = []descpb.NameInfo{nameInfo}
@@ -139,12 +168,16 @@ func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.Na
 	}
 }
 
-func (mvs *mutationVisitorState) AddNewGCJobForDescriptor(descriptor catalog.Descriptor) {
-	mvs.descriptorGCJobs = append(mvs.descriptorGCJobs,
+func (mvs *mutationVisitorState) AddNewGCJobForTable(table catalog.TableDescriptor) {
+	mvs.descriptorGCJobs[table.GetParentID()] = append(mvs.descriptorGCJobs[table.GetParentID()],
 		jobspb.SchemaChangeGCDetails_DroppedID{
-			ID:       descriptor.GetID(),
+			ID:       table.GetID(),
 			DropTime: timeutil.Now().UnixNano(),
 		})
+}
+
+func (mvs *mutationVisitorState) AddNewGCJobForDatabase(db catalog.DatabaseDescriptor) {
+	mvs.dbGCJobs.Add(db.GetID())
 }
 
 func (mvs *mutationVisitorState) AddNewGCJobForIndex(

@@ -171,6 +171,16 @@ DROP DATABASE db1 CASCADE
     dependentObjects:
     - 55
     - 56
+- DROP DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    schemaId: 55
+- DROP DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 56}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    schemaId: 56
 - DROP DefaultExpression:{DescID: 59, ColumnID: 3}
   state: PUBLIC
   details:
@@ -291,6 +301,20 @@ DROP DATABASE db1 CASCADE
     descriptorId: 64
     name: v4
     schemaId: 54
+- DROP Namespace:{DescID: 65, Name: typ}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    descriptorId: 65
+    name: typ
+    schemaId: 56
+- DROP Namespace:{DescID: 66, Name: _typ}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    descriptorId: 66
+    name: _typ
+    schemaId: 56
 - DROP Namespace:{DescID: 67, Name: v5}
   state: PUBLIC
   details:

@@ -5,6 +5,20 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 build
 DROP TYPE defaultdb.typ
 ----
+- DROP Namespace:{DescID: 54, Name: typ}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    descriptorId: 54
+    name: typ
+    schemaId: 51
+- DROP Namespace:{DescID: 55, Name: _typ}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    descriptorId: 55
+    name: _typ
+    schemaId: 51
 - DROP Type:{DescID: 54}
   state: PUBLIC
   details:

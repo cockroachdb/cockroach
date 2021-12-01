@@ -204,6 +204,10 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(Name, "Name"),
 	),
+	rel.EntityMapping(t((*scpb.DatabaseSchemaEntry)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+		rel.EntityAttr(ReferencedDescID, "SchemaID"),
+	),
 )
 
 // JoinTargetNode generates a clause that joins the target and node vars
