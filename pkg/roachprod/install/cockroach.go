@@ -98,6 +98,43 @@ func argExists(args []string, target string) int {
 	return -1
 }
 
+// StartOpts houses the options needed by Start().
+type StartOpts struct {
+	Target     StartTarget
+	Sequential bool
+	ExtraArgs  []string
+
+	// -- Options that apply only to StartDefault target --
+
+	SkipInit        bool
+	StoreCount      int
+	EncryptedStores bool
+
+	// -- Options that apply only to StartTenantSQL target --
+	TenantID int
+	KVAddrs  string
+}
+
+// StartTarget identifies what flavor of cockroach we are starting.
+type StartTarget int
+
+const (
+	// StartDefault starts a "full" (KV+SQL) node (the default).
+	StartDefault StartTarget = iota
+	// StartTenantSQL starts a tenant SQL-only process.
+	StartTenantSQL
+	// StartTenantProxy starts a tenant SQL proxy process.
+	StartTenantProxy
+)
+
+func (st StartTarget) String() string {
+	return [...]string{
+		StartDefault:     "default",
+		StartTenantSQL:   "tenant SQL",
+		StartTenantProxy: "tenant proxy",
+	}[st]
+}
+
 // Start the cockroach process on the cluster.
 //
 // Starting the first node is special-cased quite a bit, it's used to distribute
@@ -107,6 +144,9 @@ func argExists(args []string, target string) int {
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
 func (c *SyncedCluster) Start(startOpts StartOpts) error {
+	if startOpts.Target == StartTenantProxy {
+		return fmt.Errorf("start tenant proxy not implemented")
+	}
 	if err := c.distributeCerts(); err != nil {
 		return err
 	}
@@ -129,6 +169,11 @@ func (c *SyncedCluster) Start(startOpts StartOpts) error {
 		// some harmless start messaging.
 		if _, err := c.startNode(node, startOpts, vers); err != nil {
 			return nil, err
+		}
+
+		// Code that follows applies only for regular nodes.
+		if startOpts.Target != StartDefault {
+			return nil, nil
 		}
 
 		// We reserve a few special operations (bootstrapping, and setting
@@ -254,6 +299,12 @@ func (c *SyncedCluster) SQL(args []string) error {
 
 	// Otherwise, assume the user provided the "-e" flag, so we can reasonably
 	// execute the query on all specified nodes.
+	return c.RunSQL(args)
+}
+
+// RunSQL runs a `cockroach sql` command.
+// It is assumed that the args include the -e flag.
+func (c *SyncedCluster) RunSQL(args []string) error {
 	type result struct {
 		node   Node
 		output string
@@ -353,20 +404,11 @@ func (c *SyncedCluster) startNode(
 func (c *SyncedCluster) generateStartCmd(
 	node Node, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
-
 	args, err := c.generateStartArgs(node, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
 
-	// For a one-node cluster, use `start-single-node` to disable replication.
-	// For everything else we'll fall back to using `cockroach start`.
-	var startCmd string
-	if c.useStartSingleNode() {
-		startCmd = "start-single-node"
-	} else {
-		startCmd = "start"
-	}
 	return execStartTemplate(startTemplateData{
 		LogDir: c.LogDir(node),
 		KeyCmd: c.generateKeyCmd(node, startOpts),
@@ -376,7 +418,6 @@ func (c *SyncedCluster) generateStartCmd(
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
 		}, c.Env...), getEnvVars()...),
 		Binary:    cockroachNodeBinary(c, node),
-		StartCmd:  startCmd,
 		Args:      args,
 		MemoryMax: config.MemoryMax,
 		Local:     c.IsLocal(),
@@ -387,7 +428,6 @@ type startTemplateData struct {
 	Local     bool
 	LogDir    string
 	Binary    string
-	StartCmd  string
 	KeyCmd    string
 	MemoryMax string
 	Args      []string
@@ -411,42 +451,38 @@ func execStartTemplate(data startTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+// generateStartArgs generates cockroach binary arguments for starting a node.
+// The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
 	node Node, startOpts StartOpts, vers *version.Version,
 ) ([]string, error) {
 	var args []string
-	nodes := c.TargetNodes()
+
+	switch startOpts.Target {
+	case StartDefault:
+		if c.useStartSingleNode() {
+			args = []string{"start-single-node"}
+		} else {
+			args = []string{"start"}
+		}
+
+	case StartTenantSQL:
+		args = []string{"mt", "start-sql"}
+
+	case StartTenantProxy:
+		// args = []string{"mt", "start-proxy"}
+		panic("unimplemented")
+
+	default:
+		return nil, errors.Errorf("unsupported start target %v", startOpts.Target)
+	}
+
+	// Flags common to all targets.
 
 	if c.Secure {
 		args = append(args, `--certs-dir`, c.CertsDir(node))
 	} else {
 		args = append(args, "--insecure")
-	}
-
-	var storeDirs []string
-	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
-		for i := 1; i <= startOpts.StoreCount; i++ {
-			storeDir := c.NodeDir(node, i)
-			storeDirs = append(storeDirs, storeDir)
-			// Place a store{i} attribute on each store to allow for zone configs
-			// that use specific stores.
-			args = append(args, `--store`,
-				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
-		}
-	} else {
-		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
-		storeDirs = append(storeDirs, storeDir)
-	}
-
-	if startOpts.Encrypt {
-		// Encryption at rest is turned on for the cluster.
-		for _, storeDir := range storeDirs {
-			// TODO(windchan7): allow key size to be specified through flags.
-			encryptArgs := fmt.Sprintf(
-				"path=%s,key=%s/aes-128.key,old-key=plain", storeDir, storeDir,
-			)
-			args = append(args, `--enterprise-encryption`, encryptArgs)
-		}
 	}
 
 	logDir := c.LogDir(node)
@@ -457,26 +493,18 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, `--log-dir`, logDir)
 	}
 
-	cache := 25
-	if c.IsLocal() {
-		cache /= len(nodes)
-		if cache == 0 {
-			cache = 1
-		}
-	}
-	args = append(args, fmt.Sprintf("--cache=%d%%", cache))
-	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", cache))
-
 	listenHost := ""
 	if c.IsLocal() {
 		// This avoids annoying firewall prompts on Mac OS X.
 		listenHost = "127.0.0.1"
 	}
 
-	args = append(args,
-		fmt.Sprintf("--listen-addr=%s:%d", listenHost, c.NodePort(node)),
-		fmt.Sprintf("--http-addr=%s:%d", listenHost, c.NodeUIPort(node)),
-	)
+	if startOpts.Target == StartTenantSQL {
+		args = append(args, fmt.Sprintf("--sql-addr=%s:%d", listenHost, c.NodePort(node)))
+	} else {
+		args = append(args, fmt.Sprintf("--listen-addr=%s:%d", listenHost, c.NodePort(node)))
+	}
+	args = append(args, fmt.Sprintf("--http-addr=%s:%d", listenHost, c.NodeUIPort(node)))
 
 	if !c.IsLocal() {
 		advertiseHost := ""
@@ -490,15 +518,21 @@ func (c *SyncedCluster) generateStartArgs(
 		)
 	}
 
-	if locality := c.locality(node); locality != "" {
-		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
-			args = append(args, "--locality="+locality)
-		}
+	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
+	if startOpts.Target == StartDefault && !c.useStartSingleNode() {
+		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
+	}
+	if startOpts.Target == StartTenantSQL {
+		args = append(args, fmt.Sprintf("--kv-addrs=%s", startOpts.KVAddrs))
+		args = append(args, fmt.Sprintf("--tenant-id=%d", startOpts.TenantID))
 	}
 
-	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
-	if !c.useStartSingleNode() {
-		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
+	if startOpts.Target == StartDefault {
+		args = append(args, c.generateStartFlagsKV(node, startOpts, vers)...)
+	}
+
+	if startOpts.Target == StartDefault || startOpts.Target == StartTenantSQL {
+		args = append(args, c.generateStartFlagsSQL(node, startOpts, vers)...)
 	}
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
@@ -514,6 +548,71 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	return args, nil
+}
+
+// generateStartFlagsKV generates `cockroach start` arguments that are relevant
+// for the KV and storage layers (and consequently are never used by
+// `cockroach mt start-sql`).
+func (c *SyncedCluster) generateStartFlagsKV(
+	node Node, startOpts StartOpts, vers *version.Version,
+) []string {
+	var args []string
+	var storeDirs []string
+	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
+		for i := 1; i <= startOpts.StoreCount; i++ {
+			storeDir := c.NodeDir(node, i)
+			storeDirs = append(storeDirs, storeDir)
+			// Place a store{i} attribute on each store to allow for zone configs
+			// that use specific stores.
+			args = append(args, `--store`,
+				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
+		}
+	} else {
+		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
+		storeDirs = append(storeDirs, storeDir)
+	}
+
+	if startOpts.EncryptedStores {
+		// Encryption at rest is turned on for the cluster.
+		for _, storeDir := range storeDirs {
+			// TODO(windchan7): allow key size to be specified through flags.
+			encryptArgs := "path=%s,key=%s/aes-128.key,old-key=plain"
+			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
+			args = append(args, `--enterprise-encryption`, encryptArgs)
+		}
+	}
+
+	args = append(args, fmt.Sprintf("--cache=%d%%", c.maybeScaleMem(25)))
+
+	if locality := c.locality(node); locality != "" {
+		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
+			args = append(args, "--locality="+locality)
+		}
+	}
+	return args
+}
+
+// generateStartFlagsSQL generates `cockroach start` and `cockroach mt
+// start-sql` arguments that are relevant for the SQL layers, used by both KV
+// and storage layers (and in particular, are never used by `
+func (c *SyncedCluster) generateStartFlagsSQL(
+	node Node, startOpts StartOpts, vers *version.Version,
+) []string {
+	var args []string
+	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(25)))
+	return args
+}
+
+// maybeScaleMem is used to scale down a memory percentage when the cluster is
+// local.
+func (c *SyncedCluster) maybeScaleMem(val int) int {
+	if c.IsLocal() {
+		val /= len(c.Nodes)
+		if val == 0 {
+			val = 1
+		}
+	}
+	return val
 }
 
 func (c *SyncedCluster) initializeCluster(node Node) (string, error) {
@@ -594,7 +693,7 @@ func (c *SyncedCluster) generateInitCmd(node Node) string {
 }
 
 func (c *SyncedCluster) generateKeyCmd(node Node, startOpts StartOpts) string {
-	if !startOpts.Encrypt {
+	if !startOpts.EncryptedStores {
 		return ""
 	}
 

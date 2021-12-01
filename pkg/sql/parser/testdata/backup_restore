@@ -47,6 +47,14 @@ BACKUP TABLE foo INTO LATEST IN '_' -- literals removed
 BACKUP TABLE _ INTO LATEST IN 'bar' -- identifiers removed
 
 parse
+BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_storage = 'baz'
+----
+BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_storage = 'baz'
+BACKUP TABLE (foo) INTO LATEST IN ('bar') WITH incremental_storage = ('baz') -- fully parenthesized
+BACKUP TABLE foo INTO LATEST IN '_' WITH incremental_storage = '_' -- literals removed
+BACKUP TABLE _ INTO LATEST IN 'bar' WITH incremental_storage = 'baz' -- identifiers removed
+
+parse
 BACKUP TABLE foo INTO 'subdir' IN 'bar'
 ----
 BACKUP TABLE foo INTO 'subdir' IN 'bar'

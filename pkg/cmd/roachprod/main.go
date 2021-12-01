@@ -366,7 +366,7 @@ create and distribute the certs. Note that running some modes in secure mode
 and others in insecure mode is not a supported Cockroach configuration.
 
 As a debugging aid, the --sequential flag starts the nodes sequentially so node
-IDs match hostnames. Otherwise nodes are started are parallel.
+IDs match hostnames. Otherwise nodes are started in parallel.
 
 The --binary flag specifies the remote binary to run. It is up to the roachprod
 user to ensure this binary exists, usually via "roachprod put". Note that no
@@ -424,6 +424,49 @@ signals.
 			wait = true
 		}
 		return roachprod.Stop(args[0], tag, sig, wait)
+	}),
+}
+
+var startTenantCmd = &cobra.Command{
+	Use:   "start-tenant <tenant-cluster> --host-cluster <host-cluster>",
+	Short: "start a tenant",
+	Long: `Start SQL instances for a non-system tenant.
+
+The --host-cluster flag must be used to specify a host cluster (with optional
+node selector) which is already running. The command will create the tenant on
+the host cluster if it does not exist already. The host and tenant can use the
+same underlying cluster, as long as different subsets of nodes are selected.
+
+The --tenant-id flag can be used to specify the tenant ID; it defaults to 2.
+
+The --secure flag can be used to start nodes in secure mode (i.e. using
+certs). When specified, there is a one time initialization for the cluster to
+create and distribute the certs. Note that running some modes in secure mode
+and others in insecure mode is not a supported Cockroach configuration.
+
+As a debugging aid, the --sequential flag starts the nodes sequentially so node
+IDs match hostnames. Otherwise nodes are started in parallel.
+
+The --binary flag specifies the remote binary to run. It is up to the roachprod
+user to ensure this binary exists, usually via "roachprod put". Note that no
+cockroach software is installed by default on a newly created cluster.
+
+The --args and --env flags can be used to pass arbitrary command line flags and
+environment variables to the cockroach process.
+` + tagHelp + `
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		tenantCluster := args[0]
+		clusterSettingsOpts := []install.ClusterSettingOption{
+			install.TagOption(tag),
+			install.PGUrlCertsDirOption(pgurlCertsDir),
+			install.SecureOption(secure),
+			install.UseTreeDistOption(useTreeDist),
+			install.EnvOption(nodeEnv),
+			install.NumRacksOption(numRacks),
+		}
+		return roachprod.StartTenant(tenantCluster, hostCluster, startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -833,6 +876,7 @@ func main() {
 		monitorCmd,
 		startCmd,
 		stopCmd,
+		startTenantCmd,
 		initCmd,
 		runCmd,
 		wipeCmd,

@@ -292,8 +292,14 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		kmsURIs = append(kmsURIs, kmsURI.RawString())
 	}
 
-	redactedBackupNode, err := GetRedactedBackupNode(backupNode.Backup, destinations,
-		nil /* incrementalFrom */, kmsURIs, "", false /* hasBeenPlanned */)
+	redactedBackupNode, err := GetRedactedBackupNode(
+		backupNode.Backup,
+		destinations,
+		nil, /* incrementalFrom */
+		kmsURIs,
+		"",
+		nil,
+		false /* hasBeenPlanned */)
 	if err != nil {
 		return "", err
 	}
