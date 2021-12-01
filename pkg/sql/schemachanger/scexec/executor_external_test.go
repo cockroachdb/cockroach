@@ -350,7 +350,7 @@ func TestSchemaChanger(t *testing.T) {
 				scop.PreCommitPhase,
 			} {
 				sc := sctestutils.MakePlan(t, nodes, phase)
-				stages := sc.Stages
+				stages := sc.StagesForCurrentPhase()
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
 					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
@@ -364,7 +364,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
-			for _, s := range sc.Stages {
+			for _, s := range sc.StagesForCurrentPhase() {
 				exDeps := ti.newExecDeps(txn, descriptors)
 				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 				after = s.After
@@ -427,7 +427,7 @@ func TestSchemaChanger(t *testing.T) {
 					scop.PreCommitPhase,
 				} {
 					sc := sctestutils.MakePlan(t, outputNodes, phase)
-					for _, s := range sc.Stages {
+					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn, descriptors)
 						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 						ts = s.After
@@ -440,7 +440,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
-			for _, s := range sc.Stages {
+			for _, s := range sc.StagesForCurrentPhase() {
 				exDeps := ti.newExecDeps(txn, descriptors)
 				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 			}
