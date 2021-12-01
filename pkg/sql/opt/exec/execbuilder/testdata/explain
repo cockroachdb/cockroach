@@ -785,6 +785,39 @@ index recommendations: 1
 1. type: index replacement
    SQL commands: DROP INDEX tc@c; CREATE INDEX ON tc (a) STORING (b);
 
+# Ensure that the query above no longer has index recommendations if they are
+# disabled.
+statement ok
+SET index_recommendations_enabled = 'false'
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b)
+│ ordering: +b
+│ estimated row count: 10 (missing stats)
+│ order: +b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: tc@tc_pkey
+    │ key columns: rowid
+    │
+    └── • scan
+          columns: (a, rowid)
+          estimated row count: 10 (missing stats)
+          table: tc@c
+          spans: /10-/11
+
+# Reset index_recommendations_enabled to its default setting.
+statement ok
+SET index_recommendations_enabled = 'true'
+
 query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
