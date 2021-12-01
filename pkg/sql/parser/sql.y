@@ -775,7 +775,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
@@ -7460,7 +7460,13 @@ truncate_stmt:
 | TRUNCATE error // SHOW HELP: TRUNCATE
 
 password_clause:
-  PASSWORD string_or_placeholder
+  ENCRYPTED PASSWORD string_or_placeholder
+  {
+    /* SKIP DOC */
+    // This is a legacy postgres syntax.
+    $$.val = tree.KVOption{Key: tree.Name($2), Value: $3.expr()}
+  }
+| PASSWORD string_or_placeholder
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: $2.expr()}
   }
@@ -13267,6 +13273,7 @@ unreserved_keyword:
 | DOUBLE
 | DROP
 | ENCODING
+| ENCRYPTED
 | ENCRYPTION_PASSPHRASE
 | ENUM
 | ENUMS
