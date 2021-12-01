@@ -15,6 +15,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1203,3 +1204,86 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 		})
 	}
 }
+
+// TestTableDescriptorByteSizeOrder inserts different amount of data in each
+// Table and guarantees the relative order of the TableDescriptor sizes are
+// correct.
+func TestTableDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Create tables with varying number of columns.
+	tdb.Exec(t, "CREATE TABLE small   (col1 INT)")
+	tdb.Exec(t, "CREATE TABLE medium  (col1 INT, col2 INT)")
+	tdb.Exec(t, "CREATE TABLE big     (col1 INT, col2 INT, col3 INT)")
+	tdb.Exec(t, "CREATE TABLE biggest (col1 INT, col2 INT, col3 INT, col4 INT)")
+
+	// Retrieve each table descriptor's byte sizes.
+	manager := s.LeaseManager().(*Manager)
+	tableSizes := map[string]int64{"small": 0, "medium": 0, "big": 0, "biggest": 0}
+	for size := range tableSizes {
+		var tableID descpb.ID
+		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
+		desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+		require.NoError(t, err)
+		tableSizes[size] = desc.Underlying().ByteSize()
+	}
+
+	// Confirm TableDescriptor byte size orders are in correct order.
+	actual := rankByDescSize(tableSizes)
+	expected := []string{"small", "medium", "big", "biggest"}
+	for i, size := range actual {
+		require.Equal(t, expected[i], size.Desc, "Not sorted in correct order for %s: %d", size.Desc, size.ByteSize)
+	}
+
+	// Create tables with varying number of indexes.
+	tdb.Exec(t, "CREATE TABLE small_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1))")
+	tdb.Exec(t, "CREATE TABLE medium_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2))")
+	tdb.Exec(t, "CREATE TABLE big_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3))")
+	tdb.Exec(t, "CREATE TABLE biggest_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3, col4))")
+
+	// Retrieve each table descriptor's byte sizes.
+	tableSizes = map[string]int64{"small_i": 0, "medium_i": 0, "big_i": 0, "biggest_i": 0}
+	for size := range tableSizes {
+		var tableID descpb.ID
+		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
+		desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+		require.NoError(t, err)
+		tableSizes[size] = desc.Underlying().ByteSize()
+	}
+
+	// Confirm TableDescriptor byte size orders are in correct order.
+	actual = rankByDescSize(tableSizes)
+	expected = []string{"small_i", "medium_i", "big_i", "biggest_i"}
+	for i, size := range actual {
+		require.Equal(t, expected[i], size.Desc, "Not sorted in correct order for %s: %d", size.Desc, size.ByteSize)
+	}
+}
+
+// rankByDescSize is a helper function to sort pairs of descriptors and their
+// byte sizes in order of increasing byte size.
+func rankByDescSize(descToSize map[string]int64) DescSizeList {
+	descSizes := make(DescSizeList, len(descToSize))
+	i := 0
+	for k, v := range descToSize {
+		descSizes[i] = DescSize{k, v}
+		i++
+	}
+	sort.Sort(descSizes)
+	return descSizes
+}
+
+type DescSize struct {
+	Desc     string
+	ByteSize int64
+}
+
+type DescSizeList []DescSize
+
+func (d DescSizeList) Len() int           { return len(d) }
+func (d DescSizeList) Less(i, j int) bool { return d[i].ByteSize < d[j].ByteSize }
+func (d DescSizeList) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }
