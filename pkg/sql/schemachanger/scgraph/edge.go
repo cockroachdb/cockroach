@@ -11,8 +11,11 @@
 package scgraph
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // Edge represents a relationship between two Nodes.
@@ -30,6 +33,7 @@ type OpEdge struct {
 	op         []scop.Op
 	typ        scop.Type
 	revertible bool
+	minPhase   scop.Phase
 }
 
 // From implements the Edge interface.
@@ -47,6 +51,21 @@ func (oe *OpEdge) Revertible() bool { return oe.revertible }
 // Type returns the types of operations associated with this edge.
 func (oe *OpEdge) Type() scop.Type {
 	return oe.typ
+}
+
+// IsPhaseSatisfied returns true iff the operations can run in the given phase.
+func (oe *OpEdge) IsPhaseSatisfied(phase scop.Phase) bool {
+	return phase >= oe.minPhase
+}
+
+// String returns a string representation of this edge
+func (oe *OpEdge) String() string {
+	from := screl.NodeString(oe.from)
+	nonRevertible := ""
+	if !oe.revertible {
+		nonRevertible = "non-revertible"
+	}
+	return fmt.Sprintf("%s -op-%s-> %s", from, nonRevertible, oe.to.Status)
 }
 
 // DepEdgeKind indicates the kind of constraint enforced by the edge.
@@ -91,3 +110,10 @@ func (de *DepEdge) Name() string { return de.rule }
 
 // Kind returns the kind of the DepEdge.
 func (de *DepEdge) Kind() DepEdgeKind { return de.kind }
+
+// String returns a string representation of this edge
+func (de *DepEdge) String() string {
+	from := screl.NodeString(de.from)
+	to := screl.NodeString(de.to)
+	return fmt.Sprintf("%s -dep-%s-> %s", from, de.kind, to)
+}

@@ -69,6 +69,34 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 63}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
+- from: [Owner:{DescID: 55}, ABSENT]
+  to:   [Sequence:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 56}, ABSENT]
+  to:   [Table:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 57}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 58}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 59}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 60}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 63}, ABSENT]
+  to:   [View:{DescID: 63}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
   to:   [Sequence:{DescID: 55}, DROPPED]
   kind: SameStage
@@ -169,6 +197,90 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Namespace:{DescID: 56, Name: t1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
+- from: [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+  to:   [Sequence:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+  to:   [Sequence:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+  to:   [Sequence:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 56, Username: admin}, ABSENT]
+  to:   [Table:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 56, Username: public}, ABSENT]
+  to:   [Table:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 56, Username: root}, ABSENT]
+  to:   [Table:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 57, Username: admin}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 57, Username: public}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 59, Username: admin}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 59, Username: public}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 59, Username: root}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 60, Username: admin}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 60, Username: public}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 60, Username: root}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 63, Username: admin}, ABSENT]
+  to:   [View:{DescID: 63}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 63, Username: public}, ABSENT]
+  to:   [View:{DescID: 63}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 63, Username: root}, ABSENT]
+  to:   [View:{DescID: 63}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 57}, ABSENT]
   to:   [Namespace:{DescID: 57, Name: v1}, ABSENT]
   kind: HappensAfter
@@ -201,19 +313,30 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-Stage 1 of 4
+Stage 1 of 3
   transitions:
     [Sequence:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
     [Schema:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
@@ -238,35 +361,21 @@ Stage 1 of 4
       DescID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-Stage 2 of 4
-  transitions:
-    [Namespace:{DescID: 55, Name: sq1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 56, Name: t1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 57, Name: v1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 58, Name: v2}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 59, Name: v3}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 60, Name: v4}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 63, Name: v5}, PUBLIC, DROP] -> ABSENT
-  ops:
-    *scop.DrainDescriptorName
-      TableID: 55
-    *scop.DrainDescriptorName
-      TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 57
-    *scop.DrainDescriptorName
-      TableID: 58
-    *scop.DrainDescriptorName
-      TableID: 59
-    *scop.DrainDescriptorName
-      TableID: 60
-    *scop.DrainDescriptorName
-      TableID: 63
-Stage 3 of 4 (non-revertible)
+Stage 2 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 55, Name: sq1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 55}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 56, Name: t1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 56}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 56, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 56, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 56, Username: root}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
@@ -274,15 +383,40 @@ Stage 3 of 4 (non-revertible)
     [PrimaryIndex:{DescID: 56, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 57, Name: v1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 57}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 58, Name: v2}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 58}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 59, Name: v3}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 59}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 59, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 59, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 59, Username: root}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 60, Name: v4}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 60}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 60, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 60, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 60, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 60, ReferencedDescID: 63}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 63, Name: v5}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 63}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 63, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 63, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 63, Username: root}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 63, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 63, ReferencedDescID: 62}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
@@ -291,11 +425,15 @@ Stage 3 of 4 (non-revertible)
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
+    *scop.DrainDescriptorName
+      TableID: 55
     *scop.MarkDescriptorAsDropped
       DescID: 56
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 55
+    *scop.DrainDescriptorName
+      TableID: 56
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 56
@@ -306,6 +444,8 @@ Stage 3 of 4 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 56
+    *scop.DrainDescriptorName
+      TableID: 57
     *scop.MarkDescriptorAsDropped
       DescID: 58
     *scop.RemoveRelationDependedOnBy
@@ -316,6 +456,8 @@ Stage 3 of 4 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 57
+    *scop.DrainDescriptorName
+      TableID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 58
@@ -324,11 +466,17 @@ Stage 3 of 4 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 60
       TableID: 58
+    *scop.DrainDescriptorName
+      TableID: 59
+    *scop.DrainDescriptorName
+      TableID: 60
     *scop.MarkDescriptorAsDropped
       DescID: 63
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 63
       TableID: 60
+    *scop.DrainDescriptorName
+      TableID: 63
     *scop.MarkDescriptorAsDropped
       DescID: 61
     *scop.RemoveTypeBackRef
@@ -341,7 +489,7 @@ Stage 3 of 4 (non-revertible)
       TypeID: 62
     *scop.MarkDescriptorAsDropped
       DescID: 54
-Stage 4 of 4 (non-revertible)
+Stage 3 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 56}, DROPPED, DROP] -> ABSENT

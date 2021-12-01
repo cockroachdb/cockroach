@@ -9,29 +9,31 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 ops
 DROP VIEW defaultdb.v1
 ----
-Stage 1 of 4
+Stage 1 of 3
   transitions:
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
-Stage 2 of 4
-  transitions:
-    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
-  ops:
-    *scop.DrainDescriptorName
-      TableID: 55
-Stage 3 of 4 (non-revertible)
+Stage 2 of 3 (non-revertible)
   transitions:
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 55}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
+    *scop.DrainDescriptorName
+      TableID: 55
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 55
       TableID: 54
-Stage 4 of 4 (non-revertible)
+Stage 3 of 3 (non-revertible)
   transitions:
     [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
   ops:
@@ -57,10 +59,26 @@ DROP VIEW defaultdb.v1
   to:   [View:{DescID: 55}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
+- from: [Owner:{DescID: 55}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
   to:   [View:{DescID: 55}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 55}, ABSENT]
   to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
   kind: HappensAfter
@@ -89,13 +107,18 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
-Stage 1 of 4
+Stage 1 of 3
   transitions:
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
@@ -107,42 +130,51 @@ Stage 1 of 4
       DescID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
-Stage 2 of 4
-  transitions:
-    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 56, Name: v2}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 57, Name: v3}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 58, Name: v4}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 61, Name: v5}, PUBLIC, DROP] -> ABSENT
-  ops:
-    *scop.DrainDescriptorName
-      TableID: 55
-    *scop.DrainDescriptorName
-      TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 57
-    *scop.DrainDescriptorName
-      TableID: 58
-    *scop.DrainDescriptorName
-      TableID: 61
-Stage 3 of 4 (non-revertible)
+Stage 2 of 3 (non-revertible)
   transitions:
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 55}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 56, Name: v2}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 56}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 56, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 56, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 56, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 57, Name: v3}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 57}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 58, Name: v4}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 58}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 61, Name: v5}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 61}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 61, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 61, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 61, Username: root}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
+    *scop.DrainDescriptorName
+      TableID: 55
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 55
       TableID: 54
@@ -156,6 +188,8 @@ Stage 3 of 4 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 55
+    *scop.DrainDescriptorName
+      TableID: 56
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 56
@@ -164,18 +198,24 @@ Stage 3 of 4 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 58
       TableID: 56
+    *scop.DrainDescriptorName
+      TableID: 57
+    *scop.DrainDescriptorName
+      TableID: 58
     *scop.MarkDescriptorAsDropped
       DescID: 61
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 61
       TableID: 58
+    *scop.DrainDescriptorName
+      TableID: 61
     *scop.RemoveTypeBackRef
       DescID: 61
       TypeID: 59
     *scop.RemoveTypeBackRef
       DescID: 61
       TypeID: 60
-Stage 4 of 4 (non-revertible)
+Stage 3 of 3 (non-revertible)
   transitions:
     [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
@@ -277,6 +317,26 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [View:{DescID: 61}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
+- from: [Owner:{DescID: 55}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 57}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 58}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [Owner:{DescID: 61}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
   to:   [View:{DescID: 55}, DROPPED]
   kind: SameStage
@@ -321,6 +381,66 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [View:{DescID: 61}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+  to:   [View:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 56, Username: admin}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 56, Username: public}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 56, Username: root}, ABSENT]
+  to:   [View:{DescID: 56}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 57, Username: admin}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 57, Username: public}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 61, Username: admin}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 61, Username: public}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 61, Username: root}, ABSENT]
+  to:   [View:{DescID: 61}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 55}, ABSENT]
   to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
   kind: HappensAfter

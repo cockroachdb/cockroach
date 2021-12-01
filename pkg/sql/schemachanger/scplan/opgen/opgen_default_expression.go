@@ -16,23 +16,30 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.DefaultExpression)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.DefaultExpression) scop.Op {
-				return &scop.RemoveColumnDefaultExpression{
-					TableID:  this.TableID,
-					ColumnID: this.ColumnID,
-				}
-			}),
-			emit(func(this *scpb.DefaultExpression) scop.Op {
-				return &scop.UpdateRelationDeps{
-					TableID: this.TableID,
-				}
-			})),
+	opRegistry.register((*scpb.DefaultExpression)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.DefaultExpression) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.DefaultExpression) scop.Op {
+					return &scop.RemoveColumnDefaultExpression{
+						TableID:  this.TableID,
+						ColumnID: this.ColumnID,
+					}
+				}),
+				emit(func(this *scpb.DefaultExpression) scop.Op {
+					return &scop.UpdateRelationDeps{
+						TableID: this.TableID,
+					}
+				}),
+			),
+		),
 	)
 }

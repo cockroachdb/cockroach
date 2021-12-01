@@ -16,20 +16,20 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.ForeignKey)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): This  probably cannot happen until post-commit.
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.ForeignKey) scop.Op {
-				return &scop.DropForeignKeyRef{
-					TableID:  this.OriginID,
-					Name:     this.Name,
-					Outbound: true,
-				}
-			})),
+	opRegistry.register((*scpb.Locality)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.Locality) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				emit(func(this *scpb.Locality) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
 	)
 }
