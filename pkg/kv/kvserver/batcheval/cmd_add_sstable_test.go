@@ -397,11 +397,12 @@ func TestEvalAddSSTable(t *testing.T) {
 		},
 
 		// DisallowShadowingBelow
-		"DisallowShadowingBelow cannot be used with DisallowShadowing": {
+		"DisallowShadowingBelow can be used with DisallowShadowing": {
 			noShadow:      true,
 			noShadowBelow: 5,
-			sst:           []mvccKV{{"a", 1, "sst"}},
-			expectErr:     `cannot set both DisallowShadowing and DisallowShadowingBelow`,
+			data:          []mvccKV{{"a", 5, "123"}},
+			sst:           []mvccKV{{"a", 6, "123"}},
+			expect:        []mvccKV{{"a", 6, "123"}, {"a", 5, "123"}},
 		},
 		"DisallowShadowingBelow errors above existing": {
 			noShadowBelow: 5,
