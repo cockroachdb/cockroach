@@ -18,25 +18,29 @@ import (
 func init() {
 	opRegistry.register(
 		(*scpb.ColumnName)(nil),
-		scpb.Target_ADD,
-		scpb.Status_ABSENT,
-		to(scpb.Status_PUBLIC,
-			minPhase(scop.PreCommitPhase),
-			emit(func(this *scpb.ColumnName) scop.Op {
-				return &scop.SetColumnName{
-					TableID:  this.TableID,
-					ColumnID: this.ColumnID,
-					Name:     this.Name,
-				}
-			}),
+		add(
+			to(scpb.Status_PUBLIC,
+				minPhase(scop.PreCommitPhase),
+				emit(func(this *scpb.ColumnName) scop.Op {
+					return &scop.SetColumnName{
+						TableID:  this.TableID,
+						ColumnID: this.ColumnID,
+						Name:     this.Name,
+					}
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PostCommitPhase),
+				emit(func(this *scpb.ColumnName) scop.Op {
+					return &scop.SetColumnName{
+						TableID:  this.TableID,
+						ColumnID: this.ColumnID,
+						Name:     this.Name,
+					}
+				}),
+			),
 		),
 	)
-
-	opRegistry.register(
-		(*scpb.ColumnName)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
-			minPhase(scop.StatementPhase),
-		))
 }

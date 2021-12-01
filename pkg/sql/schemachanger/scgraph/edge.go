@@ -33,6 +33,7 @@ type OpEdge struct {
 	op         []scop.Op
 	typ        scop.Type
 	revertible bool
+	minPhase   scop.Phase
 }
 
 // From implements the Edge interface.
@@ -50,6 +51,11 @@ func (oe *OpEdge) Revertible() bool { return oe.revertible }
 // Type returns the types of operations associated with this edge.
 func (oe *OpEdge) Type() scop.Type {
 	return oe.typ
+}
+
+// IsPhaseSatisfied returns true iff the operations can run in the given phase.
+func (oe *OpEdge) IsPhaseSatisfied(phase scop.Phase) bool {
+	return phase >= oe.minPhase
 }
 
 // String returns a string representation of this edge
