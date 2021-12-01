@@ -14,7 +14,7 @@ begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 5 MutationType ops
+## PreCommitPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #56
   ...
      - columnIds:
@@ -94,7 +94,7 @@ upsert descriptor #56
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## stage 1 in PostCommitPhase: 3 MutationType ops
+## PostCommitPhase stage 1 of 6 with 3 MutationType ops
 upsert descriptor #56
   ...
        direction: ADD
@@ -118,15 +118,15 @@ upsert descriptor #56
 update progress of schema change job #1
 commit transaction #2
 begin transaction #3
-## stage 2 in PostCommitPhase: 1 BackfillType ops
+## PostCommitPhase stage 2 of 6 with 1 BackfillType ops
 update progress of schema change job #1
 commit transaction #3
 begin transaction #4
-## stage 3 in PostCommitPhase: 1 ValidationType ops
+## PostCommitPhase stage 3 of 6 with 1 ValidationType ops
 update progress of schema change job #1
 commit transaction #4
 begin transaction #5
-## stage 4 in PostCommitPhase: 3 MutationType ops
+## PostCommitPhase stage 4 of 6 with 3 MutationType ops
 upsert descriptor #56
   ...
          oid: 20
@@ -220,7 +220,7 @@ upsert descriptor #56
 update progress of schema change job #1
 commit transaction #5
 begin transaction #6
-## stage 5 in PostCommitPhase: 1 MutationType ops
+## PostCommitPhase non-revertible stage 5 of 6 with 1 MutationType ops
 upsert descriptor #56
   ...
          version: 4
@@ -237,7 +237,7 @@ upsert descriptor #56
 update progress of schema change job #1
 commit transaction #6
 begin transaction #7
-## stage 6 in PostCommitPhase: 2 MutationType ops
+## PostCommitPhase non-revertible stage 6 of 6 with 2 MutationType ops
 create job #2: "GC for dropping table 56 index 1"
   descriptor IDs: [56]
 upsert descriptor #56

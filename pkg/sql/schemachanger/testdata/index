@@ -11,7 +11,7 @@ begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 2 MutationType ops
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #54
   ...
      id: 54
@@ -68,7 +68,7 @@ upsert descriptor #54
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## stage 1 in PostCommitPhase: 1 MutationType ops
+## PostCommitPhase stage 1 of 4 with 1 MutationType ops
 upsert descriptor #54
   ...
          version: 3
@@ -85,15 +85,15 @@ upsert descriptor #54
 update progress of schema change job #1
 commit transaction #2
 begin transaction #3
-## stage 2 in PostCommitPhase: 1 BackfillType ops
+## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
 update progress of schema change job #1
 commit transaction #3
 begin transaction #4
-## stage 3 in PostCommitPhase: 1 ValidationType ops
+## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
 update progress of schema change job #1
 commit transaction #4
 begin transaction #5
-## stage 4 in PostCommitPhase: 1 MutationType ops
+## PostCommitPhase stage 4 of 4 with 1 MutationType ops
 upsert descriptor #54
   ...
      formatVersion: 3
