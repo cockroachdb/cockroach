@@ -57,8 +57,8 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Table) scop.Op {
-					return &scop.CreateGcJobForDescriptor{
-						DescID: this.TableID,
+					return &scop.CreateGcJobForTable{
+						TableID: this.TableID,
 					}
 				}),
 			),

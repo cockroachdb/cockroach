@@ -16,10 +16,10 @@ DROP VIEW defaultdb.v1
 - DROP Namespace:{DescID: 55, Name: v1}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 55
     name: v1
-    schemaId: 50
+    schemaId: 51
 - DROP Owner:{DescID: 55}
   state: PUBLIC
   details:
@@ -98,38 +98,38 @@ DROP VIEW defaultdb.v1 CASCADE
 - DROP Namespace:{DescID: 55, Name: v1}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 55
     name: v1
-    schemaId: 50
+    schemaId: 51
 - DROP Namespace:{DescID: 56, Name: v2}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 56
     name: v2
-    schemaId: 50
+    schemaId: 51
 - DROP Namespace:{DescID: 57, Name: v3}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 57
     name: v3
-    schemaId: 50
+    schemaId: 51
 - DROP Namespace:{DescID: 58, Name: v4}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 58
     name: v4
-    schemaId: 50
+    schemaId: 51
 - DROP Namespace:{DescID: 61, Name: v5}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 61
     name: v5
-    schemaId: 50
+    schemaId: 51
 - DROP Owner:{DescID: 55}
   state: PUBLIC
   details:

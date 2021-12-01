@@ -12,6 +12,7 @@ go_library(
         "opgen_computed_expr_type_reference.go",
         "opgen_constraint_name.go",
         "opgen_database.go",
+        "opgen_db_schema_entry.go",
         "opgen_default_expr_type_reference.go",
         "opgen_default_expression.go",
         "opgen_in_foreign_key.go",

@@ -5,7 +5,7 @@ rules
   to: other-node
   query:
     - $parent[Type] IN ['*scpb.Database', '*scpb.Schema']
-    - $other[Type] IN ['*scpb.Type', '*scpb.Table', '*scpb.View', '*scpb.Sequence']
+    - $other[Type] IN ['*scpb.Type', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Schema']
     - parentDependsOn(scpb.Element, scpb.Element)($parent, $other)
     - $parent-target[Type] = '*scpb.Target'
     - $parent-target[Element] = $parent
@@ -153,7 +153,7 @@ rules
   to: relation-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
-    - $dep[Type] IN ['*scpb.ForeignKeyBackReference', '*scpb.RelationDependedOnBy', '*scpb.ViewDependsOnType', '*scpb.DefaultExprTypeReference', '*scpb.OnUpdateExprTypeReference', '*scpb.ComputedExprTypeReference']
+    - $dep[Type] IN ['*scpb.ForeignKeyBackReference', '*scpb.RelationDependedOnBy', '*scpb.ViewDependsOnType', '*scpb.DefaultExprTypeReference', '*scpb.OnUpdateExprTypeReference', '*scpb.ComputedExprTypeReference', '*scpb.ColumnTypeReference']
     - $relation[DescID] = $id
     - $dep[ReferencedDescID] = $id
     - $relation-target[Type] = '*scpb.Target'
@@ -173,7 +173,7 @@ rules
   to: dep-node
   query:
     - $namespace[Type] = '*scpb.Namespace'
-    - $dep[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Database', '*scpb.Schema']
+    - $dep[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Database', '*scpb.Schema', '*scpb.Type']
     - $dep[DescID] = $desc-id
     - $namespace[DescID] = $desc-id
     - $namespace-target[Type] = '*scpb.Target'
@@ -193,7 +193,7 @@ rules
   to: namespace-node
   query:
     - $namespace[Type] = '*scpb.Namespace'
-    - $dep[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Database', '*scpb.Schema']
+    - $dep[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Database', '*scpb.Schema', '*scpb.Type']
     - $dep[DescID] = $desc-id
     - $namespace[DescID] = $desc-id
     - $namespace-target[Type] = '*scpb.Target'
@@ -338,3 +338,43 @@ rules
     - $table-drop-node[Target] = $table-drop-target
     - $table-drop-target[Direction] = DROP
     - $table-drop-node[Status] = DROPPED
+- name: schema can be dropped after schema entry inside the database
+  from: schema-node
+  to: schema-entry-node
+  query:
+    - $schema[Type] = '*scpb.Schema'
+    - $schema-entry[Type] = '*scpb.DatabaseSchemaEntry'
+    - $schema[DescID] = $schema-id
+    - $schema-entry[ReferencedDescID] = $schema-id
+    - $schema-target[Type] = '*scpb.Target'
+    - $schema-target[Element] = $schema
+    - $schema-node[Type] = '*scpb.Node'
+    - $schema-node[Target] = $schema-target
+    - $schema-target[Direction] = DROP
+    - $schema-node[Status] = ABSENT
+    - $schema-entry-target[Type] = '*scpb.Target'
+    - $schema-entry-target[Element] = $schema-entry
+    - $schema-entry-node[Type] = '*scpb.Node'
+    - $schema-entry-node[Target] = $schema-entry-target
+    - $schema-entry-target[Direction] = DROP
+    - $schema-entry-node[Status] = ABSENT
+- name: schema entry can be dropped after the database has exited synth drop
+  from: schema-entry-node
+  to: database-node
+  query:
+    - $database[Type] = '*scpb.Database'
+    - $schema-entry[Type] = '*scpb.DatabaseSchemaEntry'
+    - $database[DescID] = $schema-id
+    - $schema-entry[DescID] = $schema-id
+    - $database-target[Type] = '*scpb.Target'
+    - $database-target[Element] = $database
+    - $database-node[Type] = '*scpb.Node'
+    - $database-node[Target] = $database-target
+    - $database-target[Direction] = DROP
+    - $database-node[Status] = DROPPED
+    - $schema-entry-target[Type] = '*scpb.Target'
+    - $schema-entry-target[Element] = $schema-entry
+    - $schema-entry-node[Type] = '*scpb.Node'
+    - $schema-entry-node[Target] = $schema-entry-target
+    - $schema-entry-target[Direction] = DROP
+    - $schema-entry-node[Status] = ABSENT

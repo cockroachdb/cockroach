@@ -335,8 +335,8 @@ func decomposeTableDescToElements(
 	addOrDropForDir(b, dir, objectElem)
 	nameElem := scpb.Namespace{
 		Name:         tbl.GetName(),
-		DatabaseID:   tbl.GetParentSchemaID(),
-		SchemaID:     tbl.GetParentID(),
+		DatabaseID:   tbl.GetParentID(),
+		SchemaID:     tbl.GetParentSchemaID(),
 		DescriptorID: tbl.GetID(),
 	}
 	addOrDropForDir(b, dir, &nameElem)

@@ -12,10 +12,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - DROP Namespace:{DescID: 54, Name: sq1}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 54
     name: sq1
-    schemaId: 50
+    schemaId: 51
 - DROP Owner:{DescID: 54}
   state: PUBLIC
   details:
@@ -69,10 +69,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - DROP Namespace:{DescID: 54, Name: sq1}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 54
     name: sq1
-    schemaId: 50
+    schemaId: 51
 - DROP Owner:{DescID: 54}
   state: PUBLIC
   details:
