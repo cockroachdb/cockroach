@@ -558,7 +558,12 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		// enforcing are that a batch can't mix non-writes with writes.
 		// Checking isRead would cause ConditionalPut and Put to conflict,
 		// which is not what we want.
-		const mask = isWrite | isAdmin | isReverse
+		mask := isWrite | isAdmin
+		if (exFlags&isRange) != 0 && (newFlags&isRange) != 0 {
+			// Require the same value for isReverse flag only for ranged
+			// requests.
+			mask |= isReverse
+		}
 		return (mask & exFlags) == (mask & newFlags)
 	}
 	var parts [][]RequestUnion
