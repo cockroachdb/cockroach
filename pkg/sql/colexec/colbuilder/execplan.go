@@ -358,6 +358,13 @@ func (r opResult) createDiskBackedSort(
 	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
 	spoolMemLimit := totalMemLimit * 4 / 5
 	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
+	if totalMemLimit == 1 {
+		// If total memory limit is 1, we're likely in a "force disk spill"
+		// scenario, so we'll set all internal limits to 1 too (if we don't,
+		// they will end up as 0 which is treated as "no limit").
+		spoolMemLimit = 1
+		maxOutputBatchMemSize = 1
+	}
 	if limit != 0 {
 		// There is a limit specified, so we know exactly how many rows the
 		// sorter should output. Use a top K sorter, which uses a heap to avoid
@@ -863,8 +870,19 @@ func NewColOperator(
 					// We will give 20% of the hash aggregation budget to the
 					// output batch.
 					maxOutputBatchMemSize := totalMemLimit / 10
+					hashAggregationMemLimit := totalMemLimit/2 - maxOutputBatchMemSize
+					inputTuplesTrackingMemLimit := totalMemLimit / 2
+					if totalMemLimit == 1 {
+						// If total memory limit is 1, we're likely in a "force
+						// disk spill" scenario, so we'll set all internal
+						// limits to 1 too (if we don't, they will end up as 0
+						// which is treated as "no limit").
+						maxOutputBatchMemSize = 1
+						hashAggregationMemLimit = 1
+						inputTuplesTrackingMemLimit = 1
+					}
 					hashAggregatorMemAccount, hashAggregatorMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-						ctx, flowCtx, totalMemLimit/2-maxOutputBatchMemSize, opName, spec.ProcessorID,
+						ctx, flowCtx, hashAggregationMemLimit, opName, spec.ProcessorID,
 					)
 					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
 					// We need to create a separate memory account for the
@@ -880,7 +898,7 @@ func NewColOperator(
 						&colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
 							Types:              inputTypes,
-							MemoryLimit:        totalMemLimit / 2,
+							MemoryLimit:        inputTuplesTrackingMemLimit,
 							DiskQueueCfg:       args.DiskQueueCfg,
 							FDSemaphore:        args.FDSemaphore,
 							DiskAcc:            args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
