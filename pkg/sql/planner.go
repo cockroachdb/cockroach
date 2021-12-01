@@ -237,6 +237,10 @@ type planner struct {
 	// the type resolution steps will disallow resolution of types that have a
 	// parentID != contextDatabaseID when it is set.
 	contextDatabaseID descpb.ID
+
+	// validateDistSQLPlan if true we compare plan with original planNode derived
+	// distsql physical plan.
+	validateDistSQLPlan bool
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {

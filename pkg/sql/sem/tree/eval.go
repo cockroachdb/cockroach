@@ -3278,6 +3278,10 @@ type EvalPlanner interface {
 		stmt string,
 		qargs ...interface{},
 	) (InternalRows, error)
+
+	// ValidateDistSQLPlan will generate the original plan node derived physical plan
+	// and compare it to the current physical plan created directly from the memo.
+	ValidateDistSQLPlan(ctx context.Context) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

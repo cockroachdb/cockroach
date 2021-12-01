@@ -161,6 +161,8 @@ require (
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
+require github.com/nsf/jsondiff v0.0.0-20210926074059-1e845ec5d249
+
 require (
 	cloud.google.com/go v0.99.0 // indirect
 	cloud.google.com/go/kms v1.1.0 // indirect

@@ -12,12 +12,15 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -29,11 +32,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/nsf/jsondiff"
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
@@ -251,6 +259,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				)
 			}
 			if err == nil {
+				p.validateDistSQLPlan = buildutil.CrdbTestBuild
 				return nil
 			}
 		}
@@ -721,4 +730,81 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation() error {
 	)
 
 	return nil
+}
+
+func (p *planner) ValidateDistSQLPlan(ctx context.Context) error {
+	memo := p.curPlan.mem
+	if memo == nil || !p.validateDistSQLPlan || p.curPlan.main.physPlan == nil {
+		return nil
+	}
+	ogPhysPlan, cleanup, err := p.createOriginalPhysicalPlanForComparison(ctx, memo)
+	defer cleanup()
+	if err != nil {
+		return err
+	}
+	flowSpecsSpecPlanning := p.curPlan.main.physPlan.GenerateFlowSpecs()
+	flowSpecsOrig := ogPhysPlan.GenerateFlowSpecs()
+	for n, fsOG := range flowSpecsOrig {
+		// Make sure SP has this flow
+		if flowSpecsSpecPlanning[n] == nil {
+			return errors.Errorf("distsql flow missing for stage %v: Query: %s\nOG: %v", n, p.stmt.SQL, fsOG)
+		}
+		flowSpecToJSON := func(fs execinfrapb.FlowSpec) ([]byte, error) {
+			fs.FlowID.UUID = uuid.Nil
+			jsonstr, err := protoreflect.MessageToJSON(&fs, protoreflect.FmtFlags{EmitDefaults: false, EmitRedacted: true})
+			if err != nil {
+				// this can happen on some unsupported queries (TODO: what's an example)
+				fmt.Fprintf(os.Stderr, "error marshalling flow spec: %v", err)
+				return nil, err
+			}
+			pretty, err := json.Pretty(jsonstr)
+			if err != nil {
+				panic(err)
+			}
+			return []byte(pretty), nil
+		}
+		opts := jsondiff.DefaultConsoleOptions()
+		opts.SkipMatches = true
+		jsOG, err := flowSpecToJSON(*fsOG)
+		if err != nil {
+			return nil
+		}
+		jsSP, err := flowSpecToJSON(*flowSpecsSpecPlanning[n])
+		if err != nil {
+			return nil
+		}
+		diff, str := jsondiff.Compare(jsOG, jsSP, &opts)
+		if diff != jsondiff.FullMatch {
+			return errors.Errorf("distsql planning stage %v comparison failed: \nQuery: %s\nDelta: %s\nOG: %s\nSP: %s\n", n, p.stmt.SQL, str, jsOG, jsSP)
+		}
+	}
+	return nil
+}
+
+func (p *planner) createOriginalPhysicalPlanForComparison(
+	ctx context.Context, execMemo *memo.Memo,
+) (physPlan *PhysicalPlan, cleanup func(), err error) {
+	opc := &p.optPlanningCtx
+	var plan planTop
+	plan.init(&p.stmt, &p.instrumentation)
+	err = opc.runExecBuilder(
+		&plan,
+		&p.stmt,
+		newExecFactory(p),
+		execMemo,
+		p.EvalContext(),
+		p.autoCommit,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	distributePlan := getPlanDistribution(ctx, p, p.execCfg.NodeID, p.SessionData().DistSQLMode, plan.main)
+	dsp := p.extendedEvalCtx.DistSQLPlanner
+	planCtx := dsp.NewPlanningCtx(ctx, p.ExtendedEvalContext(), p, p.txn, distributePlan.WillDistribute())
+	physPlan, physPlanCleanup, err := dsp.createPhysPlan(planCtx, plan.main)
+	if err != nil {
+		return nil, nil, err
+	}
+	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
+	return physPlan, physPlanCleanup, nil
 }

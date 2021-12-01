@@ -5707,6 +5707,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_nsf_jsondiff",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/nsf/jsondiff",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:NHrXEjTNQY7P0Zfx1aMrNhpgxHmow66XQtm0aQLY0AE=",
+        version = "v0.0.0-20210926074059-1e845ec5d249",
+    )
+    go_repository(
         name = "com_github_nvveen_gotty",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Nvveen/Gotty",

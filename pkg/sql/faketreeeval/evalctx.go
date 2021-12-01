@@ -373,6 +373,11 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// ValidateDistSQLPlan is part of the tree.EvalPlanner interface.
+func (ep *DummyEvalPlanner) ValidateDistSQLPlan(ctx context.Context) error {
+	return nil
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 

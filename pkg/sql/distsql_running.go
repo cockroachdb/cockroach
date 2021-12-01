@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -1397,6 +1398,15 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		return physPlanCleanup
 	}
 	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
+
+	if buildutil.CrdbTestBuild {
+		err = evalCtx.Planner.ValidateDistSQLPlan(ctx)
+		if err != nil {
+			recv.SetError(err)
+			return physPlanCleanup
+		}
+	}
+
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	runCleanup := dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	return func() {
