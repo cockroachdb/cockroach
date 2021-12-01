@@ -547,6 +547,8 @@ test           pg_extension        geography_columns                      public
 test           pg_extension        geometry_columns                       public   SELECT
 test           pg_extension        spatial_ref_sys                        public   SELECT
 test           public              NULL                                   admin    ALL
+test           public              NULL                                   public   CREATE
+test           public              NULL                                   public   USAGE
 test           public              NULL                                   root     ALL
 
 query TTTTT colnames
@@ -984,15 +986,20 @@ a              pg_extension  NULL                             admin      ALL
 a              pg_extension  NULL                             readwrite  ALL
 a              pg_extension  NULL                             root       ALL
 a              public        NULL                             admin      ALL
-a              public        NULL                             readwrite  ALL
+a              public        NULL                             public     CREATE
+a              public        NULL                             public     USAGE
 a              public        NULL                             root       ALL
 defaultdb      pg_extension  NULL                             admin      ALL
 defaultdb      pg_extension  NULL                             root       ALL
 defaultdb      public        NULL                             admin      ALL
+defaultdb      public        NULL                             public     CREATE
+defaultdb      public        NULL                             public     USAGE
 defaultdb      public        NULL                             root       ALL
 postgres       pg_extension  NULL                             admin      ALL
 postgres       pg_extension  NULL                             root       ALL
 postgres       public        NULL                             admin      ALL
+postgres       public        NULL                             public     CREATE
+postgres       public        NULL                             public     USAGE
 postgres       public        NULL                             root       ALL
 system         pg_extension  NULL                             admin      GRANT
 system         pg_extension  NULL                             admin      USAGE
@@ -1005,6 +1012,8 @@ system         public        NULL                             root       USAGE
 test           pg_extension  NULL                             admin      ALL
 test           pg_extension  NULL                             root       ALL
 test           public        NULL                             admin      ALL
+test           public        NULL                             public     CREATE
+test           public        NULL                             public     USAGE
 test           public        NULL                             root       ALL
 
 query TTTTT colnames
@@ -1849,7 +1858,6 @@ a  crdb_internal       NULL  readwrite  ALL
 a  information_schema  NULL  readwrite  ALL
 a  pg_catalog          NULL  readwrite  ALL
 a  pg_extension        NULL  readwrite  ALL
-a  public              NULL  readwrite  ALL
 a  public              v     readwrite  CREATE
 a  public              v     readwrite  DROP
 a  public              v     readwrite  GRANT
@@ -1883,7 +1891,6 @@ a  crdb_internal       NULL  readwrite  ALL
 a  information_schema  NULL  readwrite  ALL
 a  pg_catalog          NULL  readwrite  ALL
 a  pg_extension        NULL  readwrite  ALL
-a  public              NULL  readwrite  ALL
 
 # Verify that the DB privileges have not changed.
 query TTT colnames

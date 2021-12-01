@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -142,8 +143,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			// the public schema, as all tables are scoped under the public schema.
 			add(catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()), nameValue)
 			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
-			add(catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()), publicSchemaValue)
+			publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
+			add(catalogkeys.MakeSchemaNameKey(ms.codec, desc.GetID(), tree.PublicSchema), publicSchemaValue)
 		}
 
 		// Create descriptor metadata key.

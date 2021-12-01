@@ -236,6 +236,7 @@ type DatabaseDescriptor interface {
 	// GetDefaultPrivilegeDescriptor returns the default privileges for this
 	// database.
 	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
+	HasPublicSchemaWithDescriptor() bool
 }
 
 // TableDescriptor is an interface around the table descriptor types.

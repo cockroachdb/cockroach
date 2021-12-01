@@ -291,6 +291,8 @@ const (
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
 	// WriteAtRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -504,7 +506,10 @@ var versionsSingleton = keyedVersions{
 		Key:     MVCCAddSSTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
-
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 18},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

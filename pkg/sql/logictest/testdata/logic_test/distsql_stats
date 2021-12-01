@@ -10,6 +10,9 @@ SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, e BOOL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
 
+let $t_id
+SELECT id FROM system.namespace WHERE name='data'
+
 # Split into ten parts.
 statement ok
 ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
@@ -273,7 +276,7 @@ statement ok
 DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
 
 statement ok
-CREATE STATISTICS s5 FROM [53]
+CREATE STATISTICS s5 FROM [$t_id]
 
 query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
@@ -372,7 +375,7 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 #
 
 statement ok
-CREATE STATISTICS s6 ON a FROM [53]
+CREATE STATISTICS s6 ON a FROM [$t_id]
 
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -393,7 +396,7 @@ s6               {a}           256        4               0
 
 # Combine default columns and numeric reference.
 statement ok
-CREATE STATISTICS __auto__ FROM [53]
+CREATE STATISTICS __auto__ FROM [$t_id]
 
 query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
@@ -419,12 +422,12 @@ statement ok
 DROP INDEX data@data_b_a_idx
 
 statement ok
-CREATE STATISTICS __auto__ FROM [53];
-CREATE STATISTICS __auto__ FROM [53];
-CREATE STATISTICS __auto__ FROM [53];
-CREATE STATISTICS __auto__ FROM [53];
-CREATE STATISTICS __auto__ FROM [53];
-CREATE STATISTICS __auto__ FROM [53];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
+CREATE STATISTICS __auto__ FROM [$t_id];
 
 # Only the last 4-5 automatic stats should remain for each column.
 query TT colnames
@@ -476,7 +479,7 @@ s4               {c,b}
 s4               {c,d}
 
 statement ok
-CREATE STATISTICS s7 ON a FROM [53]
+CREATE STATISTICS s7 ON a FROM [$t_id]
 
 query TT colnames
 SELECT statistics_name, column_names
@@ -527,7 +530,7 @@ s4               {c,d}
 s7               {a}
 
 statement ok
-CREATE STATISTICS s8 ON a FROM [53]
+CREATE STATISTICS s8 ON a FROM [$t_id]
 
 # s7 is deleted but the automatic stats remain.
 query TT colnames

@@ -359,7 +359,7 @@ func backupShowerDefault(
 				// Map database ID to descriptor name.
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
-				schemaIDToName[keys.PublicSchemaID] = catconstants.PublicSchemaName
+				schemaIDToName[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
 				for i := range manifest.Descriptors {
 					_, db, _, schema := descpb.FromDescriptor(&manifest.Descriptors[i])
 					if db != nil {

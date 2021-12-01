@@ -13,9 +13,11 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -120,11 +123,17 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
+	publicSchemaID, err := p.createPublicSchema(ctx, id, database)
+	if err != nil {
+		return nil, false, err
+	}
+
 	desc := dbdesc.NewInitial(
 		id,
 		string(database.Name),
 		p.SessionData().User(),
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
+		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
 
 	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
@@ -138,13 +147,67 @@ func (p *planner) createDatabase(
 		return nil, true, err
 	}
 
-	// Every database must be initialized with the public schema.
-	key := catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, id)
-	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
-		return nil, true, err
+	return desc, true, nil
+}
+
+func (p *planner) maybeCreatePublicSchemaWithDescriptor(
+	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
+) (descpb.ID, error) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		return descpb.InvalidID, nil
 	}
 
-	return desc, true, nil
+	publicSchemaID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+
+	// Every database must be initialized with the public schema.
+	// Create the SchemaDescriptor.
+	// In postgres, the user "postgres" is the owner of the public schema in a
+	// newly created db. Postgres and Public have USAGE and CREATE privileges.
+	// In CockroachDB, root is our substitute for the postgres user.
+	publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+	// By default, everyone has USAGE and CREATE on the public schema.
+	publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE})
+	publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID:   dbID,
+		Name:       tree.PublicSchema,
+		ID:         publicSchemaID,
+		Privileges: publicSchemaPrivileges,
+		Version:    1,
+	}).BuildCreatedMutableSchema()
+
+	if err := p.createDescriptorWithID(
+		ctx,
+		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema),
+		publicSchemaDesc.GetID(),
+		publicSchemaDesc,
+		p.ExecCfg().Settings,
+		tree.AsStringWithFQNames(database, p.Ann()),
+	); err != nil {
+		return descpb.InvalidID, err
+	}
+
+	return publicSchemaID, nil
+}
+
+func (p *planner) createPublicSchema(
+	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
+) (descpb.ID, error) {
+	publicSchemaID, err := p.maybeCreatePublicSchemaWithDescriptor(ctx, dbID, database)
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if publicSchemaID != descpb.InvalidID {
+		return publicSchemaID, nil
+	}
+	// Every database must be initialized with the public schema.
+	key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema)
+	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
+		return keys.PublicSchemaID, err
+	}
+	return keys.PublicSchemaID, nil
 }
 
 func (p *planner) createDescriptorWithID(

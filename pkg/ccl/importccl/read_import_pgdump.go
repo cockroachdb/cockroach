@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -304,6 +303,7 @@ func createPostgresSequences(
 	walltime int64,
 	owner security.SQLUsername,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
+	execCfg *sql.ExecutorConfig,
 ) ([]*tabledesc.Mutable, error) {
 	ret := make([]*tabledesc.Mutable, 0)
 	for schemaAndTableName, seq := range createSeq {
@@ -339,15 +339,10 @@ func getSchemaByNameFromMap(
 	schemaAndTableName schemaAndTableName, schemaNameToDesc map[string]*schemadesc.Mutable,
 ) (catalog.SchemaDescriptor, error) {
 	var schema catalog.SchemaDescriptor
-	switch schemaAndTableName.schema {
-	case "", "public":
-		schema = schemadesc.GetPublicSchema()
-	default:
-		var ok bool
-		if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
-			return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
-				schema)
-		}
+	var ok bool
+	if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
+		return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
+			schema)
 	}
 	return schema, nil
 }
@@ -504,6 +499,15 @@ func readPostgresCreateTable(
 		schemaNameToDesc[schemaDesc.GetName()] = schemaDesc
 	}
 
+	// The database should already have a public schema so we don't have to create
+	// it. However, we do have to add it to the naming map for name resolution.
+	publicSchema, err := getPublicSchemaDescForDatabase(ctx, p.ExecCfg(), parentDB)
+	if err != nil {
+		return nil, nil, err
+	}
+	schemaNameToDesc[tree.PublicSchema] =
+		schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
+
 	// Construct sequence descriptors.
 	seqs, err := createPostgresSequences(
 		ctx,
@@ -513,6 +517,7 @@ func readPostgresCreateTable(
 		walltime,
 		owner,
 		schemaNameToDesc,
+		p.ExecCfg(),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -840,12 +845,16 @@ func readPostgresStmt(
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				err := catalogkv.CheckObjectCollision(
+				dbDesc, err := catalogkv.GetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
+				if err != nil {
+					return err
+				}
+				err = catalogkv.CheckObjectCollision(
 					ctx,
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
-					keys.PublicSchemaID,
+					dbDesc.GetSchemaID(tree.PublicSchema),
 					tree.NewUnqualifiedTableName(tree.Name(tableName)),
 				)
 				if err != nil {

@@ -18,7 +18,7 @@ SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name = 'root
 ----
 SCHEMA CHANGE  updating version for users table         root
 SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 52      root
+SCHEMA CHANGE  updating privileges for database 54      root
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 
 query TTT
@@ -26,7 +26,7 @@ SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name 
 ----
 SCHEMA CHANGE  updating version for users table         root
 SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 52      root
+SCHEMA CHANGE  updating privileges for database 54      root
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 
 user testuser
@@ -66,7 +66,7 @@ SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('ro
 ----
 SCHEMA CHANGE  updating version for users table         root
 SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 52      root
+SCHEMA CHANGE  updating privileges for database 54      root
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
 
@@ -75,7 +75,7 @@ SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name 
 ----
 SCHEMA CHANGE  updating version for users table         root
 SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 52      root
+SCHEMA CHANGE  updating privileges for database 54      root
 SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
 

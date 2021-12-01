@@ -22,7 +22,7 @@ CREATE TABLE db.t();
 # - Time Series Span
 full-translate
 ----
-/Table/5{6-7}                  DEFAULT
+/Table/{59-60}                 DEFAULT
 /Table/{3-4}                   num_replicas=5
 /Table/{4-5}                   num_replicas=5
 /Table/{5-6}                   num_replicas=5

@@ -37,164 +37,164 @@ CREATE VIEW sc1.v5 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
 deps
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-- from: [DefaultExpression:{DescID: 54, ColumnID: 3}, ABSENT]
-  to:   [Table:{DescID: 54}, DROPPED]
+- from: [DefaultExpression:{DescID: 56, ColumnID: 3}, ABSENT]
+  to:   [Table:{DescID: 56}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [Namespace:{DescID: 53, Name: sq1}, ABSENT]
-  to:   [Sequence:{DescID: 53}, DROPPED]
+- from: [Namespace:{DescID: 55, Name: sq1}, ABSENT]
+  to:   [Sequence:{DescID: 55}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 54, Name: t1}, ABSENT]
-  to:   [Table:{DescID: 54}, DROPPED]
+- from: [Namespace:{DescID: 56, Name: t1}, ABSENT]
+  to:   [Table:{DescID: 56}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 56, Name: v2}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 57, Name: v3}, ABSENT]
+- from: [Namespace:{DescID: 57, Name: v1}, ABSENT]
   to:   [View:{DescID: 57}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 58, Name: v4}, ABSENT]
+- from: [Namespace:{DescID: 58, Name: v2}, ABSENT]
   to:   [View:{DescID: 58}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [Namespace:{DescID: 61, Name: v5}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
+- from: [Namespace:{DescID: 59, Name: v3}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-  to:   [Sequence:{DescID: 53}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
-  to:   [Table:{DescID: 54}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [Table:{DescID: 54}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
+- from: [Namespace:{DescID: 60, Name: v4}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [Namespace:{DescID: 63, Name: v5}, ABSENT]
+  to:   [View:{DescID: 63}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+  to:   [Sequence:{DescID: 55}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
+  to:   [Table:{DescID: 56}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
+  to:   [Table:{DescID: 56}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
   to:   [View:{DescID: 57}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}, ABSENT]
   to:   [View:{DescID: 58}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, ABSENT]
+  to:   [View:{DescID: 57}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, ABSENT]
   to:   [View:{DescID: 58}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, ABSENT]
+  to:   [View:{DescID: 59}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [Sequence:{DescID: 53}, ABSENT]
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, ABSENT]
+  to:   [View:{DescID: 58}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 60, ReferencedDescID: 63}, ABSENT]
+  to:   [View:{DescID: 60}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [RelationDependedOnBy:{DescID: 60, ReferencedDescID: 63}, ABSENT]
+  to:   [View:{DescID: 63}, DROPPED]
+  kind: SameStage
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [Sequence:{DescID: 55}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [Table:{DescID: 54}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [Table:{DescID: 56}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [Type:{DescID: 59}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [Type:{DescID: 61}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [Type:{DescID: 60}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [Type:{DescID: 62}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [View:{DescID: 55}, ABSENT]
-  kind: HappensAfter
-  rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [View:{DescID: 56}, ABSENT]
-  kind: HappensAfter
-  rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
   to:   [View:{DescID: 57}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
   to:   [View:{DescID: 58}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Schema:{DescID: 52}, ABSENT]
-  to:   [View:{DescID: 61}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [View:{DescID: 59}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
-- from: [Sequence:{DescID: 53}, ABSENT]
-  to:   [Namespace:{DescID: 53, Name: sq1}, ABSENT]
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [View:{DescID: 60}, ABSENT]
+  kind: HappensAfter
+  rule: parent dependencies
+- from: [Schema:{DescID: 54}, ABSENT]
+  to:   [View:{DescID: 63}, ABSENT]
+  kind: HappensAfter
+  rule: parent dependencies
+- from: [Sequence:{DescID: 55}, ABSENT]
+  to:   [Namespace:{DescID: 55, Name: sq1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Table:{DescID: 54}, ABSENT]
-  to:   [Namespace:{DescID: 54, Name: t1}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 55}, ABSENT]
-  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 56}, ABSENT]
-  to:   [Namespace:{DescID: 56, Name: v2}, ABSENT]
+- from: [Table:{DescID: 56}, ABSENT]
+  to:   [Namespace:{DescID: 56, Name: t1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
 - from: [View:{DescID: 57}, ABSENT]
-  to:   [Namespace:{DescID: 57, Name: v3}, ABSENT]
+  to:   [Namespace:{DescID: 57, Name: v1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
 - from: [View:{DescID: 58}, ABSENT]
-  to:   [Namespace:{DescID: 58, Name: v4}, ABSENT]
+  to:   [Namespace:{DescID: 58, Name: v2}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 61}, ABSENT]
-  to:   [Namespace:{DescID: 61, Name: v5}, ABSENT]
+- from: [View:{DescID: 59}, ABSENT]
+  to:   [Namespace:{DescID: 59, Name: v3}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
-- from: [ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, ABSENT]
-  to:   [Type:{DescID: 59}, DROPPED]
+- from: [View:{DescID: 60}, ABSENT]
+  to:   [Namespace:{DescID: 60, Name: v4}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [View:{DescID: 63}, ABSENT]
+  to:   [Namespace:{DescID: 63, Name: v5}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [ViewDependsOnType:{DescID: 63, ReferencedDescID: 61}, ABSENT]
+  to:   [Type:{DescID: 61}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, ABSENT]
-  to:   [Type:{DescID: 60}, DROPPED]
+- from: [ViewDependsOnType:{DescID: 63, ReferencedDescID: 62}, ABSENT]
+  to:   [Type:{DescID: 62}, DROPPED]
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
 
@@ -203,25 +203,21 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ----
 Stage 1 of 4
   transitions:
-    [Sequence:{DescID: 53}, PUBLIC, DROP] -> TXN_DROPPED
-    [Table:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
-    [Column:{DescID: 54, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [Column:{DescID: 54, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [Column:{DescID: 54, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Sequence:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Table:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Column:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
-    [Type:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
-    [Type:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
-    [Schema:{DescID: 52}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
+    [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
+    [Type:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [Type:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
+    [Schema:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
-    *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 53
-    *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 54
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
@@ -231,27 +227,27 @@ Stage 1 of 4
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 61
-    *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 60
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 52
+      DescID: 63
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 61
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 62
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 54
 Stage 2 of 4
   transitions:
-    [Namespace:{DescID: 53, Name: sq1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 54, Name: t1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 56, Name: v2}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 57, Name: v3}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 58, Name: v4}, PUBLIC, DROP] -> ABSENT
-    [Namespace:{DescID: 61, Name: v5}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 55, Name: sq1}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 56, Name: t1}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 57, Name: v1}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 58, Name: v2}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 59, Name: v3}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 60, Name: v4}, PUBLIC, DROP] -> ABSENT
+    [Namespace:{DescID: 63, Name: v5}, PUBLIC, DROP] -> ABSENT
   ops:
-    *scop.DrainDescriptorName
-      TableID: 53
-    *scop.DrainDescriptorName
-      TableID: 54
     *scop.DrainDescriptorName
       TableID: 55
     *scop.DrainDescriptorName
@@ -261,61 +257,52 @@ Stage 2 of 4
     *scop.DrainDescriptorName
       TableID: 58
     *scop.DrainDescriptorName
-      TableID: 61
+      TableID: 59
+    *scop.DrainDescriptorName
+      TableID: 60
+    *scop.DrainDescriptorName
+      TableID: 63
 Stage 3 of 4 (non-revertible)
   transitions:
-    [Sequence:{DescID: 53}, TXN_DROPPED, DROP] -> DROPPED
-    [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
-    [Table:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
-    [Column:{DescID: 54, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 54, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [DefaultExpression:{DescID: 54, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [Table:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
+    [Column:{DescID: 56, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
-    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
-    [ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
-    [ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
-    [Type:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
-    [Type:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
-    [Schema:{DescID: 52}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
+    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
+    [View:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
+    [RelationDependedOnBy:{DescID: 60, ReferencedDescID: 63}, PUBLIC, DROP] -> ABSENT
+    [View:{DescID: 63}, TXN_DROPPED, DROP] -> DROPPED
+    [ViewDependsOnType:{DescID: 63, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
+    [ViewDependsOnType:{DescID: 63, ReferencedDescID: 62}, PUBLIC, DROP] -> ABSENT
+    [Type:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
+    [Type:{DescID: 62}, TXN_DROPPED, DROP] -> DROPPED
+    [Schema:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 53
-    *scop.MarkDescriptorAsDropped
-      DescID: 54
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 54
-      TableID: 53
-    *scop.RemoveColumnDefaultExpression
-      ColumnID: 3
-      TableID: 54
-    *scop.UpdateRelationDeps
-      TableID: 54
-    *scop.MarkDescriptorAsDropped
       DescID: 55
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 55
-      TableID: 54
     *scop.MarkDescriptorAsDropped
       DescID: 56
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 55
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 56
+    *scop.UpdateRelationDeps
+      TableID: 56
     *scop.MarkDescriptorAsDropped
       DescID: 57
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 57
-      TableID: 55
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 56
@@ -323,79 +310,64 @@ Stage 3 of 4 (non-revertible)
       DescID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 58
-      TableID: 56
-    *scop.MarkDescriptorAsDropped
-      DescID: 61
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 61
-      TableID: 58
+      TableID: 57
     *scop.MarkDescriptorAsDropped
       DescID: 59
-    *scop.RemoveTypeBackRef
-      DescID: 61
-      TypeID: 59
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 59
+      TableID: 57
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 59
+      TableID: 58
     *scop.MarkDescriptorAsDropped
       DescID: 60
-    *scop.RemoveTypeBackRef
-      DescID: 61
-      TypeID: 60
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 60
+      TableID: 58
     *scop.MarkDescriptorAsDropped
-      DescID: 52
+      DescID: 63
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 63
+      TableID: 60
+    *scop.MarkDescriptorAsDropped
+      DescID: 61
+    *scop.RemoveTypeBackRef
+      DescID: 63
+      TypeID: 61
+    *scop.MarkDescriptorAsDropped
+      DescID: 62
+    *scop.RemoveTypeBackRef
+      DescID: 63
+      TypeID: 62
+    *scop.MarkDescriptorAsDropped
+      DescID: 54
 Stage 4 of 4 (non-revertible)
   transitions:
-    [Sequence:{DescID: 53}, DROPPED, DROP] -> ABSENT
-    [Table:{DescID: 54}, DROPPED, DROP] -> ABSENT
-    [Column:{DescID: 54, ColumnID: 1}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 54, ColumnID: 3}, DELETE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
-    [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
+    [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
+    [Table:{DescID: 56}, DROPPED, DROP] -> ABSENT
+    [Column:{DescID: 56, ColumnID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [Column:{DescID: 56, ColumnID: 2}, DELETE_ONLY, DROP] -> ABSENT
+    [Column:{DescID: 56, ColumnID: 3}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
     [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 59}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 60}, DROPPED, DROP] -> ABSENT
-    [Schema:{DescID: 52}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 60}, DROPPED, DROP] -> ABSENT
+    [View:{DescID: 63}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 61}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 62}, DROPPED, DROP] -> ABSENT
+    [Schema:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
-    *scop.LogEvent
-      DescID: 53
-      Direction: 2
-      Element:
-        sequence:
-          sequenceId: 53
-      Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 53
-    *scop.LogEvent
-      DescID: 54
-      Direction: 2
-      Element:
-        table:
-          tableId: 54
-      Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 54
     *scop.LogEvent
       DescID: 55
       Direction: 2
       Element:
-        view:
-          tableId: 55
+        sequence:
+          sequenceId: 55
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 2
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -404,12 +376,12 @@ Stage 4 of 4 (non-revertible)
       DescID: 56
       Direction: 2
       Element:
-        view:
+        table:
           tableId: 56
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
-          SourceElementID: 3
+          SourceElementID: 2
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -443,11 +415,11 @@ Stage 4 of 4 (non-revertible)
     *scop.CreateGcJobForDescriptor
       DescID: 58
     *scop.LogEvent
-      DescID: 61
+      DescID: 59
       Direction: 2
       Element:
         view:
-          tableId: 61
+          tableId: 59
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:
@@ -455,21 +427,47 @@ Stage 4 of 4 (non-revertible)
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
-      DescID: 61
-    *scop.DrainDescriptorName
-      TableID: 59
-    *scop.DrainDescriptorName
-      TableID: 60
-    *scop.DrainDescriptorName
-      TableID: 52
+      DescID: 59
     *scop.LogEvent
-      DescID: 52
+      DescID: 60
+      Direction: 2
+      Element:
+        view:
+          tableId: 60
+      Metadata:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 60
+    *scop.LogEvent
+      DescID: 63
+      Direction: 2
+      Element:
+        view:
+          tableId: 63
+      Metadata:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+        Username: root
+    *scop.CreateGcJobForDescriptor
+      DescID: 63
+    *scop.DrainDescriptorName
+      TableID: 61
+    *scop.DrainDescriptorName
+      TableID: 62
+    *scop.DrainDescriptorName
+      TableID: 54
+    *scop.LogEvent
+      DescID: 54
       Direction: 2
       Element:
         schema:
           dependentObjects:
-          - 53
-          - 54
           - 55
           - 56
           - 57
@@ -477,7 +475,9 @@ Stage 4 of 4 (non-revertible)
           - 59
           - 60
           - 61
-          schemaId: 52
+          - 62
+          - 63
+          schemaId: 54
       Metadata:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
         TargetMetadata:

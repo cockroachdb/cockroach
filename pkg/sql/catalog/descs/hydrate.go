@@ -168,6 +168,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			// the only cases we have to consider here.
 			var scName string
 			switch typDesc.GetParentSchemaID() {
+			// TODO(richardjcai): Remove case for keys.PublicSchemaID in 22.2.
 			case keys.PublicSchemaID:
 				scName = tree.PublicSchema
 			default:

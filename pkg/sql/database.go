@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 //
@@ -115,7 +116,14 @@ func (p *planner) forEachMutableTableInDatabase(
 			continue
 		}
 		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
-		if err := fn(ctx, lCtx.schemaNames[desc.GetParentSchemaID()], mutable); err != nil {
+		schemaName, found, err := lCtx.GetSchemaName(ctx, desc.GetParentSchemaID(), desc.GetParentID(), p.ExecCfg().Settings.Version)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.AssertionFailedf("schema id %d not found", desc.GetParentSchemaID())
+		}
+		if err := fn(ctx, schemaName, mutable); err != nil {
 			return err
 		}
 	}

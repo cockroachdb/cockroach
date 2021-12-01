@@ -137,11 +137,18 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 		for _, schemaID := range lCtx.schemaIDs {
 			if IsOwner(lCtx.schemaDescs[schemaID], oldRole) {
+				// Don't reassign public schema.
+				// TODO(richardjcai): revisit this in 22.2, in 22.1 we do not allow
+				// modifying the public schema.
+				if lCtx.schemaDescs[schemaID].GetName() == tree.PublicSchema {
+					continue
+				}
 				if err := n.reassignSchemaOwner(lCtx.schemaDescs[schemaID], currentDbDesc, params); err != nil {
 					return err
 				}
 			}
 		}
+
 		for _, tbID := range lCtx.tbIDs {
 			if IsOwner(lCtx.tbDescs[tbID], oldRole) {
 				if err := n.reassignTableOwner(lCtx.tbDescs[tbID], params); err != nil {

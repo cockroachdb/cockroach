@@ -113,6 +113,20 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					curDetails = schemaMetadata.schemaPreparedDetails
 				}
 
+				// In 22.1, the Public schema should always be present in the database.
+				// Make sure it is part of schemaMetadata, it is not guaranteed to
+				// be added in prepareSchemasForIngestion if we're not importing any
+				// schemas.
+				// The Public schema will not change in the database so both the
+				// oldSchemaIDToName and newSchemaIDToName entries will be the
+				// same for the Public schema.
+				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, details.ParentID, tree.DatabaseLookupFlags{Required: true})
+				if err != nil {
+					return err
+				}
+				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
+				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
+
 				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn, descsCol,
 					schemaMetadata)
 				if err != nil {
@@ -261,6 +275,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			r.res.IndexEntries += count
 		}
 	}
+
 	if r.testingKnobs.afterImport != nil {
 		if err := r.testingKnobs.afterImport(r.res); err != nil {
 			return err
@@ -725,6 +740,9 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 					Required:    true,
 					AvoidCached: true,
 				})
+				if err != nil {
+					return err
+				}
 				return err
 			}); err != nil {
 				return err
@@ -776,6 +794,22 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		}
 	}
 	return nil
+}
+
+func getPublicSchemaDescForDatabase(
+	ctx context.Context, execCfg *sql.ExecutorConfig, db catalog.DatabaseDescriptor,
+) (scDesc catalog.SchemaDescriptor, err error) {
+	if err := sql.DescsTxn(ctx, execCfg, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+		scDesc, err = descriptors.GetImmutableSchemaByID(ctx, txn, publicSchemaID, tree.SchemaLookupFlags{})
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return scDesc, nil
 }
 
 // parseAndCreateBundleTableDescs parses and creates the table
@@ -1212,9 +1246,9 @@ func constructSchemaAndTableKey(
 	tableDesc *descpb.TableDescriptor, schemaIDToName map[descpb.ID]string,
 ) (schemaAndTableName, error) {
 	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
-	if !ok && tableDesc.UnexposedParentSchemaID != keys.PublicSchemaID {
-		return schemaAndTableName{}, errors.Newf("invalid parent schema ID %d for table %s",
-			tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
+	if !ok && schemaName != tree.PublicSchema {
+		return schemaAndTableName{}, errors.Newf("invalid parent schema %s with ID %d for table %s",
+			schemaName, tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
 	}
 
 	return schemaAndTableName{schema: schemaName, table: tableDesc.GetName()}, nil

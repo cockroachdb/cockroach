@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1301,8 +1303,16 @@ func TestDistSQLRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// One of the rows in the table.
-	targetKey := roachpb.Key("\275\211\212")
+	// We can't programmatically get the targetKey since it's used before
+	// the test cluster is created.
+	// targetKey is represents one of the rows in the table.
+	// +2 since the first two available ids are allocated to the database and
+	// public schema.
+	firstTableID := uint32(keys.MinNonPredefinedUserDescID + 2)
+	indexID := uint32(1)
+	valInTable := uint64(2)
+	indexKey := keys.SystemSQLCodec.IndexPrefix(firstTableID, indexID)
+	targetKey := encoding.EncodeUvarintAscending(indexKey, valInTable)
 
 	restarted := true
 
