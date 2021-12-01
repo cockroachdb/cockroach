@@ -78,7 +78,7 @@ type descriptorState struct {
 //
 // This returns errRenewLease when there is no descriptor cached
 // or the latest descriptor version's ModificationTime satisfies the
-// timestamp while it's expiration time doesn't satisfy the timestamp.
+// timestamp while its expiration time doesn't satisfy the timestamp.
 // This is an optimistic strategy betting that in all likelihood a
 // higher layer renewing the lease on the descriptor and populating
 // descriptorState will satisfy the timestamp on a subsequent call.
@@ -142,6 +142,11 @@ func (t *descriptorState) upsertLeaseLocked(
 		}
 		descState := newDescriptorVersionState(t, desc, expiration, true /* isLease */)
 		t.mu.active.insert(descState)
+		// Grow memory monitor by byte size of inserted leased descriptor
+		if err := t.m.mu.boundAccount.Grow(ctx, descState.ByteSize()); err != nil {
+			log.Warningf(ctx, "Unable to grow leaseMgr bound account for id %d", descState.GetID())
+			return nil, nil, err
+		}
 		return descState, nil, nil
 	}
 
@@ -204,6 +209,7 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 			desc.mu.Lock()
 			defer desc.mu.Unlock()
 			if desc.mu.refcount == 0 {
+				t.m.mu.boundAccount.Shrink(context.Background(), desc.ByteSize())
 				t.mu.active.remove(desc)
 				if l := desc.mu.lease; l != nil {
 					desc.mu.lease = nil
@@ -266,6 +272,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		if l := maybeMarkRemoveStoredLease(s); l != nil {
+			t.m.mu.boundAccount.Shrink(ctx, s.ByteSize())
 			t.mu.active.remove(s)
 			return l
 		}

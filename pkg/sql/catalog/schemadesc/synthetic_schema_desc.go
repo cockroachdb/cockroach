@@ -80,6 +80,9 @@ func (p synthetic) DescriptorProto() *descpb.Descriptor {
 		"%s schema cannot be encoded", p.kindName())
 	return nil // unreachable
 }
+func (p synthetic) ByteSize() int64 {
+	return 0
+}
 func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 	log.Fatalf(context.TODO(),
 		"%s schema cannot create a builder", p.kindName())
