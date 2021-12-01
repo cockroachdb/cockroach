@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -84,6 +85,84 @@ func performGC(
 	return nil
 }
 
+func unsplitRangesForTables(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	droppedTables []jobspb.SchemaChangeGCDetails_DroppedID,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	for _, droppedTable := range droppedTables {
+		startKey := execCfg.Codec.TablePrefix(uint32(droppedTable.ID))
+		span := roachpb.Span{
+			Key:    startKey,
+			EndKey: startKey.PrefixEnd(),
+		}
+		if err := sql.UnsplitRangesInSpan(ctx, execCfg.DB, span); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// unsplitRangesForIndexes unsplits ranges with dropped index in key prefix
+func unsplitRangesForIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	indexes []jobspb.SchemaChangeGCDetails_DroppedIndex,
+	parentTableID descpb.ID,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
+	for _, idx := range indexes {
+		startKey := execCfg.Codec.IndexPrefix(uint32(parentTableID), uint32(idx.IndexID))
+		idxSpan := roachpb.Span{
+			Key:    startKey,
+			EndKey: startKey.PrefixEnd(),
+		}
+
+		if err := sql.UnsplitRangesInSpan(ctx, execCfg.DB, idxSpan); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func maybeUnsplitRanges(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
+	details *jobspb.SchemaChangeGCDetails,
+	progress *jobspb.SchemaChangeGCProgress,
+) error {
+	if progress.RangesUnsplitDone {
+		return nil
+	}
+
+	if len(details.Indexes) > 0 {
+		if err := unsplitRangesForIndexes(ctx, execCfg, details.Indexes, details.ParentID); err != nil {
+			return err
+		}
+	}
+
+	if len(details.Tables) > 0 {
+		if err := unsplitRangesForTables(ctx, execCfg, details.Tables); err != nil {
+			return err
+		}
+	}
+
+	progress.RangesUnsplitDone = true
+	persistProgress(ctx, execCfg, jobID, progress, runningStatusGC(progress))
+
+	return nil
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) (err error) {
 	defer func() {
@@ -101,6 +180,10 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	}
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
+		return err
+	}
+
+	if err := maybeUnsplitRanges(ctx, execCfg, r.jobID, details, progress); err != nil {
 		return err
 	}
 

@@ -17,11 +17,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +81,44 @@ func TestSelfBootstrap(t *testing.T) {
 	if s.RPCContext().ClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
 	}
+}
+
+func TestPanicRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+	require.NoError(t, err)
+	defer s.Stopper().Stop(context.Background())
+	ts := s.(*TestServer)
+
+	// Enable a test-only endpoint that induces a panic.
+	ts.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("induced panic for testing")
+	}))
+
+	// Create a request.
+	req, err := http.NewRequest(http.MethodGet, ts.AdminURL()+"/panic", nil /* body */)
+	require.NoError(t, err)
+
+	// Create a ResponseRecorder to record the response.
+	rr := httptest.NewRecorder()
+	require.NotPanics(t, func() {
+		ts.ServeHTTP(rr, req)
+	})
+
+	// Check that the status code is correct.
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+
+	// Check that the panic has been reported.
+	entries, err := log.FetchEntriesFromFiles(
+		0, /* startTimestamp */
+		math.MaxInt64,
+		10000, /* maxEntries */
+		regexp.MustCompile("a panic has occurred!"),
+		log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+	require.NotEmpty(t, entries, "no log entries matching the regexp")
 }
 
 // TestHealthCheck runs a basic sanity check on the health checker.
