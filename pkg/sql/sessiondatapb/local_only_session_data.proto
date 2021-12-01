@@ -212,6 +212,9 @@ message LocalOnlySessionData {
   // CustomOptions contains a map of all custom session settings.
   // These session variables have at least one period in their name.
   map<string, string> custom_options = 57;
+  // IndexRecommendationsEnabled controls whether or not we display index
+  // recommendations below the plan in EXPLAIN.
+  bool index_recommendations_enabled = 58;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

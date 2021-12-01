@@ -478,6 +478,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`index_recommendations_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`index_recommendations_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("index_recommendations_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetIndexRecommendationsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().IndexRecommendationsEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.DistSQLExecModeFromString(s)
@@ -1911,6 +1928,7 @@ func displayPgBool(val bool) func(_ *settings.Values) string {
 }
 
 var globalFalse = displayPgBool(false)
+var globalTrue = displayPgBool(true)
 
 // sessionDataTimeZoneFormat returns the appropriate timezone format
 // to output when the `timezone` is required output.

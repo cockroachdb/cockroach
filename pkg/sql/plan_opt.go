@@ -526,7 +526,8 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	// For index recommendations, after building we must interrupt the flow to
 	// find potential index candidates in the memo.
-	if _, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain && !hasVirtualTables(f) {
+	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
+	if isExplain && opc.p.SessionData().IndexRecommendationsEnabled && !hasVirtualTables(f) {
 		if err := opc.makeQueryIndexRecommendation(f); err != nil {
 			return nil, err
 		}

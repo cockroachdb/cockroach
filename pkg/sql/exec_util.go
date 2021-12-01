@@ -2707,6 +2707,10 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
 }
 
+func (m *sessionDataMutator) SetIndexRecommendationsEnabled(val bool) {
+	m.data.IndexRecommendationsEnabled = val
+}
+
 func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
 	val sessiondatapb.ExperimentalDistSQLPlanningMode,
 ) {
