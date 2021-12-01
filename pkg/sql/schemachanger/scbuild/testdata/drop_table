@@ -211,17 +211,17 @@ DROP TABLE defaultdb.shipments CASCADE;
 - DROP Namespace:{DescID: 59, Name: shipments}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 59
     name: shipments
-    schemaId: 50
+    schemaId: 51
 - DROP Namespace:{DescID: 61, Name: v1}
   state: PUBLIC
   details:
-    databaseId: 51
+    databaseId: 50
     descriptorId: 61
     name: v1
-    schemaId: 50
+    schemaId: 51
 - DROP Owner:{DescID: 59}
   state: PUBLIC
   details:
