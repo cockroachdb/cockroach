@@ -93,6 +93,9 @@ func TestBatchSplit(t *testing.T) {
 		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}, true},
 		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}, true},
 		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}, true},
+		{[]Request{scan, get, scan, get}, []int{4}, true},
+		{[]Request{rv, get, rv, get}, []int{4}, true},
+		{[]Request{scan, get, rv, get}, []int{2, 2}, true},
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}, true},
 		// Same one again, but this time don't allow EndTxn to be split.
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 2}, false},
