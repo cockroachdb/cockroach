@@ -15,6 +15,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1201,5 +1202,261 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			}
 			require.Equal(t, tc.expected, retrievedVersions)
 		})
+	}
+}
+
+// TestTableDescriptorByteSizeOrder inserts different amount of data in each
+// Table and guarantees the relative order of the TableDescriptor sizes are
+// correct.
+func TestTableDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := s.LeaseManager().(*Manager)
+	for _, tc := range []struct {
+		tblExprs map[string]string
+		expOrder []string
+	}{
+		// Confirm order of TableDescriptors with varying name.
+		{
+			tblExprs: map[string]string{
+				"s":        "CREATE TABLE s (col1 INT)",
+				"med":      "CREATE TABLE med (col1 INT)",
+				"large":    "CREATE TABLE large (col1 INT)",
+				"largestx": "CREATE TABLE largestx (col1 INT)",
+			},
+			expOrder: []string{
+				"s",
+				"med",
+				"large",
+				"largestx",
+			},
+		},
+		// Confirm order of TableDescriptors with varying col count.
+		{
+			tblExprs: map[string]string{
+				"smallxxcol": "CREATE TABLE smallxxcol (col1 INT)",
+				"mediumxcol": "CREATE TABLE mediumxcol (col1 INT, col2 INT)",
+				"largexxcol": "CREATE TABLE largexxcol (col1 INT, col2 INT, col3 UUID)",
+				"largestcol": "CREATE TABLE largestcol (col1 INT, col2 INT, col3 UUID, col4 UUID)",
+			},
+			expOrder: []string{
+				"smallxxcol",
+				"mediumxcol",
+				"largexxcol",
+				"largestcol",
+			},
+		},
+		// Confirm order of TableDescriptors with varying idx count.
+		{
+			tblExprs: map[string]string{
+				"smallxx": "CREATE TABLE smallxx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1))",
+				"mediumx": "CREATE TABLE mediumx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2))",
+				"largexx": "CREATE TABLE largexx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3))",
+				"largest": "CREATE TABLE largest (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3, col4))",
+			},
+			expOrder: []string{
+				"smallxx",
+				"mediumx",
+				"largexx",
+				"largest",
+			},
+		},
+	} {
+		// Create tables and retrieve TableDescriptors.
+		descs := make([]LeasedDescriptor, len(tc.tblExprs))
+		i := 0
+		for size, expr := range tc.tblExprs {
+			tdb.Exec(t, expr)
+			var tableID descpb.ID
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
+			desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+			require.NoError(t, err)
+			descs[i] = desc
+			i++
+		}
+
+		// Sort the descriptors and confirm is same as expected.
+		sort.Slice(descs, func(i, j int) bool {
+			return descs[i].Underlying().ByteSize() < descs[j].Underlying().ByteSize()
+		})
+		actual := make([]string, len(descs))
+		for i, desc := range descs {
+			actual[i] = desc.GetName()
+		}
+		require.Equalf(t, tc.expOrder, actual, "Expected: %v, Got: %v", tc.expOrder, actual)
+	}
+}
+
+// TestDatabaseDescriptorByteSizeOrder inserts different amount of data in each
+// Database and guarantees the relative order of the DatabaseDescriptor sizes
+// are correct.
+func TestDatabaseDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := s.LeaseManager().(*Manager)
+	for _, tc := range []struct {
+		dbExprs  map[string]string
+		expOrder []string
+	}{
+		// Confirm order of DatabaseDescriptors with varying name.
+		{
+			dbExprs: map[string]string{
+				"s":       "CREATE DATABASE s",
+				"med":     "CREATE DATABASE med",
+				"large":   "CREATE DATABASE large",
+				"largest": "CREATE DATABASE largest",
+			},
+			expOrder: []string{
+				"s",
+				"med",
+				"large",
+				"largest",
+			},
+		},
+	} {
+		// Create databases and retrieve DatabaseDescriptors.
+		descs := make([]LeasedDescriptor, len(tc.dbExprs))
+		i := 0
+		for size, expr := range tc.dbExprs {
+			tdb.Exec(t, expr)
+			var dbID descpb.ID
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&dbID)
+			desc, err := manager.Acquire(ctx, s.Clock().Now(), dbID)
+			require.NoError(t, err)
+			descs[i] = desc
+			i++
+		}
+
+		// Sort the descriptors and confirm is same as expected.
+		sort.Slice(descs, func(i, j int) bool {
+			return descs[i].Underlying().ByteSize() < descs[j].Underlying().ByteSize()
+		})
+		actual := make([]string, len(descs))
+		for i, desc := range descs {
+			actual[i] = desc.GetName()
+		}
+		require.Equalf(t, tc.expOrder, actual, "Expected: %v, Got: %v", tc.expOrder, actual)
+	}
+}
+
+// TestSchemaDescriptorByteSizeOrder constructs multiple Schema and guarantees
+// the relative order of the SchemaDescriptor sizes are correct.
+func TestSchemaDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := s.LeaseManager().(*Manager)
+	for _, tc := range []struct {
+		schemaExpr map[string]string
+		expOrder   []string
+	}{
+		// Confirm order of SchemaDescriptors with varying name.
+		{
+			schemaExpr: map[string]string{
+				"s":       "CREATE SCHEMA s",
+				"med":     "CREATE SCHEMA med",
+				"large":   "CREATE SCHEMA large",
+				"largest": "CREATE SCHEMA largest",
+			},
+			expOrder: []string{
+				"s",
+				"med",
+				"large",
+				"largest",
+			},
+		},
+	} {
+		// Create schemas and retrieve SchemaDescriptors.
+		descs := make([]LeasedDescriptor, len(tc.schemaExpr))
+		i := 0
+		for size, expr := range tc.schemaExpr {
+			tdb.Exec(t, expr)
+			var schemaID descpb.ID
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&schemaID)
+			desc, err := manager.Acquire(ctx, s.Clock().Now(), schemaID)
+			require.NoError(t, err)
+			descs[i] = desc
+			i++
+		}
+
+		// Sort the descriptors and confirm is same as expected.
+		sort.Slice(descs, func(i, j int) bool {
+			return descs[i].Underlying().ByteSize() < descs[j].Underlying().ByteSize()
+		})
+		actual := make([]string, len(descs))
+		for i, desc := range descs {
+			actual[i] = desc.GetName()
+		}
+		require.Equalf(t, tc.expOrder, actual, "Expected: %v, Got: %v", tc.expOrder, actual)
+	}
+}
+
+// TestTypeDescriptorByteSizeOrder constructs multiple different types and guarantees
+// the relative order of the TypeDescriptor sizes are correct.
+func TestTypeDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := s.LeaseManager().(*Manager)
+	for _, tc := range []struct {
+		schemaExpr map[string]string
+		expOrder   []string
+	}{
+		// Confirm order of TypeDescriptors with varying name.
+		{
+			schemaExpr: map[string]string{
+				"s":       "CREATE TYPE s AS ENUM ('open', 'closed')",
+				"med":     "CREATE TYPE med AS ENUM ('open', 'closed', 'inactive')",
+				"large":   "CREATE TYPE large AS ENUM ('open', 'closed', 'inactive', 'active')",
+				"largest": "CREATE TYPE largest AS ENUM ('open', 'closed', 'inactive', 'active', 'starting')",
+			},
+			expOrder: []string{
+				"s",
+				"med",
+				"large",
+				"largest",
+			},
+		},
+	} {
+		// Create Types and retrieve TypeDescriptors.
+		descs := make([]LeasedDescriptor, len(tc.schemaExpr))
+		i := 0
+		for size, expr := range tc.schemaExpr {
+			tdb.Exec(t, expr)
+			var typeID descpb.ID
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&typeID)
+			desc, err := manager.Acquire(ctx, s.Clock().Now(), typeID)
+			require.NoError(t, err)
+			descs[i] = desc
+			i++
+		}
+
+		// Sort the descriptors and confirm is same as expected.
+		sort.Slice(descs, func(i, j int) bool {
+			return descs[i].Underlying().ByteSize() < descs[j].Underlying().ByteSize()
+		})
+		actual := make([]string, len(descs))
+		for i, desc := range descs {
+			actual[i] = desc.GetName()
+		}
+		require.Equalf(t, tc.expOrder, actual, "Expected: %v, Got: %v", tc.expOrder, actual)
 	}
 }

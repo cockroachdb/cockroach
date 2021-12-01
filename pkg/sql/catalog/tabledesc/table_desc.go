@@ -101,6 +101,11 @@ func (desc *wrapper) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// ByteSize implements the Descriptor interface.
+func (desc *wrapper) ByteSize() int64 {
+	return int64(desc.Size())
+}
+
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
 	return NewBuilder(desc.TableDesc())
