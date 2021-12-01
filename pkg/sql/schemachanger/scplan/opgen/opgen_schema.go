@@ -16,43 +16,52 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.Schema)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_TXN_DROPPED,
-			minPhase(scop.StatementPhase),
-			emit(func(this *scpb.Schema) scop.Op {
-				return &scop.MarkDescriptorAsDroppedSynthetically{
-					DescID: this.SchemaID,
-				}
-			})),
-		to(scpb.Status_DROPPED,
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.Schema) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					DescID: this.SchemaID,
-				}
-			}),
+	opRegistry.register((*scpb.Schema)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.Schema) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
+			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		to(scpb.Status_ABSENT,
-			// TODO(ajwerner): The minPhase here feels like it should be PostCommit.
-			// Also, this definitely is not revertible. Leaving to make this commit
-			// a port.
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.Schema) scop.Op {
-				return &scop.DrainDescriptorName{
-					TableID: this.SchemaID,
-				}
-			}),
-			emit(func(this *scpb.Schema, md *scpb.ElementMetadata) scop.Op {
-				return &scop.LogEvent{Metadata: *md,
-					DescID:    this.SchemaID,
-					Element:   &scpb.ElementProto{Schema: this},
-					Direction: scpb.Target_DROP,
-				}
-			})),
+		drop(
+			to(scpb.Status_TXN_DROPPED,
+				minPhase(scop.StatementPhase),
+				emit(func(this *scpb.Schema) scop.Op {
+					return &scop.MarkDescriptorAsDroppedSynthetically{
+						DescID: this.SchemaID,
+					}
+				})),
+			to(scpb.Status_DROPPED,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Schema) scop.Op {
+					return &scop.MarkDescriptorAsDropped{
+						DescID: this.SchemaID,
+					}
+				}),
+			),
+			to(scpb.Status_ABSENT,
+				// TODO(ajwerner): The minPhase here feels like it should be PostCommit.
+				// Also, this definitely is not revertible. Leaving to make this commit
+				// a port.
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Schema) scop.Op {
+					return &scop.DrainDescriptorName{
+						TableID: this.SchemaID,
+					}
+				}),
+				emit(func(this *scpb.Schema, md *scpb.ElementMetadata) scop.Op {
+					return &scop.LogEvent{Metadata: *md,
+						DescID:    this.SchemaID,
+						Element:   &scpb.ElementProto{Schema: this},
+						Direction: scpb.Target_DROP,
+					}
+				}),
+			),
+		),
 	)
 }

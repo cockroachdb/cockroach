@@ -308,6 +308,15 @@ func (*MemFile) Close() error {
 	return nil
 }
 
+// Flush implements the same interface as the standard library's *bufio.Writer's
+// Flush method. The Pebble sstable Writer tests whether files implement a Flush
+// method. If not, it wraps the file with a bufio.Writer to buffer writes to the
+// underlying file. This buffering is not necessary for an in-memory file. We
+// signal this by implementing Flush as a noop.
+func (*MemFile) Flush() error {
+	return nil
+}
+
 // Sync implements the writeCloseSyncer interface.
 func (*MemFile) Sync() error {
 	return nil

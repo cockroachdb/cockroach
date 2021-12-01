@@ -18,15 +18,23 @@ import (
 func init() {
 	opRegistry.register(
 		(*scpb.Namespace)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
-			minPhase(scop.PreCommitPhase),
-			emit(func(this *scpb.Namespace) scop.Op {
-				return &scop.DrainDescriptorName{
-					TableID: this.DescriptorID,
-				}
-			}),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.Namespace) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Namespace) scop.Op {
+					return &scop.DrainDescriptorName{
+						TableID: this.DescriptorID,
+					}
+				}),
+			),
 		),
 	)
 }

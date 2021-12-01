@@ -29,21 +29,20 @@ func init() {
 	registerNoOpEdges(screl.MustQuery(
 		relation.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil)),
 		dep.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil),
-			(*scpb.Column)(nil), (*scpb.ColumnName)(nil),
+			(*scpb.IndexName)(nil), (*scpb.Column)(nil), (*scpb.ColumnName)(nil),
 			(*scpb.ForeignKeyBackReference)(nil), (*scpb.ForeignKey)(nil),
 			(*scpb.CheckConstraint)(nil), (*scpb.UniqueConstraint)(nil),
 			(*scpb.ConstraintName)(nil), (*scpb.Owner)(nil),
-			(*scpb.Locality)(nil)),
+			(*scpb.Locality)(nil), (*scpb.UserPrivileges)(nil)),
 		id.Entities(screl.DescID, relation, dep),
 
 		// If the relation is in any drop state in the current phase,
 		// then any dependent edges should be cleaned up.
-		rel.And(
-			screl.JoinTargetNode(relation, relationTarget, relationNode),
-			relationTarget.AttrEq(screl.Direction, scpb.Target_DROP)),
-		rel.And(
-			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.Direction, scpb.Target_DROP)),
+		screl.JoinTargetNode(relation, relationTarget, relationNode),
+		relationTarget.AttrEq(screl.Direction, scpb.Target_DROP),
+
+		screl.JoinTargetNode(dep, depTarget, depNode),
+		depTarget.AttrEq(screl.Direction, scpb.Target_DROP),
 	),
 		depNode, // Node to delete
 	)

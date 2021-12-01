@@ -210,7 +210,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					},
 					typs,
 					[]uint32{0}, /* hashCols */
-					64<<20,      /* memoryLimit */
+					execinfra.DefaultMemoryLimit,
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,

@@ -74,7 +74,11 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, limit int64, opName string, processorID int32,
 ) (*mon.BoundAccount, string) {
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
-		limit = 1
+		if limit != 1 {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"expected limit of 1 when forcing disk spilling, got %d", limit,
+			))
+		}
 	}
 	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
 	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.EvalCtx.Mon)

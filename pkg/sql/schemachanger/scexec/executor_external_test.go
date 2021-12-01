@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -349,14 +349,11 @@ func TestSchemaChanger(t *testing.T) {
 				scop.StatementPhase,
 				scop.PreCommitPhase,
 			} {
-				sc, err := scplan.MakePlan(nodes, scplan.Params{
-					ExecutionPhase: phase,
-				})
-				require.NoError(t, err)
+				sc := sctestutils.MakePlan(t, nodes, phase)
 				stages := sc.Stages
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
-					require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 					ts = s.After
 				}
 			}
@@ -366,13 +363,10 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc, err := scplan.MakePlan(ts, scplan.Params{
-				ExecutionPhase: scop.PostCommitPhase,
-			})
-			require.NoError(t, err)
+			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 				after = s.After
 			}
 			return nil
@@ -401,7 +395,7 @@ func TestSchemaChanger(t *testing.T) {
 				},
 				{
 					Target: targetSlice[5],
-					Status: scpb.Status_PUBLIC,
+					Status: scpb.Status_ABSENT,
 				},
 			},
 
@@ -432,13 +426,10 @@ func TestSchemaChanger(t *testing.T) {
 					scop.StatementPhase,
 					scop.PreCommitPhase,
 				} {
-					sc, err := scplan.MakePlan(outputNodes, scplan.Params{
-						ExecutionPhase: phase,
-					})
-					require.NoError(t, err)
+					sc := sctestutils.MakePlan(t, outputNodes, phase)
 					for _, s := range sc.Stages {
 						exDeps := ti.newExecDeps(txn, descriptors)
-						require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 						ts = s.After
 					}
 				}
@@ -448,13 +439,10 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc, err := scplan.MakePlan(ts, scplan.Params{
-				ExecutionPhase: scop.PostCommitPhase,
-			})
-			require.NoError(t, err)
+			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 			}
 			return nil
 		}))

@@ -16,20 +16,28 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.Partitioning)(nil),
-		scpb.Target_ADD,
-		scpb.Status_ABSENT,
-		to(scpb.Status_PUBLIC,
-			minPhase(scop.PreCommitPhase),
-			emit(func(this *scpb.Partitioning) scop.Op {
-				return &scop.AddIndexPartitionInfo{
-					TableID:         this.TableID,
-					IndexID:         this.IndexID,
-					PartitionFields: this.Fields,
-					ListPartitions:  this.ListPartitions,
-					RangePartitions: this.RangePartitions,
-				}
-			}),
-		))
+	opRegistry.register((*scpb.Partitioning)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				minPhase(scop.PreCommitPhase),
+				emit(func(this *scpb.Partitioning) scop.Op {
+					return &scop.AddIndexPartitionInfo{
+						TableID:         this.TableID,
+						IndexID:         this.IndexID,
+						PartitionFields: this.Fields,
+						ListPartitions:  this.ListPartitions,
+						RangePartitions: this.RangePartitions,
+					}
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				emit(func(this *scpb.Partitioning) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
+	)
+
 }

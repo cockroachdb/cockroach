@@ -442,3 +442,25 @@ func init() {
 		),
 	)
 }
+
+func init() {
+	// Ensure table dependencies drop after the table is marked as dropped.
+	dep, depTarget, depNode := targetNodeVars("dep-drop")
+	tbl, tblTarget, tblNode := targetNodeVars("table-drop")
+	tableID := rel.Var("table-id")
+
+	register(
+		"table deps removal happens after table marked as dropped",
+		scgraph.HappensAfter,
+		depNode, tblNode,
+		screl.MustQuery(
+			dep.Type((*scpb.Owner)(nil), (*scpb.UserPrivileges)(nil)),
+			tbl.Type((*scpb.Table)(nil), (*scpb.Sequence)(nil), (*scpb.View)(nil)),
+
+			tableID.Entities(screl.DescID, tbl, dep),
+
+			joinTargetNode(dep, depTarget, depNode, drop, absent),
+			joinTargetNode(tbl, tblTarget, tblNode, drop, dropped),
+		),
+	)
+}

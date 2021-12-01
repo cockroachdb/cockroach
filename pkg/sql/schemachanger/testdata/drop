@@ -53,9 +53,8 @@ begin transaction #1
 ## stage 1 in StatementPhase: 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 1 MutationType ops
+## stage 1 in PreCommitPhase: 2 MutationType ops
 delete object namespace entry {54 57 t} -> 58
-## stage 2 in PreCommitPhase: 1 MutationType ops
 upsert descriptor #58
   ...
      replacementOf:
@@ -213,7 +212,7 @@ begin transaction #1
 ## stage 1 in StatementPhase: 14 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 9 MutationType ops
+## stage 1 in PreCommitPhase: 37 MutationType ops
 delete object namespace entry {61 62 sq1} -> 64
 delete object namespace entry {61 63 sq1} -> 65
 delete object namespace entry {61 63 t1} -> 66
@@ -223,7 +222,6 @@ delete object namespace entry {61 63 v2} -> 69
 delete object namespace entry {61 63 v3} -> 70
 delete object namespace entry {61 63 v4} -> 71
 delete object namespace entry {61 63 v5} -> 74
-## stage 2 in PreCommitPhase: 28 MutationType ops
 upsert descriptor #61
   ...
        sc1:
@@ -459,7 +457,7 @@ upsert descriptor #74
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
-## stage 3 in PreCommitPhase: 4 MutationType ops
+## stage 2 in PreCommitPhase: 4 MutationType ops
 delete database namespace entry {0 0 db1} -> 61
 delete object namespace entry {61 63 typ} -> 72
 delete object namespace entry {61 63 _typ} -> 73

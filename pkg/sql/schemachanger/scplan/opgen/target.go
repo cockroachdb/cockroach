@@ -20,7 +20,8 @@ import (
 
 // target represents the operation generation rules for a given Target.
 type target struct {
-	scpb.Target
+	e           scpb.Element
+	dir         scpb.Target_Direction
 	transitions []transition
 	iterateFunc func(*rel.Database, func(*scpb.Node) error) error
 }
@@ -33,43 +34,15 @@ type transition struct {
 	minPhase   scop.Phase
 }
 
-func makeTarget(
-	e scpb.Element, dir scpb.Target_Direction, initialStatus scpb.Status, specs ...transitionSpec,
-) target {
+func makeTarget(e scpb.Element, dir scpb.Target_Direction, specs ...transitionSpec) target {
 	defer decoratePanickedError(func(err error) error {
 		return errors.Wrapf(err, "making target %T:%v", e, dir)
 	})()
-	populateSpecs(initialStatus, specs)
 	return target{
-		Target:      *scpb.NewTarget(dir, e, nil /* metadata */),
+		e:           e,
+		dir:         dir,
 		transitions: makeTransitions(e, specs),
 		iterateFunc: makeQuery(e, dir),
-	}
-}
-
-func populateSpecs(status scpb.Status, specs []transitionSpec) {
-	for i := 0; i < len(specs); i++ {
-		if i == 0 {
-			specs[i].from = status
-			continue
-		}
-		specs[i].from = specs[i-1].to
-		specs[i].revertible = specs[i].revertible && specs[i-1].revertible
-		prevMinPhase := specs[i-1].minPhase
-		switch curMinPhase := specs[i].minPhase; curMinPhase {
-		case 0:
-			// TODO(ajwerner): Consider enforcing that the client always provide
-			// an increasing set of minPhase values as opposed to inheriting the
-			// default. It'll probably be more onerous than it's worth.
-			specs[i].minPhase = prevMinPhase
-		default:
-			if prevMinPhase > curMinPhase {
-				panic(errors.AssertionFailedf(
-					"invalid minimum phase %s < %s for %s -> %s",
-					prevMinPhase, specs[i].minPhase, specs[i].from, specs[i].to,
-				))
-			}
-		}
 	}
 }
 

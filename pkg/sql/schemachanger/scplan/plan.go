@@ -68,7 +68,7 @@ func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 		Initial: initial,
 		Params:  params,
 	}
-	g, err := opgen.BuildGraph(params.ExecutionPhase, initial)
+	g, err := opgen.BuildGraph(initial)
 	if err != nil {
 		return p, err
 	}
@@ -81,7 +81,7 @@ func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 		return p, err
 	}
 	p.Graph = optimizedGraph
-	p.Stages = buildStages(initial, optimizedGraph)
+	p.Stages = buildStages(initial, params.ExecutionPhase, optimizedGraph)
 	// TODO(fqazi): Enforce here that only one post commit stage will be generated
 	// Inside OpGen we will enforce that only a single transition can occur in
 	// post commit.
@@ -107,7 +107,7 @@ func validateStages(stages []Stage) error {
 	return nil
 }
 
-func buildStages(init scpb.State, g *scgraph.Graph) []Stage {
+func buildStages(init scpb.State, phase scop.Phase, g *scgraph.Graph) []Stage {
 	// Fetch the order of the graph, which will be used to
 	// evaluating edges in topological order.
 	nodeRanks, err := g.GetNodeRanks()
@@ -127,6 +127,11 @@ func buildStages(init scpb.State, g *scgraph.Graph) []Stage {
 		// if they are all run. Any which will not must be pruned. This greedy
 		// algorithm works, but a justification is in order.
 		failed := map[*scgraph.OpEdge]struct{}{}
+		for _, e := range edges {
+			if !e.IsPhaseSatisfied(phase) {
+				failed[e] = struct{}{}
+			}
+		}
 		for _, e := range edges {
 			if err := g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
 				_, isFulfilled := fulfilled[de.To()]
@@ -194,6 +199,7 @@ func buildStages(init scpb.State, g *scgraph.Graph) []Stage {
 		}
 		return edges, false
 	}
+	isRevertiblePreferred := true
 	buildStageType := func(edges []*scgraph.OpEdge) (Stage, bool) {
 		edges, ok := filterUnsatisfiedEdges(edges)
 		if !ok {
@@ -206,13 +212,16 @@ func buildStages(init scpb.State, g *scgraph.Graph) []Stage {
 			})
 
 		next := shallowCopy(cur)
-		isStageRevertible := true
 		var ops []scop.Op
-		for revertible := 1; revertible >= 0; revertible-- {
-			isStageRevertible = revertible == 1
+		var isStageRevertible bool
+		revertible := []bool{true, false}
+		if !isRevertiblePreferred {
+			revertible = []bool{false}
+		}
+		for _, isStageRevertible = range revertible {
 			for _, e := range edges {
 				for i, ts := range cur.Nodes {
-					if e.From() == ts && isStageRevertible == e.Revertible() {
+					if e.From() == ts && (!isRevertiblePreferred || isStageRevertible == e.Revertible()) {
 						next.Nodes[i] = e.To()
 						// TODO(fqazi): MakePlan should never emit empty stages, they are harmless
 						// but a side effect of OpEdge filtering. We need to adjust the algorithm
@@ -232,6 +241,9 @@ func buildStages(init scpb.State, g *scgraph.Graph) []Stage {
 			if len(ops) != 0 {
 				break
 			}
+		}
+		if isRevertiblePreferred && !isStageRevertible {
+			isRevertiblePreferred = false
 		}
 		return Stage{
 			Before:     cur,
