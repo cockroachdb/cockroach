@@ -149,7 +149,6 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/tscache:tscache_test",
     "//pkg/kv/kvserver/txnrecovery:txnrecovery_test",
     "//pkg/kv/kvserver/txnwait:txnwait_test",
-    "//pkg/kv/kvserver/uncertainty:observedts_test",
     "//pkg/kv/kvserver/uncertainty:uncertainty_test",
     "//pkg/kv/kvserver:kvserver_test",
     "//pkg/kv:kv_test",

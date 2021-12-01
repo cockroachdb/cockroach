@@ -723,9 +723,16 @@ func postgresCreateTableMutator(
 					// to their own statement.
 					var newCols tree.IndexElemList
 					for _, col := range def.Columns {
-						// Postgres doesn't support box2d as a btree index key.
-						colTypeFamily := colTypes[string(col.Column)].Family()
-						if colTypeFamily == types.Box2DFamily {
+						isBox2d := false
+						// NB: col.Column is empty for expression-based indexes.
+						if col.Expr == nil {
+							// Postgres doesn't support box2d as a btree index key.
+							colTypeFamily := colTypes[string(col.Column)].Family()
+							if colTypeFamily == types.Box2DFamily {
+								isBox2d = true
+							}
+						}
+						if isBox2d {
 							changed = true
 						} else {
 							newCols = append(newCols, col)
@@ -752,9 +759,16 @@ func postgresCreateTableMutator(
 				case *tree.UniqueConstraintTableDef:
 					var newCols tree.IndexElemList
 					for _, col := range def.Columns {
-						// Postgres doesn't support box2d as a btree index key.
-						colTypeFamily := colTypes[string(col.Column)].Family()
-						if colTypeFamily == types.Box2DFamily {
+						isBox2d := false
+						// NB: col.Column is empty for expression-based indexes.
+						if col.Expr == nil {
+							// Postgres doesn't support box2d as a btree index key.
+							colTypeFamily := colTypes[string(col.Column)].Family()
+							if colTypeFamily == types.Box2DFamily {
+								isBox2d = true
+							}
+						}
+						if isBox2d {
 							changed = true
 						} else {
 							newCols = append(newCols, col)
