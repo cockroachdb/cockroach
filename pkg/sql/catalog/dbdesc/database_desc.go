@@ -137,6 +137,11 @@ func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// MemorySize implements the Descriptor interface.
+func (desc *immutable) MemorySize() int {
+	return desc.Size()
+}
+
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 	return NewBuilder(desc.DatabaseDesc())
