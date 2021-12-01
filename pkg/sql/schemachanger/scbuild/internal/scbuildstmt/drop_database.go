@@ -46,7 +46,7 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 			// direct dependencies on.
 			nodeAdded, schemaDroppedIDs := dropSchema(c, db, schema, tree.DropCascade)
 			// Block drops if cascade is not set.
-			if n.DropBehavior != tree.DropCascade && (nodeAdded || !schemaDroppedIDs.Empty()) {
+			if n.DropBehavior == tree.DropRestrict && (nodeAdded || !schemaDroppedIDs.Empty()) {
 				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"database %q has a non-empty schema %q and CASCADE was not specified", db.GetName(), schema.GetName()))
 			}

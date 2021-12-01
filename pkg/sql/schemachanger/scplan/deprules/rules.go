@@ -59,6 +59,7 @@ func init() {
 			parent.Type((*scpb.Database)(nil), (*scpb.Schema)(nil)),
 			other.Type(
 				(*scpb.Type)(nil), (*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil),
+				(*scpb.Schema)(nil),
 				// TODO(ajwerner): Should sequence be here if the parent is a database?
 				// There was code in the old rules to have sequence but then it was
 				// actually just duplicating the type case.
@@ -289,7 +290,8 @@ func init() {
 	depNeedsRelationToExitSynthDrop("dependency (ref desc) needs relation/type as non-synthetically dropped",
 		[]interface{}{(*scpb.ForeignKeyBackReference)(nil), (*scpb.RelationDependedOnBy)(nil),
 			(*scpb.ViewDependsOnType)(nil), (*scpb.DefaultExprTypeReference)(nil),
-			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil)},
+			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil),
+			(*scpb.ColumnTypeReference)(nil)},
 		screl.ReferencedDescID)
 }
 
@@ -306,7 +308,8 @@ func init() {
 		screl.MustQuery(
 			ns.Type((*scpb.Namespace)(nil)),
 			dep.Type((*scpb.Table)(nil), (*scpb.View)(nil),
-				(*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil)),
+				(*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil),
+				(*scpb.Type)(nil)),
 
 			tabID.Entities(screl.DescID, dep, ns),
 
@@ -324,7 +327,8 @@ func init() {
 		screl.MustQuery(
 			ns.Type((*scpb.Namespace)(nil)),
 			dep.Type((*scpb.Table)(nil), (*scpb.View)(nil),
-				(*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil)),
+				(*scpb.Sequence)(nil), (*scpb.Database)(nil), (*scpb.Schema)(nil),
+				(*scpb.Type)(nil)),
 
 			tabID.Entities(screl.DescID, dep, ns),
 
@@ -461,6 +465,49 @@ func init() {
 
 			joinTargetNode(dep, depTarget, depNode, drop, absent),
 			joinTargetNode(tbl, tblTarget, tblNode, drop, dropped),
+		),
+	)
+}
+
+func init() {
+	schema, schemaTarget, schemaNode := targetNodeVars("schema")
+	scEntry, scEntryTarget, scEntryNode := targetNodeVars("schema-entry")
+	schemaID := rel.Var("schema-id")
+
+	register(
+		"schema can be dropped after schema entry inside the database",
+		scgraph.HappensAfter,
+		schemaNode, scEntryNode,
+		screl.MustQuery(
+			schema.Type((*scpb.Schema)(nil)),
+			scEntry.Type((*scpb.DatabaseSchemaEntry)(nil)),
+
+			schemaID.Entities(screl.DescID, schema),
+			schemaID.Entities(screl.ReferencedDescID, scEntry),
+
+			joinTargetNode(schema, schemaTarget, schemaNode, drop, absent),
+			joinTargetNode(scEntry, scEntryTarget, scEntryNode, drop, absent),
+		),
+	)
+}
+
+func init() {
+	database, databaseTarget, databaseNode := targetNodeVars("database")
+	scEntry, scEntryTarget, scEntryNode := targetNodeVars("schema-entry")
+	schemaID := rel.Var("schema-id")
+
+	register(
+		"schema entry can be dropped after the database has exited synth drop",
+		scgraph.HappensAfter,
+		scEntryNode, databaseNode,
+		screl.MustQuery(
+			database.Type((*scpb.Database)(nil)),
+			scEntry.Type((*scpb.DatabaseSchemaEntry)(nil)),
+
+			schemaID.Entities(screl.DescID, database, scEntry),
+
+			joinTargetNode(database, databaseTarget, databaseNode, drop, dropped),
+			joinTargetNode(scEntry, scEntryTarget, scEntryNode, drop, absent),
 		),
 	)
 }

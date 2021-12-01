@@ -407,3 +407,16 @@ func ForEachColumnTypeReference (b NodeIterator, elementFunc func(status Status,
 	}
   })
 }
+func (e DatabaseSchemaEntry) element() {}
+
+// ForEachDatabaseSchemaEntry iterates over nodes of type DatabaseSchemaEntry.
+func ForEachDatabaseSchemaEntry (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *DatabaseSchemaEntry) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*DatabaseSchemaEntry)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}
