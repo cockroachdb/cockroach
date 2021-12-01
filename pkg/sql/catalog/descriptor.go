@@ -182,6 +182,9 @@ type Descriptor interface {
 	// DescriptorProto prepares this descriptor for serialization.
 	DescriptorProto() *descpb.Descriptor
 
+	//ByteSize returns the memory held by the Descriptor.
+	ByteSize() int64
+
 	// NewBuilder initializes a DescriptorBuilder with this descriptor.
 	NewBuilder() DescriptorBuilder
 
