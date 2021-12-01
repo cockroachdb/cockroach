@@ -37,5 +37,11 @@ message SampledQuery {
   // omitted, or its value is zero, this indicates that no statement
   // was omitted since the last event.
   uint64 skipped_queries = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Cost of the query as estimated by the optimizer.
+  double cost_estimate = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The distribution of the DistSQL query plan (local, full, or partial).
+  string distribution = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 

@@ -120,6 +120,9 @@ type instrumentationHelper struct {
 	// planGist is a compressed version of plan that can be converted (lossily)
 	// back into a logical plan or be used to get a plan hash.
 	planGist explain.PlanGist
+
+	// costEstimate is the cost of the query as estimated by the optimizer.
+	costEstimate float64
 }
 
 // outputMode indicates how the statement output needs to be populated (for

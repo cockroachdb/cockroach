@@ -212,6 +212,14 @@ func TestTelemetryLogging(t *testing.T) {
 						t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
 					}
 				}
+				costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
+				if !costRe.MatchString(e.Message) {
+					t.Errorf("expected to find CostEstimate but none was found")
+				}
+				distRe := regexp.MustCompile("\"Distribution\":(\"full\"|\"local\")")
+				if !distRe.MatchString(e.Message) {
+					t.Errorf("expected to find Distribution but none was found")
+				}
 			}
 		}
 		if logCount != expectedLogCount {
