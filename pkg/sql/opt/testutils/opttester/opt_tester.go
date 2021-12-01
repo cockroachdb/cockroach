@@ -399,6 +399,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Walks through the SQL statement to determine candidates for index
 //    recommendation. See the indexrec package.
 //
+//  - index-recommendations
+//
+//    Walks through the SQL statement and recommends indexes to add in order to
+//    speed up its execution, if these indexes exist. See the indexrec package.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -717,6 +722,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "index-candidates":
 		result := ot.IndexCandidates()
+		return result
+
+	case "index-recommendations":
+		result := ot.IndexRecommendations()
 		return result
 
 	default:
@@ -1040,7 +1049,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 func (ot *OptTester) OptBuild() (opt.Expr, error) {
 	o := ot.makeOptimizer()
 	o.DisableOptimizations()
-	return ot.optimizeExpr(o)
+	return ot.optimizeExpr(o, nil)
 }
 
 // OptNorm constructs an opt expression tree for the SQL query, with all
@@ -1060,19 +1069,27 @@ func (ot *OptTester) OptNorm() (opt.Expr, error) {
 	if !ot.Flags.NoStableFolds {
 		o.Factory().FoldingControl().AllowStableFolds()
 	}
-	return ot.optimizeExpr(o)
+	return ot.optimizeExpr(o, nil)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
 func (ot *OptTester) Optimize() (opt.Expr, error) {
+	return ot.OptimizeWithTables(nil)
+}
+
+// OptimizeWithTables is identical to Optimize except it also allows the user to
+// update the table metadata used for optimization. Optimize constructs an opt
+// expression tree for the SQL query, with all transformations applied to it.
+// The result is the memo expression tree with the lowest estimated cost.
+func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.Expr, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
 	})
 	o.Factory().FoldingControl().AllowStableFolds()
-	return ot.optimizeExpr(o)
+	return ot.optimizeExpr(o, tables)
 }
 
 // AssignPlaceholders builds the given query with placeholders, then assigns the
@@ -1164,7 +1181,7 @@ func (ot *OptTester) Memo() (string, error) {
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
 	})
-	if _, err := ot.optimizeExpr(o); err != nil {
+	if _, err := ot.optimizeExpr(o, nil); err != nil {
 		return "", err
 	}
 	return o.FormatMemo(ot.Flags.MemoFormat), nil
@@ -1229,7 +1246,7 @@ func (ot *OptTester) RuleStats() (string, error) {
 			}
 		},
 	)
-	if _, err := ot.optimizeExpr(o); err != nil {
+	if _, err := ot.optimizeExpr(o, nil); err != nil {
 		return "", err
 	}
 
@@ -1976,7 +1993,7 @@ func (ot *OptTester) CheckSize() (string, error) {
 	o.Memo().NotifyOnNewGroup(func(expr opt.Expr) {
 		groups++
 	})
-	if _, err := ot.optimizeExpr(o); err != nil {
+	if _, err := ot.optimizeExpr(o, nil); err != nil {
 		return "", err
 	}
 	if ot.Flags.RuleApplicationLimit > 0 && ruleApplications > ot.Flags.RuleApplicationLimit {
@@ -2027,6 +2044,25 @@ func (ot *OptTester) IndexCandidates() string {
 	return strings.Join(tablesOutput, "")
 }
 
+// IndexRecommendations is used with the index-recommendations option. It
+// determines index recommendations for the SQL statement, if they exist, and
+// formats them as a human-readable string.
+func (ot *OptTester) IndexRecommendations() string {
+	normExpr, _ := ot.OptNorm()
+	md := normExpr.(memo.RelExpr).Memo().Metadata()
+	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
+	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
+
+	optExpr, _ := ot.OptimizeWithTables(hypTables)
+	result := indexrec.FindIndexRecommendationSet(optExpr, optExpr.(memo.RelExpr).Memo().Metadata())
+
+	formattedResult := strings.Replace(strings.TrimSpace(result.String()), "\n\n", "\n", -1)
+	if formattedResult == "" {
+		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr))
+	}
+	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", formattedResult, ot.FormatExpr(optExpr))
+}
+
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	stmt, err := parser.ParseOne(ot.sql)
 	if err != nil {
@@ -2056,10 +2092,17 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	return &o
 }
 
-func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, error) {
+// optimizeExpr calls the optimizer's Optimize function. The tables argument, if
+// not nil, allows the caller to update the table metadata before optimizing.
+func (ot *OptTester) optimizeExpr(
+	o *xform.Optimizer, tables map[cat.StableID]cat.Table,
+) (opt.Expr, error) {
 	err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return nil, err
+	}
+	if tables != nil {
+		o.Memo().Metadata().UpdateTableMeta(tables)
 	}
 	root, err := o.Optimize()
 	if err != nil {

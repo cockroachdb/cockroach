@@ -100,6 +100,11 @@ func (hi *hypotheticalIndex) ColumnCount() int {
 	return len(hi.cols) + len(hi.suffixKeyColsOrdList)
 }
 
+// ExplicitColumnCount is part of the cat.Index interface.
+func (hi *hypotheticalIndex) ExplicitColumnCount() int {
+	return len(hi.cols)
+}
+
 // KeyColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) KeyColumnCount() int {
 	// Since hypothetical indexes are not unique, we build a key by including all

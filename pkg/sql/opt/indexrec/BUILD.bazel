@@ -6,6 +6,7 @@ go_library(
         "hypothetical_index.go",
         "hypothetical_table.go",
         "index_candidate_set.go",
+        "index_recommendation_set.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec",
     visibility = ["//visibility:public"],
@@ -29,10 +30,17 @@ go_test(
     srcs = [
         "hypothetical_table_test.go",
         "index_candidate_set_test.go",
+        "indexrec_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":indexrec"],
     deps = [
         "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

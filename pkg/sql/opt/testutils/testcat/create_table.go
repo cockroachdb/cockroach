@@ -716,6 +716,7 @@ func (tt *Table) addIndexWithVersion(
 
 	// Add explicit columns and mark primary key columns as not null.
 	// Add the geoConfig if applicable.
+	idx.ExplicitColCount = len(def.Columns)
 	notNullIndex := true
 	for i, colDef := range def.Columns {
 		isLastIndexCol := i == len(def.Columns)-1
