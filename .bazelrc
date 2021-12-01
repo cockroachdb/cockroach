@@ -6,6 +6,7 @@ build:with_ui --define cockroach_with_ui=y
 build:test --define crdb_test=y
 build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
 test:test --test_env=TZ=
+test:race --test_timeout=1200,6000,18000,72000
 query --ui_event_filters=-DEBUG
 
 # CI should always run with `--config=ci`.

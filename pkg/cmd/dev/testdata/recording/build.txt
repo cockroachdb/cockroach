@@ -228,3 +228,31 @@ mkdir go/src/github.com/cockroachdb/cockroach/bin
 bazel info bazel-bin --color=no
 ----
 /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+
+bazel query pkg/foo/... --output=label_kind
+----
+----
+go_binary rule //pkg/foo:bar
+go_test rule //pkg/foo:baz
+----
+----
+
+bazel build //pkg/foo:bar //pkg/foo:baz --config=test
+----
+
+bazel info workspace --color=no
+----
+go/src/github.com/cockroachdb/cockroach
+
+mkdir go/src/github.com/cockroachdb/cockroach/bin
+----
+
+bazel info bazel-bin --color=no
+----
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin
+
+rm go/src/github.com/cockroachdb/cockroach/bin/bar
+----
+
+ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/foo/bar_/bar go/src/github.com/cockroachdb/cockroach/bin/bar
+----

@@ -3145,7 +3145,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	_, err := registry.CreateJobWithTxn(ctx, rec, registry.MakeJobID(), nil)
 	require.NoError(t, err)
 	registry.TestingNudgeAdoptionQueue()
-	require.Regexp(t, `expected session '\w+' but found NULL`, <-resumed)
+	require.Regexp(t, `expected session "\w+" but found NULL`, <-resumed)
 }
 
 func checkBundle(t *testing.T, zipFile string, expectedFiles []string) {

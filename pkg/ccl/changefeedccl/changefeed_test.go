@@ -2626,7 +2626,7 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 			require.Error(t, err)
 			// TODO(ssd): Replace this error in the jobs system with
 			// an error type we can check against.
-			require.Contains(t, err.Error(), fmt.Sprintf("expected session '%s' but found NULL", testSession.ID().String()))
+			require.Contains(t, err.Error(), fmt.Sprintf("expected session \"%s\" but found NULL", testSession.ID().String()))
 		case <-time.After(5 * time.Second):
 			t.Fatal("expected distflow to fail but it hasn't after 5 seconds")
 		}

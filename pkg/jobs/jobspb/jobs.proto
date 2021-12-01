@@ -608,7 +608,11 @@ message SchemaChangeGCProgress {
   repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
 
   // The status of the tenant to be deleted.
- TenantProgress tenant = 3;
+  TenantProgress tenant = 3;
+
+  // RangesUnsplitDone indicates whether ranges or gc-ed indexes and tables are
+  // already unsplit.
+  bool ranges_unsplit_done = 4;
 }
 
 message ChangefeedTarget {
