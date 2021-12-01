@@ -91,6 +91,9 @@ func DecorateErrorWithPlanDetails(err error, p scplan.Plan) error {
 
 // DrawStages returns a graphviz string of the stages of the Plan.
 func DrawStages(p scplan.Plan) (string, error) {
+	if p.Stages == nil {
+		return "", errors.Errorf("missing stages in plan")
+	}
 	gv, err := drawStages(p)
 	if err != nil {
 		return "", err
@@ -100,6 +103,9 @@ func DrawStages(p scplan.Plan) (string, error) {
 
 // DrawDependencies returns a graphviz string of graph used to build the Plan.
 func DrawDependencies(p scplan.Plan) (string, error) {
+	if p.Graph == nil {
+		return "", errors.Errorf("missing graph in plan")
+	}
 	gv, err := drawDeps(p)
 	if err != nil {
 		return "", err
