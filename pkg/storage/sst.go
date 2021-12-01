@@ -25,14 +25,15 @@ import (
 // out if it finds any conflicts. This includes intents and existing keys with a
 // timestamp at or above the SST key timestamp.
 //
-// If disallowShadowing is true, it also errors for any existing live key at the
-// SST key timestamp, and ignores entries that exactly match an existing entry
-// (key/value/timestamp), for backwards compatibility.
-//
 // If disallowShadowingBelow is non-empty, it also errors for any existing live
 // key at the SST key timestamp, but allows shadowing an existing key if its
 // timestamp is above the given timestamp and the values are equal. See comment
 // on AddSSTableRequest.DisallowShadowingBelow for details.
+//
+// If disallowShadowing is true, it also errors for any existing live key at the
+// SST key timestamp, and ignores entries that exactly match an existing entry
+// (key/value/timestamp), for backwards compatibility. If disallowShadowingBelow
+// is non-empty, disallowShadowing is ignored.
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
 // timestamps), nor tombstones (i.e. empty values), but this is only checked for
@@ -52,11 +53,6 @@ func CheckSSTConflicts(
 ) (enginepb.MVCCStats, error) {
 	var statsDiff enginepb.MVCCStats
 	var intents []roachpb.Intent
-
-	if disallowShadowing && !disallowShadowingBelow.IsEmpty() {
-		return enginepb.MVCCStats{}, errors.New(
-			"cannot set both DisallowShadowing and DisallowShadowingBelow")
-	}
 
 	// Fast path: there are no keys in the reader between the sstable's start and
 	// end keys. We use a non-prefix iterator for this search, and reopen a prefix
@@ -168,8 +164,8 @@ func CheckSSTConflicts(
 		//
 		// * disallowShadowing: any matching key.
 		// * disallowShadowingBelow: any matching key at or above the given timestamp.
-		allowIdempotent := disallowShadowing ||
-			(!disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp))
+		allowIdempotent := (!disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp)) ||
+			(disallowShadowingBelow.IsEmpty() && disallowShadowing)
 		if allowIdempotent && sstKey.Timestamp.Equal(extKey.Timestamp) &&
 			bytes.Equal(extValue, sstValue) {
 			// This SST entry will effectively be a noop, but its stats have already
@@ -209,7 +205,7 @@ func CheckSSTConflicts(
 		// a WriteTooOldError -- that error implies that the client should
 		// retry at a higher timestamp, but we already know that such a retry
 		// would fail (because it will shadow an existing key).
-		if len(extValue) > 0 && (disallowShadowing || !disallowShadowingBelow.IsEmpty()) {
+		if len(extValue) > 0 && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
 			allowShadow := !disallowShadowingBelow.IsEmpty() &&
 				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValue, sstValue)
 			if !allowShadow {
