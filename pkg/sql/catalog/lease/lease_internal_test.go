@@ -15,6 +15,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1208,6 +1210,247 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 				retrievedVersions = append([]version{ver}, retrievedVersions...)
 			}
 			require.Equal(t, tc.expected, retrievedVersions)
+		})
+	}
+}
+
+// TestTableDescriptorByteSizeOrder inserts different amount of data in each
+// Table and guarantees the relative order of the TableDescriptor sizes are
+// correct.
+func TestTableDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := s.LeaseManager().(*Manager)
+	for _, tc := range []struct {
+		sqlExprs map[string]string
+		expOrder []string
+		name     string
+	}{
+		// Confirm order of TableDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"s":        "CREATE TABLE s (col1 INT)",
+				"med":      "CREATE TABLE med (col1 INT)",
+				"large":    "CREATE TABLE large (col1 INT)",
+				"largestx": "CREATE TABLE largestx (col1 INT)",
+			},
+			expOrder: []string{
+				"s",
+				"med",
+				"large",
+				"largestx",
+			},
+			name: "tables with varying name",
+		},
+		// Confirm order of TableDescriptors with varying col count.
+		{
+			sqlExprs: map[string]string{
+				"smallxxcol": "CREATE TABLE smallxxcol (col1 INT)",
+				"mediumxcol": "CREATE TABLE mediumxcol (col1 INT, col2 INT)",
+				"largexxcol": "CREATE TABLE largexxcol (col1 INT, col2 INT, col3 UUID)",
+				"largestcol": "CREATE TABLE largestcol (col1 INT, col2 INT, col3 UUID, col4 UUID)",
+			},
+			expOrder: []string{
+				"smallxxcol",
+				"mediumxcol",
+				"largexxcol",
+				"largestcol",
+			},
+			name: "tables with varying col",
+		},
+		// Confirm order of TableDescriptors with varying idx count.
+		{
+			sqlExprs: map[string]string{
+				"smallxx": "CREATE TABLE smallxx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1))",
+				"mediumx": "CREATE TABLE mediumx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2))",
+				"largexx": "CREATE TABLE largexx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3))",
+				"largest": "CREATE TABLE largest (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3, col4))",
+			},
+			expOrder: []string{
+				"smallxx",
+				"mediumx",
+				"largexx",
+				"largest",
+			},
+			name: "tables with varying idx",
+		},
+		// Confirm order of DatabaseDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"sdb":       "CREATE DATABASE sdb",
+				"meddb":     "CREATE DATABASE meddb",
+				"largedb":   "CREATE DATABASE largedb",
+				"largestdb": "CREATE DATABASE largestdb",
+			},
+			expOrder: []string{
+				"sdb",
+				"meddb",
+				"largedb",
+				"largestdb",
+			},
+			name: "databases with varying name",
+		},
+		// Confirm order of SchemaDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"sschema":          "CREATE SCHEMA sschema",
+				"medschemax":       "CREATE SCHEMA medschemax",
+				"largeschemaxx":    "CREATE SCHEMA largeschemaxx",
+				"largestschemaxxx": "CREATE SCHEMA largestschemaxxx",
+			},
+			expOrder: []string{
+				"sschema",
+				"medschemax",
+				"largeschemaxx",
+				"largestschemaxxx",
+			},
+			name: "schemas with varying name",
+		},
+		// Confirm order of TypeDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"stype":       "CREATE TYPE stype AS ENUM ('open', 'closed')",
+				"medtype":     "CREATE TYPE medtype AS ENUM ('open', 'closed', 'inactive')",
+				"largetype":   "CREATE TYPE largetype AS ENUM ('open', 'closed', 'inactive', 'active')",
+				"largesttype": "CREATE TYPE largesttype AS ENUM ('open', 'closed', 'inactive', 'active', 'starting')",
+			},
+			expOrder: []string{
+				"stype",
+				"medtype",
+				"largetype",
+				"largesttype",
+			},
+			name: "types with varying name",
+		},
+	} {
+		t.Run(fmt.Sprintf("test: %s", tc.name), func(t *testing.T) {
+			// Create tables and retrieve TableDescriptors.
+			descs := make([]LeasedDescriptor, len(tc.sqlExprs))
+			i := 0
+			for size, expr := range tc.sqlExprs {
+				tdb.Exec(t, expr)
+				var tableID descpb.ID
+				tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
+				desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+				require.NoError(t, err)
+				descs[i] = desc
+				i++
+			}
+
+			// Sort the descriptors and confirm is same as expected.
+			sort.Slice(descs, func(i, j int) bool {
+				return descs[i].Underlying().ByteSize() < descs[j].Underlying().ByteSize()
+			})
+			actual := make([]string, len(descs))
+			for i, desc := range descs {
+				actual[i] = desc.GetName()
+			}
+			require.Equalf(t, tc.expOrder, actual, "Expected: %v, Got: %v", tc.expOrder, actual)
+		})
+	}
+}
+
+// TestLeasedDescriptorByteSizeBaseline ensures each descriptor type has a byte
+// size of at least the baseline approximation, which is the number of bytes
+// from the binary encoded in the descriptor table.
+func TestLeasedDescriptorByteSizeBaseline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	manager := s.LeaseManager().(*Manager)
+
+	getApproxByteSize := func(descID descpb.ID) int64 {
+		var descBytes *[]byte
+		rows := tdb.Query(t, "SELECT descriptor FROM system.descriptor WHERE id = $1", descID)
+		if rows.Next() {
+			if err := rows.Scan(&descBytes); err != nil {
+				log.Eventf(ctx, "Error retrieving bytes from descriptor: %v", err)
+			}
+		}
+		return int64(len(*descBytes))
+	}
+
+	for _, tc := range []struct {
+		sqlExpr  []string
+		descType string
+		name     string
+	}{
+		{
+			sqlExpr: []string{
+				"CREATE TABLE s (col1 INT)",
+			},
+			descType: "table",
+			name:     "s",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE TABLE ss (col1 INT)",
+				"INSERT INTO s VALUES (1)",
+				"INSERT INTO s VALUES (10)",
+			},
+			descType: "table",
+			name:     "ss",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE DATABASE randomDB",
+			},
+			descType: "db",
+			name:     "randomdb",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE SCHEMA schema_one",
+			},
+			descType: "schema",
+			name:     "schema_one",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE USER max WITH PASSWORD 'roach'",
+				"CREATE SCHEMA schema_two AUTHORIZATION max",
+			},
+			descType: "schema",
+			name:     "schema_two",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE TYPE type_one AS ENUM ('open', 'closed')",
+			},
+			descType: "type",
+			name:     "type_one",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE TYPE type_two AS ENUM ('open', 'closed', 'inactive', 'active', 'starting')",
+			},
+			descType: "type",
+			name:     "type_two",
+		},
+	} {
+		t.Run(fmt.Sprintf("%s descriptor %s", tc.descType, tc.name), func(t *testing.T) {
+			// Execute SQL commands and acquire leases on descriptors.
+			for _, expr := range tc.sqlExpr {
+				tdb.Exec(t, expr)
+			}
+			var descID descpb.ID
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name ="+
+				"'"+tc.name+"'").Scan(&descID)
+			desc, err := manager.Acquire(ctx, s.Clock().Now(), descID)
+			require.NoError(t, err)
+
+			// Confirm each descriptor byte size is at least the baseline's.
+			approx := getApproxByteSize(descID)
+			require.Greaterf(t, desc.Underlying().ByteSize(), approx, "ByteSize of desc "+
+				"%d does not exceed the baseline", desc.GetID())
 		})
 	}
 }

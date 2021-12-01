@@ -635,6 +635,7 @@ type Manager struct {
 	storage          storage
 	mu               struct {
 		syncutil.Mutex
+		//TODO(james): Track size of leased descriptors in memory.
 		descriptors map[descpb.ID]*descriptorState
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
