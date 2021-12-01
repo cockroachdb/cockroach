@@ -65,6 +65,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 60}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
+- from: [Namespace:{DescID: 61, Name: typ}, ABSENT]
+  to:   [Type:{DescID: 61}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [Namespace:{DescID: 62, Name: _typ}, ABSENT]
+  to:   [Type:{DescID: 62}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
 - from: [Namespace:{DescID: 63, Name: v5}, ABSENT]
   to:   [View:{DescID: 63}, DROPPED]
   kind: HappensAfter
@@ -154,6 +162,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: SameStage
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Schema:{DescID: 54}, ABSENT]
+  to:   [DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}, ABSENT]
+  kind: HappensAfter
+  rule: schema can be dropped after schema entry inside the database
+- from: [Schema:{DescID: 54}, ABSENT]
   to:   [Sequence:{DescID: 55}, ABSENT]
   kind: HappensAfter
   rule: parent dependencies
@@ -195,6 +207,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Table:{DescID: 56}, ABSENT]
   to:   [Namespace:{DescID: 56, Name: t1}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [Type:{DescID: 61}, ABSENT]
+  to:   [Namespace:{DescID: 61, Name: typ}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [Type:{DescID: 62}, ABSENT]
+  to:   [Namespace:{DescID: 62, Name: _typ}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
 - from: [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
@@ -357,7 +377,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       DescID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 2 with 28 MutationType ops
+PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 55, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -412,8 +432,11 @@ PreCommitPhase non-revertible stage 1 of 2 with 28 MutationType ops
     [ViewDependsOnType:{DescID: 63, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 63, ReferencedDescID: 62}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 61, Name: typ}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 62}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 62, Name: _typ}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
@@ -479,18 +502,16 @@ PreCommitPhase non-revertible stage 1 of 2 with 28 MutationType ops
     *scop.RemoveTypeBackRef
       DescID: 63
       TypeID: 62
-    *scop.MarkDescriptorAsDropped
-      DescID: 54
-PreCommitPhase non-revertible stage 2 of 2 with 2 MutationType ops
-  transitions:
-    [Type:{DescID: 61}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 62}, DROPPED, DROP] -> ABSENT
-  ops:
     *scop.DrainDescriptorName
       TableID: 61
     *scop.DrainDescriptorName
       TableID: 62
-PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
+    *scop.DeleteDatabaseSchemaEntry
+      DatabaseID: 50
+      SchemaID: 54
+    *scop.MarkDescriptorAsDropped
+      DescID: 54
+PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 56}, DROPPED, DROP] -> ABSENT
@@ -507,6 +528,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
     [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 60}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 63}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 61}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 62}, DROPPED, DROP] -> ABSENT
     [Schema:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.LogEvent
@@ -521,8 +544,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 55
+    *scop.CreateGcJobForTable
+      TableID: 55
     *scop.LogEvent
       DescID: 56
       Direction: 2
@@ -535,8 +558,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 56
+    *scop.CreateGcJobForTable
+      TableID: 56
     *scop.LogEvent
       DescID: 57
       Direction: 2
@@ -549,8 +572,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 4
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 57
+    *scop.CreateGcJobForTable
+      TableID: 57
     *scop.LogEvent
       DescID: 58
       Direction: 2
@@ -563,8 +586,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 5
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 58
+    *scop.CreateGcJobForTable
+      TableID: 58
     *scop.LogEvent
       DescID: 59
       Direction: 2
@@ -577,8 +600,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 59
+    *scop.CreateGcJobForTable
+      TableID: 59
     *scop.LogEvent
       DescID: 60
       Direction: 2
@@ -591,8 +614,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 60
+    *scop.CreateGcJobForTable
+      TableID: 60
     *scop.LogEvent
       DescID: 63
       Direction: 2
@@ -605,8 +628,36 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 8
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 63
+    *scop.CreateGcJobForTable
+      TableID: 63
+    *scop.LogEvent
+      DescID: 61
+      Direction: 2
+      Element:
+        type:
+          typeId: 61
+      Metadata:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.DeleteDescriptor
+      DescriptorID: 61
+    *scop.LogEvent
+      DescID: 62
+      Direction: 2
+      Element:
+        type:
+          typeId: 62
+      Metadata:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+        Username: root
+    *scop.DeleteDescriptor
+      DescriptorID: 62
     *scop.DrainDescriptorName
       TableID: 54
     *scop.LogEvent
@@ -631,3 +682,5 @@ PostCommitPhase non-revertible stage 1 of 1 with 16 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+    *scop.DeleteDescriptor
+      DescriptorID: 54

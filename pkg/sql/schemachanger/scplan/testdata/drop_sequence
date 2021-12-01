@@ -41,8 +41,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 54
+    *scop.CreateGcJobForTable
+      TableID: 54
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
@@ -111,8 +111,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 54
+    *scop.CreateGcJobForTable
+      TableID: 54
 
 
 deps

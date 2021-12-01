@@ -215,6 +215,11 @@ ColumnTypeReference :  TableID
 ColumnTypeReference :  ColumnID
 ColumnTypeReference :  TypeID
 
+object DatabaseSchemaEntry
+
+DatabaseSchemaEntry :  DatabaseID
+DatabaseSchemaEntry :  SchemaID
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -264,4 +269,6 @@ View <|-- ViewDependsOnType
 Type <|-- ViewDependsOnType
 Column <|-- ColumnTypeReference
 Type <|-- ColumnTypeReference
+Database <|-- DatabaseSchemaEntry
+Schema <|-- DatabaseSchemaEntry
 @enduml

@@ -71,8 +71,14 @@ type MutationVisitorStateUpdater interface {
 	// AddDrainedName marks a namespace entry as being drained.
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
 
-	// AddNewGCJobForDescriptor enqueues a GC job for the given descriptor.
-	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
+	// DeleteDescriptor adds a descriptor for deletion.
+	DeleteDescriptor(id descpb.ID)
+
+	// AddNewGCJobForTable enqueues a GC job for the given table.
+	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
+
+	// AddNewGCJobForDatabase enqueues a GC job for the given database.
+	AddNewGCJobForDatabase(descriptor catalog.DatabaseDescriptor)
 
 	// AddNewGCJobForIndex enqueues a GC job for the given table index.
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
@@ -322,14 +328,23 @@ func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackR
 	return nil
 }
 
-func (m *visitor) CreateGcJobForDescriptor(
-	ctx context.Context, op scop.CreateGcJobForDescriptor,
-) error {
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescID)
+func (m *visitor) CreateGcJobForTable(ctx context.Context, op scop.CreateGcJobForTable) error {
+	desc, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	m.s.AddNewGCJobForDescriptor(desc)
+	m.s.AddNewGCJobForTable(desc)
+	return nil
+}
+
+func (m *visitor) CreateGcJobForDatabase(
+	ctx context.Context, op scop.CreateGcJobForDatabase,
+) error {
+	desc, err := m.checkOutDatabase(ctx, op.DatabaseID)
+	if err != nil {
+		return err
+	}
+	m.s.AddNewGCJobForDatabase(desc)
 	return nil
 }
 
@@ -912,6 +927,26 @@ func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error 
 		return err
 	}
 	index.IndexDesc().Name = op.Name
+	return nil
+}
+
+func (m *visitor) DeleteDescriptor(_ context.Context, op scop.DeleteDescriptor) error {
+	m.s.DeleteDescriptor(op.DescriptorID)
+	return nil
+}
+
+func (m *visitor) DeleteDatabaseSchemaEntry(
+	ctx context.Context, op scop.DeleteDatabaseSchemaEntry,
+) error {
+	db, err := m.checkOutDatabase(ctx, op.DatabaseID)
+	if err != nil {
+		return err
+	}
+	sc, err := m.cr.MustReadImmutableDescriptor(ctx, op.SchemaID)
+	if err != nil {
+		return err
+	}
+	delete(db.Schemas, sc.GetName())
 	return nil
 }
 

@@ -72,6 +72,9 @@ type CatalogChangeBatcher interface {
 	// DeleteName deletes a namespace entry.
 	DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error
 
+	// DeleteDescriptor deletes a descriptor entry.
+	DeleteDescriptor(ctx context.Context, id descpb.ID) error
+
 	// ValidateAndRun executes the updates after validating them using
 	// catalog.Validate.
 	ValidateAndRun(ctx context.Context) error

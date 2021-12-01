@@ -41,6 +41,7 @@ func dropSchema(
 	sc catalog.SchemaDescriptor,
 	behavior tree.DropBehavior,
 ) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
+	descsThatNeedElements := catalog.DescriptorIDSet{}
 	// For non-user defined schemas, another check will be
 	// done each object as we go to drop them.
 	if sc.SchemaKind() == catalog.SchemaUserDefined {
@@ -48,9 +49,13 @@ func dropSchema(
 	}
 	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
 	for _, id := range objectIDs {
-		// If the object is already dropped, nothing to do here.
+		// For dependency tracking we will still track that these elements were
+		// children even if we didn't add the drop elements ourselves here.
+		dropIDs.Add(id)
+		// If the object is already dropped, then we don't need to create elements
+		// for them.
 		if !checkIfDescOrElementAreDropped(b, id) {
-			dropIDs.Add(id)
+			descsThatNeedElements.Add(id)
 		}
 	}
 	if behavior != tree.DropCascade && !dropIDs.Empty() {
@@ -59,7 +64,7 @@ func dropSchema(
 	}
 	{
 		c := b.WithNewSourceElementID()
-		for _, id := range dropIDs.Ordered() {
+		for _, id := range descsThatNeedElements.Ordered() {
 			desc := c.CatalogReader().MustReadDescriptor(b, id)
 			switch t := desc.(type) {
 			case catalog.TableDescriptor:
@@ -88,6 +93,10 @@ func dropSchema(
 		b.EnqueueDrop(&scpb.Schema{
 			SchemaID:         sc.GetID(),
 			DependentObjects: dropIDs.Ordered(),
+		})
+		b.EnqueueDrop(&scpb.DatabaseSchemaEntry{
+			DatabaseID: sc.GetParentID(),
+			SchemaID:   sc.GetID(),
 		})
 		return true, dropIDs
 	}

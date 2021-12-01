@@ -580,9 +580,10 @@ func (s *TestState) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 }
 
 type testCatalogChangeBatcher struct {
-	s             *TestState
-	descs         []catalog.Descriptor
-	namesToDelete map[descpb.NameInfo]descpb.ID
+	s                   *TestState
+	descs               []catalog.Descriptor
+	namesToDelete       map[descpb.NameInfo]descpb.ID
+	descriptorsToDelete catalog.DescriptorIDSet
 }
 
 var _ scexec.CatalogChangeBatcher = (*testCatalogChangeBatcher)(nil)
@@ -600,6 +601,12 @@ func (b *testCatalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
 	b.namesToDelete[nameInfo] = id
+	return nil
+}
+
+// DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
+	b.descriptorsToDelete.Add(id)
 	return nil
 }
 
@@ -645,6 +652,10 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		})
 		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), diff)
 		b.s.descriptors.Upsert(desc)
+	}
+	for _, deletedID := range b.descriptorsToDelete.Ordered() {
+		b.s.LogSideEffectf("deleted descriptor #%d", deletedID)
+		b.s.descriptors.Remove(deletedID)
 	}
 	return catalog.Validate(ctx, b.s, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...).CombinedError()
 }
@@ -773,9 +784,7 @@ func (s *TestState) User() security.SQLUsername {
 var _ scrun.JobRunDependencies = (*TestState)(nil)
 
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
-func (s *TestState) WithTxnInJob(
-	ctx context.Context, fn func(ctx context.Context, txndeps scrun.JobTxnRunDependencies) error,
-) (err error) {
+func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err error) {
 	s.WithTxn(func(s *TestState) {
 		err = fn(ctx, s)
 	})

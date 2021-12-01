@@ -70,13 +70,14 @@ func NewExecutorDependencies(
 }
 
 type txnDeps struct {
-	txn             *kv.Txn
-	codec           keys.SQLCodec
-	descsCollection *descs.Collection
-	jobRegistry     JobRegistry
-	indexValidator  scexec.IndexValidator
-	partitioner     scexec.Partitioner
-	eventLogWriter  *eventLogWriter
+	txn                *kv.Txn
+	codec              keys.SQLCodec
+	descsCollection    *descs.Collection
+	jobRegistry        JobRegistry
+	indexValidator     scexec.IndexValidator
+	partitioner        scexec.Partitioner
+	eventLogWriter     *eventLogWriter
+	deletedDescriptors catalog.DescriptorIDSet
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
@@ -216,6 +217,13 @@ func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
 	b.batch.Del(catalogkeys.EncodeNameKey(b.codec, nameInfo))
+	return nil
+}
+
+// DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
+	b.batch.Del(catalogkeys.MakeDescMetadataKey(b.codec, id))
+	b.deletedDescriptors.Add(id)
 	return nil
 }
 

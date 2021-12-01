@@ -58,6 +58,11 @@ func init() {
 						Direction: scpb.Target_DROP,
 					}
 				}),
+				emit(func(this *scpb.Database) scop.Op {
+					return &scop.CreateGcJobForDatabase{
+						DatabaseID: this.DatabaseID,
+					}
+				}),
 			),
 		),
 	)

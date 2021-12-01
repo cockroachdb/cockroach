@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -46,16 +47,21 @@ func ExecuteStage(ctx context.Context, deps Dependencies, ops scop.Ops) error {
 // specified set of table descriptors.
 func UpdateDescriptorJobIDs(
 	ctx context.Context,
-	catalog Catalog,
+	cat Catalog,
 	descIDs []descpb.ID,
 	expectedID jobspb.JobID,
 	newID jobspb.JobID,
 ) error {
-	b := catalog.NewCatalogChangeBatcher()
+	b := cat.NewCatalogChangeBatcher()
 	for _, id := range descIDs {
 		// Confirm the descriptor is a table, view or sequence
 		// since we can only lock those types.
-		desc, err := catalog.MustReadMutableDescriptor(ctx, id)
+		desc, err := cat.MustReadMutableDescriptor(ctx, id)
+		// It's valid for descriptors to get removed after a stage executes, so
+		// skip anything that has disappeared.
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			continue
+		}
 		if err != nil {
 			return err
 		}

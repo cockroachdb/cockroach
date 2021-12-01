@@ -14,25 +14,71 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
       DescID: 54
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
-PreCommitPhase non-revertible stage 1 of 2 with 2 MutationType ops
+PreCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
   transitions:
     [Type:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 54, Name: typ}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 55, Name: _typ}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
+    *scop.DrainDescriptorName
+      TableID: 54
     *scop.MarkDescriptorAsDropped
       DescID: 55
-PreCommitPhase non-revertible stage 2 of 2 with 2 MutationType ops
+    *scop.DrainDescriptorName
+      TableID: 55
+PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
   transitions:
     [Type:{DescID: 54}, DROPPED, DROP] -> ABSENT
     [Type:{DescID: 55}, DROPPED, DROP] -> ABSENT
   ops:
-    *scop.DrainDescriptorName
-      TableID: 54
-    *scop.DrainDescriptorName
-      TableID: 55
+    *scop.LogEvent
+      DescID: 54
+      Direction: 2
+      Element:
+        type:
+          typeId: 54
+      Metadata:
+        Statement: DROP TYPE defaultdb.typ
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.DeleteDescriptor
+      DescriptorID: 54
+    *scop.LogEvent
+      DescID: 55
+      Direction: 2
+      Element:
+        type:
+          typeId: 55
+      Metadata:
+        Statement: DROP TYPE defaultdb.typ
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+    *scop.DeleteDescriptor
+      DescriptorID: 55
 
 deps
 DROP TYPE defaultdb.typ
 ----
+- from: [Namespace:{DescID: 54, Name: typ}, ABSENT]
+  to:   [Type:{DescID: 54}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [Namespace:{DescID: 55, Name: _typ}, ABSENT]
+  to:   [Type:{DescID: 55}, DROPPED]
+  kind: HappensAfter
+  rule: namespace needs descriptor to be dropped
+- from: [Type:{DescID: 54}, ABSENT]
+  to:   [Namespace:{DescID: 54, Name: typ}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [Type:{DescID: 55}, ABSENT]
+  to:   [Namespace:{DescID: 55, Name: _typ}, ABSENT]
+  kind: HappensAfter
+  rule: descriptor can only be cleaned up once the name is drained

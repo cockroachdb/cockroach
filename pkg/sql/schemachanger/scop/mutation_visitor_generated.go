@@ -28,7 +28,8 @@ type MutationVisitor interface {
 	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
-	CreateGcJobForDescriptor(context.Context, CreateGcJobForDescriptor) error
+	CreateGcJobForTable(context.Context, CreateGcJobForTable) error
+	CreateGcJobForDatabase(context.Context, CreateGcJobForDatabase) error
 	CreateGcJobForIndex(context.Context, CreateGcJobForIndex) error
 	MarkDescriptorAsDroppedSynthetically(context.Context, MarkDescriptorAsDroppedSynthetically) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
@@ -55,6 +56,8 @@ type MutationVisitor interface {
 	LogEvent(context.Context, LogEvent) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
+	DeleteDescriptor(context.Context, DeleteDescriptor) error
+	DeleteDatabaseSchemaEntry(context.Context, DeleteDatabaseSchemaEntry) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -88,8 +91,13 @@ func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v
 }
 
 // Visit is part of the MutationOp interface.
-func (op CreateGcJobForDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.CreateGcJobForDescriptor(ctx, op)
+func (op CreateGcJobForTable) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGcJobForTable(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateGcJobForDatabase) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGcJobForDatabase(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -220,4 +228,14 @@ func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op SetIndexName) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.SetIndexName(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DeleteDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DeleteDescriptor(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DeleteDatabaseSchemaEntry) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DeleteDatabaseSchemaEntry(ctx, op)
 }

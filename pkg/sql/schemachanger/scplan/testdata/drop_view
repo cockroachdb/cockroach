@@ -49,8 +49,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 55
+    *scop.CreateGcJobForTable
+      TableID: 55
 
 deps
 DROP VIEW defaultdb.v1
@@ -235,8 +235,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 55
+    *scop.CreateGcJobForTable
+      TableID: 55
     *scop.LogEvent
       DescID: 56
       Direction: 2
@@ -249,8 +249,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 56
+    *scop.CreateGcJobForTable
+      TableID: 56
     *scop.LogEvent
       DescID: 57
       Direction: 2
@@ -263,8 +263,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 57
+    *scop.CreateGcJobForTable
+      TableID: 57
     *scop.LogEvent
       DescID: 58
       Direction: 2
@@ -277,8 +277,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 58
+    *scop.CreateGcJobForTable
+      TableID: 58
     *scop.LogEvent
       DescID: 61
       Direction: 2
@@ -291,8 +291,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
           SourceElementID: 5
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 61
+    *scop.CreateGcJobForTable
+      TableID: 61
 
 deps
 DROP VIEW defaultdb.v1 CASCADE

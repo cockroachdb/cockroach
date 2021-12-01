@@ -87,10 +87,16 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 	IndexID descpb.IndexID
 }
 
-// CreateGcJobForDescriptor creates a GC job for a given descriptor.
-type CreateGcJobForDescriptor struct {
+// CreateGcJobForTable creates a GC job for a given table, when necessary.
+type CreateGcJobForTable struct {
 	mutationOp
-	DescID descpb.ID
+	TableID descpb.ID
+}
+
+// CreateGcJobForDatabase creates a GC job for a given database.
+type CreateGcJobForDatabase struct {
+	mutationOp
+	DatabaseID descpb.ID
 }
 
 // CreateGcJobForIndex creates a GC job for a given table index.
@@ -304,11 +310,24 @@ type SetColumnName struct {
 	Name     string
 }
 
-// SetIndexName makes a index name only to allocate
+// SetIndexName makes an index name only to allocate
 // the name and ID.
 type SetIndexName struct {
 	mutationOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 	Name    string
+}
+
+// DeleteDescriptor deletes a descriptor.
+type DeleteDescriptor struct {
+	mutationOp
+	DescriptorID descpb.ID
+}
+
+// DeleteDatabaseSchemaEntry deletes an entry for a schema.
+type DeleteDatabaseSchemaEntry struct {
+	mutationOp
+	DatabaseID descpb.ID
+	SchemaID   descpb.ID
 }
