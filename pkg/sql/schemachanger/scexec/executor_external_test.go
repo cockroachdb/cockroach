@@ -395,7 +395,7 @@ func TestSchemaChanger(t *testing.T) {
 				},
 				{
 					Target: targetSlice[5],
-					Status: scpb.Status_PUBLIC,
+					Status: scpb.Status_ABSENT,
 				},
 			},
 

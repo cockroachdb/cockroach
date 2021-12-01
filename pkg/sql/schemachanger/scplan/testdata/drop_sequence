@@ -5,25 +5,27 @@ CREATE SEQUENCE defaultdb.SQ1
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-Stage 1 of 4
+Stage 1 of 3
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-Stage 2 of 4
-  transitions:
-    [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
-  ops:
-    *scop.DrainDescriptorName
-      TableID: 54
-Stage 3 of 4 (non-revertible)
+Stage 2 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 54}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
-Stage 4 of 4 (non-revertible)
+    *scop.DrainDescriptorName
+      TableID: 54
+Stage 3 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -53,33 +55,35 @@ CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval(
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-Stage 1 of 4
+Stage 1 of 3
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-Stage 2 of 4
-  transitions:
-    [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
-  ops:
-    *scop.DrainDescriptorName
-      TableID: 54
-Stage 3 of 4 (non-revertible)
+Stage 2 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
+    [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
+    [Owner:{DescID: 54}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
+    [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
+    *scop.DrainDescriptorName
+      TableID: 54
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 55
       TableID: 54
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 54
-Stage 4 of 4 (non-revertible)
+Stage 3 of 3 (non-revertible)
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -106,6 +110,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   to:   [Sequence:{DescID: 54}, DROPPED]
   kind: HappensAfter
   rule: namespace needs descriptor to be dropped
+- from: [Owner:{DescID: 54}, ABSENT]
+  to:   [Sequence:{DescID: 54}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
 - from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
   to:   [Sequence:{DescID: 54}, DROPPED]
   kind: SameStage
@@ -118,3 +126,15 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   to:   [Namespace:{DescID: 54, Name: sq1}, ABSENT]
   kind: HappensAfter
   rule: descriptor can only be cleaned up once the name is drained
+- from: [UserPrivileges:{DescID: 54, Username: admin}, ABSENT]
+  to:   [Sequence:{DescID: 54}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 54, Username: public}, ABSENT]
+  to:   [Sequence:{DescID: 54}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped
+- from: [UserPrivileges:{DescID: 54, Username: root}, ABSENT]
+  to:   [Sequence:{DescID: 54}, DROPPED]
+  kind: HappensAfter
+  rule: table deps removal happens after table marked as dropped

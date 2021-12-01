@@ -18,16 +18,30 @@ import (
 func init() {
 	opRegistry.register(
 		(*scpb.IndexName)(nil),
-		scpb.Target_ADD,
-		scpb.Status_ABSENT,
-		to(scpb.Status_PUBLIC,
-			minPhase(scop.PreCommitPhase),
-			emit(func(this *scpb.IndexName) scop.Op {
-				return &scop.SetIndexName{
-					TableID: this.TableID,
-					IndexID: this.IndexID,
-					Name:    this.Name,
-				}
-			}),
-		))
+		add(
+			to(scpb.Status_PUBLIC,
+				minPhase(scop.PreCommitPhase),
+				emit(func(this *scpb.IndexName) scop.Op {
+					return &scop.SetIndexName{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+						Name:    this.Name,
+					}
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PostCommitPhase),
+				emit(func(this *scpb.IndexName) scop.Op {
+					return &scop.SetIndexName{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+						Name:    this.Name,
+					}
+				}),
+			),
+		),
+	)
+
 }

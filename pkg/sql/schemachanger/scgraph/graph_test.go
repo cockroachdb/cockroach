@@ -117,12 +117,14 @@ func TestGraphRanks(t *testing.T) {
 					scpb.Status_ABSENT,
 					scpb.Status_PUBLIC,
 					true,
+					scop.StatementPhase,
 					&scop.MakeColumnAbsent{}))
 			} else {
 				require.NoError(t, graph.AddOpEdges(state.Nodes[idx].Target,
 					scpb.Status_PUBLIC,
 					scpb.Status_ABSENT,
 					true,
+					scop.StatementPhase,
 					&scop.MakeColumnAbsent{}))
 			}
 		}

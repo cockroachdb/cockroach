@@ -18,41 +18,50 @@ import (
 func init() {
 
 	// TODO(ajwerner): This needs more steps.
-	opRegistry.register(
-		(*scpb.Sequence)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_TXN_DROPPED,
-			minPhase(scop.StatementPhase),
-			emit(func(this *scpb.Sequence) scop.Op {
-				return &scop.MarkDescriptorAsDroppedSynthetically{
-					DescID: this.SequenceID,
-				}
-			})),
-		to(scpb.Status_DROPPED,
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.Sequence) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					DescID: this.SequenceID,
-				}
-			}),
+	opRegistry.register((*scpb.Sequence)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.Sequence) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
+			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		to(scpb.Status_ABSENT,
-			minPhase(scop.PostCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.Sequence, md *scpb.ElementMetadata) scop.Op {
-				return &scop.LogEvent{Metadata: *md,
-					DescID:    this.SequenceID,
-					Element:   &scpb.ElementProto{Sequence: this},
-					Direction: scpb.Target_DROP,
-				}
-			}),
-			emit(func(this *scpb.Sequence) scop.Op {
-				return &scop.CreateGcJobForDescriptor{
-					DescID: this.SequenceID,
-				}
-			}),
+		drop(
+			to(scpb.Status_TXN_DROPPED,
+				minPhase(scop.StatementPhase),
+				emit(func(this *scpb.Sequence) scop.Op {
+					return &scop.MarkDescriptorAsDroppedSynthetically{
+						DescID: this.SequenceID,
+					}
+				}),
+			),
+			to(scpb.Status_DROPPED,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Sequence) scop.Op {
+					return &scop.MarkDescriptorAsDropped{
+						DescID: this.SequenceID,
+					}
+				}),
+			),
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PostCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.Sequence, md *scpb.ElementMetadata) scop.Op {
+					return &scop.LogEvent{Metadata: *md,
+						DescID:    this.SequenceID,
+						Element:   &scpb.ElementProto{Sequence: this},
+						Direction: scpb.Target_DROP,
+					}
+				}),
+				emit(func(this *scpb.Sequence) scop.Op {
+					return &scop.CreateGcJobForDescriptor{
+						DescID: this.SequenceID,
+					}
+				}),
+			),
 		),
 	)
 }

@@ -17,40 +17,50 @@ import (
 
 func init() {
 	// TODO(ajwerner): This needs more steps.
-	opRegistry.register(
-		(*scpb.View)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_TXN_DROPPED,
-			minPhase(scop.StatementPhase),
-			emit(func(this *scpb.View) scop.Op {
-				return &scop.MarkDescriptorAsDroppedSynthetically{
-					DescID: this.TableID,
-				}
-			})),
-		to(scpb.Status_DROPPED,
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.View) scop.Op {
-				return &scop.MarkDescriptorAsDropped{
-					DescID: this.TableID,
-				}
-			}),
+	opRegistry.register((*scpb.View)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.View) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
+			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		to(scpb.Status_ABSENT,
-			minPhase(scop.PostCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.View, md *scpb.ElementMetadata) scop.Op {
-				return &scop.LogEvent{Metadata: *md,
-					DescID:    this.TableID,
-					Element:   &scpb.ElementProto{View: this},
-					Direction: scpb.Target_DROP,
-				}
-			}),
-			emit(func(this *scpb.View) scop.Op {
-				return &scop.CreateGcJobForDescriptor{
-					DescID: this.TableID,
-				}
-			})),
+		drop(
+			to(scpb.Status_TXN_DROPPED,
+				minPhase(scop.StatementPhase),
+				emit(func(this *scpb.View) scop.Op {
+					return &scop.MarkDescriptorAsDroppedSynthetically{
+						DescID: this.TableID,
+					}
+				}),
+			),
+			to(scpb.Status_DROPPED,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.View) scop.Op {
+					return &scop.MarkDescriptorAsDropped{
+						DescID: this.TableID,
+					}
+				}),
+			),
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PostCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.View, md *scpb.ElementMetadata) scop.Op {
+					return &scop.LogEvent{Metadata: *md,
+						DescID:    this.TableID,
+						Element:   &scpb.ElementProto{View: this},
+						Direction: scpb.Target_DROP,
+					}
+				}),
+				emit(func(this *scpb.View) scop.Op {
+					return &scop.CreateGcJobForDescriptor{
+						DescID: this.TableID,
+					}
+				}),
+			),
+		),
 	)
 }

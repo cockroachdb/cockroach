@@ -318,3 +318,23 @@ rules
     - $type-ref-add-node[Target] = $type-ref-add-target
     - $type-ref-add-target[Direction] = ADD
     - $type-ref-add-node[Status] = PUBLIC
+- name: table deps removal happens after table marked as dropped
+  from: dep-drop-node
+  to: table-drop-node
+  query:
+    - $dep-drop[Type] IN ['*scpb.Owner', '*scpb.UserPrivileges']
+    - $table-drop[Type] IN ['*scpb.Table', '*scpb.Sequence', '*scpb.View']
+    - $table-drop[DescID] = $table-id
+    - $dep-drop[DescID] = $table-id
+    - $dep-drop-target[Type] = '*scpb.Target'
+    - $dep-drop-target[Element] = $dep-drop
+    - $dep-drop-node[Type] = '*scpb.Node'
+    - $dep-drop-node[Target] = $dep-drop-target
+    - $dep-drop-target[Direction] = DROP
+    - $dep-drop-node[Status] = ABSENT
+    - $table-drop-target[Type] = '*scpb.Target'
+    - $table-drop-target[Element] = $table-drop
+    - $table-drop-node[Type] = '*scpb.Node'
+    - $table-drop-node[Target] = $table-drop-target
+    - $table-drop-target[Direction] = DROP
+    - $table-drop-node[Status] = DROPPED

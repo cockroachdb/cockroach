@@ -16,18 +16,25 @@ import (
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.RelationDependedOnBy)(nil),
-		scpb.Target_DROP,
-		scpb.Status_PUBLIC,
-		to(scpb.Status_ABSENT,
-			minPhase(scop.PreCommitPhase),
-			revertible(false),
-			emit(func(this *scpb.RelationDependedOnBy) scop.Op {
-				return &scop.RemoveRelationDependedOnBy{
-					TableID:      this.TableID,
-					DependedOnBy: this.DependedOnBy,
-				}
-			})),
+	opRegistry.register((*scpb.RelationDependedOnBy)(nil),
+		add(
+			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.RelationDependedOnBy) scop.Op {
+					return notImplemented(this)
+				}),
+			),
+		),
+		drop(
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.RelationDependedOnBy) scop.Op {
+					return &scop.RemoveRelationDependedOnBy{
+						TableID:      this.TableID,
+						DependedOnBy: this.DependedOnBy,
+					}
+				}),
+			),
+		),
 	)
 }
