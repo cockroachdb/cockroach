@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -389,11 +390,19 @@ type importRowError struct {
 	rowNum int64
 }
 
+const (
+	importRowErrMaxRuneCount    = 1024
+	importRowErrTruncatedMarker = " -- TRUNCATED"
+)
+
 func (e *importRowError) Error() string {
 	return fmt.Sprintf("error parsing row %d: %v (row: %q)", e.rowNum, e.err, e.row)
 }
 
 func newImportRowError(err error, row string, num int64) error {
+	if len(row) > importRowErrMaxRuneCount {
+		row = util.TruncateString(row, importRowErrMaxRuneCount) + importRowErrTruncatedMarker
+	}
 	return &importRowError{
 		err:    err,
 		row:    row,
