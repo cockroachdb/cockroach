@@ -139,7 +139,11 @@ func TestCompare(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer conn.Close()
+
+				defer func(conn cmpconn.Conn) {
+					conn.Close(ctx)
+				}(conn)
+
 				for _, init := range uri.init {
 					if err := conn.Exec(ctx, init); err != nil {
 						t.Fatalf("%s: %v", testCn.name, err)
@@ -182,10 +186,10 @@ func TestCompare(t *testing.T) {
 					ignoredErrCount++
 				}
 				totalQueryCount++
-				// Make sure we can still ping on a connection. If we can't we may have
+				// Make sure we can still ping on a connection. If we can't, we may have
 				// crashed something.
 				for name, conn := range conns {
-					if err := conn.Ping(); err != nil {
+					if err := conn.Ping(ctx); err != nil {
 						t.Log(query)
 						t.Fatalf("%s: ping: %v", name, err)
 					}

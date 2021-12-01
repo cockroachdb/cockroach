@@ -165,7 +165,8 @@ type FlowBase struct {
 	startedGoroutines bool
 
 	// inboundStreams are streams that receive data from other hosts; this map
-	// is to be passed to FlowRegistry.RegisterFlow.
+	// is to be passed to FlowRegistry.RegisterFlow. This map is populated in
+	// Flow.Setup(), so it is safe to lookup into concurrently later.
 	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo
 
 	// waitGroup is used to wait for async components of the flow:
@@ -527,9 +528,9 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 }
 
-// cancel iterates through all unconnected streams of this flow and marks them canceled.
-// This function is called in Wait() after the associated context has been canceled.
-// In order to cancel a flow, call f.ctxCancel() instead of this function.
+// cancel cancels all unconnected streams of this flow. This function is called
+// in Wait() after the associated context has been canceled. In order to cancel
+// a flow, call f.ctxCancel() instead of this function.
 //
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
@@ -538,15 +539,7 @@ func (f *FlowBase) cancel() {
 	if f.IsLocal() {
 		return
 	}
-	f.flowRegistry.Lock()
-	timedOutReceivers := f.flowRegistry.cancelPendingStreamsLocked(f.ID)
-	f.flowRegistry.Unlock()
-
-	for _, receiver := range timedOutReceivers {
-		go func(receiver InboundStreamHandler) {
-			// Stream has yet to be started; send an error to its
-			// receiver and prevent it from being connected.
-			receiver.Timeout(cancelchecker.QueryCanceledError)
-		}(receiver)
-	}
+	// Pending streams have yet to be started; send an error to its receivers
+	// and prevent them from being connected.
+	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.QueryCanceledError)
 }
