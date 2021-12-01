@@ -2022,6 +2022,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Catalog"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Current",
+				Metrics: []string{"sql.mem.lease-manager-memory.current"},
+			},
+			{
+				Title:   "Max",
+				Metrics: []string{"sql.mem.lease-manager-memory.max"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL Memory"}},
 		Charts: []chartDescription{
 			{
