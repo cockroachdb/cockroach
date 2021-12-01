@@ -3,9 +3,9 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 ----
 
 ops
-CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
+CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-Stage 1 of 5
+PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
@@ -26,28 +26,28 @@ Stage 1 of 5
       IndexID: 2
       Name: id1
       TableID: 54
-Stage 2 of 5
+PostCommitPhase stage 1 of 4 with 1 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 54
-Stage 3 of 5
+PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 54
-Stage 4 of 5
+PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
-Stage 5 of 5
+PostCommitPhase stage 4 of 4 with 1 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
@@ -56,7 +56,7 @@ Stage 5 of 5
       TableID: 54
 
 deps
-CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
+CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 - from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
@@ -68,9 +68,9 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
   rule: index needs a name to be assigned
 
 ops
-CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
+CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-Stage 1 of 5
+PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
@@ -93,28 +93,28 @@ Stage 1 of 5
       IndexID: 2
       Name: id1
       TableID: 54
-Stage 2 of 5
+PostCommitPhase stage 1 of 4 with 1 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 54
-Stage 3 of 5
+PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 54
-Stage 4 of 5
+PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
-Stage 5 of 5
+PostCommitPhase stage 4 of 4 with 1 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
@@ -123,7 +123,7 @@ Stage 5 of 5
       TableID: 54
 
 deps
-CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
+CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 - from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
@@ -135,11 +135,9 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
   rule: index needs a name to be assigned
 
 ops
-CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
-                                                              PARTITION p1 VALUES IN (1)
-                                                            )
+CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-Stage 1 of 5
+PreCommitPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [Partitioning:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> PUBLIC
     [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
@@ -171,28 +169,28 @@ Stage 1 of 5
       IndexID: 2
       Name: id1
       TableID: 54
-Stage 2 of 5
+PostCommitPhase stage 1 of 4 with 1 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 54
-Stage 3 of 5
+PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       TableID: 54
-Stage 4 of 5
+PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
-Stage 5 of 5
+PostCommitPhase stage 4 of 4 with 1 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
@@ -201,9 +199,7 @@ Stage 5 of 5
       TableID: 54
 
 deps
-CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
-                                                              PARTITION p1 VALUES IN (1)
-                                                            )
+CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
 - from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
