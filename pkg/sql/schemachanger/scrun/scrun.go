@@ -39,15 +39,12 @@ func RunSchemaChangesInTxn(
 	if len(state.Nodes) == 0 {
 		return scpb.State{}, nil
 	}
-	sc, err := scplan.MakePlan(state, scplan.Params{
-		ExecutionPhase: deps.Phase(),
-		// TODO(ajwerner): Populate the set of new descriptors
-	})
+	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: deps.Phase()})
 	if err != nil {
 		return scpb.State{}, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 	after := state
-	for i, s := range sc.Stages {
+	for i, s := range sc.StagesForCurrentPhase() {
 		if err := executeStage(ctx, deps, sc, i); err != nil {
 			return scpb.State{}, err
 		}
@@ -142,7 +139,8 @@ func RunSchemaChangesInJob(
 		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 
-	if len(sc.Stages) == 0 {
+	stages := sc.StagesForCurrentPhase()
+	if len(stages) == 0 {
 		// In the case where no stage exists, and therefore there's nothing to
 		// execute, we still need to open a transaction to remove all references to
 		// this schema change job from the descriptors.
@@ -152,8 +150,8 @@ func RunSchemaChangesInJob(
 		})
 	}
 
-	for i, stage := range sc.Stages {
-		isLastStage := i == len(sc.Stages)-1
+	for i, stage := range stages {
+		isLastStage := i == len(stages)-1
 		// Execute each stage in its own transaction.
 		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
 			if err := executeStage(ctx, td, sc, i); err != nil {
@@ -232,9 +230,10 @@ func executeStage(ctx context.Context, deps TxnRunDependencies, p scplan.Plan, s
 			return err
 		}
 	}
-	err := scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), p.Stages[stageIdx].Ops)
+	stage := p.StagesForCurrentPhase()[stageIdx]
+	err := scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), stage.Ops)
 	if err != nil {
-		err = errors.Wrapf(err, "Error executing %s stage %d of %d", p.Params.ExecutionPhase, stageIdx+1, len(p.Stages))
+		err = errors.Wrapf(err, "Error executing %s", stage.String())
 		return scgraphviz.DecorateErrorWithPlanDetails(err, p)
 	}
 	return nil

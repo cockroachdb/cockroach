@@ -91,7 +91,7 @@ func DecorateErrorWithPlanDetails(err error, p scplan.Plan) error {
 
 // DrawStages returns a graphviz string of the stages of the Plan.
 func DrawStages(p scplan.Plan) (string, error) {
-	if p.Stages == nil {
+	if p.StagesForAllPhases() == nil {
 		return "", errors.Errorf("missing stages in plan")
 	}
 	gv, err := drawStages(p)
@@ -152,13 +152,13 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 		e.Label(n.Target.Direction.String())
 		curNodes[i] = tsn
 	}
-	for id, st := range p.Stages {
-		stage := fmt.Sprintf("stage %d of %d", id+1, len(p.Stages))
+	for _, st := range p.StagesForAllPhases() {
+		stage := st.String()
 		sg := stagesSubgraph.Subgraph(stage, dot.ClusterOption{})
 		next := st.After
 		nextNodes := make([]dot.Node, len(curNodes))
 		for i, st := range next.Nodes {
-			cst := sg.Node(fmt.Sprintf("stage %d of %d: %d", id+1, len(p.Stages), i))
+			cst := sg.Node(fmt.Sprintf("%s: %d", stage, i))
 			cst.Attr("label", targetStatusID(i, st.Status))
 			if st != cur.Nodes[i] {
 				ge := curNodes[i].Edge(cst)

@@ -5,14 +5,14 @@ CREATE SEQUENCE defaultdb.SQ1
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-Stage 1 of 3
+StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-Stage 2 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -25,7 +25,7 @@ Stage 2 of 3 (non-revertible)
       DescID: 54
     *scop.DrainDescriptorName
       TableID: 54
-Stage 3 of 3 (non-revertible)
+PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -45,24 +45,24 @@ Stage 3 of 3 (non-revertible)
       DescID: 54
 
 create-table
-CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
 ----
 
 create-table
-CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
 ----
 
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-Stage 1 of 3
+StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-Stage 2 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -83,7 +83,7 @@ Stage 2 of 3 (non-revertible)
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 54
-Stage 3 of 3 (non-revertible)
+PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
