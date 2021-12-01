@@ -406,6 +406,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs = *leaseManagerTestingKnobs.(*lease.ManagerTestingKnobs)
 	}
 
+	rootSQLMetrics := cfg.monitorAndMetrics.rootSQLMetrics
+	cfg.registry.AddMetricStruct(rootSQLMetrics)
+	rootSQLMemoryMonitor := cfg.monitorAndMetrics.rootSQLMemoryMonitor
+
+	// Lease Manager monitor is the memory metric for all leases by the Manager.
+	leaseMetrics := sql.MakeBaseMemMetrics("lease-manager-memory", cfg.HistogramWindowInterval())
+	leaseMgrMonitor := mon.NewMonitorInheritWithLimit("lease-manager", 0 /* limit */, rootSQLMemoryMonitor)
+
 	leaseMgr := lease.NewLeaseManager(
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
@@ -417,17 +425,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs,
 		cfg.stopper,
 		cfg.rangeFeedFactory,
+		leaseMgrMonitor,
 	)
-	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
-	rootSQLMetrics := cfg.monitorAndMetrics.rootSQLMetrics
-	cfg.registry.AddMetricStruct(rootSQLMetrics)
+	// Begin memory monitoring for manager's leases.
+	leaseMgrMetrics := leaseMgr.MetricsStruct(leaseMetrics.CurBytesCount, leaseMetrics.MaxBytesHist)
+	cfg.registry.AddMetricStruct(leaseMgrMetrics)
+	leaseMgrMonitor.SetMetrics(leaseMgrMetrics.CurBytesCount, leaseMgrMetrics.MaxBytesHist)
+	leaseMgrMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(internalMemMetrics)
-
-	rootSQLMemoryMonitor := cfg.monitorAndMetrics.rootSQLMemoryMonitor
 
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the

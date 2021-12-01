@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -368,7 +369,12 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, false),
+			)
+			// Grow leaseMgr monitor for new leased descriptor.
+			if err := m.boundAccount.Grow(context.Background(), versions[i].desc.ByteSize()); err != nil {
+				log.Warningf(context.Background(), "Unable to grow leaseMgr bound account for id %d", id)
+			}
 		}
 	}
 }
@@ -607,6 +613,12 @@ type Manager struct {
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
 	sem          *quotapool.IntPool
+
+	// mon is a memory monitor linked with the leaseMgr on creation.
+	mon *mon.BytesMonitor
+	// boundAccount is associated with mon and is used to track memory allocations
+	// during lease acquires.
+	boundAccount mon.BoundAccount
 }
 
 const leaseConcurrencyLimit = 5
@@ -628,6 +640,7 @@ func NewLeaseManager(
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
 	rangeFeedFactory *rangefeed.Factory,
+	monitor *mon.BytesMonitor,
 ) *Manager {
 	lm := &Manager{
 		storage: storage{
@@ -658,6 +671,10 @@ func NewLeaseManager(
 	lm.mu.updatesResolvedTimestamp = db.Clock().Now()
 
 	lm.draining.Store(false)
+
+	lm.mon = monitor
+	lm.boundAccount = lm.mon.MakeBoundAccount()
+
 	return lm
 }
 
@@ -741,6 +758,7 @@ func (m *Manager) AcquireByName(
 		// m.names.get() incremented the refcount, we decrement it to get a new
 		// version.
 		descVersion.Release(ctx)
+
 		// Return a valid descriptor for the timestamp.
 		leasedDesc, err := m.Acquire(ctx, timestamp, descVersion.GetID())
 		if err != nil {
@@ -1252,12 +1270,16 @@ func (m *Manager) Codec() keys.SQLCodec {
 // registration.
 type Metrics struct {
 	OutstandingLeases *metric.Gauge
+	CurBytesCount     *metric.Gauge
+	MaxBytesHist      *metric.Histogram
 }
 
 // MetricsStruct returns a struct containing all of this Manager's metrics.
-func (m *Manager) MetricsStruct() Metrics {
+func (m *Manager) MetricsStruct(gauge *metric.Gauge, histogram *metric.Histogram) Metrics {
 	return Metrics{
 		OutstandingLeases: m.storage.outstandingLeases,
+		CurBytesCount:     gauge,
+		MaxBytesHist:      histogram,
 	}
 }
 

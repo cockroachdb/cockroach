@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -93,6 +94,9 @@ func TestSchemaChangeProcess(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
 	require.NoError(t, err)
+
+	leaseMetrics := sql.MakeBaseMemMetrics("lease-manager-memory", execCfg.HistogramWindowInterval)
+	leaseMgrMonitor := mon.NewMonitorInheritWithLimit("lease-manager", 0 /* limit */, execCfg.RootMemoryMonitor)
 	leaseMgr := lease.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		execCfg.NodeID,
@@ -104,7 +108,13 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
+		nil,
 	)
+	// Pass manager memory monitor for leasing.
+	leaseMgrMetrics := leaseMgr.MetricsStruct(leaseMetrics.CurBytesCount, leaseMetrics.MaxBytesHist)
+	leaseMgrMonitor.SetMetrics(leaseMgrMetrics.CurBytesCount, leaseMgrMetrics.MaxBytesHist)
+	leaseMgrMonitor.Start(context.Background(), execCfg.RootMemoryMonitor, mon.BoundAccount{})
+
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
 	changer := sql.NewSchemaChangerForTesting(

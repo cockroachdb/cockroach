@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -212,6 +213,8 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		// different node id.
 		cfgCpy := t.server.ExecutorConfig().(sql.ExecutorConfig)
 		cfgCpy.NodeInfo.NodeID = nc
+		leaseMetrics := sql.MakeBaseMemMetrics("lease-manager-memory", cfgCpy.HistogramWindowInterval)
+		leaseMgrMonitor := mon.NewMonitorInheritWithLimit("lease-manager", 0 /* limit */, cfgCpy.RootMemoryMonitor)
 		mgr = lease.NewLeaseManager(
 			log.AmbientContext{Tracer: tracing.NewTracer()},
 			nc,
@@ -223,7 +226,13 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			cfgCpy.RangeFeedFactory,
+			leaseMgrMonitor,
 		)
+		// Pass manager memory monitor for leasing.
+		leaseMgrMetrics := mgr.MetricsStruct(leaseMetrics.CurBytesCount, leaseMetrics.MaxBytesHist)
+		leaseMgrMonitor.SetMetrics(leaseMgrMetrics.CurBytesCount, leaseMgrMetrics.MaxBytesHist)
+		leaseMgrMonitor.Start(context.Background(), cfgCpy.RootMemoryMonitor, mon.BoundAccount{})
+
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
 		mgr.PeriodicallyRefreshSomeLeases(ctx)
 		t.nodes[nodeID] = mgr
