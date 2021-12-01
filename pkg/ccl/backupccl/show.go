@@ -65,6 +65,7 @@ type backupInfoReader interface {
 	showBackup(
 		context.Context,
 		cloud.ExternalStorage,
+		cloud.ExternalStorage,
 		*jobspb.BackupEncryptionOptions,
 		[]string,
 		chan<- tree.Datums,
@@ -88,6 +89,7 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	store cloud.ExternalStorage,
+	incStore cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
 	incPaths []string,
 	resultsCh chan<- tree.Datums,
@@ -112,7 +114,7 @@ func (m manifestInfoReader) showBackup(
 	}
 
 	for i := range incPaths {
-		m, err := readBackupManifest(ctx, store, incPaths[i], enc)
+		m, err := readBackupManifest(ctx, incStore, incPaths[i], enc)
 		if err != nil {
 			return err
 		}
@@ -181,6 +183,7 @@ func showBackupPlanHook(
 		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
 		backupOptAsJSON:         sql.KVStringOptRequireNoValue,
 		backupOptWithDebugIDs:   sql.KVStringOptRequireNoValue,
+		backupOptIncStorage:     sql.KVStringOptRequireValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -279,20 +282,37 @@ func showBackupPlanHook(
 				Mode:    jobspb.EncryptionMode_KMS,
 				KMSInfo: defaultKMSInfo}
 		}
+		var incPaths []string
+		incStore := store
+		if incDest, ok := opts[backupOptIncStorage]; ok {
+			if subdir != "" {
+				parsed, err := url.Parse(incDest)
+				if err != nil {
+					return err
+				}
+				parsed.Path = path.Join(parsed.Path, subdir)
+				incDest = parsed.String()
+			}
+			incStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incDest, p.User())
+			if err != nil {
+				return errors.Wrapf(err, "make incremental storage")
+			}
+			defer incStore.Close()
+		}
+		incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
 
-		incPaths, err := FindPriorBackups(ctx, store, IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
 				// and show the specified base.
-				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", store)
+				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", incStore)
 				incPaths = nil
 			} else {
 				return err
 			}
 		}
 
-		return infoReader.showBackup(ctx, store, encryption, incPaths, resultsCh)
+		return infoReader.showBackup(ctx, store, incStore, encryption, incPaths, resultsCh)
 	}
 
 	return fn, infoReader.header(), nil, false, nil
