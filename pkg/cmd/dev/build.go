@@ -334,13 +334,15 @@ func (d *dev) getBasicBuildArgs(
 				err = fmt.Errorf("could not run `bazel %s` (%w)", shellescape.QuoteCommand(queryArgs), queryErr)
 				return
 			}
-			fields := strings.Fields(strings.TrimSpace(string(labelKind)))
-			fullTargetName := fields[len(fields)-1]
-			typ := fields[0]
-			args = append(args, fullTargetName)
-			buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
-			if typ == "go_test" {
-				shouldBuildWithTestConfig = true
+			for _, line := range strings.Split(strings.TrimSpace(string(labelKind)), "\n") {
+				fields := strings.Fields(line)
+				fullTargetName := fields[len(fields)-1]
+				typ := fields[0]
+				args = append(args, fullTargetName)
+				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
+				if typ == "go_test" {
+					shouldBuildWithTestConfig = true
+				}
 			}
 			continue
 		}
