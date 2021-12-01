@@ -1330,7 +1330,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					colexecargs.OpWithMetaInfo{Root: input},
 					typs,
 					[]uint32{0}, /* hashCols */
-					64<<20,      /* memoryLimit */
+					execinfra.DefaultMemoryLimit,
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
