@@ -47,27 +47,27 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	}{
 		{
 			stmt:        "CREATE TABLE t()",
-			expectedIDs: descpb.IDs{52},
-		},
-		{
-			stmt:        "CREATE TABLE t2(); ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
-			expectedIDs: descpb.IDs{53},
-		},
-		{
-			stmt:        "CREATE DATABASE d; CREATE TABLE d.t1(); CREATE TABLE d.t2()",
-			expectedIDs: descpb.IDs{54, 55, 56},
-		},
-		{
-			stmt:        "ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5",
 			expectedIDs: descpb.IDs{54},
 		},
 		{
+			stmt:        "CREATE TABLE t2(); ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
+			expectedIDs: descpb.IDs{55},
+		},
+		{
+			stmt:        "CREATE DATABASE d; CREATE TABLE d.t1(); CREATE TABLE d.t2()",
+			expectedIDs: descpb.IDs{56, 57, 58, 59},
+		},
+		{
+			stmt:        "ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5",
+			expectedIDs: descpb.IDs{56},
+		},
+		{
 			stmt:        "CREATE TABLE t3(); CREATE TABLE t4()",
-			expectedIDs: descpb.IDs{57, 58},
+			expectedIDs: descpb.IDs{60, 61},
 		},
 		{
 			stmt:        "ALTER TABLE t3 CONFIGURE ZONE USING num_replicas=5; CREATE TABLE t5(); DROP TABLE t4;",
-			expectedIDs: descpb.IDs{57, 58, 59},
+			expectedIDs: descpb.IDs{60, 61, 62},
 		},
 		// Named zone tests.
 		{
@@ -93,13 +93,13 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		// Test that events on types/schemas are also captured.
 		{
 			stmt: "CREATE DATABASE db; CREATE SCHEMA db.sc",
-			// One ID each for the parent database and the schema.
-			expectedIDs: descpb.IDs{60, 61},
+			// One ID each for the parent database, the public schema and the schema.
+			expectedIDs: descpb.IDs{63, 64, 65},
 		},
 		{
 			stmt: "CREATE TYPE typ AS ENUM()",
 			// One ID each for the enum and the array type.
-			expectedIDs: descpb.IDs{62, 63},
+			expectedIDs: descpb.IDs{66, 67},
 		},
 	}
 
@@ -229,7 +229,9 @@ func TestSQLWatcherMultiple(t *testing.T) {
 	beforeStmtTS := ts.Clock().Now()
 	tdb.Exec(t, "CREATE TABLE t()")
 	afterStmtTS := ts.Clock().Now()
-	const expDescID descpb.ID = 52
+	var expDescID descpb.ID
+	row := tdb.QueryRow(t, `SELECT id FROM system.namespace WHERE name='t'`)
+	row.Scan(&expDescID)
 
 	var wg sync.WaitGroup
 	mu := struct {
@@ -480,7 +482,9 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 	beforeStmtTS := ts.Clock().Now()
 	tdb.Exec(t, "CREATE TABLE t()")
 	afterStmtTS := ts.Clock().Now()
-	const expDescID descpb.ID = 52
+	var expDescID descpb.ID
+	row := tdb.QueryRow(t, `SELECT id FROM system.namespace WHERE name='t'`)
+	row.Scan(&expDescID)
 
 	var wg sync.WaitGroup
 	mu := struct {

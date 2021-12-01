@@ -373,7 +373,7 @@ var errEvalPrivileged = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSe
 
 // LookupNamespaceID is part of the tree.PrivilegedAccessor interface.
 func (ep *DummyPrivilegedAccessor) LookupNamespaceID(
-	ctx context.Context, parentID int64, name string,
+	ctx context.Context, parentID int64, parentSchemaID int64, name string,
 ) (tree.DInt, bool, error) {
 	return 0, false, errors.WithStack(errEvalPrivileged)
 }

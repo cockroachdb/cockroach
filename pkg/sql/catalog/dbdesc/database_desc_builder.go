@@ -13,12 +13,14 @@ package dbdesc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -137,6 +139,24 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 			PrimaryRegion: regionConfig.PrimaryRegion(),
 			RegionEnumID:  regionConfig.RegionEnumID(),
 			Placement:     regionConfig.Placement(),
+		}
+	}
+}
+
+// WithPublicSchemaID is used to create a DatabaseDescriptor with a
+// publicSchemaID.
+func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
+	return func(desc *descpb.DatabaseDescriptor) {
+		// TODO(richardjcai): Remove this in 22.2. If the public schema id is
+		// keys.PublicSchemaID, we do not add an entry as the public schema does
+		// not have a descriptor.
+		if publicSchemaID != keys.PublicSchemaID {
+			desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
+				tree.PublicSchema: {
+					ID:      publicSchemaID,
+					Dropped: false,
+				},
+			}
 		}
 	}
 }

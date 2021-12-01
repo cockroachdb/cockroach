@@ -38,7 +38,7 @@ func TestLookupNamespaceID(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(
 			ctx,
-			catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, 999, "bob"),
+			catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, 999, 1000, "bob"),
 			9999,
 		)
 	})
@@ -47,8 +47,9 @@ func TestLookupNamespaceID(t *testing.T) {
 	// Assert the row exists in the database.
 	var id int64
 	err = sqlDB.QueryRow(
-		`SELECT crdb_internal.get_namespace_id($1, $2)`,
+		`SELECT crdb_internal.get_namespace_id($1, $2, $3)`,
 		999,
+		1000,
 		"bob",
 	).Scan(&id)
 	require.NoError(t, err)

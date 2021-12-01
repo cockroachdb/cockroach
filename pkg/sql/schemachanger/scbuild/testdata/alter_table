@@ -5,31 +5,31 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
-- ADD Column:{DescID: 52, ColumnID: 2}
+- ADD Column:{DescID: 54, ColumnID: 2}
   state: ABSENT
   details:
     columnId: 2
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 52
+    tableId: 54
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD ColumnName:{DescID: 52, ColumnID: 2, Name: j}
+- ADD ColumnName:{DescID: 54, ColumnID: 2, Name: j}
   state: ABSENT
   details:
     columnId: 2
     name: j
-    tableId: 52
-- ADD IndexName:{DescID: 52, IndexID: 2, Name: new_primary_key}
+    tableId: 54
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
     name: new_primary_key
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, IndexID: 2}
+    tableId: 54
+- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -40,15 +40,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     shardedDescriptor: {}
     storingColumnIds:
     - 2
-    tableId: 52
+    tableId: 54
     unique: true
-- DROP IndexName:{DescID: 52, IndexID: 1, Name: foo_pkey}
+- DROP IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}
   state: PUBLIC
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, IndexID: 1}
+    tableId: 54
+- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
@@ -57,13 +57,13 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     keyColumnIds:
     - 1
     shardedDescriptor: {}
-    tableId: 52
+    tableId: 54
     unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-- ADD Column:{DescID: 52, ColumnID: 2}
+- ADD Column:{DescID: 54, ColumnID: 2}
   state: ABSENT
   details:
     columnId: 2
@@ -71,24 +71,24 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 52
+    tableId: 54
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD ColumnName:{DescID: 52, ColumnID: 2, Name: j}
+- ADD ColumnName:{DescID: 54, ColumnID: 2, Name: j}
   state: ABSENT
   details:
     columnId: 2
     name: j
-    tableId: 52
-- ADD IndexName:{DescID: 52, IndexID: 2, Name: new_primary_key}
+    tableId: 54
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
     name: new_primary_key
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, IndexID: 2}
+    tableId: 54
+- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -99,15 +99,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     shardedDescriptor: {}
     storingColumnIds:
     - 2
-    tableId: 52
+    tableId: 54
     unique: true
-- DROP IndexName:{DescID: 52, IndexID: 1, Name: foo_pkey}
+- DROP IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}
   state: PUBLIC
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, IndexID: 1}
+    tableId: 54
+- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
@@ -116,14 +116,14 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     keyColumnIds:
     - 1
     shardedDescriptor: {}
-    tableId: 52
+    tableId: 54
     unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-- ADD Column:{DescID: 52, ColumnID: 2}
+- ADD Column:{DescID: 54, ColumnID: 2}
   state: ABSENT
   details:
     columnId: 2
@@ -131,12 +131,12 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 52
+    tableId: 54
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD Column:{DescID: 52, ColumnID: 3}
+- ADD Column:{DescID: 54, ColumnID: 3}
   state: ABSENT
   details:
     columnId: 3
@@ -144,30 +144,30 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     familyName: primary
     nullable: true
     pgAttributeNum: 3
-    tableId: 52
+    tableId: 54
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD ColumnName:{DescID: 52, ColumnID: 2, Name: j}
+- ADD ColumnName:{DescID: 54, ColumnID: 2, Name: j}
   state: ABSENT
   details:
     columnId: 2
     name: j
-    tableId: 52
-- ADD ColumnName:{DescID: 52, ColumnID: 3, Name: k}
+    tableId: 54
+- ADD ColumnName:{DescID: 54, ColumnID: 3, Name: k}
   state: ABSENT
   details:
     columnId: 3
     name: k
-    tableId: 52
-- ADD IndexName:{DescID: 52, IndexID: 2, Name: new_primary_key}
+    tableId: 54
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
     name: new_primary_key
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, IndexID: 2}
+    tableId: 54
+- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -179,15 +179,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     storingColumnIds:
     - 2
     - 3
-    tableId: 52
+    tableId: 54
     unique: true
-- DROP IndexName:{DescID: 52, IndexID: 1, Name: foo_pkey}
+- DROP IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}
   state: PUBLIC
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, IndexID: 1}
+    tableId: 54
+- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
@@ -196,13 +196,13 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     keyColumnIds:
     - 1
     shardedDescriptor: {}
-    tableId: 52
+    tableId: 54
     unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-- ADD Column:{DescID: 52, ColumnID: 2}
+- ADD Column:{DescID: 54, ColumnID: 2}
   state: ABSENT
   details:
     columnId: 2
@@ -210,24 +210,24 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 52
+    tableId: 54
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD ColumnName:{DescID: 52, ColumnID: 2, Name: a}
+- ADD ColumnName:{DescID: 54, ColumnID: 2, Name: a}
   state: ABSENT
   details:
     columnId: 2
     name: a
-    tableId: 52
-- ADD IndexName:{DescID: 52, IndexID: 2, Name: new_primary_key}
+    tableId: 54
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
     name: new_primary_key
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, IndexID: 2}
+    tableId: 54
+- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -238,15 +238,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     shardedDescriptor: {}
     storingColumnIds:
     - 2
-    tableId: 52
+    tableId: 54
     unique: true
-- DROP IndexName:{DescID: 52, IndexID: 1, Name: foo_pkey}
+- DROP IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}
   state: PUBLIC
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, IndexID: 1}
+    tableId: 54
+- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
@@ -255,7 +255,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     keyColumnIds:
     - 1
     shardedDescriptor: {}
-    tableId: 52
+    tableId: 54
     unique: true
 
 create-table
@@ -266,55 +266,55 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-- ADD Column:{DescID: 52, ColumnID: 2}
+- ADD Column:{DescID: 54, ColumnID: 2}
   state: ABSENT
   details:
     columnId: 2
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 52
+    tableId: 54
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD Column:{DescID: 53, ColumnID: 3}
+- ADD Column:{DescID: 55, ColumnID: 3}
   state: ABSENT
   details:
     columnId: 3
     familyName: primary
     nullable: true
     pgAttributeNum: 3
-    tableId: 53
+    tableId: 55
     type:
       family: IntFamily
       oid: 20
       width: 64
-- ADD ColumnName:{DescID: 52, ColumnID: 2, Name: a}
+- ADD ColumnName:{DescID: 54, ColumnID: 2, Name: a}
   state: ABSENT
   details:
     columnId: 2
     name: a
-    tableId: 52
-- ADD ColumnName:{DescID: 53, ColumnID: 3, Name: b}
+    tableId: 54
+- ADD ColumnName:{DescID: 55, ColumnID: 3, Name: b}
   state: ABSENT
   details:
     columnId: 3
     name: b
-    tableId: 53
-- ADD IndexName:{DescID: 52, IndexID: 2, Name: new_primary_key}
+    tableId: 55
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
     name: new_primary_key
-    tableId: 52
-- ADD IndexName:{DescID: 53, IndexID: 2, Name: new_primary_key}
+    tableId: 54
+- ADD IndexName:{DescID: 55, IndexID: 2, Name: new_primary_key}
   state: ABSENT
   details:
     indexId: 2
     name: new_primary_key
-    tableId: 53
-- ADD PrimaryIndex:{DescID: 52, IndexID: 2}
+    tableId: 55
+- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -325,9 +325,9 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     shardedDescriptor: {}
     storingColumnIds:
     - 2
-    tableId: 52
+    tableId: 54
     unique: true
-- ADD PrimaryIndex:{DescID: 53, IndexID: 2}
+- ADD PrimaryIndex:{DescID: 55, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -339,21 +339,21 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     storingColumnIds:
     - 1
     - 3
-    tableId: 53
+    tableId: 55
     unique: true
-- DROP IndexName:{DescID: 52, IndexID: 1, Name: foo_pkey}
+- DROP IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}
   state: PUBLIC
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 52
-- DROP IndexName:{DescID: 53, IndexID: 1, Name: bar_pkey}
+    tableId: 54
+- DROP IndexName:{DescID: 55, IndexID: 1, Name: bar_pkey}
   state: PUBLIC
   details:
     indexId: 1
     name: bar_pkey
-    tableId: 53
-- DROP PrimaryIndex:{DescID: 52, IndexID: 1}
+    tableId: 55
+- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
@@ -362,9 +362,9 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     keyColumnIds:
     - 1
     shardedDescriptor: {}
-    tableId: 52
+    tableId: 54
     unique: true
-- DROP PrimaryIndex:{DescID: 53, IndexID: 1}
+- DROP PrimaryIndex:{DescID: 55, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
@@ -375,5 +375,5 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     shardedDescriptor: {}
     storingColumnIds:
     - 1
-    tableId: 53
+    tableId: 55
     unique: true
