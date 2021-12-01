@@ -77,8 +77,13 @@ func EvalAddSSTable(
 		// Additionally, if DisallowShadowing or DisallowShadowingBelow is set, it
 		// will not write above existing/visible values (but will write above
 		// tombstones).
+		//
+		// If DisallowShadowingBelow is set, ignore the value of DisallowShadowing
+		// to allow callers to specify both for forward and backward compatibility.
+		disallowShadowing := args.DisallowShadowing && args.DisallowShadowingBelow.IsEmpty()
+
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end,
-			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents)
+			disallowShadowing, args.DisallowShadowingBelow, maxIntents)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}

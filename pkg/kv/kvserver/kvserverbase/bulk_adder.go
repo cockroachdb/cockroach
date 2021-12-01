@@ -55,9 +55,10 @@ type BulkAdderOptions struct {
 	// detection does not apply.
 	SkipDuplicates bool
 
-	// DisallowShadowing controls whether shadowing of existing keys is permitted
-	// when the SSTables produced by this adder are ingested.
-	DisallowShadowing bool
+	// DisallowShadowingBelow controls whether shadowing of existing keys is
+	// permitted when the SSTables produced by this adder are ingested. See the
+	// comment on roachpb.AddSSTableRequest for more details.
+	DisallowShadowingBelow hlc.Timestamp
 
 	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
 	// different from the timestamp used to construct the adder which is what is
