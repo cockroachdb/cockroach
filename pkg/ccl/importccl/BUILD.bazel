@@ -148,6 +148,7 @@ go_test(
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
         "//pkg/cloud/userfile",
+        "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/jobs",
