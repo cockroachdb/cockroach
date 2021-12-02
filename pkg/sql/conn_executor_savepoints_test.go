@@ -36,10 +36,26 @@ func TestSavepoints(t *testing.T) {
 	datadriven.Walk(t, "testdata/savepoints", func(t *testing.T, path string) {
 
 		params := base.TestServerArgs{}
-		s, origConn, _ := serverutils.StartServer(t, params)
+		s, db, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
-		if _, err := origConn.Exec(`CREATE TABLE progress(
+		sqlConns := make(map[string]*gosql.Conn)
+		getConn := func(name string) *gosql.Conn {
+			conn, ok := sqlConns[name]
+			if ok {
+				return conn
+			}
+			conn, err := db.Conn(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlConns[name] = conn
+			return conn
+		}
+
+		// progressConn is used to manipulate the progress table.
+		progressConn := getConn("progress")
+		if _, err := progressConn.ExecContext(ctx, `CREATE TABLE progress(
       conn STRING,
     	n INT, 
     	marker BOOL,
@@ -48,33 +64,21 @@ func TestSavepoints(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		const defaultConn = "default"
-		sqlConns := make(map[string]*gosql.DB)
-		sqlConns[defaultConn] = origConn
-
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "sql":
 				// Determine which connection to run the SQL statements on. If no
 				// connection specifier is provided, use the "default" conn.
-				connName := defaultConn
-				sqlConn := sqlConns[connName]
+				connName := "default"
 				if td.HasArg("conn") {
 					td.ScanArgs(t, "conn", &connName)
-
-					var ok bool
-					sqlConn, ok = sqlConns[connName]
-					if !ok {
-						sqlConn = serverutils.OpenDBConn(
-							t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
-						sqlConns[connName] = sqlConn
-					}
 				}
+				sqlConn := getConn(connName)
 
 				// Implicitly abort any previously-ongoing txn.
-				_, _ = sqlConn.Exec("ABORT")
+				_, _ = sqlConn.ExecContext(ctx, "ABORT")
 				// Prepare for the next test.
-				if _, err := sqlConn.Exec("DELETE FROM progress WHERE conn = $1", connName); err != nil {
+				if _, err := progressConn.ExecContext(ctx, "DELETE FROM progress WHERE conn = $1", connName); err != nil {
 					td.Fatalf(t, "cleaning up: %v", err)
 				}
 
@@ -104,7 +108,7 @@ func TestSavepoints(t *testing.T) {
 				// updateProgress loads the current set of writes
 				// into the progress bar.
 				updateProgress := func() {
-					rows, err := sqlConn.Query("SELECT n FROM progress WHERE conn = $1", connName)
+					rows, err := progressConn.QueryContext(ctx, "SELECT n FROM progress WHERE conn = $1", connName)
 					if err != nil {
 						t.Logf("%d: reading progress: %v", stepNum, err)
 						// It's OK if we can't read this.
@@ -127,7 +131,7 @@ func TestSavepoints(t *testing.T) {
 				// This is guaranteed to always succeed because SHOW TRANSACTION STATUS
 				// is an observer statement.
 				getTxnStatus := func() string {
-					row := sqlConn.QueryRow("SHOW TRANSACTION STATUS")
+					row := sqlConn.QueryRowContext(ctx, "SHOW TRANSACTION STATUS")
 					var status string
 					if err := row.Scan(&status); err != nil {
 						td.Fatalf(t, "%d: unable to retrieve txn status: %v", stepNum, err)
@@ -137,7 +141,7 @@ func TestSavepoints(t *testing.T) {
 				// showSavepointStatus is like getTxnStatus but retrieves the
 				// savepoint stack.
 				showSavepointStatus := func() {
-					rows, err := sqlConn.Query("SHOW SAVEPOINT STATUS")
+					rows, err := sqlConn.QueryContext(ctx, "SHOW SAVEPOINT STATUS")
 					if err != nil {
 						td.Fatalf(t, "%d: unable to retrieve savepoint status: %v", stepNum, err)
 					}
@@ -184,7 +188,7 @@ func TestSavepoints(t *testing.T) {
 					// Before each statement, mark the progress so far with
 					// a KV write.
 					if isOpenTxn(beforeStatus) {
-						_, err := sqlConn.Exec("INSERT INTO progress(conn, n, marker) VALUES ($1, $2, true)", connName, stepNum)
+						_, err := progressConn.ExecContext(ctx, "INSERT INTO progress(conn, n, marker) VALUES ($1, $2, true)", connName, stepNum)
 						if err != nil {
 							td.Fatalf(t, "%d: before-stmt: %v", stepNum, err)
 						}
@@ -192,7 +196,7 @@ func TestSavepoints(t *testing.T) {
 
 					// Run the statement and report errors/results.
 					fmt.Fprintf(&buf, "%d: %s -- ", stepNum, stmt)
-					execRes, err := sqlConn.Exec(stmt)
+					execRes, err := sqlConn.ExecContext(ctx, stmt)
 					if err != nil {
 						fmt.Fprintf(&buf, "%v\n", err)
 					} else {
