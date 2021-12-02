@@ -657,7 +657,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			tc.StartWithStoreConfig(t, stopper, cfg)
 
 			// Write an intent.
-			txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0)
+			txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0, 0)
 			pArgs := putArgs(intentKey, []byte("val"))
 			assignSeqNumsForReqs(&txn, &pArgs)
 			_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
@@ -697,7 +697,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 
 	// Write an intent.
 	key := roachpb.Key("a")
-	txn := roachpb.MakeTransaction("test", key, 0, ts10, 0)
+	txn := roachpb.MakeTransaction("test", key, 0, ts10, 0, 0)
 	pArgs := putArgs(key, []byte("val"))
 	assignSeqNumsForReqs(&txn, &pArgs)
 	_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
@@ -958,7 +958,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				tc.StartWithStoreConfig(t, stopper, cfg)
 
 				// Write an intent.
-				txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0)
+				txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0, 0)
 				pArgs := putArgs(intentKey, []byte("val"))
 				assignSeqNumsForReqs(&txn, &pArgs)
 				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
@@ -1044,7 +1044,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			send(roachpb.Header{Timestamp: makeTS(ts)}, &pArgs)
 		}
 		writeIntent := func(k string, ts int64) {
-			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0)
+			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0, 0)
 			pArgs := putArgs(roachpb.Key(k), val)
 			assignSeqNumsForReqs(&txn, &pArgs)
 			send(roachpb.Header{Txn: &txn}, &pArgs)

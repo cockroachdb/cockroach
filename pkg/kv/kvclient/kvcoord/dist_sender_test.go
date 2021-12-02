@@ -546,7 +546,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(),
+		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.getNodeID()),
 	)
 	origTxnTs := txn.WriteTimestamp
 
@@ -2168,7 +2168,14 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	ds := NewDistSender(cfg)
 
-	txn := roachpb.MakeTransaction("foo", nil, 1.0, clock.Now(), 0)
+	txn := roachpb.MakeTransaction(
+		"foo",
+		nil, // baseKey
+		1.0, // userPriority
+		clock.Now(),
+		0, // maxOffsetNs
+		1, // coordinatorNodeID
+	)
 
 	var ba roachpb.BatchRequest
 	ba.Txn = &txn
@@ -2964,7 +2971,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 	key := roachpb.Key("a")
 	txn := roachpb.MakeTransaction(
 		"test", key, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(),
+		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
 	)
 
 	txnRecordPresent := true
@@ -3298,7 +3305,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(),
+		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
 	)
 	// We're also going to check that the highest bumped WriteTimestamp makes it
 	// to the merged error.
