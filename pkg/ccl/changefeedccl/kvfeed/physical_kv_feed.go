@@ -71,12 +71,9 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg phys
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
-	for _, span := range cfg.Spans {
-		span := span
-		g.GoCtx(func(ctx context.Context) error {
-			return p(ctx, []roachpb.Span{span}, cfg.Timestamp, cfg.WithDiff, feed.eventC)
-		})
-	}
+	g.GoCtx(func(ctx context.Context) error {
+		return p(ctx, cfg.Spans, cfg.Timestamp, cfg.WithDiff, feed.eventC)
+	})
 	return g.Wait()
 }
 
