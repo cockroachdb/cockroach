@@ -12,7 +12,8 @@ ALTER TABLE small INJECT STATISTICS '[
     "columns": ["m"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 2
   }
 ]'
 ----
@@ -28,16 +29,16 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ ├── stats: [rows=99, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4]
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
  │    ├── key columns: [1] = [6]
- │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
- │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=2]
  │    └── filters (true)
  └── filters (true)
 
@@ -50,19 +51,19 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int) c:8(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(6)=9.9, null(6)=0]
+ ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, avgsize(1)=2, distinct(6)=9.9, null(6)=0, avgsize(6)=4]
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
  │    ├── key columns: [1] = [6]
- │    ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(6)=9.9, null(6)=0]
+ │    ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, avgsize(1)=2, distinct(6)=9.9, null(6)=0, avgsize(6)=4]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── select
  │    │    ├── columns: m:1(int) n:2(int!null)
- │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
+ │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, avgsize(1)=2, distinct(2)=1, null(2)=0, avgsize(2)=4]
  │    │    ├── scan small
  │    │    │    ├── columns: m:1(int) n:2(int)
- │    │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
+ │    │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(2)=1, null(2)=0.1, avgsize(2)=4]
  │    │    └── filters
  │    │         └── n:2 > 2 [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
  │    └── filters (true)
@@ -77,7 +78,7 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) c:8(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4]
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
@@ -85,11 +86,11 @@ inner-join (lookup abcd)
  │    │    └── filters
  │    │         ├── a:6 = m:1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── b:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
- │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0, distinct(7)=33, null(7)=0]
+ │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4, distinct(7)=33, null(7)=0, avgsize(7)=4]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
- │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=2]
  │    └── filters (true)
  └── filters (true)
 
@@ -101,16 +102,16 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4]
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
  │    ├── key columns: [1] = [6]
- │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
- │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=2]
  │    └── filters (true)
  └── filters
       └── c:8 > 2 [type=bool, outer=(8), constraints=(/8: [/3 - ]; tight)]
@@ -123,16 +124,16 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) c:8(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.334949339, null(6)=0, distinct(7)=1e-10, null(7)=0]
+ ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, avgsize(1)=2, distinct(2)=1e-10, null(2)=0, avgsize(2)=4, distinct(6)=0.334949339, null(6)=0, avgsize(6)=4, distinct(7)=1e-10, null(7)=0, avgsize(7)=4]
  ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
  │    ├── key columns: [1 2] = [6 7]
- │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.970299, null(6)=0, distinct(7)=1e-10, null(7)=0]
+ │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, avgsize(1)=2, distinct(2)=1e-10, null(2)=0, avgsize(2)=4, distinct(6)=0.970299, null(6)=0, avgsize(6)=4, distinct(7)=1e-10, null(7)=0, avgsize(7)=4]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
- │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
+ │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(2)=1, null(2)=0.1, avgsize(2)=4]
  │    └── filters (true)
  └── filters
       └── c:8 > 2 [type=bool, outer=(8), constraints=(/8: [/3 - ]; tight)]
@@ -152,7 +153,8 @@ ALTER TABLE abc INJECT STATISTICS '[
     "columns": ["a"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 100,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 2
   }
 ]'
 ----
@@ -163,19 +165,22 @@ ALTER TABLE def INJECT STATISTICS '[
     "columns": ["d"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 1000
+    "distinct_count": 1000,
+    "avg_size": 5
   },
   {
     "columns": ["e"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 6
   },
   {
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10000
+    "distinct_count": 10000,
+    "avg_size": 7
   }
 ]'
 ----
@@ -187,12 +192,12 @@ SELECT a, b, c, d, e, f FROM abc JOIN def ON a = f
 inner-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int!null) f:8(int!null)
  ├── key columns: [1] = [8]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(8)=100, null(8)=0]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(8)=100, null(8)=0, avgsize(8)=7]
  ├── key: (3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6), (1)==(8), (8)==(1)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(3)=10, null(3)=0, avgsize(3)=4]
  │    ├── key: (1,3)
  │    └── fd: (1,3)-->(2)
  └── filters (true)
@@ -205,18 +210,18 @@ inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int!null) f:8(int!null)
  ├── left ordering: +7
  ├── right ordering: +1
- ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(7)=100, null(7)=0]
+ ├── stats: [rows=10000, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(7)=100, null(7)=0, avgsize(7)=6]
  ├── key: (3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6), (1)==(7), (7)==(1)
  ├── scan def@e_idx
  │    ├── columns: d:6(int) e:7(int!null) f:8(int!null)
- │    ├── stats: [rows=10000, distinct(7)=100, null(7)=0, distinct(8)=10000, null(8)=0]
+ │    ├── stats: [rows=10000, distinct(7)=100, null(7)=0, avgsize(7)=6, distinct(8)=10000, null(8)=0, avgsize(8)=7]
  │    ├── key: (7,8)
  │    ├── fd: (7,8)-->(6)
  │    └── ordering: +7
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(3)=10, null(3)=0, avgsize(3)=4]
  │    ├── key: (1,3)
  │    ├── fd: (1,3)-->(2)
  │    └── ordering: +1
@@ -229,12 +234,12 @@ SELECT a, b, c, d, e, f FROM abc JOIN DEF ON a = f
 inner-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int!null) f:8(int!null)
  ├── key columns: [1] = [8]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=9.99954623, null(2)=1, distinct(3)=9.99954623, null(3)=0, distinct(4)=1, null(4)=0, distinct(7)=63.2138954, null(7)=0, distinct(8)=100, null(8)=0, distinct(2,7,8)=100, null(2,7,8)=0]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=9.99954623, null(2)=1, avgsize(2)=4, distinct(3)=9.99954623, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(7)=63.2138954, null(7)=0, avgsize(7)=6, distinct(8)=100, null(8)=0, avgsize(8)=7, distinct(2,7,8)=100, null(2,7,8)=0, avgsize(2,7,8)=17]
  ├── key: (3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6), (1)==(8), (8)==(1)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=10, null(2)=1, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
  │    ├── key: (1,3)
  │    └── fd: (1,3)-->(2)
  └── filters (true)
@@ -247,18 +252,18 @@ left-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int) g:9(float)
  ├── key columns: [8 7] = [8 7]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(6)=10.0000001, null(6)=89.9999999, distinct(9)=9.95021585, null(9)=90.9999999]
+ ├── stats: [rows=100, distinct(6)=10.0000001, null(6)=89.9999999, avgsize(6)=5, distinct(9)=9.95021585, null(9)=90.9999999, avgsize(9)=4]
  ├── key: (1,3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6,9)
  ├── left-join (lookup def@d_idx)
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int)
  │    ├── key columns: [1] = [6]
- │    ├── stats: [rows=100, distinct(6)=10.0000001, null(6)=89.9999999]
+ │    ├── stats: [rows=100, distinct(6)=10.0000001, null(6)=89.9999999, avgsize(6)=5]
  │    ├── key: (1,3,7,8)
  │    ├── fd: (1,3)-->(2), (7,8)-->(6)
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- │    │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=10, null(2)=1, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
  │    │    ├── key: (1,3)
  │    │    └── fd: (1,3)-->(2)
  │    └── filters
@@ -272,17 +277,17 @@ SELECT * FROM abc LEFT JOIN DEF ON a = e AND b = 3
 ----
 right-join (hash)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int) g:9(float)
- ├── stats: [rows=100.000001, distinct(7)=100, null(7)=0, distinct(9)=95.1671073, null(9)=1.00000001]
+ ├── stats: [rows=100.000001, distinct(7)=100, null(7)=0, avgsize(7)=6, distinct(9)=95.1671073, null(9)=1.00000001, avgsize(9)=4]
  ├── key: (1,3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6,9)
  ├── scan def
  │    ├── columns: d:6(int) e:7(int!null) f:8(int!null) g:9(float)
- │    ├── stats: [rows=10000, distinct(7)=100, null(7)=0, distinct(9)=1000, null(9)=100]
+ │    ├── stats: [rows=10000, distinct(7)=100, null(7)=0, avgsize(7)=6, distinct(9)=1000, null(9)=100, avgsize(9)=4]
  │    ├── key: (7,8)
  │    └── fd: (7,8)-->(6,9)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=10, null(2)=1, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
  │    ├── key: (1,3)
  │    └── fd: (1,3)-->(2)
  └── filters
@@ -303,13 +308,15 @@ ALTER TABLE t INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 2
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 3
   }
 ]'
 ----
@@ -320,13 +327,15 @@ ALTER TABLE u INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10,
-    "distinct_count": 2
+    "distinct_count": 2,
+    "avg_size": 1
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10,
-    "distinct_count": 2
+    "distinct_count": 2,
+    "avg_size": 5
   }
 ]'
 ----
@@ -338,10 +347,10 @@ SELECT * FROM u WHERE EXISTS (SELECT * FROM t WHERE u.x=t.x AND u.y=t.y);
 semi-join (lookup t@xy_idx)
  ├── columns: x:1(int) y:2(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ ├── stats: [rows=10, distinct(1)=2, null(1)=0, avgsize(1)=1, distinct(2)=2, null(2)=0, avgsize(2)=5]
  ├── scan u
  │    ├── columns: u.x:1(int) u.y:2(int)
- │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ │    └── stats: [rows=10, distinct(1)=2, null(1)=0, avgsize(1)=1, distinct(2)=2, null(2)=0, avgsize(2)=5]
  └── filters (true)
 
 opt
@@ -353,7 +362,7 @@ anti-join (lookup t@xy_idx)
  ├── stats: [rows=1e-10]
  ├── scan u
  │    ├── columns: u.x:1(int) u.y:2(int)
- │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
+ │    └── stats: [rows=10, distinct(1)=2, null(1)=0, avgsize(1)=1, distinct(2)=2, null(2)=0, avgsize(2)=5]
  └── filters (true)
 
 
@@ -367,7 +376,8 @@ ALTER TABLE medium INJECT STATISTICS '[
     "columns": ["m"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 40,
-    "distinct_count": 40
+    "distinct_count": 40,
+    "avg_size": 2
   }
 ]'
 ----
@@ -383,6 +393,7 @@ ALTER TABLE wxyz INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
     "distinct_count": 11,
+    "avg_size": 3,
     "histo_col_type": "int",
     "histo_buckets": [
       {"num_eq": 50, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
@@ -400,20 +411,20 @@ inner-join (lookup wxyz)
  ├── columns: m:1(int!null) n:2(int) w:6(int) x:7(int!null) y:8(int!null) z:9(int)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
- ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(7)=39.1263061, null(7)=0]
+ ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, avgsize(1)=2, distinct(7)=39.1263061, null(7)=0, avgsize(7)=4]
  ├── fd: ()-->(8), (1)==(7), (7)==(1)
  ├── inner-join (lookup wxyz@wxyz_x_y_z_idx)
  │    ├── columns: m:1(int!null) n:2(int) x:7(int!null) y:8(int!null) z:9(int) wxyz.rowid:10(int!null)
  │    ├── key columns: [1 13] = [7 8]
- │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(7)=19.8, null(7)=0, distinct(8)=1, null(8)=0, distinct(13)=1, null(13)=0]
+ │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, avgsize(1)=2, distinct(7)=19.8, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=3, distinct(13)=1, null(13)=0, avgsize(13)=4]
  │    ├── fd: ()-->(8), (10)-->(7,9), (1)==(7), (7)==(1)
  │    ├── project
  │    │    ├── columns: "lookup_join_const_col_@8":13(int!null) m:1(int) n:2(int)
- │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, distinct(13)=1, null(13)=0]
+ │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, avgsize(1)=2, distinct(13)=1, null(13)=0, avgsize(13)=4]
  │    │    ├── fd: ()-->(13)
  │    │    ├── scan medium
  │    │    │    ├── columns: m:1(int) n:2(int)
- │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
+ │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0, avgsize(1)=2]
  │    │    └── projections
  │    │         └── 10 [as="lookup_join_const_col_@8":13, type=int]
  │    └── filters (true)
@@ -426,6 +437,7 @@ ALTER TABLE wxyz INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
     "distinct_count": 11,
+    "avg_size": 3,
     "histo_col_type": "int",
     "histo_buckets": [
       {"num_eq": 10, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
@@ -441,23 +453,23 @@ SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
 ----
 inner-join (hash)
  ├── columns: m:1(int!null) n:2(int) w:6(int) x:7(int!null) y:8(int!null) z:9(int)
- ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, distinct(7)=40, null(7)=0]
+ ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, avgsize(1)=2, distinct(7)=40, null(7)=0, avgsize(7)=4]
  ├── fd: ()-->(8), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: w:6(int) x:7(int) y:8(int!null) z:9(int)
- │    ├── stats: [rows=900, distinct(7)=100, null(7)=9, distinct(8)=1, null(8)=0]
+ │    ├── stats: [rows=900, distinct(7)=100, null(7)=9, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=3]
  │    │   histogram(8)=  0 900
  │    │                <--- 10
  │    ├── fd: ()-->(8)
  │    ├── scan wxyz
  │    │    ├── columns: w:6(int) x:7(int) y:8(int) z:9(int)
- │    │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=11, null(8)=0]
+ │    │    └── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=11, null(8)=0, avgsize(8)=3]
  │    │        histogram(8)=  0 10  90 900
  │    │                     <--- 0 ---- 10
  │    └── filters
  │         └── y:8 = 10 [type=bool, outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
  ├── scan medium
  │    ├── columns: m:1(int) n:2(int)
- │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
+ │    └── stats: [rows=40, distinct(1)=40, null(1)=0, avgsize(1)=2]
  └── filters
       └── m:1 = x:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
