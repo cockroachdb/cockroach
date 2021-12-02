@@ -2639,7 +2639,9 @@ func getRestorePrivilegesForTableOrSchema(
 
 		// TODO(dt): Make this more configurable.
 		immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
-		updatedPrivileges = immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+		updatedPrivileges = catprivilege.CreatePrivilegesFromDefaultPrivileges([]catalog.DefaultPrivilegeDescriptor{
+			immutableDefaultPrivileges,
+		},
 			parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
 	}
 	return updatedPrivileges, nil

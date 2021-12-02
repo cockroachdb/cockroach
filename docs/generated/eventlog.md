@@ -1559,6 +1559,7 @@ An event of type `alter_default_privileges` is recorded when default privileges 
 | `DatabaseName` | The name of the affected database. | yes |
 | `RoleName` | Either role_name should be populated or for_all_roles should be true. The role having its default privileges altered. | yes |
 | `ForAllRoles` | Identifies if FOR ALL ROLES is used. | no |
+| `SchemaName` | The names of the affected schema. | yes |
 
 
 #### Common fields

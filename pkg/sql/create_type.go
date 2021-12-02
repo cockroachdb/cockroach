@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -344,9 +345,15 @@ func CreateEnumTypeDesc(
 		}
 	}
 
-	privs := dbDesc.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		[]catalog.DefaultPrivilegeDescriptor{
+			schema.GetDefaultPrivilegeDescriptor(),
+			dbDesc.GetDefaultPrivilegeDescriptor(),
+		},
 		dbDesc.GetID(),
-		params.p.User(), tree.Types, dbDesc.GetPrivileges(),
+		params.SessionData().User(),
+		tree.Types,
+		dbDesc.GetPrivileges(),
 	)
 
 	enumKind := descpb.TypeDescriptor_ENUM

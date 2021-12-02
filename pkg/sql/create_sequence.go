@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -100,9 +101,15 @@ func doCreateSequence(
 		return err
 	}
 
-	privs := dbDesc.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		[]catalog.DefaultPrivilegeDescriptor{
+			scDesc.GetDefaultPrivilegeDescriptor(),
+			dbDesc.GetDefaultPrivilegeDescriptor(),
+		},
 		dbDesc.GetID(),
-		params.SessionData().User(), tree.Sequences, dbDesc.GetPrivileges(),
+		params.SessionData().User(),
+		tree.Sequences,
+		dbDesc.GetPrivileges(),
 	)
 
 	if persistence.IsTemporary() {

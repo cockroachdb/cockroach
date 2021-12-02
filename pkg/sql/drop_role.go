@@ -145,7 +145,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 					break
 				}
 			}
-			return accumulateDependentDefaultPrivileges(db, userNames)
+			accumulateDependentDefaultPrivileges(db, nil /* sc */, userNames)
+			return nil
 		}); err != nil {
 		return err
 	}
@@ -209,6 +210,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 					ObjectName: schemaDesc.GetName(),
 				})
 		}
+
+		accumulateDependentDefaultPrivileges(nil /* db */, schemaDesc, userNames)
 	}
 	for _, typDesc := range lCtx.typDescs {
 		if _, ok := userNames[typDesc.GetPrivileges().Owner()]; ok {
@@ -420,59 +423,21 @@ func (*DropRoleNode) Close(context.Context) {}
 
 // accumulateDependentDefaultPrivileges checks for any default privileges
 // that the users in userNames have and append them to the objectAndType array.
+// Only one of db or sc should be non-nil.
 func accumulateDependentDefaultPrivileges(
-	db catalog.DatabaseDescriptor, userNames map[security.SQLUsername][]objectAndType,
-) error {
-	addDependentPrivileges := func(object tree.AlterDefaultPrivilegesTargetObject, defaultPrivs descpb.PrivilegeDescriptor, role descpb.DefaultPrivilegesRole) {
-		var objectType string
-		switch object {
-		case tree.Tables:
-			objectType = "relations"
-		case tree.Sequences:
-			objectType = "sequences"
-		case tree.Types:
-			objectType = "types"
-		case tree.Schemas:
-			objectType = "schemas"
-		}
-
-		for _, privs := range defaultPrivs.Users {
-			if !role.ForAllRoles {
-				if _, ok := userNames[role.Role]; ok {
-					userNames[role.Role] = append(userNames[role.Role],
-						objectAndType{
-							ObjectType: defaultPrivilege,
-							ErrorMessage: errors.Newf(
-								"owner of default privileges on new %s belonging to role %s",
-								objectType, role.Role,
-							),
-						})
-				}
-			}
-			grantee := privs.User()
-			if _, ok := userNames[grantee]; ok {
-				var err error
-				if role.ForAllRoles {
-					err = errors.Newf(
-						"privileges for default privileges on new %s for all roles",
-						objectType,
-					)
-				} else {
-					err = errors.Newf(
-						"privileges for default privileges on new %s belonging to role %s",
-						objectType, role.Role,
-					)
-				}
-				userNames[grantee] = append(userNames[grantee],
-					objectAndType{
-						ObjectType:   defaultPrivilege,
-						ErrorMessage: err,
-					})
-			}
-		}
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	userNames map[security.SQLUsername][]objectAndType,
+) {
+	var defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor
+	if db != nil {
+		defaultPrivilegeDescriptor = db.GetDefaultPrivilegeDescriptor()
+	} else {
+		defaultPrivilegeDescriptor = sc.GetDefaultPrivilegeDescriptor()
 	}
+
 	// No error is returned.
-	return db.GetDefaultPrivilegeDescriptor().ForEachDefaultPrivilegeForRole(func(
+	defaultPrivilegeDescriptor.ForEachDefaultPrivilegeForRole(func(
 		defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
 		role := descpb.DefaultPrivilegesRole{}
 		if defaultPrivilegesForRole.IsExplicitRole() {
@@ -481,8 +446,62 @@ func accumulateDependentDefaultPrivileges(
 			role.ForAllRoles = true
 		}
 		for object, defaultPrivs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
-			addDependentPrivileges(object, defaultPrivs, role)
+			addDependentPrivileges(object, defaultPrivs, role, userNames)
 		}
 		return nil
 	})
+}
+
+func addDependentPrivileges(
+	object tree.AlterDefaultPrivilegesTargetObject,
+	defaultPrivs descpb.PrivilegeDescriptor,
+	role descpb.DefaultPrivilegesRole,
+	userNames map[security.SQLUsername][]objectAndType,
+) {
+	var objectType string
+	switch object {
+	case tree.Tables:
+		objectType = "relations"
+	case tree.Sequences:
+		objectType = "sequences"
+	case tree.Types:
+		objectType = "types"
+	case tree.Schemas:
+		objectType = "schemas"
+	}
+
+	for _, privs := range defaultPrivs.Users {
+		if !role.ForAllRoles {
+			if _, ok := userNames[role.Role]; ok {
+				userNames[role.Role] = append(userNames[role.Role],
+					objectAndType{
+						ObjectType: defaultPrivilege,
+						ErrorMessage: errors.Newf(
+							"owner of default privileges on new %s belonging to role %s",
+							objectType, role.Role,
+						),
+					})
+			}
+		}
+		grantee := privs.User()
+		if _, ok := userNames[grantee]; ok {
+			var err error
+			if role.ForAllRoles {
+				err = errors.Newf(
+					"privileges for default privileges on new %s for all roles",
+					objectType,
+				)
+			} else {
+				err = errors.Newf(
+					"privileges for default privileges on new %s belonging to role %s",
+					objectType, role.Role,
+				)
+			}
+			userNames[grantee] = append(userNames[grantee],
+				objectAndType{
+					ObjectType:   defaultPrivilege,
+					ErrorMessage: err,
+				})
+		}
+	}
 }

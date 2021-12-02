@@ -134,5 +134,7 @@ message AlterDefaultPrivileges {
   // The role having its default privileges altered.
   string role_name = 5 [(gogoproto.jsontag) = ",omitempty"];
   // Identifies if FOR ALL ROLES is used.
-  bool for_all_roles = 6 [(gogoproto.jsontag) = ",omitempty"];;
+  bool for_all_roles = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // The names of the affected schema.
+  string schema_name = 7 [(gogoproto.jsontag) = ",omitempty"];
 }
