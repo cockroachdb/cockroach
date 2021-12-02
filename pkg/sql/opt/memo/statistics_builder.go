@@ -26,6 +26,63 @@ import (
 
 var statsAnnID = opt.NewTableAnnID()
 
+const (
+	// This is the value used for inequality filters such as x < 1 in
+	// "Access Path Selection in a Relational Database Management System"
+	// by Pat Selinger et al.
+	unknownFilterSelectivity = 1.0 / 3.0
+
+	// TODO(rytaft): Add other selectivities for other types of predicates.
+
+	// This is an arbitrary row count used in the absence of any real statistics.
+	unknownRowCount = 1000
+
+	// UnknownDistinctCountRatio is the ratio of distinct column values to number
+	// of rows, which is used in the absence of any real statistics for non-key
+	// columns.  TODO(rytaft): See if there is an industry standard value for
+	// this.
+	UnknownDistinctCountRatio = 0.1
+
+	// UnknownNullCountRatio is the ratio of null column values to number of rows
+	// for nullable columns, which is used in the absence of any real statistics.
+	UnknownNullCountRatio = 0.01
+
+	// UnknownAvgRowSize is the average size of a row in bytes, which is used in
+	// the absence of any real statistics.
+	UnknownAvgRowSize = 8
+
+	// Use a small row count for generator functions; this allows use of lookup
+	// join in cases like using json_array_elements with a small constant array.
+	unknownGeneratorRowCount = 10
+
+	// Since the generator row count is so small, we need a larger distinct count
+	// ratio for generator functions.
+	unknownGeneratorDistinctCountRatio = 0.7
+
+	// When subtracting floating point numbers, avoid precision errors by making
+	// sure the result is greater than or equal to epsilon.
+	epsilon = 1e-10
+
+	// This is the minimum cardinality an expression should have in order to make
+	// it worth adding the overhead of using a histogram.
+	minCardinalityForHistogram = 100
+
+	// This is the default selectivity estimated for inverted joins until we can
+	// get better statistics on inverted indexes.
+	unknownInvertedJoinSelectivity = 1.0 / 100.0
+
+	// multiColWeight is the weight to assign the selectivity calculation using
+	// multi-column statistics versus the calculation using single-column
+	// statistics. See the comment above selectivityFromMultiColDistinctCounts for
+	// details.
+	multiColWeight = 9.0 / 10.0
+
+	// defaultColSize is the default size of a column in bytes. This is used when
+	// the table statistics have an avgSize of 0 for a given column and not all
+	// columns are NULL.
+	defaultColSize = 4.0
+)
+
 // statisticsBuilder is responsible for building the statistics that are
 // used by the coster to estimate the cost of expressions.
 //
@@ -455,13 +512,33 @@ func (sb *statisticsBuilder) colStatLeaf(
 		}
 		// Only one of the null values counts towards the distinct count.
 		colStat.DistinctCount = s.RowCount - max(colStat.NullCount-1, 0)
+
+		if colSet.Len() == 1 {
+			// If there was only one key in the column set, and it wasn't found in the
+			// cache above, then we don't have statistics on this column so we use the
+			// default size.
+			// TODO(harding): Base the AvgSize on the type of the column.
+			colStat.AvgSize = defaultColSize
+		} else {
+			// Compute the average column size by adding the size of each member of
+			// the lax key together.
+			avgSize := 0.0
+			colSet.ForEach(func(i opt.ColumnID) {
+				colStatLeaf := sb.colStatLeaf(opt.MakeColSet(i), s, fd, notNullCols)
+				avgSize += colStatLeaf.AvgSize
+			})
+			colStat.AvgSize = avgSize
+		}
 		return colStat
 	}
 
 	if colSet.Len() == 1 {
+		// There is only one column, and it was not found in the cache above, so we
+		// do not have statistics available for it.
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = UnknownDistinctCountRatio * s.RowCount
 		colStat.NullCount = UnknownNullCountRatio * s.RowCount
+		colStat.AvgSize = defaultColSize
 		if notNullCols.Contains(col) {
 			colStat.NullCount = 0
 		}
@@ -478,17 +555,21 @@ func (sb *statisticsBuilder) colStatLeaf(
 	} else {
 		distinctCount := 1.0
 		nullCount := s.RowCount
+		avgSize := 0.0
 		colSet.ForEach(func(i opt.ColumnID) {
 			colStatLeaf := sb.colStatLeaf(opt.MakeColSet(i), s, fd, notNullCols)
 			distinctCount *= colStatLeaf.DistinctCount
 			// Multiply by the expected chance of collisions with nulls already
 			// collected.
 			nullCount *= colStatLeaf.NullCount / s.RowCount
+			// Add the average size of the columns together.
+			avgSize += colStatLeaf.AvgSize
 		})
 		// Fetch the colStat again since it may now have a different address.
 		colStat, _ = s.ColStats.Lookup(colSet)
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
 		colStat.NullCount = min(nullCount, s.RowCount)
+		colStat.AvgSize = avgSize
 	}
 
 	return colStat
@@ -559,6 +640,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			if colStat, ok := stats.ColStats.Add(cols); ok {
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
+				colStat.AvgSize = float64(stat.AvgSize())
 				if cols.Len() == 1 && stat.Histogram() != nil &&
 					sb.evalCtx.SessionData().OptimizerUseHistograms {
 					col, _ := cols.Next(0)
@@ -583,6 +665,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 								invColStat.DistinctCount = max(invColStat.Histogram.DistinctValuesCount(), 1)
 								// Inverted indexes don't have nulls.
 								invColStat.NullCount = 0
+								if stat.AvgSize() == 0 {
+									invColStat.AvgSize = defaultColSize
+								} else {
+									invColStat.AvgSize = float64(stat.AvgSize())
+								}
 							}
 						}
 					}
@@ -953,6 +1040,7 @@ func (sb *statisticsBuilder) colStatProject(
 		// above.
 		inputColStat := sb.colStatFromChild(reqInputCols, prj, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.AvgSize = inputColStat.AvgSize
 		if nonNullFound {
 			colStat.NullCount = 0
 		} else {
@@ -961,6 +1049,7 @@ func (sb *statisticsBuilder) colStatProject(
 	} else {
 		// There are no columns in this expression, so it must be a constant.
 		colStat.DistinctCount = 1
+		colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		if nonNullFound {
 			colStat.NullCount = 0
 		} else {
@@ -1406,6 +1495,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			}
 			colStat, _ = s.ColStats.Add(colSet)
 			colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
+			colStat.AvgSize = leftColStat.AvgSize + rightColStat.AvgSize
 		}
 
 		// Null count estimation - assume an inner join and then bump the null count later
@@ -1584,6 +1674,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount
+	colStat.AvgSize = 0
 
 	// Some of the requested columns may be from the input index.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -1591,6 +1682,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		inputColStat := sb.colStatFromChild(reqInputCols, join, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
+		colStat.AvgSize += inputColStat.AvgSize
 	}
 
 	// Other requested columns may be from the primary index.
@@ -1617,6 +1709,8 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		f1 := lookupColStat.NullCount / inputStats.RowCount
 		f2 := colStat.NullCount / inputStats.RowCount
 		colStat.NullCount = inputStats.RowCount * f1 * f2
+
+		colStat.AvgSize += lookupColStat.AvgSize
 	}
 
 	if colSet.Intersects(relProps.NotNullCols) {
@@ -1782,6 +1876,7 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		colStat.DistinctCount = 1
 		// TODO(itsbilal): Handle case where the scalar resolves to NULL.
 		colStat.NullCount = 0
+		colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		return colStat
 	}
 
@@ -1790,9 +1885,12 @@ func (sb *statisticsBuilder) colStatGroupBy(
 	if !colSet.SubsetOf(groupingColSet) {
 		// Some of the requested columns are aggregates. Estimate the distinct
 		// count to be the same as the grouping columns.
+		// TODO(harding): We should be able to get const-agg or first-agg stats from
+		// the input.
 		colStat, _ = s.ColStats.Add(colSet)
 		inputColStat = sb.colStatFromChild(groupingColSet, groupNode, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.AvgSize = inputColStat.AvgSize
 	} else {
 		// Make a copy so we don't modify the original
 		colStat = sb.copyColStatFromChild(colSet, groupNode, s)
@@ -1891,14 +1989,19 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	case opt.UnionOp, opt.UnionAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount + rightColStat.DistinctCount
 		colStat.NullCount = leftNullCount + rightNullCount
+		leftRowCount := sb.statsFromChild(setNode, 0 /* childIdx */).RowCount
+		rightRowCount := sb.statsFromChild(setNode, 1 /* childIdx */).RowCount
+		colStat.AvgSize = (leftColStat.AvgSize*leftRowCount + rightColStat.AvgSize*rightRowCount) / (leftRowCount + rightRowCount)
 
 	case opt.IntersectOp, opt.IntersectAllOp:
 		colStat.DistinctCount = min(leftColStat.DistinctCount, rightColStat.DistinctCount)
 		colStat.NullCount = min(leftNullCount, rightNullCount)
+		colStat.AvgSize = leftColStat.AvgSize
 
 	case opt.ExceptOp, opt.ExceptAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount
 		colStat.NullCount = max(leftNullCount-rightNullCount, 0)
+		colStat.AvgSize = leftColStat.AvgSize
 	}
 
 	// Use the actual null counts for bag operations, and normalize them for set
@@ -1979,6 +2082,9 @@ func (sb *statisticsBuilder) colStatValues(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = float64(len(distinct))
 	colStat.NullCount = float64(nullCount)
+	// TODO(harding): The AvgSize would be more accurate if we took the width and/
+	// or type of the values.
+	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2129,6 +2235,8 @@ func (sb *statisticsBuilder) colStatMax1Row(
 	if colSet.Intersects(max1Row.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
+	inputColStat := sb.colStatFromChild(colSet, max1Row, 0 /* childIdx */)
+	colStat.AvgSize = inputColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2159,12 +2267,14 @@ func (sb *statisticsBuilder) colStatOrdinality(
 
 	colStat, _ := s.ColStats.Add(colSet)
 
+	inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
+	colStat.AvgSize = inputColStat.AvgSize
+
 	if colSet.Contains(ord.ColID) {
 		// The ordinality column is a key, so every row is distinct.
 		colStat.DistinctCount = s.RowCount
 		colStat.NullCount = 0
 	} else {
-		inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
 	}
@@ -2223,16 +2333,20 @@ func (sb *statisticsBuilder) colStatWindow(
 		if colSet.SubsetOf(windowCols) {
 			// The generated columns are the only columns being requested.
 			colStat.NullCount = 0
+			// TODO(harding): make AvgSize more accurate.
+			colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		} else {
-			// Copy NullCount from child.
+			// Copy NullCount and AvgSize from child.
 			colSetChild := colSet.Difference(windowCols)
 			inputColStat := sb.colStatFromChild(colSetChild, window, 0 /* childIdx */)
 			colStat.NullCount = inputColStat.NullCount
+			colStat.AvgSize = inputColStat.AvgSize
 		}
 	} else {
 		inputColStat := sb.colStatFromChild(colSet, window, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
+		colStat.AvgSize = inputColStat.AvgSize
 	}
 
 	if colSet.Intersects(relProps.NotNullCols) {
@@ -2297,6 +2411,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount
+	colStat.AvgSize = 0
 
 	// Some of the requested columns may be from the input.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -2304,11 +2419,13 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		inputColStat := sb.colStatFromChild(reqInputCols, projectSet, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount * (s.RowCount / inputStats.RowCount)
+		colStat.AvgSize += inputColStat.AvgSize
 	}
 
 	// Other requested columns may be from the output columns of the zip.
 	zipCols := projectSet.Zip.OutputCols()
 	reqZipCols := colSet.Difference(inputCols).Intersection(zipCols)
+	colStat.AvgSize += float64(defaultColSize * reqZipCols.Len())
 	if !reqZipCols.Empty() {
 		// Calculate the distinct count and null count for the zip columns
 		// after the cross join has been applied.
@@ -2408,6 +2525,7 @@ func (sb *statisticsBuilder) colStatWithScan(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	colStat.AvgSize = inColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2445,6 +2563,7 @@ func (sb *statisticsBuilder) colStatMutation(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	colStat.AvgSize = inColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2468,6 +2587,7 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = 0
+	colStat.AvgSize = defaultColSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2491,6 +2611,7 @@ func (sb *statisticsBuilder) colStatUnknown(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = s.RowCount
 	colStat.NullCount = 0
+	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2539,6 +2660,7 @@ func (sb *statisticsBuilder) copyColStat(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
 	colStat.NullCount = inputColStat.NullCount
+	colStat.AvgSize = inputColStat.AvgSize
 	return colStat
 }
 
@@ -2602,6 +2724,12 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	// The distinct and null counts should be no larger than the row count.
 	colStat.DistinctCount = min(colStat.DistinctCount, rowCount)
 	colStat.NullCount = min(colStat.NullCount, rowCount)
+
+	// If there are non-nulls in the column but the avgSize is 0, use the default
+	// column size.
+	if rowCount > 0 && colStat.AvgSize == 0 && colStat.NullCount < rowCount {
+		colStat.AvgSize = float64(defaultColSize * colStat.Cols.Len())
+	}
 
 	// Uniformly reduce the size of each histogram bucket so the number of values
 	// is no larger than the row count.
@@ -2780,58 +2908,6 @@ func max(a, b float64) float64 {
 //////////////////////////////////////////////////
 // Helper functions for selectivity calculation //
 //////////////////////////////////////////////////
-
-const (
-	// This is the value used for inequality filters such as x < 1 in
-	// "Access Path Selection in a Relational Database Management System"
-	// by Pat Selinger et al.
-	unknownFilterSelectivity = 1.0 / 3.0
-
-	// TODO(rytaft): Add other selectivities for other types of predicates.
-
-	// This is an arbitrary row count used in the absence of any real statistics.
-	unknownRowCount = 1000
-
-	// UnknownDistinctCountRatio is the ratio of distinct column values to number
-	// of rows, which is used in the absence of any real statistics for non-key
-	// columns.  TODO(rytaft): See if there is an industry standard value for
-	// this.
-	UnknownDistinctCountRatio = 0.1
-
-	// UnknownNullCountRatio is the ratio of null column values to number of rows
-	// for nullable columns, which is used in the absence of any real statistics.
-	UnknownNullCountRatio = 0.01
-
-	// UnknownAvgRowSize is the average size of a row in bytes, which is used in
-	// the absence of any real statistics.
-	UnknownAvgRowSize = 8
-
-	// Use a small row count for generator functions; this allows use of lookup
-	// join in cases like using json_array_elements with a small constant array.
-	unknownGeneratorRowCount = 10
-
-	// Since the generator row count is so small, we need a larger distinct count
-	// ratio for generator functions.
-	unknownGeneratorDistinctCountRatio = 0.7
-
-	// When subtracting floating point numbers, avoid precision errors by making
-	// sure the result is greater than or equal to epsilon.
-	epsilon = 1e-10
-
-	// This is the minimum cardinality an expression should have in order to make
-	// it worth adding the overhead of using a histogram.
-	minCardinalityForHistogram = 100
-
-	// This is the default selectivity estimated for inverted joins until we can
-	// get better statistics on inverted indexes.
-	unknownInvertedJoinSelectivity = 1.0 / 100.0
-
-	// multiColWeight is the weight to assign the selectivity calculation using
-	// multi-column statistics versus the calculation using single-column
-	// statistics. See the comment above selectivityFromMultiColDistinctCounts for
-	// details.
-	multiColWeight = 9.0 / 10.0
-)
 
 // countPaths returns the number of JSON or Array paths in the specified
 // FiltersItem. Used in the calculation of unapplied conjuncts in a Contains
@@ -3695,6 +3771,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	colStat, _ := s.ColStats.Add(multiColSet)
 	colStat.DistinctCount = maxNewDistinct + distinctCountRange*(1-fdStrength)
 	colStat.NullCount = multiColNullCount
+	colStat.AvgSize = inputColStat.AvgSize
 	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
 
 	// Now, we must adjust multiColSelectivity so that it is not greater than
