@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -42,6 +43,12 @@ type KVAccessor interface {
 		toDelete []roachpb.Span,
 		toUpsert []roachpb.SpanConfigEntry,
 	) error
+
+	// WithTxn returns a KVAccessor that runs using the given transaction (with
+	// its operations discarded if aborted, valid only if committed). If nil, a
+	// transaction is created internally for every operation. If chained,
+	// (.WithTxn(txnA).WithTxn(txnB)), only the last transaction is used.
+	WithTxn(*kv.Txn) KVAccessor
 }
 
 // KVSubscriber presents a consistent[1] snapshot of a StoreReader that's
