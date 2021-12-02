@@ -308,6 +308,12 @@ const (
 	// This version must be active before any ProbeRequest is issued on the
 	// cluster.
 	ProbeRequest
+	// SeedTenantSpanConfigs populates system.span_configurations with seed
+	// data for secondary tenants. This state is what ensures that we always
+	// split on tenant boundaries when using the span configs infrastructure.
+	// This version also comes with a migration to populate the same seed data
+	// for existing tenants.
+	SeedTenantSpanConfigs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -540,6 +546,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
+	},
+	{
+		Key:     SeedTenantSpanConfigs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 28},
 	},
 
 	// *************************************************
