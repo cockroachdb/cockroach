@@ -856,7 +856,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec)
+		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec, spanConfigKnobs)
 		sqlWatcher := spanconfigsqlwatcher.New(
 			codec,
 			cfg.Settings,
