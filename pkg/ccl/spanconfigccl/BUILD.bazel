@@ -18,6 +18,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",

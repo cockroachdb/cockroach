@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -142,7 +143,7 @@ func TestSQLTranslatorDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				return datadrivenTranslationResult(entries)
 			case "full-translate":
-				entries, _, err := spanconfig.FullTranslate(ctx, sqlTranslator)
+				entries, _, err := spanconfigsqltranslator.FullTranslate(ctx, sqlTranslator)
 				require.NoError(t, err)
 				return datadrivenTranslationResult(entries)
 			case "sleep":

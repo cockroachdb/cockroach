@@ -11,6 +11,8 @@
 package spanconfig
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -57,6 +59,16 @@ type TestingKnobs struct {
 	// SQLWatcherOnEventInterceptor, if set, is invoked when the SQLWatcher
 	// receives an event on one of its rangefeeds.
 	SQLWatcherOnEventInterceptor func() error
+
+	// SQLWatcherCheckpointNoopsEveryDurationOverride, if set, overrides how
+	// often the SQLWatcher checkpoints noops.
+	SQLWatcherCheckpointNoopsEveryDurationOverride time.Duration
+
+	// ExcludeDroppedDescriptorsFromLookup is used to control if the
+	// SQLTranslator ignores dropped descriptors. If enabled, dropped
+	// descriptors appear as missing -- a convenient+faster alternative to
+	// waiting for the descriptor to actually get GC-ed in tests.
+	ExcludeDroppedDescriptorsFromLookup bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
