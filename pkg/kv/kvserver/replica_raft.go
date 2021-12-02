@@ -981,6 +981,13 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	if r.mu.internalRaftGroup == nil {
 		return false, nil
 	}
+	// If the replica is uninitialized, it does not need to tick. This is also
+	// enforced in raftTickLoop (with a justification), but we check here again to
+	// avoid races if a range is scheduled for a tick, removed, then added again
+	// as an uninitialized replica.
+	if !r.isInitializedRLocked() {
+		return false, nil
+	}
 
 	for remoteReplica := range remotes {
 		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))

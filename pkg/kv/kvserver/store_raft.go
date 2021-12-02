@@ -634,6 +634,27 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			}
 			s.unquiescedReplicas.Unlock()
 
+			// Filter out uninitialized replicas. We could tick them, but doing so is
+			// unnecessary because uninitialized replicas can never win elections, so
+			// there is no reason for them to ever call an election. Because of this,
+			// all work performed by an uninitialized replica is reactive, in response
+			// to incoming messages (see processRequestQueue).
+			//
+			// There are multiple ways for an uninitialized replica to be created and
+			// then abandoned, so it is important that they are cheap. Not passing
+			// them through the Raft scheduler and ticking them avoids a meaningful
+			// amount of periodic work for each uninitialized replica.
+			s.mu.RLock()
+			i := 0
+			for _, rangeID := range rangeIDs {
+				if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
+					rangeIDs[i] = rangeID
+					i++
+				}
+			}
+			rangeIDs = rangeIDs[:i]
+			s.mu.RUnlock()
+
 			s.scheduler.EnqueueRaftTicks(rangeIDs...)
 			s.metrics.RaftTicks.Inc(1)
 
