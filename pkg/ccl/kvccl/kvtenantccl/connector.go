@@ -455,7 +455,7 @@ func (c *Connector) UpdateSpanConfigEntries(
 }
 
 // WithTxn implements the spanconfig.KVAccessor interface.
-func (c *Connector) WithTxn(*kv.Txn) spanconfig.KVAccessor {
+func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
 }
 
