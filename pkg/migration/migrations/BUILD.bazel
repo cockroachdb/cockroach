@@ -15,6 +15,7 @@ go_library(
         "records_based_registry.go",
         "retry_jobs_with_exponential_backoff.go",
         "schema_changes.go",
+        "seed_tenant_span_configs.go",
         "separated_intents.go",
         "span_configurations.go",
         "sql_instances.go",
