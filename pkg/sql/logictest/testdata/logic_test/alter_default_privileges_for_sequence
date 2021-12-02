@@ -21,6 +21,7 @@ d              public       testuser_s  testuser  ALL
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM testuser;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM testuser;
 
 statement ok
 CREATE SEQUENCE testuser_s2;

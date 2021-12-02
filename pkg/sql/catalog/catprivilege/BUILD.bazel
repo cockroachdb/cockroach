@@ -35,5 +35,6 @@ go_test(
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )

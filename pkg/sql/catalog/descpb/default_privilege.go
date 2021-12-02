@@ -84,7 +84,7 @@ func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 	if idx == len(p.DefaultPrivilegesPerRole) {
 		// Not found but should be inserted at the end.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole,
-			InitDefaultPrivilegesForRole(role),
+			InitDefaultPrivilegesForRole(role, p.Type),
 		)
 	} else if p.DefaultPrivilegesPerRole[idx].toDefaultPrivilegesRole() == role {
 		// Found.
@@ -92,14 +92,17 @@ func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 		// New element to be inserted at idx.
 		p.DefaultPrivilegesPerRole = append(p.DefaultPrivilegesPerRole, DefaultPrivilegesForRole{})
 		copy(p.DefaultPrivilegesPerRole[idx+1:], p.DefaultPrivilegesPerRole[idx:])
-		p.DefaultPrivilegesPerRole[idx] = InitDefaultPrivilegesForRole(role)
+		p.DefaultPrivilegesPerRole[idx] = InitDefaultPrivilegesForRole(role, p.Type)
 	}
 	return &p.DefaultPrivilegesPerRole[idx]
 }
 
 // InitDefaultPrivilegesForRole creates the default DefaultPrivilegesForRole
 // for a user.
-func InitDefaultPrivilegesForRole(role DefaultPrivilegesRole) DefaultPrivilegesForRole {
+func InitDefaultPrivilegesForRole(
+	role DefaultPrivilegesRole,
+	defaultPrivilegeDescType DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType,
+) DefaultPrivilegesForRole {
 	var defaultPrivilegesRole isDefaultPrivilegesForRole_Role
 	if role.ForAllRoles {
 		defaultPrivilegesRole = &DefaultPrivilegesForRole_ForAllRoles{
@@ -112,15 +115,26 @@ func InitDefaultPrivilegesForRole(role DefaultPrivilegesRole) DefaultPrivilegesF
 			DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
 		}
 	}
-	defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole_{
-		ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
-			UserProto:                       role.Role.EncodeProto(),
-			PublicHasUsageOnTypes:           true,
-			RoleHasAllPrivilegesOnTables:    true,
-			RoleHasAllPrivilegesOnSequences: true,
-			RoleHasAllPrivilegesOnSchemas:   true,
-			RoleHasAllPrivilegesOnTypes:     true,
-		},
+
+	if defaultPrivilegeDescType == DefaultPrivilegeDescriptor_DATABASE {
+		defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole_{
+			ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
+				UserProto:                       role.Role.EncodeProto(),
+				PublicHasUsageOnTypes:           true,
+				RoleHasAllPrivilegesOnTables:    true,
+				RoleHasAllPrivilegesOnSequences: true,
+				RoleHasAllPrivilegesOnSchemas:   true,
+				RoleHasAllPrivilegesOnTypes:     true,
+			},
+		}
+	} else {
+		// If the default privilege descriptor is on a schema, there are no
+		// defaults set.
+		defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole_{
+			ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
+				UserProto: role.Role.EncodeProto(),
+			},
+		}
 	}
 	return DefaultPrivilegesForRole{
 		Role:                       defaultPrivilegesRole,
