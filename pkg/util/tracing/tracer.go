@@ -740,9 +740,16 @@ func (t *Tracer) startSpanGeneric(
 		// created Span to the parent so that the parent will later be able to
 		// collect the child's recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
-			if opts.Parent.i.crdb.recordingType() != RecordingOff {
-				s.i.crdb.mu.parent = opts.Parent.i.crdb
-				opts.Parent.i.crdb.addChild(s.i.crdb, !opts.ParentDoesNotCollectRecording)
+			parent := opts.Parent.i.crdb
+			if parent.recordingType() != RecordingOff {
+				// We're going to hold the parent's lock while we link both the parent
+				// to the child and the child to the parent.
+				parent.withLock(func() {
+					added := parent.addChildLocked(s.i.crdb, !opts.ParentDoesNotCollectRecording)
+					if added {
+						s.i.crdb.mu.parent = opts.Parent.i.crdb
+					}
+				})
 			}
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
