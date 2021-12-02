@@ -2113,6 +2113,7 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
+	| 'INCREMENTAL_STORAGE' '=' string_or_placeholder_opt_list
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
