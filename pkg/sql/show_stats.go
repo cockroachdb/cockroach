@@ -13,7 +13,9 @@ package sql
 import (
 	"context"
 	encjson "encoding/json"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,7 +27,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO(harding): Remove use of showTableStatsColumns in 22.2 when AvgSizeColVer
+// is fully integrated.
 var showTableStatsColumns = colinfo.ResultColumns{
+	{Name: "statistics_name", Typ: types.String},
+	{Name: "column_names", Typ: types.StringArray},
+	{Name: "created", Typ: types.Timestamp},
+	{Name: "row_count", Typ: types.Int},
+	{Name: "distinct_count", Typ: types.Int},
+	{Name: "null_count", Typ: types.Int},
+	{Name: "histogram_id", Typ: types.Int},
+}
+
+var showTableStatsColumnsAvgSizeVer = colinfo.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.StringArray},
 	{Name: "created", Typ: types.Timestamp},
@@ -52,7 +66,11 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
-	columns := showTableStatsColumns
+	avgSizeColVerActive := p.ExtendedEvalContext().ExecCfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol)
+	columns := showTableStatsColumnsAvgSizeVer
+	if !avgSizeColVerActive {
+		columns = showTableStatsColumns
+	}
 	if n.UsingJSON {
 		columns = showTableStatsJSONColumns
 	}
@@ -67,22 +85,28 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
+			var avgSize string
+			if avgSizeColVerActive {
+				avgSize = `
+					"avgSize",`
+			}
+			stmt := fmt.Sprintf(`SELECT "statisticID",
+																				 name,
+																				 "columnIDs",
+																				 "createdAt",
+																				 "rowCount",
+																				 "distinctCount",
+																				 "nullCount",
+																				 %s
+																				 histogram
+																	FROM system.table_statistics
+																	WHERE "tableID" = $1
+																	ORDER BY "createdAt"`, avgSize)
 			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 				ctx,
 				"read-table-stats",
 				p.txn,
-				`SELECT "statisticID",
-					      name,
-					      "columnIDs",
-					      "createdAt",
-					      "rowCount",
-					      "distinctCount",
-					      "nullCount",
-					      "avgSize",
-					      histogram
-				 FROM system.table_statistics
-				 WHERE "tableID" = $1
-				 ORDER BY "createdAt"`,
+				stmt,
 				desc.GetID(),
 			)
 			if err != nil {
@@ -101,6 +125,13 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				histogramIdx
 				numCols
 			)
+
+			histIdx := histogramIdx
+			nCols := numCols
+			if !avgSizeColVerActive {
+				histIdx = histogramIdx - 1
+				nCols = numCols - 1
+			}
 
 			// Guard against crashes in the code below (e.g. #56356).
 			defer func() {
@@ -127,7 +158,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					result[i].RowCount = (uint64)(*r[rowCountIdx].(*tree.DInt))
 					result[i].DistinctCount = (uint64)(*r[distinctCountIdx].(*tree.DInt))
 					result[i].NullCount = (uint64)(*r[nullCountIdx].(*tree.DInt))
-					result[i].AvgSize = (uint64)(*r[avgSizeIdx].(*tree.DInt))
+					if avgSizeColVerActive {
+						result[i].AvgSize = (uint64)(*r[avgSizeIdx].(*tree.DInt))
+					}
 					if r[nameIdx] != tree.DNull {
 						result[i].Name = string(*r[nameIdx].(*tree.DString))
 					}
@@ -136,7 +169,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					for j, d := range colIDs {
 						result[i].Columns[j] = statColumnString(desc, d)
 					}
-					if err := result[i].DecodeAndSetHistogram(ctx, &p.semaCtx, r[histogramIdx]); err != nil {
+					if err := result[i].DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
 					}
@@ -159,7 +192,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			}
 
 			for _, r := range rows {
-				if len(r) != numCols {
+				if len(r) != nCols {
 					v.Close(ctx)
 					return nil, errors.Errorf("incorrect columns from internal query")
 				}
@@ -172,20 +205,34 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				histogramID := tree.DNull
-				if r[histogramIdx] != tree.DNull {
+				if r[histIdx] != tree.DNull {
 					histogramID = r[statIDIdx]
 				}
 
-				res := tree.Datums{
-					r[nameIdx],
-					colNames,
-					r[createdAtIdx],
-					r[rowCountIdx],
-					r[distinctCountIdx],
-					r[nullCountIdx],
-					r[avgSizeIdx],
-					histogramID,
+				var res tree.Datums
+				if avgSizeColVerActive {
+					res = tree.Datums{
+						r[nameIdx],
+						colNames,
+						r[createdAtIdx],
+						r[rowCountIdx],
+						r[distinctCountIdx],
+						r[nullCountIdx],
+						r[avgSizeIdx],
+						histogramID,
+					}
+				} else {
+					res = tree.Datums{
+						r[nameIdx],
+						colNames,
+						r[createdAtIdx],
+						r[rowCountIdx],
+						r[distinctCountIdx],
+						r[nullCountIdx],
+						histogramID,
+					}
 				}
+
 				if _, err := v.rows.AddRow(ctx, res); err != nil {
 					v.Close(ctx)
 					return nil, err
