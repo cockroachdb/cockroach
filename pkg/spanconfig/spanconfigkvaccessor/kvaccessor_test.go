@@ -62,7 +62,6 @@ func TestDataDriven(t *testing.T) {
 
 		const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-		tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_kvaccessor.enabled = true`)
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
 		accessor := spanconfigkvaccessor.New(
 			tc.Server(0).DB(),

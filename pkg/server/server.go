@@ -624,15 +624,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		KVMemoryMonitor:         kvMemoryMonitor,
 	}
 
-	var spanConfigAccessor spanconfig.KVAccessor
-	var spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
+	spanConfig := struct {
+		kvAccessor        spanconfig.KVAccessor
+		kvAccessorWithTxn spanconfig.KVAccessorWithTxn
+		subscriber        *spanconfigkvsubscriber.KVSubscriber
+	}{}
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
 			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
 		} else {
-			spanConfigSubscriber = spanconfigkvsubscriber.New(
+			spanConfig.subscriber = spanconfigkvsubscriber.New(
 				stopper,
 				db,
 				clock,
@@ -642,15 +645,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				storeCfg.DefaultSpanConfig,
 				spanConfigKnobs,
 			)
-			storeCfg.SpanConfigSubscriber = spanConfigSubscriber
+			storeCfg.SpanConfigSubscriber = spanConfig.subscriber
 		}
 
-		spanConfigAccessor = spanconfigkvaccessor.New(
+		spanConfigKVAccessorImpl := spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
 		)
+		spanConfig.kvAccessor = spanConfigKVAccessorImpl
+		spanConfig.kvAccessorWithTxn = spanConfigKVAccessorImpl
 	} else {
-		spanConfigAccessor = spanconfigkvaccessor.DisabledAccessor{}
+		spanConfig.kvAccessor = spanconfigkvaccessor.MakeDisabledKVAccessor()
+		spanConfig.kvAccessorWithTxn = spanconfigkvaccessor.MakeNoopKVAccessorWithTxn()
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -685,7 +691,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage, spanConfigAccessor,
+		tenantUsage, spanConfig.kvAccessor,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -770,6 +776,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
 			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
+			spanConfigKVAccessor:     spanConfig.kvAccessorWithTxn,
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
@@ -779,7 +786,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
 		systemConfigProvider:     g,
-		spanConfigAccessor:       spanConfigAccessor,
+		spanConfigAccessor:       spanConfig.kvAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -841,7 +848,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
-		spanConfigSubscriber:   spanConfigSubscriber,
+		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
