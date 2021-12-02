@@ -622,7 +622,7 @@ func TestEvalAddSSTable(t *testing.T) {
 				defer engine.Close()
 
 				// Write initial data.
-				intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0)
+				intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0, 1)
 				b := engine.NewBatch()
 				for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
 					kv := tc.data[i]

@@ -77,6 +77,19 @@ WITH payloads AS (
 ----
 true
 
+# check that the sql instance id / gateway node id is properly stored with the contention event
+query B
+WITH payloads AS (
+  SELECT *
+  FROM crdb_internal.payloads_for_trace(crdb_internal.trace_id())
+) SELECT count(*) > 0
+  FROM payloads
+  WHERE payload_type = 'roachpb.ContentionEvent'
+  AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
+  AND (payload_jsonb->'txnMeta'->>'coordinatorNodeId')::INTEGER = 1
+----
+true
+
 # Check that there is at least 1 contention event for kv table in the contention
 # virtual tables.
 query B
