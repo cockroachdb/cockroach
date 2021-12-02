@@ -523,7 +523,6 @@ func TestFlowRegistryDrain(t *testing.T) {
 // TODO(asubiotto): This error should also be considered retryable by clients.
 func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	fr := NewFlowRegistry()
 	wg := sync.WaitGroup{}
