@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -41,6 +42,27 @@ type KVAccessor interface {
 		ctx context.Context,
 		toDelete []roachpb.Span,
 		toUpsert []roachpb.SpanConfigEntry,
+	) error
+}
+
+// KVAccessorWithTxn is identical to KVAccessor, but scoped to the given
+// transaction.
+type KVAccessorWithTxn interface {
+	// GetSpanConfigEntriesForWithTxn is the txn scoped version of
+	// KVAccessor.GetSpanConfigEntriesFor.
+	GetSpanConfigEntriesForWithTxn(
+		ctx context.Context,
+		spans []roachpb.Span,
+		txn *kv.Txn,
+	) ([]roachpb.SpanConfigEntry, error)
+
+	// UpdateSpanConfigEntriesWithTxn is the txn scoped version of
+	// KVAccessor.UpdateSpanConfigEntries.
+	UpdateSpanConfigEntriesWithTxn(
+		ctx context.Context,
+		toDelete []roachpb.Span,
+		toUpsert []roachpb.SpanConfigEntry,
+		txn *kv.Txn,
 	) error
 }
 
