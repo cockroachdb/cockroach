@@ -73,7 +73,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
-		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		ts.SpanConfigKVAccessor().(spanconfig.KVAccessor),
 		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
 		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
 		&spanconfig.TestingKnobs{
@@ -162,7 +162,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
-		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		ts.SpanConfigKVAccessor().(spanconfig.KVAccessor),
 		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
 		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
 		&spanconfig.TestingKnobs{
@@ -238,7 +238,7 @@ func TestManagerCheckJobConditions(t *testing.T) {
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
-		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
+		ts.SpanConfigKVAccessor().(spanconfig.KVAccessor),
 		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
 		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
 		&spanconfig.TestingKnobs{
