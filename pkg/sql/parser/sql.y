@@ -3125,7 +3125,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-
+| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+	{
+		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+	}
 import_format:
   name
   {
