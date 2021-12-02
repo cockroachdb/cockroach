@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -28,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -59,7 +61,7 @@ func (ti testInfra) newExecDeps(
 		ti.lm.Codec(),
 		txn,
 		descsCollection,
-		nil,                  /* jobRegistry */
+		noopJobRegistry{},    /* jobRegistry */
 		noopBackfiller{},     /* indexBackfiller */
 		noopIndexValidator{}, /* indexValidator */
 		noopCCLCallbacks{},   /* noopCCLCallbacks */
@@ -347,14 +349,11 @@ func TestSchemaChanger(t *testing.T) {
 				scop.StatementPhase,
 				scop.PreCommitPhase,
 			} {
-				sc, err := scplan.MakePlan(nodes, scplan.Params{
-					ExecutionPhase: phase,
-				})
-				require.NoError(t, err)
+				sc := sctestutils.MakePlan(t, nodes, phase)
 				stages := sc.Stages
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
-					require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 					ts = s.After
 				}
 			}
@@ -364,13 +363,10 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc, err := scplan.MakePlan(ts, scplan.Params{
-				ExecutionPhase: scop.PostCommitPhase,
-			})
-			require.NoError(t, err)
+			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 				after = s.After
 			}
 			return nil
@@ -399,7 +395,7 @@ func TestSchemaChanger(t *testing.T) {
 				},
 				{
 					Target: targetSlice[5],
-					Status: scpb.Status_PUBLIC,
+					Status: scpb.Status_ABSENT,
 				},
 			},
 
@@ -430,13 +426,10 @@ func TestSchemaChanger(t *testing.T) {
 					scop.StatementPhase,
 					scop.PreCommitPhase,
 				} {
-					sc, err := scplan.MakePlan(outputNodes, scplan.Params{
-						ExecutionPhase: phase,
-					})
-					require.NoError(t, err)
+					sc := sctestutils.MakePlan(t, outputNodes, phase)
 					for _, s := range sc.Stages {
 						exDeps := ti.newExecDeps(txn, descriptors)
-						require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 						ts = s.After
 					}
 				}
@@ -446,18 +439,29 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc, err := scplan.MakePlan(ts, scplan.Params{
-				ExecutionPhase: scop.PostCommitPhase,
-			})
-			require.NoError(t, err)
+			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scexec.ExecuteStage(ctx, exDeps, s.Ops))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
 			}
 			return nil
 		}))
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
+}
+
+type noopJobRegistry struct{}
+
+var _ scdeps.JobRegistry = noopJobRegistry{}
+
+func (n noopJobRegistry) MakeJobID() jobspb.JobID {
+	return jobspb.InvalidJobID
+}
+
+func (n noopJobRegistry) CreateJobWithTxn(
+	ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn,
+) (*jobs.Job, error) {
+	return &jobs.Job{}, nil
 }
 
 type noopBackfiller struct{}

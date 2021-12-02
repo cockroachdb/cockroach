@@ -857,7 +857,8 @@ func importPlanHook(
 
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
-			if sc.GetID() != keys.PublicSchemaID {
+			publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+			if sc.GetID() != publicSchemaID && sc.GetID() != keys.PublicSchemaID {
 				err := errors.New("cannot use IMPORT with a user defined schema")
 				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
 				return hint

@@ -3159,6 +3159,9 @@ type EvalPlanner interface {
 	EvalDatabase
 	TypeResolver
 
+	// ExecutorConfig returns *ExecutorConfig
+	ExecutorConfig() interface{}
+
 	// GetImmutableTableInterfaceByID returns an interface{} with
 	// catalog.TableDescriptor to avoid a circular dependency.
 	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
@@ -3332,14 +3335,6 @@ type ClientNoticeSender interface {
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
-// ExecConfigAccessor is a limited interface to access ExecutorConfig's states.
-// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
-type ExecConfigAccessor interface {
-
-	// JobRegistry returns jobs.Registry from ExecutorConfig
-	JobRegistry() interface{}
-}
-
 // PrivilegedAccessor gives access to certain queries that would otherwise
 // require someone with RootUser access to query a given data source.
 // It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
@@ -3349,7 +3344,7 @@ type PrivilegedAccessor interface {
 	// Returns the id, a bool representing whether the namespace exists, and an error
 	// if there is one.
 	LookupNamespaceID(
-		ctx context.Context, parentID int64, name string,
+		ctx context.Context, parentID int64, parentSchemaID int64, name string,
 	) (DInt, bool, error)
 
 	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
@@ -3578,8 +3573,6 @@ type EvalContext struct {
 
 	// Context holds the context in which the expression is evaluated.
 	Context context.Context
-
-	ExecConfigAccessor ExecConfigAccessor
 
 	Planner EvalPlanner
 

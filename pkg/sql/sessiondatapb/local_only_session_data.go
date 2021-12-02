@@ -113,29 +113,30 @@ func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 }
 
 // SerialNormalizationMode controls if and when the Executor uses DistSQL.
+// NB: The values of the enums must be stable across releases.
 type SerialNormalizationMode int64
 
 const (
 	// SerialUsesRowID means use INT NOT NULL DEFAULT unique_rowid().
-	SerialUsesRowID SerialNormalizationMode = iota
-	// SerialUsesUnorderedRowID means use INT NOT NULL DEFAULT unordered_unique_rowid().
-	SerialUsesUnorderedRowID
+	SerialUsesRowID SerialNormalizationMode = 0
 	// SerialUsesVirtualSequences means create a virtual sequence and
 	// use INT NOT NULL DEFAULT nextval(...).
-	SerialUsesVirtualSequences
+	SerialUsesVirtualSequences SerialNormalizationMode = 1
 	// SerialUsesSQLSequences means create a regular SQL sequence and
 	// use INT NOT NULL DEFAULT nextval(...). Each call to nextval()
 	// is a distributed call to kv. This minimizes the size of gaps
 	// between successive sequence numbers (which occur due to
 	// node failures or errors), but the multiple kv calls
 	// can impact performance negatively.
-	SerialUsesSQLSequences
+	SerialUsesSQLSequences SerialNormalizationMode = 2
 	// SerialUsesCachedSQLSequences is identical to SerialUsesSQLSequences with
 	// the exception that nodes can cache sequence values. This significantly
 	// reduces contention and distributed calls to kv, which results in better
 	// performance. Gaps between sequences may be larger as a result of cached
 	// values being lost to errors and/or node failures.
-	SerialUsesCachedSQLSequences
+	SerialUsesCachedSQLSequences SerialNormalizationMode = 3
+	// SerialUsesUnorderedRowID means use INT NOT NULL DEFAULT unordered_unique_rowid().
+	SerialUsesUnorderedRowID SerialNormalizationMode = 4
 )
 
 func (m SerialNormalizationMode) String() string {

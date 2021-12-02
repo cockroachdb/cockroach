@@ -6,6 +6,10 @@
 # problem. Before the changes made in the commit adding this test, this test
 # would result in a nil pointer panic.
 
+# TODO(richardjcai): Support let command similar to logic tests to
+# programmatically get the table id.
+# The first table created has id 54.
+
 send
 Query {"String": "CREATE TABLE t (a INT PRIMARY KEY)"}
 ----
@@ -64,7 +68,7 @@ until crdb_only
 ReadyForQuery
 ----
 {"Type":"BindComplete"}
-{"Type":"DataRow","Values":[{"text":"52"}]}
+{"Type":"DataRow","Values":[{"text":"54"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 

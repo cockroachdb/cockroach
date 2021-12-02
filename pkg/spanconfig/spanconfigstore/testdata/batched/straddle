@@ -1,0 +1,135 @@
+# Test semantics of batched updates that partially overlap with what's already
+# present, possibly straddling multiple existing entries.
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state
+# set        [--A--)  [--B--)
+# ====================================
+# result     [--A--)  [--B--)
+apply
+set [b,d):A
+set [e,g):B
+----
+added [b,d):A
+added [e,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set           [---X----)
+# ====================================
+# result     [-A|----X---|-B)
+apply dryrun
+set [c,f):X
+----
+deleted [b,d)
+deleted [e,g)
+added [b,c):A
+added [c,f):X
+added [f,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set           [---X-------)
+# ====================================
+# result     [-A|----X------)
+apply dryrun
+set [c,g):X
+----
+deleted [b,d)
+deleted [e,g)
+added [b,c):A
+added [c,g):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set           [---X----|xx)
+# ====================================
+# result     [-A|----X---)
+apply dryrun
+set [c,f):X
+delete [f,g)
+----
+deleted [b,d)
+deleted [e,g)
+added [b,c):A
+added [c,f):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set           [---X----------)
+# ====================================
+# result     [-A|----X---------)
+apply dryrun
+set [c,h):X
+----
+deleted [b,d)
+deleted [e,g)
+added [b,c):A
+added [c,h):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set        [---X-------)
+# ====================================
+# result     [-------X---|-B)
+apply dryrun
+set [b,f):X
+----
+deleted [b,d)
+deleted [e,g)
+added [b,f):X
+added [f,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set     [------X-------)
+# ====================================
+# result  [----------X---|-B)
+apply dryrun
+set [a,f):X
+----
+deleted [b,d)
+deleted [e,g)
+added [a,f):X
+added [f,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set           [xxxxxxxx)
+# ====================================
+# result     [-A)        [-B)
+apply dryrun
+delete [c,f)
+----
+deleted [b,d)
+deleted [e,g)
+added [b,c):A
+added [f,g):B
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set     [xxxxx|---X----------)
+# ====================================
+# result        [----X---------)
+apply dryrun
+delete [a,c)
+set [c,h):X
+----
+deleted [b,d)
+deleted [e,g)
+added [c,h):X
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [--A--)  [--B--)
+# set        [--X--|xxxxx|-Y)
+# ====================================
+# result     [--X--)     [-Y)
+apply dryrun
+set [b,d):X
+delete [d,f)
+set [f,g):Y
+----
+deleted [b,d)
+deleted [e,g)
+added [b,d):X
+added [f,g):Y

@@ -153,13 +153,13 @@ func newParquetColumn(typ *types.T, name string) (parquetColumn, error) {
 		  - repeated: 0 or more occurrences (the column value can be an array of values,
 		  so the value within the array will have its own repetition type)
 
-		  Right now, the parquet exporter hardcodes each crdb table column to have the `required`
+		  Right now, the parquet exporter hardcodes each crdb table column to have the `optional`
 		  repetition type.
 
 			See this blog post for more on parquet type specification:
 			https://blog.twitter.com/engineering/en_us/a/2013/dremel-made-simple-with-parquet
 	*/
-	col.definition.SchemaElement.RepetitionType = parquet.FieldRepetitionTypePtr(parquet.FieldRepetitionType_REQUIRED)
+	col.definition.SchemaElement.RepetitionType = parquet.FieldRepetitionTypePtr(parquet.FieldRepetitionType_OPTIONAL)
 	col.definition.SchemaElement.Name = col.name
 
 	// MB figured out the low level properties of the encoding by running the goland debugger on
@@ -338,19 +338,18 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 				rows++
 
 				for i, ed := range row {
-					// TODO(MB): Deal with NULL VALUES
 					if ed.IsNull() {
-						return errors.New("NULL value encountered during EXPORT PARQUET, " +
-							". Tables with NULL values not supported yet :(")
+						parquetRow[exporter.parquetColumns[i].name] = nil
+					} else {
+						if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
+							return err
+						}
+						edNative, err := exporter.parquetColumns[i].encodeFn(ed.Datum)
+						if err != nil {
+							return err
+						}
+						parquetRow[exporter.parquetColumns[i].name] = edNative
 					}
-					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
-						return err
-					}
-					edNative, err := exporter.parquetColumns[i].encodeFn(ed.Datum)
-					if err != nil {
-						return err
-					}
-					parquetRow[exporter.parquetColumns[i].name] = edNative
 				}
 				if err := exporter.Write(parquetRow); err != nil {
 					return err

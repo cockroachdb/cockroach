@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1339,7 +1340,7 @@ func TestImportIntoUserDefinedTypes(t *testing.T) {
 		// Test CSV default and computed column imports.
 		{
 			create: `
-a greeting, b greeting default 'hi', c greeting 
+a greeting, b greeting default 'hi', c greeting
 AS (
 CASE a
 WHEN 'hello' THEN 'hi'
@@ -1364,7 +1365,7 @@ END
 		// Test AVRO default and computed column imports.
 		{
 			create: `
-a greeting, b greeting, c greeting 
+a greeting, b greeting, c greeting
 AS (
 CASE a
 WHEN 'hello' THEN 'hi'
@@ -1389,7 +1390,7 @@ END
 		// Test DELIMITED default and computed column imports.
 		{
 			create: `
-a greeting, b greeting default 'hi', c greeting 
+a greeting, b greeting default 'hi', c greeting
 AS (
 CASE a
 WHEN 'hello' THEN 'hi'
@@ -1414,7 +1415,7 @@ END
 		// Test PGCOPY default and computed column imports.
 		{
 			create: `
-a greeting, b greeting default 'hi', c greeting 
+a greeting, b greeting default 'hi', c greeting
 AS (
 CASE a
 WHEN 'hello' THEN 'hi'
@@ -1928,10 +1929,12 @@ func TestFailedImportGC(t *testing.T) {
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 	// In the case of the test, the ID of the table that will be cleaned up due
-	// to the failed import will be one higher than the ID of the empty database
+	// to the failed import will be two higher than the ID of the empty database
 	// it was created in.
+	// We increment the id once for the public schema and a second time for the
+	// "MakeSimpleTableDescriptor".
 	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
-	tableID := descpb.ID(dbID + 1)
+	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
@@ -1962,6 +1965,7 @@ func TestFailedImportGC(t *testing.T) {
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
@@ -2213,8 +2217,8 @@ func TestImportCSVStmt(t *testing.T) {
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
 				intodb)).Scan(&intodbID)
 			var publicSchemaID descpb.ID
-			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
-				tree.PublicSchema)).Scan(&publicSchemaID)
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s' AND "parentID" = %d`,
+				tree.PublicSchema, intodbID)).Scan(&publicSchemaID)
 			var tableID int64
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = $2`,
 				intodbID, publicSchemaID).Scan(&tableID)
@@ -2268,7 +2272,6 @@ func TestImportCSVStmt(t *testing.T) {
 					t.Fatal("expected > 1 SST files")
 				}
 			}
-
 		})
 	}
 
@@ -3791,7 +3794,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -4732,7 +4735,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -4833,7 +4836,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID,
+	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup,
 		descpb.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
@@ -5963,7 +5966,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		expectedTableName2 := "test2"
 		expectedSeqName := "testseq"
 		sqlDB.CheckQueryResults(t, `SELECT schema_name,
-table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
+	table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			[][]string{{"bar", expectedTableName}, {"bar", expectedTableName2}, {"bar", expectedSeqName},
 				{"baz", expectedTableName}, {"foo", expectedTableName}, {"public", expectedTableName}})
 
@@ -6018,7 +6021,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			expectedContent := [][]string{{"1", "abc"}, {"2", "def"}}
 			expectedTableName := "test"
 			sqlDB.CheckQueryResults(t, `SELECT schema_name,
-table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
+	table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 				[][]string{{"public", expectedTableName}})
 
 			// Check that the target table in the public schema was imported correctly.
@@ -6066,14 +6069,16 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 		tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimportpgdump")
+		// The public schema in the database also uses an ID.
+		publicSchemaID := dbID + 1
 		// In the case of the test, the ID of the 3 schemas that will be cleaned up
 		// due to the failed import will be consecutive IDs after the ID of the
 		// empty database it was created in.
-		schemaIDs := []descpb.ID{descpb.ID(dbID + 1), descpb.ID(dbID + 2), descpb.ID(dbID + 3)}
+		schemaIDs := []descpb.ID{descpb.ID(publicSchemaID + 1), descpb.ID(publicSchemaID + 2), descpb.ID(publicSchemaID + 3)}
 		// The table IDs are allocated after the schemas are created. There is one
 		// extra table in the "public" schema.
-		tableIDs := []descpb.ID{descpb.ID(dbID + 4), descpb.ID(dbID + 5), descpb.ID(dbID + 6),
-			descpb.ID(dbID + 7)}
+		tableIDs := []descpb.ID{descpb.ID(publicSchemaID + 4), descpb.ID(publicSchemaID + 5), descpb.ID(publicSchemaID + 6),
+			descpb.ID(publicSchemaID + 7)}
 
 		// At this point we expect to see three jobs related to the cleanup.
 		// - SCHEMA CHANGE GC job for the table cleanup.
@@ -6505,7 +6510,7 @@ DROP VIEW IF EXISTS v`,
 				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER DATABASE multi_region ADD REGION "us-east2"`,
-				errString: `type descriptor "crdb_internal_region" \(54\) has been ` +
+				errString: `type descriptor "crdb_internal_region" \(57\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},
@@ -6521,7 +6526,7 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 `,
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER TYPE typ ADD VALUE 'b'`,
-				errString: `type descriptor "typ" \(66\) has been ` +
+				errString: `type descriptor "typ" \(70\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},
@@ -7006,6 +7011,42 @@ func TestDetachedImport(t *testing.T) {
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+}
+
+func TestImportRowErrorLargeRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			return
+		}
+		_, err := w.Write([]byte("firstrowvalue\nsecondrow,is,notok,"))
+		require.NoError(t, err)
+		// Write 8MB field as the last field of the second
+		// row.
+		bigData := randutil.RandBytes(rng, 8<<20)
+		_, err = w.Write(bigData)
+		require.NoError(t, err)
+		_, err = w.Write([]byte("\n"))
+		require.NoError(t, err)
+	}))
+	defer srv.Close()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	connDB := tc.Conns[0]
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+	// Our input file has an 8MB row
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft.command.max_size = '4MiB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+	sqlDB.Exec(t, "CREATE TABLE simple (s string)")
+	defer sqlDB.Exec(t, "DROP table simple")
+
+	importIntoQuery := `IMPORT INTO simple CSV DATA ($1)`
+	// Without truncation this would fail with:
+	// pq: job 715036628973879297: could not mark as reverting: job-update: command is too large: 33561185 bytes (max: 4194304)
+	sqlDB.ExpectErr(t, ".*error parsing row 2: expected 1 fields, got 4.*-- TRUNCATED", importIntoQuery, srv.URL)
 }
 
 func TestImportJobEventLogging(t *testing.T) {

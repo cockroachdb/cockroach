@@ -120,32 +120,21 @@ func FullTranslate(
 
 // SQLWatcher watches for events on system.zones and system.descriptors.
 type SQLWatcher interface {
-	// WatchForSQLUpdates watches for updates to zones and descriptors starting at
-	// the given timestamp (exclusive), informing callers using the handler
-	// callback.
+	// WatchForSQLUpdates watches for updates to zones and descriptors starting
+	// at the given timestamp (exclusive), informing callers periodically using
+	// the given handler[1] and a checkpoint timestamp. The handler is invoked:
+	// - serially, in the same thread where WatchForSQLUpdates was called;
+	// - with a monotonically increasing timestamp;
+	// - with updates from the last provided timestamp (exclusive) to the
+	//   current one (inclusive).
 	//
-	// The handler callback[1] is invoked from time to time with a list of updates
-	// and a checkpointTS. Invocations of the handler callback provide the
-	// following semantics:
-	// 	1. Calls to the handler are serial.
-	// 	2. The timestamp supplied to the handler is monotonically increasing.
-	// 	3. The list of DescriptorUpdates supplied to handler includes all events
-	//	in the window (prevInvocationCheckpointTS, checkpointTS].
-	// 	4. No further calls to the handler are made if a call to the handler
-	// 	returns an error.
+	// If the handler errors out, it's not invoked subsequently (and internal
+	// processes are wound down accordingly). Callers are free to persist the
+	// checkpoint timestamps and use it to re-establish the watcher without
+	// missing any updates.
 	//
-	// These guarantees mean that users of this interface are free to persist the
-	// checkpointTS and later use it to re-establish a SQLWatcher without missing
-	// any updates.
+	// [1]: Users should avoid doing expensive work in the handler.
 	//
-	// WatchForSQLUpdates can only ever be called once, effectively making the
-	// SQLWatcher a single use interface.
-	//
-	// WatchForSQLUpdates may run out of memory and return an error if it is
-	// tracking too many events between two checkpoints.
-	//
-	// [1] Users of this interface should not intend to do expensive work in the
-	// handler callback.
 	// TODO(arul): Possibly get rid of this limitation.
 	WatchForSQLUpdates(
 		ctx context.Context,
@@ -165,22 +154,14 @@ type DescriptorUpdate struct {
 	DescriptorType catalog.DescriptorType
 }
 
-// SQLWatcherFactory is used to construct new SQLWatchers.
-type SQLWatcherFactory interface {
-	// New returns a new SQLWatcher.
-	New() SQLWatcher
-}
-
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
 // configurations.
 type ReconciliationDependencies interface {
 	KVAccessor
-
 	SQLTranslator
-
-	SQLWatcherFactory
+	SQLWatcher
 }
 
 // Store is a data structure used to store spans and their corresponding
@@ -192,10 +173,10 @@ type Store interface {
 
 // StoreWriter is the write-only portion of the Store interface.
 type StoreWriter interface {
-	// Apply applies the given update[1]. It also returns the existing spans that
-	// were deleted and entries that were newly added to make room for the
-	// update. The deleted list can double as a list of overlapping spans in the
-	// Store, provided the update is not a no-op[2].
+	// Apply applies a batch of non-overlapping updates atomically[1] and
+	// returns (i) the existing spans that were deleted, and (ii) the entries
+	// that were newly added to make room for the batch. The deleted list can
+	// also double as a list of overlapping spans in the Store[2].
 	//
 	// Span configs are stored in non-overlapping fashion. When an update
 	// overlaps with existing configs, the existing configs are deleted. If the
@@ -203,7 +184,8 @@ type StoreWriter interface {
 	// configs are re-added. If the update itself is adding an entry, that too
 	// is added. This is best illustrated with the following example:
 	//
-	//                                         [--- X --) is a span with config X
+	//                                        [--- X --) is a span with config X
+	//                                        [xxxxxxxx) is a span being deleted
 	//
 	//  Store    | [--- A ----)[------------- B -----------)[---------- C -----)
 	//  Update   |             [------------------ D -------------)
@@ -211,6 +193,15 @@ type StoreWriter interface {
 	//  Deleted  |             [------------- B -----------)[---------- C -----)
 	//  Added    |             [------------------ D -------------)[--- C -----)
 	//  Store*   | [--- A ----)[------------------ D -------------)[--- C -----)
+	//
+	// Generalizing to multiple updates:
+	//
+	//  Store    | [--- A ----)[------------- B -----------)[---------- C -----)
+	//  Updates  |             [--- D ----)        [xxxxxxxxx)       [--- E ---)
+	//           |
+	//  Deleted  |             [------------- B -----------)[---------- C -----)
+	//  Added    |             [--- D ----)[-- B --)         [-- C -)[--- E ---)
+	//  Store*   | [--- A ----)[--- D ----)[-- B --)         [-- C -)[--- E ---)
 	//
 	// TODO(irfansharif): We'll make use of the dryrun option in a future PR
 	// when wiring up the reconciliation job to use the KVAccessor. Since the
@@ -255,7 +246,7 @@ type StoreWriter interface {
 	//      against a StoreWriter (populated using KVAccessor contents) using
 	//      the descriptor's span config entry would return empty lists,
 	//      indicating a no-op.
-	Apply(ctx context.Context, update Update, dryrun bool) (
+	Apply(ctx context.Context, dryrun bool, updates ...Update) (
 		deleted []roachpb.Span, added []roachpb.SpanConfigEntry,
 	)
 }

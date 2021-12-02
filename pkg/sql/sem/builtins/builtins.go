@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -4929,6 +4930,33 @@ value if you rely on the HLC for accuracy.`,
 				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
 					ctx.Context,
 					int64(parentID),
+					0,
+					string(name),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(id), nil
+			},
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"parent_id", types.Int},
+				{"parent_schema_id", types.Int},
+				{"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				parentID := tree.MustBeDInt(args[0])
+				parentSchemaID := tree.MustBeDInt(args[1])
+				name := tree.MustBeDString(args[2])
+				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
+					ctx.Context,
+					int64(parentID),
+					int64(parentSchemaID),
 					string(name),
 				)
 				if err != nil {
@@ -4957,6 +4985,7 @@ value if you rely on the HLC for accuracy.`,
 				name := tree.MustBeDString(args[0])
 				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
 					ctx.Context,
+					int64(0),
 					int64(0),
 					string(name),
 				)
@@ -6093,6 +6122,30 @@ table's zone configuration this will return NULL.`,
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
 			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.check_password_hash_format": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"password", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arg := []byte(tree.MustBeDBytes(args[0]))
+				ctx := evalCtx.Ctx()
+				isHashed, _, schemeName, _, err := security.CheckPasswordHashValidity(ctx, arg)
+				if err != nil {
+					return tree.DNull, pgerror.WithCandidateCode(err, pgcode.Syntax)
+				}
+				if !isHashed {
+					return tree.DNull, pgerror.New(pgcode.Syntax, "hash format not recognized")
+				}
+				return tree.NewDString(schemeName), nil
+			},
+			Info:       "This function checks whether a string is a precomputed password hash. Returns the hash algorithm.",
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 

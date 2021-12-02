@@ -52,10 +52,10 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 			WithForceRealSpan(), WithLogTags(&staticLogTags),
 		}},
 		{"real,autoparent", []SpanOption{
-			WithForceRealSpan(), WithParentAndAutoCollection(parSp),
+			WithForceRealSpan(), WithParent(parSp),
 		}},
 		{"real,manualparent", []SpanOption{
-			WithForceRealSpan(), WithParentAndManualCollection(parSp.Meta()),
+			WithForceRealSpan(), WithParent(parSp), WithDetachedRecording(),
 		}},
 	} {
 		b.Run(fmt.Sprintf("opts=%s", tc.name), func(b *testing.B) {
@@ -91,7 +91,7 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 		run(b, sp)
 	})
 
-	child := tr.StartSpan("bar", WithParentAndAutoCollection(sp), WithForceRealSpan())
+	child := tr.StartSpan("bar", WithParent(sp), WithForceRealSpan())
 	b.Run("child-only", func(b *testing.B) {
 		run(b, child)
 	})
@@ -110,7 +110,7 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		root := tr.StartSpan("foo")
 		root.RecordStructured(ev)
-		child := tr.StartSpan("bar", WithParentAndAutoCollection(root))
+		child := tr.StartSpan("bar", WithParent(root))
 		child.RecordStructured(ev)
 		child.Finish()
 		_ = root.GetRecording(RecordingStructured)
@@ -122,18 +122,26 @@ func BenchmarkSpanCreation(b *testing.B) {
 	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{
 		ForceRealSpans: true,
 	}))
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		sps := make([]*Span, 0, 10)
-		ctx, sp := tr.StartSpanCtx(context.Background(), "root")
-		sps = append(sps, sp)
-		for j := 0; j < 5; j++ {
-			var sp *Span
-			ctx, sp = EnsureChildSpan(ctx, tr, "child")
-			sps = append(sps, sp)
-		}
-		for j := len(sps) - 1; j >= 0; j-- {
-			sps[j].Finish()
-		}
+	const numChildren = 5
+	childNames := make([]string, numChildren)
+	for i := 0; i < numChildren; i++ {
+		childNames[i] = fmt.Sprintf("child%d", i)
 	}
+	b.RunParallel(func(pb *testing.PB) {
+		b.ReportAllocs()
+		sps := make([]*Span, 0, 10)
+		for pb.Next() {
+			sps = sps[:0]
+			ctx, sp := tr.StartSpanCtx(context.Background(), "root")
+			sps = append(sps, sp)
+			for j := 0; j < numChildren; j++ {
+				var sp *Span
+				ctx, sp = EnsureChildSpan(ctx, tr, childNames[j])
+				sps = append(sps, sp)
+			}
+			for j := len(sps) - 1; j >= 0; j-- {
+				sps[j].Finish()
+			}
+		}
+	})
 }

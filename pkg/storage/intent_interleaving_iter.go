@@ -131,6 +131,11 @@ type intentInterleavingIter struct {
 	intentLimitKeyBuf []byte
 }
 
+// TODO(bananabrick): Update intent interleaving iter so that
+// it doesn't understand interleaved intents. As of now, cockroach
+// can't write new interleaved intents, but can read them using
+// this iterator.
+
 var _ MVCCIterator = &intentInterleavingIter{}
 
 var intentInterleavingIterPool = sync.Pool{
@@ -923,10 +928,6 @@ func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
 func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
 	value := i.UnsafeValue()
 	return protoutil.Unmarshal(value, msg)
-}
-
-func (i *intentInterleavingIter) IsCurIntentSeparated() bool {
-	return i.isCurAtIntentIter()
 }
 
 func (i *intentInterleavingIter) ComputeStats(

@@ -72,7 +72,6 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			onlySeparatedIntents := engine.IsSeparatedIntentsEnabledForTesting(ctx)
 			// Resolve all three intent.
 			txn1CommitTS := *txn1Commit
 			txn1CommitTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
@@ -80,14 +79,14 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
 					roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
-				math.MaxInt64, onlySeparatedIntents); err != nil {
+				math.MaxInt64); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
 					roachpb.Span{Key: localKey, EndKey: localKey.Next()}),
-				math.MaxInt64, onlySeparatedIntents); err != nil {
+				math.MaxInt64); err != nil {
 				t.Fatal(err)
 			}
 

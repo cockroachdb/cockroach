@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -98,7 +99,6 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	})
 
 	// Verify the actual splits.
-	objectID := uint32(keys.MinUserDescID)
 	splits := []roachpb.RKey{roachpb.RKeyMax}
 	ranges, err := getRangeKeys(kvDB)
 	if err != nil {
@@ -125,7 +125,9 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	})
 
 	// Verify the actual splits.
-	splits = []roachpb.RKey{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(objectID + 3)), roachpb.RKeyMax}
+	tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "test")
+
+	splits = []roachpb.RKey{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tableID)), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)

@@ -12,8 +12,4 @@ package storage
 
 // TestingKnobs can be passed when instantiating a storage engine. Settings here
 // are used to change behavior in tests.
-type TestingKnobs struct {
-	// DisableSeparatedIntents disables the writing of separated intents. Only
-	// used in tests to check handling of interleaved intents.
-	DisableSeparatedIntents bool
-}
+type TestingKnobs struct{}

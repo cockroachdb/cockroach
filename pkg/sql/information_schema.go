@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -2098,7 +2099,15 @@ func forEachSchema(
 		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
 			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
 		case name == tree.PublicSchema:
-			schemas = append(schemas, schemadesc.GetPublicSchema())
+			// TODO(richardjcai): Remove this in 22.2. In 22.2, only the system
+			// public schema will continue to use keys.PublicSchemaID (29).
+			if id == keys.PublicSchemaID {
+				schemas = append(schemas, schemadesc.GetPublicSchema())
+			} else {
+				// The default case is a user defined schema. Collect the ID to get the
+				// descriptor later.
+				userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
+			}
 		default:
 			// The default case is a user defined schema. Collect the ID to get the
 			// descriptor later.
@@ -2462,7 +2471,12 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		var scName string
 		if parentExists {
 			var ok bool
-			scName, ok = lCtx.schemaNames[table.GetParentSchemaID()]
+			scName, ok, err = lCtx.GetSchemaName(
+				ctx, table.GetParentSchemaID(), table.GetParentID(), p.ExecCfg().Settings.Version,
+			)
+			if err != nil {
+				return err
+			}
 			// Look up the schemas for this database if we discover that there is a
 			// missing temporary schema name. The only schemas which do not have
 			// descriptors are the public schema and temporary schemas. The public
@@ -2480,11 +2494,22 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 						table.GetParentSchemaID())
 				}
 				for id, n := range namesForSchema {
-					if _, exists := lCtx.schemaNames[id]; exists {
+					_, exists, err := lCtx.GetSchemaName(ctx, id, dbDesc.GetID(), p.ExecCfg().Settings.Version)
+					if err != nil {
+						return err
+					}
+					if exists {
 						continue
 					}
 					lCtx.schemaNames[id] = n
-					scName = lCtx.schemaNames[table.GetParentSchemaID()]
+					var found bool
+					scName, found, err = lCtx.GetSchemaName(ctx, id, dbDesc.GetID(), p.ExecCfg().Settings.Version)
+					if err != nil {
+						return err
+					}
+					if !found {
+						return errors.AssertionFailedf("schema id %d not found", id)
+					}
 				}
 			}
 		}

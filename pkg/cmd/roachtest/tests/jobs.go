@@ -29,7 +29,7 @@ type jobStarter func(c cluster.Cluster) (string, error)
 // if nodeToShutdown is shutdown partway through execution.
 //
 // This helper assumes:
-// - That the job is long running and will take a least a minute to complete.
+// - That the job is will take at least 2 seconds to complete.
 // - That the necessary setup is done (e.g. any data that the job relies on is
 // already loaded) so that `query` can be run on its own to kick off the job.
 // - That the statement running the job is a detached statement, and does not
@@ -71,7 +71,6 @@ func jobSurvivesNodeShutdown(
 
 		pollInterval := 5 * time.Second
 		ticker := time.NewTicker(pollInterval)
-
 		var status string
 		for {
 			select {
@@ -103,31 +102,39 @@ func jobSurvivesNodeShutdown(
 			return errors.New("job never created")
 		}
 
-		// Shutdown a node after a bit, and keep it shutdown for the remainder
-		// of the job.
-		timeToWait := 5 * time.Second
-		timer := timeutil.Timer{}
-		timer.Reset(timeToWait)
-		select {
-		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), "stopping test, did not shutdown node")
-		case <-timer.C:
-			timer.Read = true
-		}
-
-		// Sanity check that the job is still running.
+		// Check once a second to see if the job has started running.
 		watcherDB := c.Conn(ctx, watcherNode)
 		defer watcherDB.Close()
-
-		var status string
-		err := watcherDB.QueryRowContext(ctx, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`, jobID).Scan(&status)
-		if err != nil {
-			return errors.Wrap(err, "getting the job status")
-		}
-		jobStatus := jobs.Status(status)
-		if jobStatus != jobs.StatusRunning {
-			return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
-				status)
+		timeToWait := time.Second
+		timer := timeutil.Timer{}
+		jobRunning := false
+		for {
+			var status string
+			err := watcherDB.QueryRowContext(ctx, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`, jobID).Scan(&status)
+			if err != nil {
+				return errors.Wrap(err, "getting the job status")
+			}
+			switch jobs.Status(status) {
+			case jobs.StatusPending:
+			case jobs.StatusRunning:
+				jobRunning = true
+			default:
+				return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
+					status)
+			}
+			t.L().Printf(`status %s`, status)
+			timer.Reset(timeToWait)
+			select {
+			case <-ctx.Done():
+				return errors.Wrapf(ctx.Err(), "stopping test, did not shutdown node")
+			case <-timer.C:
+				timer.Read = true
+			}
+			// Break a second after confirming the job is running to ensure the node shutdown
+			// "in the middle" of running the job, right after the job began running.
+			if jobRunning {
+				break
+			}
 		}
 
 		t.L().Printf(`stopping node %s`, target)

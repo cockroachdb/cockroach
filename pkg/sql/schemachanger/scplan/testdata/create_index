@@ -5,10 +5,10 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 ops
 CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
 ----
-Stage 0
+Stage 1 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [IndexName:{DescID: 52, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -21,55 +21,59 @@ Stage 0
       SecondaryIndex: true
       StoreColumnIDs:
       - 3
-      TableID: 52
+      TableID: 54
     *scop.SetIndexName
       IndexID: 2
       Name: id1
-      TableID: 52
-Stage 1
+      TableID: 54
+Stage 2 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 52
-Stage 2
+      TableID: 54
+Stage 3 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
-      TableID: 52
-Stage 3
+      TableID: 54
+Stage 4 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 52
-Stage 4
+      TableID: 54
+Stage 5 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
-      TableID: 52
+      TableID: 54
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
 ----
-- from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
-- from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+- from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: index name is assigned once the index is created
+- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY]
+  to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+  kind: HappensAfter
+  rule: index needs a name to be assigned
 
 ops
 CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
 ----
-Stage 0
+Stage 1 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [IndexName:{DescID: 52, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteOnly
       Concurrently: true
@@ -84,58 +88,62 @@ Stage 0
       SecondaryIndex: true
       StoreColumnIDs:
       - 3
-      TableID: 52
+      TableID: 54
     *scop.SetIndexName
       IndexID: 2
       Name: id1
-      TableID: 52
-Stage 1
+      TableID: 54
+Stage 2 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 52
-Stage 2
+      TableID: 54
+Stage 3 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
-      TableID: 52
-Stage 3
+      TableID: 54
+Stage 4 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 52
-Stage 4
+      TableID: 54
+Stage 5 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
-      TableID: 52
+      TableID: 54
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money)
 ----
-- from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
-- from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+- from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: index name is assigned once the index is created
+- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY]
+  to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+  kind: HappensAfter
+  rule: index needs a name to be assigned
 
 ops
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
                                                               PARTITION p1 VALUES IN (1)
                                                             )
 ----
-Stage 0
+Stage 1 of 5
   transitions:
-    [Partitioning:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> PUBLIC
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [IndexName:{DescID: 52, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
+    [Partitioning:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -148,7 +156,7 @@ Stage 0
       SecondaryIndex: true
       StoreColumnIDs:
       - 3
-      TableID: 52
+      TableID: 54
     *scop.AddIndexPartitionInfo
       IndexID: 2
       ListPartitions:
@@ -158,48 +166,54 @@ Stage 0
       PartitionFields:
       - id
       RangePartitions: []
-      TableID: 52
+      TableID: 54
     *scop.SetIndexName
       IndexID: 2
       Name: id1
-      TableID: 52
-Stage 1
+      TableID: 54
+Stage 2 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 52
-Stage 2
+      TableID: 54
+Stage 3 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
-      TableID: 52
-Stage 3
+      TableID: 54
+Stage 4 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 52
-Stage 4
+      TableID: 54
+Stage 5 of 5
   transitions:
-    [SecondaryIndex:{DescID: 52, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
-      TableID: 52
+      TableID: 54
 
 deps
 CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
                                                               PARTITION p1 VALUES IN (1)
                                                             )
 ----
-- from: [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
-- from: [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_ONLY]
-- from: [SecondaryIndex:{DescID: 52, IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  to:   [IndexName:{DescID: 52, IndexID: 2, Name: id1}, PUBLIC]
+- from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: index name is assigned once the index is created
+- from: [Partitioning:{DescID: 54, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
+  kind: HappensAfter
+  rule: partitioning information needs the basic index as created
+- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY]
+  to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+  kind: HappensAfter
+  rule: index needs a name to be assigned

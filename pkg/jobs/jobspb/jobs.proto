@@ -109,6 +109,12 @@ message StreamIngestionProgress {
 message StreamReplicationDetails {
   // Key spans we are replicating
   repeated roachpb.Span spans = 1;
+
+  // ID of the protected timestamp record that protects the above spans
+  bytes protected_timestamp_record = 2 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
 
 message StreamReplicationProgress {
@@ -602,7 +608,11 @@ message SchemaChangeGCProgress {
   repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
 
   // The status of the tenant to be deleted.
- TenantProgress tenant = 3;
+  TenantProgress tenant = 3;
+
+  // RangesUnsplitDone indicates whether ranges or gc-ed indexes and tables are
+  // already unsplit.
+  bool ranges_unsplit_done = 4;
 }
 
 message ChangefeedTarget {

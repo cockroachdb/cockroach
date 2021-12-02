@@ -74,7 +74,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
-		ts.SpanConfigSQLWatcherFactory().(spanconfig.SQLWatcherFactory),
+		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
 		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
@@ -163,7 +163,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
-		ts.SpanConfigSQLWatcherFactory().(spanconfig.SQLWatcherFactory),
+		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
 		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
@@ -239,7 +239,7 @@ func TestManagerCheckJobConditions(t *testing.T) {
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigAccessor().(spanconfig.KVAccessor),
-		ts.SpanConfigSQLWatcherFactory().(spanconfig.SQLWatcherFactory),
+		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
 		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
 		&spanconfig.TestingKnobs{
 			ManagerDisableJobCreation: true,

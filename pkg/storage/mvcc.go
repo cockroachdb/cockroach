@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -333,7 +334,6 @@ func updateStatsOnPut(
 	prevValSize int64,
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
-	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
@@ -389,6 +389,7 @@ func updateStatsOnPut(
 			ms.ValCount--
 			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 			ms.IntentCount--
+			ms.SeparatedIntentCount--
 		}
 
 		// If the original intent is a deletion, we're removing the intent. This
@@ -480,9 +481,8 @@ func updateStatsOnPut(
 	if meta.Txn != nil {
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
+		ms.SeparatedIntentCount++
 	}
-	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
-
 	return ms
 }
 
@@ -496,7 +496,6 @@ func updateStatsOnResolve(
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
 	commit bool,
-	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
@@ -544,6 +543,7 @@ func updateStatsOnResolve(
 	// IntentAge is always accrued from the intent's own timestamp on.
 	ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
 	ms.IntentCount--
+	ms.SeparatedIntentCount--
 
 	// If there was a previous value (before orig.Timestamp), and it was not a
 	// deletion tombstone, then we have to adjust its GCBytesAge contribution
@@ -585,9 +585,8 @@ func updateStatsOnResolve(
 		// updateStatsOnPut, not this method).
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
+		ms.SeparatedIntentCount++
 	}
-	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
-
 	return ms
 }
 
@@ -600,7 +599,6 @@ func updateStatsOnClear(
 	origMetaKeySize, origMetaValSize, restoredMetaKeySize, restoredMetaValSize int64,
 	orig, restored *enginepb.MVCCMetadata,
 	restoredNanos int64,
-	separatedIntentCountDelta int,
 ) enginepb.MVCCStats {
 
 	var ms enginepb.MVCCStats
@@ -670,9 +668,8 @@ func updateStatsOnClear(
 	if orig.Txn != nil {
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
+		ms.SeparatedIntentCount--
 	}
-	ms.SeparatedIntentCount += int64(separatedIntentCountDelta)
-
 	return ms
 }
 
@@ -784,26 +781,7 @@ type MVCCGetOptions struct {
 	Tombstones       bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
-	// LocalUncertaintyLimit is the transaction's GlobalUncertaintyLimit, reduce
-	// by any observed timestamp that the transaction has acquired from the node
-	// that holds the lease for the range that the transaction is evaluating on.
-	//
-	// The local uncertainty limit can reduce the uncertainty interval applied
-	// to most values on a range. This can lead to values that would otherwise
-	// be considered uncertain by the original global uncertainty limit to be
-	// considered "certainly concurrent", and thus not causally related, with
-	// the transaction due to observed timestamps.
-	//
-	// However, the local uncertainty limit does not apply to all values on a
-	// range. Specifically, values with "synthetic timestamps" must use the
-	// transaction's original global uncertainty limit for the purposes of
-	// uncertainty, because observed timestamps do not apply to values with
-	// synthetic timestamps.
-	//
-	// See pkg/kv/kvserver/observedts for more details.
-	//
-	// The field is only set if Txn is also set.
-	LocalUncertaintyLimit hlc.Timestamp
+	Uncertainty      uncertainty.Interval
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
 }
@@ -894,7 +872,7 @@ func mvccGet(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
+	mvccScanner.init(opts.Txn, opts.Uncertainty)
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
@@ -977,27 +955,27 @@ func MVCCGetAsTxn(
 // avoided.
 func mvccGetMetadata(
 	iter MVCCIterator, metaKey MVCCKey, iterAlreadyPositioned bool, meta *enginepb.MVCCMetadata,
-) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 	if !iterAlreadyPositioned {
 		iter.SeekGE(metaKey)
 	}
 	if ok, err := iter.Valid(); !ok {
-		return false, false, 0, 0, err
+		return false, 0, 0, err
 	}
 
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 
 	if !unsafeKey.IsValue() {
 		if err := iter.ValueProto(meta); err != nil {
-			return false, false, 0, 0, err
+			return false, 0, 0, err
 		}
-		return true, iter.IsCurIntentSeparated(), int64(unsafeKey.EncodedSize()),
+		return true, int64(unsafeKey.EncodedSize()),
 			int64(len(iter.UnsafeValue())), nil
 	}
 
@@ -1009,7 +987,7 @@ func mvccGetMetadata(
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
-	return true, false, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
+	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1075,23 +1053,22 @@ func (b *putBuffer) putIntentMeta(
 	key MVCCKey,
 	helper txnDidNotUpdateMetaHelper,
 	meta *enginepb.MVCCMetadata,
-) (keyBytes, valBytes int64, separatedIntentCountDelta int, err error) {
+) (keyBytes, valBytes int64, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
 		// be clear for readers which one to use for what.
-		return 0, 0, 0, errors.AssertionFailedf(
+		return 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
 	helper.populateMeta(ctx, meta)
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, err
 	}
-	if separatedIntentCountDelta, err = writer.PutIntent(
-		ctx, key.Key, bytes, helper.state, helper.valueForPutIntent(), meta.Txn.ID); err != nil {
-		return 0, 0, 0, err
+	if err = writer.PutIntent(ctx, key.Key, bytes, meta.Txn.ID); err != nil {
+		return 0, 0, err
 	}
-	return int64(key.EncodedSize()), int64(len(bytes)), separatedIntentCountDelta, nil
+	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
 
 // txnDidNotUpdateMetaHelper is used to decide what to put in the MVCCMetadata
@@ -1141,16 +1118,13 @@ func (b *putBuffer) putIntentMeta(
 //
 // - The state field describes the preceding intent state. It is intended to
 //   be used for populating the MVCCMetadata.TxnDidNotUpdateMeta. This is
-//   where we use Writer.OverrideTxnDidNotUpdateMetaToFalse to override to
-//   false until there can never be v21.1 nodes.
+//   where we use Writer.OverrideTxnDidNotUpdateMetaToFa
+// TODO(sumeer): We should get rid of txnDidNotUpdateMetaHelper since it's
+// only storing the PrecedingIntentState, and txnDidNotUpdateMetaHelper is
+// too heavyweight for that purpose.
 type txnDidNotUpdateMetaHelper struct {
-	txnDidNotUpdateMeta bool
-	state               PrecedingIntentState
-	w                   Writer
-}
-
-func (t txnDidNotUpdateMetaHelper) valueForPutIntent() bool {
-	return t.txnDidNotUpdateMeta
+	state PrecedingIntentState
+	w     Writer
 }
 
 func (t txnDidNotUpdateMetaHelper) populateMeta(ctx context.Context, meta *enginepb.MVCCMetadata) {
@@ -1468,7 +1442,7 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
+	ok, origMetaKeySize, origMetaValSize, err :=
 		mvccGetMetadata(iter, metaKey, false /* iterAlreadyPositioned */, &buf.meta)
 	if err != nil {
 		return err
@@ -1511,24 +1485,13 @@ func mvccPutInternal(
 	// Compute PrecedingIntentState and whether the transaction has previously
 	// updated the intent. This is to prepare for a later Put.
 	var precedingIntentState PrecedingIntentState
-	var txnDidNotUpdateMeta bool
 	if !ok || buf.meta.Txn == nil {
 		// !ok represents no meta (no actual intent and no manufactured meta).
 		// buf.meta.Txn==nil represents a manufactured meta, i.e., there is no
 		// intent.
 		precedingIntentState = NoExistingIntent
-		txnDidNotUpdateMeta = true
 	} else {
-		if isIntentSeparated {
-			precedingIntentState = ExistingIntentSeparated
-		} else {
-			precedingIntentState = ExistingIntentInterleaved
-		}
-		if buf.meta.TxnDidNotUpdateMeta == nil {
-			txnDidNotUpdateMeta = false
-		} else {
-			txnDidNotUpdateMeta = *buf.meta.TxnDidNotUpdateMeta
-		}
+		precedingIntentState = ExistingIntentSeparated
 	}
 
 	// Determine the read and write timestamps for the write. For a
@@ -1794,14 +1757,12 @@ func mvccPutInternal(
 	newMeta.Deleted = value == nil
 
 	var metaKeySize, metaValSize int64
-	var separatedIntentCountDelta int
 	if newMeta.Txn != nil {
-		metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
+		metaKeySize, metaValSize, err = buf.putIntentMeta(
 			ctx, writer, metaKey,
 			txnDidNotUpdateMetaHelper{
-				txnDidNotUpdateMeta: txnDidNotUpdateMeta,
-				state:               precedingIntentState,
-				w:                   writer,
+				state: precedingIntentState,
+				w:     writer,
 			}, newMeta)
 		if err != nil {
 			return err
@@ -1830,7 +1791,7 @@ func mvccPutInternal(
 	// Update MVCC stats.
 	if ms != nil {
 		ms.Add(updateStatsOnPut(key, prevValSize, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, newMeta, separatedIntentCountDelta))
+			metaKeySize, metaValSize, meta, newMeta))
 	}
 
 	// Log the logical MVCC operation.
@@ -2298,11 +2259,11 @@ func MVCCClearTimeRange(
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
 				ms.Add(updateStatsOnClear(
-					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime, 0,
+					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
 				))
 			} else {
 				// We cleared a revision of a different key, so nothing was "restored".
-				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0, 0))
+				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 			}
 			clearedMetaKey.Key = clearedMetaKey.Key[:0]
 		}
@@ -2352,7 +2313,7 @@ func MVCCClearTimeRange(
 		// If we cleared on the last iteration, no older revision of that key was
 		// "restored", since otherwise we would have iterated over it.
 		origMetaKeySize := int64(clearedMetaKey.EncodedSize())
-		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0, 0))
+		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 	}
 
 	return resume, flushClearedKeys(MVCCKey{Key: endKey})
@@ -2472,7 +2433,7 @@ func mvccScanToBytes(
 		keyBuf:                 mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
+	mvccScanner.init(opts.Txn, opts.Uncertainty)
 
 	var res MVCCScanResult
 	var err error
@@ -2569,26 +2530,7 @@ type MVCCScanOptions struct {
 	Reverse          bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
-	// LocalUncertaintyLimit is the transaction's GlobalUncertaintyLimit, reduce
-	// by any observed timestamp that the transaction has acquired from the node
-	// that holds the lease for the range that the transaction is evaluating on.
-	//
-	// The local uncertainty limit can reduce the uncertainty interval applied
-	// to most values on a range. This can lead to values that would otherwise
-	// be considered uncertain by the original global uncertainty limit to be
-	// considered "certainly concurrent", and thus not causally related, with
-	// the transaction due to observed timestamps.
-	//
-	// However, the local uncertainty limit does not apply to all values on a
-	// range. Specifically, values with "synthetic timestamps" must use the
-	// transaction's original global uncertainty limit for the purposes of
-	// uncertainty, because observed timestamps do not apply to values with
-	// synthetic timestamps.
-	//
-	// See pkg/kv/kvserver/observedts for more details.
-	//
-	// The field is only set if Txn is also set.
-	LocalUncertaintyLimit hlc.Timestamp
+	Uncertainty      uncertainty.Interval
 	// MaxKeys is the maximum number of kv pairs returned from this operation.
 	// The zero value represents an unbounded scan. If the limit stops the scan,
 	// a corresponding ResumeSpan is returned. As a special case, the value -1
@@ -2867,7 +2809,6 @@ type iterForKeyVersions interface {
 	UnsafeKey() MVCCKey
 	UnsafeValue() []byte
 	ValueProto(msg protoutil.Message) error
-	IsCurIntentSeparated() bool
 }
 
 // separatedIntentAndVersionIter is an implementation of iterForKeyVersions
@@ -2977,13 +2918,6 @@ func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error 
 	return protoutil.Unmarshal(v, msg)
 }
 
-func (s *separatedIntentAndVersionIter) IsCurIntentSeparated() bool {
-	if s.atMVCCIter {
-		panic(errors.AssertionFailedf("IsCurIntentSeparated called when not positioned at intent"))
-	}
-	return true
-}
-
 // mvccGetIntent uses an iterForKeyVersions that has been seeked to
 // metaKey.Key for a potential intent, and tries to retrieve an intent if it
 // is present. ok returns true iff an intent for that key is found. In that
@@ -2991,21 +2925,21 @@ func (s *separatedIntentAndVersionIter) IsCurIntentSeparated() bool {
 // is placed in meta.
 func mvccGetIntent(
 	iter iterForKeyVersions, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
-) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if ok, err := iter.Valid(); !ok {
-		return false, false, 0, 0, err
+		return false, 0, 0, err
 	}
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 	if unsafeKey.IsValue() {
-		return false, false, 0, 0, nil
+		return false, 0, 0, nil
 	}
 	if err := iter.ValueProto(meta); err != nil {
-		return false, false, 0, 0, err
+		return false, 0, 0, err
 	}
-	return true, iter.IsCurIntentSeparated(), int64(unsafeKey.EncodedSize()),
+	return true, int64(unsafeKey.EncodedSize()),
 		int64(len(iter.UnsafeValue())), nil
 }
 
@@ -3116,7 +3050,7 @@ func mvccResolveWriteIntent(
 ) (bool, error) {
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
-	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
+	ok, origMetaKeySize, origMetaValSize, err :=
 		mvccGetIntent(iter, metaKey, meta)
 	if err != nil {
 		return false, err
@@ -3125,10 +3059,7 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 	metaTimestamp := meta.Timestamp.ToTimestamp()
-	precedingIntentState := ExistingIntentInterleaved
-	if isIntentSeparated {
-		precedingIntentState = ExistingIntentSeparated
-	}
+	precedingIntentState := ExistingIntentSeparated
 	canSingleDelHelper := singleDelOptimizationHelper{
 		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
 		_hasIgnoredSeqs:   len(intent.IgnoredSeqNums) > 0,
@@ -3234,7 +3165,6 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
-	var separatedIntentCountDelta int
 	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
@@ -3270,17 +3200,16 @@ func mvccResolveWriteIntent(
 			// overwriting a newer epoch (see comments above). The pusher's job isn't
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
-			metaKeySize, metaValSize, separatedIntentCountDelta, err = buf.putIntentMeta(
+			metaKeySize, metaValSize, err = buf.putIntentMeta(
 				ctx, rw, metaKey,
 				txnDidNotUpdateMetaHelper{
-					txnDidNotUpdateMeta: canSingleDelHelper.v(),
-					state:               precedingIntentState,
-					w:                   rw,
+					state: precedingIntentState,
+					w:     rw,
 				},
 				&buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			separatedIntentCountDelta, err =
+			err =
 				rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
 		}
 		if err != nil {
@@ -3336,7 +3265,7 @@ func mvccResolveWriteIntent(
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
 			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
-				metaKeySize, metaValSize, meta, &buf.newMeta, commit, separatedIntentCountDelta))
+				metaKeySize, metaValSize, meta, &buf.newMeta, commit))
 		}
 
 		// Log the logical MVCC operation.
@@ -3406,14 +3335,14 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if separatedIntentCountDelta, err =
+		if err =
 			rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
 			ms.Add(updateStatsOnClear(
-				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, separatedIntentCountDelta))
+				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
 		}
 		return true, nil
 	}
@@ -3426,7 +3355,7 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if separatedIntentCountDelta, err =
+	if err =
 		rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 		return false, err
 	}
@@ -3436,7 +3365,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, metaKeySize,
-			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime, separatedIntentCountDelta))
+			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime))
 	}
 
 	return true, nil
@@ -3527,12 +3456,7 @@ func (b IterAndBuf) Cleanup() {
 // intent span as the resume span. Returns the number of intents resolved and a
 // resume span if the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context,
-	rw ReadWriter,
-	ms *enginepb.MVCCStats,
-	intent roachpb.LockUpdate,
-	max int64,
-	onlySeparatedIntents bool,
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
@@ -3550,14 +3474,14 @@ func MVCCResolveWriteIntentRange(
 	// resolution.
 	var iter iterForKeyVersions
 
-	// If onlySeparatedIntents, we can find relevant intents quickly by
+	// We can find relevant intents quickly by
 	// iterating over the lock table. We additionally require
 	// ConsistentIterators() since we want the two iterators to be mutually
 	// consistent (and production code will have consistent iterators).
 	//
 	// TODO(sumeer): when removing the slow path, use
 	// newMVCCIteratorByCloningEngineIter for the inconsistent iterators case.
-	if onlySeparatedIntents && rw.ConsistentIterators() {
+	if rw.ConsistentIterators() {
 		ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
 		ltEnd, _ := keys.LockTableSingleKey(intent.EndKey, nil)
 		engineIter := rw.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
@@ -3722,7 +3646,7 @@ func MVCCGarbageCollect(
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, _, metaKeySize, metaValSize, err :=
+		ok, metaKeySize, metaValSize, err :=
 			mvccGetMetadata(iter, encKey, false /* iterAlreadyPositioned */, meta)
 		if err != nil {
 			return err
@@ -4017,9 +3941,7 @@ func ComputeStatsForRange(
 	var ms enginepb.MVCCStats
 	// Only some callers are providing an MVCCIterator. The others don't have
 	// any intents.
-	iterForSeparatedIntents, countSeparatedIntents := iter.(MVCCIterator)
 	var meta enginepb.MVCCMetadata
-	var isSeparatedIntentMeta bool
 	var prevKey []byte
 	first := false
 
@@ -4075,7 +3997,6 @@ func ComputeStatsForRange(
 		if implicitMeta {
 			// No MVCCMetadata entry for this series of keys.
 			meta.Reset()
-			isSeparatedIntentMeta = false
 			meta.KeyBytes = MVCCVersionTimestampSize
 			meta.ValBytes = int64(len(unsafeValue))
 			meta.Deleted = len(unsafeValue) == 0
@@ -4094,9 +4015,6 @@ func ComputeStatsForRange(
 			if !implicitMeta {
 				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-				}
-				if countSeparatedIntents {
-					isSeparatedIntentMeta = iterForSeparatedIntents.IsCurIntentSeparated()
 				}
 			}
 
@@ -4141,9 +4059,7 @@ func ComputeStatsForRange(
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
 					ms.IntentCount++
-					if isSeparatedIntentMeta {
-						ms.SeparatedIntentCount++
-					}
+					ms.SeparatedIntentCount++
 					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 
@@ -44,6 +45,46 @@ func (s *Store) TestingGetAllOverlapping(
 	return res
 }
 
+// TestingApplyInternal exports an internal method for testing purposes.
+func (s *Store) TestingApplyInternal(
+	_ context.Context, dryrun bool, updates ...spanconfig.Update,
+) (deleted []roachpb.Span, added []roachpb.SpanConfigEntry, err error) {
+	return s.applyInternal(dryrun, updates...)
+}
+
+// TestDataDriven runs datadriven tests against the Store interface.
+// The syntax is as follows:
+//
+// 		apply
+// 		delete [a,c)
+// 		set [c,h):X
+// 		----
+// 		deleted [b,d)
+// 		deleted [e,g)
+// 		added [c,h):X
+//
+// 		get key=b
+// 		----
+// 		conf=A # or conf=FALLBACK if the key is not present
+//
+// 		needs-split span=[b,h)
+// 		----
+// 		true
+//
+// 		compute-split span=[b,h)
+// 		----
+// 		key=c
+//
+// 		overlapping span=[b,h)
+// 		----
+// 		[b,d):A
+// 		[d,f):B
+// 		[f,h):A
+//
+//
+// Text of the form [a,b) and [a,b):C correspond to spans and span config
+// entries; see spanconfigtestutils.Parse{Span,Config,SpanConfigEntry} for more
+// details.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -51,33 +92,20 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		store := New(spanconfigtestutils.ParseConfig(t, "FALLBACK"))
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			var (
-				spanStr, confStr, keyStr string
-			)
+			var spanStr, keyStr string
 			switch d.Cmd {
-			case "set":
-				d.ScanArgs(t, "span", &spanStr)
-				d.ScanArgs(t, "conf", &confStr)
-				span, config := spanconfigtestutils.ParseSpan(t, spanStr), spanconfigtestutils.ParseConfig(t, confStr)
-
+			case "apply":
+				updates := spanconfigtestutils.ParseStoreApplyArguments(t, d.Input)
 				dryrun := d.HasArg("dryrun")
-				deleted, added := store.Apply(ctx, spanconfig.Update{Span: span, Config: config}, dryrun)
-
-				var b strings.Builder
-				for _, sp := range deleted {
-					b.WriteString(fmt.Sprintf("deleted %s\n", spanconfigtestutils.PrintSpan(sp)))
+				deleted, added, err := store.TestingApplyInternal(ctx, dryrun, updates...)
+				if err != nil {
+					return fmt.Sprintf("err: %v", err)
 				}
-				for _, ent := range added {
-					b.WriteString(fmt.Sprintf("added %s\n", spanconfigtestutils.PrintSpanConfigEntry(ent)))
-				}
-				return b.String()
 
-			case "delete":
-				d.ScanArgs(t, "span", &spanStr)
-				span := spanconfigtestutils.ParseSpan(t, spanStr)
-
-				dryrun := d.HasArg("dryrun")
-				deleted, added := store.Apply(ctx, spanconfig.Update{Span: span}, dryrun)
+				sort.Sort(roachpb.Spans(deleted))
+				sort.Slice(added, func(i, j int) bool {
+					return added[i].Span.Key.Compare(added[j].Span.Key) < 0
+				})
 
 				var b strings.Builder
 				for _, sp := range deleted {
@@ -119,9 +147,9 @@ func TestDataDriven(t *testing.T) {
 				return strings.Join(results, "\n")
 
 			default:
+				t.Fatalf("unknown command: %s", d.Cmd)
 			}
 
-			t.Fatalf("unknown command: %s", d.Cmd)
 			return ""
 		})
 	})
@@ -163,6 +191,47 @@ func TestRandomized(t *testing.T) {
 		return ops[rand.Intn(2)]
 	}
 
+	getRandomUpdate := func() spanconfig.Update {
+		sp, conf, op := genRandomSpan(), getRandomConf(), getRandomOp()
+		switch op {
+		case "set":
+			return spanconfig.Update{Span: sp, Config: conf}
+		case "del":
+			return spanconfig.Update{Span: sp}
+		default:
+		}
+		t.Fatalf("unexpected op: %s", op)
+		return spanconfig.Update{}
+	}
+
+	getRandomUpdates := func() []spanconfig.Update {
+		numUpdates := 1 + rand.Intn(3)
+		updates := make([]spanconfig.Update, numUpdates)
+		for {
+			for i := 0; i < numUpdates; i++ {
+				updates[i] = getRandomUpdate()
+			}
+			sort.Slice(updates, func(i, j int) bool {
+				return updates[i].Span.Key.Compare(updates[j].Span.Key) < 0
+			})
+			invalid := false
+			for i := 1; i < numUpdates; i++ {
+				if updates[i].Span.Overlaps(updates[i-1].Span) {
+					invalid = true
+				}
+			}
+
+			if invalid {
+				continue // try again
+			}
+
+			rand.Shuffle(len(updates), func(i, j int) {
+				updates[i], updates[j] = updates[j], updates[i]
+			})
+			return updates
+		}
+	}
+
 	testSpan := spanconfigtestutils.ParseSpan(t, "[f,g)") // pin a single character span to test with
 	var expConfig roachpb.SpanConfig
 	var expFound bool
@@ -170,20 +239,16 @@ func TestRandomized(t *testing.T) {
 	const numOps = 5000
 	store := New(roachpb.TestingDefaultSpanConfig())
 	for i := 0; i < numOps; i++ {
-		sp, conf, op := genRandomSpan(), getRandomConf(), getRandomOp()
-		switch op {
-		case "set":
-			store.Apply(ctx, spanconfig.Update{Span: sp, Config: conf}, false)
-			if testSpan.Overlaps(sp) {
-				expConfig, expFound = conf, true
+		updates := getRandomUpdates()
+		store.Apply(ctx, false /* dryrun */, updates...)
+		for _, update := range updates {
+			if testSpan.Overlaps(update.Span) {
+				if update.Addition() {
+					expConfig, expFound = update.Config, true
+				} else {
+					expConfig, expFound = roachpb.SpanConfig{}, false
+				}
 			}
-		case "del":
-			store.Apply(ctx, spanconfig.Update{Span: sp}, false)
-			if testSpan.Overlaps(sp) {
-				expConfig, expFound = roachpb.SpanConfig{}, false
-			}
-		default:
-			t.Fatalf("unexpected op: %s", op)
 		}
 	}
 
@@ -219,6 +284,12 @@ func TestRandomized(t *testing.T) {
 			last = cur
 			continue
 		}
+
+		// All spans are expected to be valid.
+		require.True(t, cur.Span.Valid(),
+			"expected to only find valid spans, found %s",
+			spanconfigtestutils.PrintSpan(cur.Span),
+		)
 
 		// Span configs are returned in strictly sorted order.
 		require.True(t, last.Span.Key.Compare(cur.Span.Key) < 0,

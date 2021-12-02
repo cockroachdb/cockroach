@@ -25,6 +25,13 @@ var _ = mutationOp{baseOp: baseOp{}}
 
 func (mutationOp) Type() Type { return MutationType }
 
+// NotImplemented is a placeholder for operations which haven't been defined yet.
+// TODO(postamar): remove all of these
+type NotImplemented struct {
+	mutationOp
+	ElementType string
+}
+
 // MakeAddedIndexDeleteOnly adds a non-existent primary index to the
 // table.
 type MakeAddedIndexDeleteOnly struct {
@@ -84,6 +91,13 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 type CreateGcJobForDescriptor struct {
 	mutationOp
 	DescID descpb.ID
+}
+
+// CreateGcJobForIndex creates a GC job for a given table index.
+type CreateGcJobForIndex struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
 }
 
 // MarkDescriptorAsDroppedSynthetically marks a descriptor as dropped within

@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -24,12 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kylelemons/godebug/diff"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
@@ -149,4 +155,11 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs) string {
 	}
 
 	return Diff(toYAML(a), toYAML(b), args)
+}
+
+// MakePlan is a convenient alternative to calling scplan.MakePlan in tests.
+func MakePlan(t *testing.T, state scpb.State, phase scop.Phase) scplan.Plan {
+	plan, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: phase})
+	require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(err, plan))
+	return plan
 }

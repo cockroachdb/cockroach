@@ -91,7 +91,9 @@ type extendedEvalContext struct {
 	// jobsCollection.
 	Jobs *jobsCollection
 
-	// SchemaChangeJobRecords refers to schemaChangeJobsCache in extraTxnState.
+	// SchemaChangeJobRecords refers to schemaChangeJobsCache in extraTxnState of
+	// in sql.connExecutor. sql.connExecutor.createJobs() enqueues jobs with these
+	// records when transaction is committed.
 	SchemaChangeJobRecords map[descpb.ID]*jobs.Record
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
@@ -595,10 +597,6 @@ func (p *planner) LookupTableByID(
 	return table, nil
 }
 
-func (p *planner) JobRegistry() interface{} {
-	return p.ExecCfg().JobRegistry
-}
-
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
@@ -794,6 +792,11 @@ func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
 // Ann is a shortcut for the Annotations from the eval context.
 func (p *planner) Ann() *tree.Annotations {
 	return p.ExtendedEvalContext().EvalContext.Annotations
+}
+
+// ExecutorConfig implements EvalPlanner interface.
+func (p *planner) ExecutorConfig() interface{} {
+	return p.execCfg
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

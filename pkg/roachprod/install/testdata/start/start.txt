@@ -20,12 +20,13 @@ set -euo pipefail
 LOCAL=true
 LOG_DIR='./path with spaces/logs/$THIS_DOES_NOT_EVER_GET_EXPANDED'
 BINARY=./cockroach
-START_CMD=start-single-node
 KEY_CMD=echo foo && \
 echo bar $HOME
 MEMORY_MAX=81%
 ARGS=(
-'--log "file-defaults: {dir: '"'"'/path with spaces/logs'"'"', exit-on-error: false}"'
+start
+--log
+'file-defaults: {dir: '"'"'/path with spaces/logs'"'"', exit-on-error: false}'
 )
 ENV_VARS=(
 ROACHPROD=1/tigtag
@@ -48,7 +49,7 @@ if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
   # NB: ENV_VARS is never empty.
   export "${ENV_VARS[@]}"
   CODE=0
-  "${BINARY}" "${START_CMD}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
+  "${BINARY}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
   if [[ -z "${LOCAL}" || "${CODE}" -ne 0 ]]; then
     echo "cockroach exited with code ${CODE}: $(date)" | tee -a "${LOG_DIR}"/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi

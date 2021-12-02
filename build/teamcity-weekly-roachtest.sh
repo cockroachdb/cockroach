@@ -44,6 +44,9 @@ chmod o+rwx "${artifacts}"
 # NB(2): We specify --zones below so that nodes are created in us-central1-b
 # by default. This reserves us-east1-b (the roachprod default zone) for use
 # by manually created clusters.
+#
+# NB(3): If you make changes here, you should probably make the same change in
+# build/teamcity/cockroach/nightlies/roachtest_weekly_impl.sh.
 exit_status=0
 timeout -s INT $((7800*60)) bin/roachtest run \
   tag:weekly \

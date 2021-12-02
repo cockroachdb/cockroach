@@ -26,6 +26,8 @@ CREATE TABLE testdb.sc.othertable (a INT);
 # User1 has access to testdb.sc.othertable.
 exec-sql
 GRANT ALL ON DATABASE testdb TO user1;
+GRANT ALL ON SCHEMA public TO user1;
+GRANT ALL ON SCHEMA public TO testuser;
 GRANT USAGE ON SCHEMA sc TO user1;
 GRANT SELECT ON testdb.sc.othertable TO user1;
 ----
@@ -162,6 +164,8 @@ query-sql
 SHOW GRANTS ON SCHEMA public;
 ----
 testdb public admin ALL
+testdb public public CREATE
+testdb public public USAGE
 testdb public root ALL
 testdb public testuser ALL
 testdb public user1 ALL

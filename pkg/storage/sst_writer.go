@@ -157,14 +157,9 @@ func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
-	return 0, fw.put(MVCCKey{Key: key}, value)
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
+	return fw.put(MVCCKey{Key: key}, value)
 }
 
 // PutEngineKey implements the Writer interface.
@@ -222,7 +217,7 @@ func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
 // called.
 func (fw *SSTWriter) ClearIntent(
 	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+) error {
 	panic("ClearIntent is unsupported")
 }
 
@@ -310,6 +305,15 @@ type MemFile struct {
 
 // Close implements the writeCloseSyncer interface.
 func (*MemFile) Close() error {
+	return nil
+}
+
+// Flush implements the same interface as the standard library's *bufio.Writer's
+// Flush method. The Pebble sstable Writer tests whether files implement a Flush
+// method. If not, it wraps the file with a bufio.Writer to buffer writes to the
+// underlying file. This buffering is not necessary for an in-memory file. We
+// signal this by implementing Flush as a noop.
+func (*MemFile) Flush() error {
 	return nil
 }
 

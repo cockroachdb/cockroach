@@ -245,8 +245,8 @@ type cFetcher struct {
 	// table is the table that's configured for fetching.
 	table *cTableInfo
 
-	// maxKeysPerRow memoizes the maximum number of keys per row
-	// out of all the tables. This is used to calculate the kvBatchFetcher's
+	// maxKeysPerRow memoizes the maximum number of keys per row in the index
+	// we're fetching from. This is used to calculate the kvBatchFetcher's
 	// firstBatchLimit.
 	maxKeysPerRow int
 
@@ -555,12 +555,10 @@ func (rf *cFetcher) Init(
 
 	// Keep track of the maximum keys per row to accommodate a
 	// limitHint when StartScan is invoked.
-	keysPerRow, err := table.desc.KeysPerRow(table.index.GetID())
+	var err error
+	rf.maxKeysPerRow, err = table.desc.KeysPerRow(table.index.GetID())
 	if err != nil {
 		return err
-	}
-	if keysPerRow > rf.maxKeysPerRow {
-		rf.maxKeysPerRow = keysPerRow
 	}
 
 	_ = table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {

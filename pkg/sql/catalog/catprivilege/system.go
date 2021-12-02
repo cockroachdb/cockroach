@@ -68,7 +68,7 @@ var (
 		m := make(map[descpb.NameInfo]privilege.List)
 		tableKey := descpb.NameInfo{
 			ParentID:       keys.SystemDatabaseID,
-			ParentSchemaID: keys.PublicSchemaID,
+			ParentSchemaID: keys.SystemPublicSchemaID,
 		}
 		for _, rw := range readWriteSystemTables {
 			tableKey.Name = string(rw)

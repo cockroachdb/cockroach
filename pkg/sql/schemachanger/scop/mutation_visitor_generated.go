@@ -22,12 +22,14 @@ type MutationOp interface {
 
 // MutationVisitor is a visitor for MutationOp operations.
 type MutationVisitor interface {
+	NotImplemented(context.Context, NotImplemented) error
 	MakeAddedIndexDeleteOnly(context.Context, MakeAddedIndexDeleteOnly) error
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
 	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
 	CreateGcJobForDescriptor(context.Context, CreateGcJobForDescriptor) error
+	CreateGcJobForIndex(context.Context, CreateGcJobForIndex) error
 	MarkDescriptorAsDroppedSynthetically(context.Context, MarkDescriptorAsDroppedSynthetically) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
@@ -53,6 +55,11 @@ type MutationVisitor interface {
 	LogEvent(context.Context, LogEvent) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
+}
+
+// Visit is part of the MutationOp interface.
+func (op NotImplemented) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.NotImplemented(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -83,6 +90,11 @@ func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v
 // Visit is part of the MutationOp interface.
 func (op CreateGcJobForDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.CreateGcJobForDescriptor(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateGcJobForIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGcJobForIndex(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

@@ -26,7 +26,7 @@ import (
 // cat.StableID to its constructed hypotheticalTable. These tables will be used
 // to update the table query metadata when making index recommendations.
 func BuildOptAndHypTableMaps(
-	indexCandidates, existingIndexes map[cat.Table][][]cat.IndexColumn,
+	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) (optTables, hypTables map[cat.StableID]cat.Table) {
 	numTables := len(indexCandidates)
 	hypTables = make(map[cat.StableID]cat.Table, numTables)
@@ -35,7 +35,7 @@ func BuildOptAndHypTableMaps(
 	for t, indexes := range indexCandidates {
 		hypIndexes := make([]hypotheticalIndex, 0, len(indexes))
 		var hypTable hypotheticalTable
-		hypTable.init(t, existingIndexes[t], hypIndexes)
+		hypTable.init(t, hypIndexes)
 
 		indexOrd := t.IndexCount()
 		for _, index := range indexes {
@@ -69,17 +69,13 @@ func BuildOptAndHypTableMaps(
 type hypotheticalTable struct {
 	cat.Table
 	primaryKeyColsOrdSet util.FastIntSet
-	existingIndexes      [][]cat.IndexColumn
 	hypotheticalIndexes  []hypotheticalIndex
 }
 
 var _ cat.Table = &hypotheticalTable{}
 
-func (ht *hypotheticalTable) init(
-	table cat.Table, existingIndexes [][]cat.IndexColumn, hypIndexes []hypotheticalIndex,
-) {
+func (ht *hypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalIndex) {
 	ht.Table = table
-	ht.existingIndexes = existingIndexes
 	ht.hypotheticalIndexes = hypIndexes
 
 	// Get PK column ordinals.
@@ -115,17 +111,18 @@ func (ht *hypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ht.hypotheticalIndexes[hypOrd]
 }
 
-// indexExists checks whether an index is present in the slice of
-// existingIndexes containing a table's existing indexes.
+// indexExists checks whether an index is present in the hypotheticalTable's
+// embedded table.
 func (ht *hypotheticalTable) indexExists(index []cat.IndexColumn) bool {
-	for _, existingIndex := range ht.existingIndexes {
-		if len(existingIndex) != len(index) {
+	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
+		existingIndex := ht.Index(i)
+		if existingIndex.ExplicitColumnCount() != len(index) {
 			continue
 		}
 		indexExists := true
-		for i := range existingIndex {
-			if existingIndex[i].ColID() != index[i].ColID() ||
-				existingIndex[i].Descending != index[i].Descending {
+		for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
+			indexCol := existingIndex.Column(j)
+			if indexCol != index[j] {
 				indexExists = false
 				break
 			}

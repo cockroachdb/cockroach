@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scopt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -52,7 +53,7 @@ type Stage struct {
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
 // the initial state for a set of targets.
-func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
+func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			rAsErr, ok := r.(error)
@@ -63,43 +64,50 @@ func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 		}
 	}()
 
-	g, err := opgen.BuildGraph(params.ExecutionPhase, initial)
-	if err != nil {
-		return Plan{}, err
+	p = Plan{
+		Initial: initial,
+		Params:  params,
 	}
+	g, err := opgen.BuildGraph(initial)
+	if err != nil {
+		return p, err
+	}
+	p.Graph = g
 	if err := deprules.Apply(g); err != nil {
-		return Plan{}, err
+		return p, err
 	}
 	optimizedGraph, err := scopt.OptimizePlan(g)
 	if err != nil {
-		return Plan{}, err
+		return p, err
 	}
-	stages := buildStages(initial, optimizedGraph, params)
-	return Plan{
-		Params:  params,
-		Initial: initial,
-		Graph:   optimizedGraph,
-		Stages:  stages,
-	}, nil
+	p.Graph = optimizedGraph
+	p.Stages = buildStages(initial, params.ExecutionPhase, optimizedGraph)
+	// TODO(fqazi): Enforce here that only one post commit stage will be generated
+	// Inside OpGen we will enforce that only a single transition can occur in
+	// post commit.
+	if err = validateStages(p.Stages); err != nil {
+		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid execution plan"))
+	}
+	return p, nil
 }
 
 // validateStages sanity checks stages to ensure no
 // invalid execution plans are made.
-func validateStages(stages []Stage) {
+func validateStages(stages []Stage) error {
 	revertibleAllowed := true
 	for idx, stage := range stages {
 		if !stage.Revertible {
 			revertibleAllowed = false
 		}
 		if stage.Revertible && !revertibleAllowed {
-			panic(errors.AssertionFailedf(
-				"invalid execution plan: stage %d of %d is unexpectedly marked as revertible: %v",
-				idx+1, len(stages), stage))
+			return errors.Errorf("stage %d of %d is unexpectedly marked as revertible: %v",
+				idx+1, len(stages), stage)
 		}
 	}
+	return nil
 }
 
-func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
+func buildStages(init scpb.State, phase scop.Phase, g *scgraph.Graph) []Stage {
 	// Fetch the order of the graph, which will be used to
 	// evaluating edges in topological order.
 	nodeRanks, err := g.GetNodeRanks()
@@ -111,24 +119,64 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 	cur := init
 	fulfilled := map[*scpb.Node]struct{}{}
 	filterUnsatisfiedEdgesStep := func(edges []*scgraph.OpEdge) ([]*scgraph.OpEdge, bool) {
-		candidates := make(map[*scpb.Node]struct{})
+		candidates := make(map[*scpb.Node]*scgraph.OpEdge)
 		for _, e := range edges {
-			candidates[e.To()] = struct{}{}
+			candidates[e.To()] = e
 		}
 		// Check to see if the current set of edges will have their dependencies met
 		// if they are all run. Any which will not must be pruned. This greedy
 		// algorithm works, but a justification is in order.
 		failed := map[*scgraph.OpEdge]struct{}{}
 		for _, e := range edges {
-			_ = g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
+			if !e.IsPhaseSatisfied(phase) {
+				failed[e] = struct{}{}
+			}
+		}
+		for _, e := range edges {
+			if err := g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
 				_, isFulfilled := fulfilled[de.To()]
 				_, isCandidate := candidates[de.To()]
+				if de.Kind() == scgraph.SameStage && isFulfilled {
+					// This is bad, we have a happens-after relationship, and it has
+					// already happened.
+					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
+						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+				}
 				if isFulfilled || isCandidate {
 					return nil
 				}
 				failed[e] = struct{}{}
 				return iterutil.StopIteration()
-			})
+			}); err != nil {
+				panic(err)
+			}
+		}
+		// Ensure that all SameStage DepEdges are met appropriately.
+		for _, e := range edges {
+			if err := g.ForEachSameStageDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
+				if _, isFulfilled := fulfilled[de.From()]; isFulfilled {
+					// This is bad, we have a happens-after relationship, and it has
+					// already happened.
+					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
+						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+				}
+				fromCandidate, fromIsCandidate := candidates[de.From()]
+				if !fromIsCandidate {
+					failed[e] = struct{}{}
+					return iterutil.StopIteration()
+				}
+				_, fromIsFailed := failed[fromCandidate]
+				if fromIsFailed {
+					failed[e] = struct{}{}
+					return iterutil.StopIteration()
+				}
+				if _, eIsFailed := failed[e]; eIsFailed {
+					failed[fromCandidate] = struct{}{}
+				}
+				return nil
+			}); err != nil {
+				panic(err)
+			}
 		}
 		if len(failed) == 0 {
 			return edges, true
@@ -151,6 +199,7 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		}
 		return edges, false
 	}
+	isRevertiblePreferred := true
 	buildStageType := func(edges []*scgraph.OpEdge) (Stage, bool) {
 		edges, ok := filterUnsatisfiedEdges(edges)
 		if !ok {
@@ -163,13 +212,16 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 			})
 
 		next := shallowCopy(cur)
-		isStageRevertible := true
 		var ops []scop.Op
-		for revertible := 1; revertible >= 0; revertible-- {
-			isStageRevertible = revertible == 1
+		var isStageRevertible bool
+		revertible := []bool{true, false}
+		if !isRevertiblePreferred {
+			revertible = []bool{false}
+		}
+		for _, isStageRevertible = range revertible {
 			for _, e := range edges {
 				for i, ts := range cur.Nodes {
-					if e.From() == ts && isStageRevertible == e.Revertible() {
+					if e.From() == ts && (!isRevertiblePreferred || isStageRevertible == e.Revertible()) {
 						next.Nodes[i] = e.To()
 						// TODO(fqazi): MakePlan should never emit empty stages, they are harmless
 						// but a side effect of OpEdge filtering. We need to adjust the algorithm
@@ -189,6 +241,9 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 			if len(ops) != 0 {
 				break
 			}
+		}
+		if isRevertiblePreferred && !isStageRevertible {
+			isRevertiblePreferred = false
 		}
 		return Stage{
 			Before:     cur,
@@ -242,10 +297,6 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		stages = append(stages, s)
 		cur = s.After
 	}
-	// TODO(fqazi): Enforce here that only one post commit stage will be generated
-	// Inside OpGen we will enforce that only a single transition can occur in
-	// post commit.
-	validateStages(stages)
 	return stages
 }
 

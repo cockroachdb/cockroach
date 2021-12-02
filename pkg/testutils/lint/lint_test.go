@@ -1673,6 +1673,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("server/api_v2.go.*package comment should be of the form"),
 				stream.GrepNot("type name will be used as row.RowLimit by other packages, and that stutters; consider calling this Limit"),
 				stream.GrepNot("pkg/util/timeutil/time_zone_util.go.*error strings should not be capitalized or end with punctuation or a newline"),
+				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method ExtendedEvalContext returns unexported type"),
+				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method SessionDataMutatorIterator returns unexported type"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

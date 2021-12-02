@@ -354,6 +354,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 	scID := desc.GetParentSchemaID()
 	var scName tree.Name
+	// TODO(richardjcai): Remove this in 22.2.
 	if scID == keys.PublicSchemaID {
 		scName = tree.PublicSchemaName
 	} else {
@@ -1337,6 +1338,11 @@ func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
+// ExplicitColumnCount is part of the cat.Index interface.
+func (oi *optIndex) ExplicitColumnCount() int {
+	return oi.idx.NumKeyColumns()
+}
+
 // KeyColumnCount is part of the cat.Index interface.
 func (oi *optIndex) KeyColumnCount() int {
 	return oi.numKeyCols
@@ -2065,6 +2071,11 @@ func (oi *optVirtualIndex) IsUnique() bool {
 // IsInverted is part of the cat.Index interface.
 func (oi *optVirtualIndex) IsInverted() bool {
 	return false
+}
+
+// ExplicitColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ExplicitColumnCount() int {
+	return oi.idx.NumKeyColumns()
 }
 
 // ColumnCount is part of the cat.Index interface.
