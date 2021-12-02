@@ -27,7 +27,7 @@ import (
 const sshPublicKeyFile = "${HOME}/.ssh/id_rsa.pub"
 
 // sshKeyExists checks to see if there is a an SSH key with the given name in the given region.
-func (p *Provider) sshKeyExists(keyName string, region string) (bool, error) {
+func (p *Provider) sshKeyExists(keyName, region string) (bool, error) {
 	var data struct {
 		KeyPairs []struct {
 			KeyName string
@@ -51,7 +51,7 @@ func (p *Provider) sshKeyExists(keyName string, region string) (bool, error) {
 
 // sshKeyImport takes the user's local, public SSH key and imports it into the ec2 region so that
 // we can create new hosts with it.
-func (p *Provider) sshKeyImport(keyName string, region string) error {
+func (p *Provider) sshKeyImport(keyName, region string) error {
 	_, err := os.Stat(os.ExpandEnv(sshPublicKeyFile))
 	if err != nil {
 		if oserror.IsNotExist(err) {
