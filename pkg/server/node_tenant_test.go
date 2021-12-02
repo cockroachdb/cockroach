@@ -45,7 +45,9 @@ func TestMaybeRedactRecording(t *testing.T) {
 			Add("tag_sensitive", tagSensitive).
 			Add("tag_not_sensitive", log.Safe(tagNotSensitive))
 		ctx := logtags.WithTags(context.Background(), tags)
-		ctx, sp := tracing.NewTracer().StartSpanCtx(ctx, "foo", tracing.WithForceRealSpan())
+		tracer := tracing.NewTracer()
+		tracer.SetRedactable(true)
+		ctx, sp := tracer.StartSpanCtx(ctx, "foo", tracing.WithForceRealSpan())
 		sp.SetVerbose(true)
 
 		log.Eventf(ctx, "%s %s", msgSensitive, log.Safe(msgNotSensitive))

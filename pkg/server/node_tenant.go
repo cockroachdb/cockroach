@@ -19,6 +19,11 @@ import (
 
 const sRedactedMarker = "verbose trace message redacted"
 
+// maybeRedactRecording will inspect all entries in the `Logs` field of
+// the recording and redact them if the recorded span has
+// `RedactableLogs` enabled. Otherwise, the field value is replaced with
+// a static marker.
+// The function also clears all tags.
 func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 	if tenID == roachpb.SystemTenantID {
 		return
@@ -40,7 +45,7 @@ func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 				} else if field.Key != tracingpb.LogMessageField {
 					// We don't have any of these fields, but let's not take any
 					// chances (our dependencies might slip them in).
-					field.Value = tracingpb.MaybeRedactableString(redact.Sprint(redact.SafeString(sRedactedMarker)))
+					field.Value = sRedactedMarker
 				} else {
 					field.Value = tracingpb.MaybeRedactableString(redact.RedactableString(field.Value).Redact())
 				}

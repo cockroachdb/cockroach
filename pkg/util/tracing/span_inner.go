@@ -186,6 +186,13 @@ func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	return s
 }
 
+func (s *spanInner) SetRedactable(to bool) {
+	if s.isNoop() {
+		return
+	}
+	s.crdb.redactable = to
+}
+
 func (s *spanInner) SetTag(key string, value interface{}) *spanInner {
 	if s.isNoop() {
 		return s
@@ -245,7 +252,7 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if s.netTr != nil {
 		s.netTr.LazyPrintf(format, args)
 	}
-	s.crdb.record(str)
+	s.crdb.record(tracingpb.MaybeRedactableString(str))
 }
 
 // hasVerboseSink returns false if there is no reason to even evaluate Record
