@@ -11,6 +11,7 @@ package statusccl
 import (
 	"context"
 	gosql "database/sql"
+	"math/rand"
 	"net/http"
 	"testing"
 
@@ -28,6 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
+
+// randomServerIdx can be used to let the test helper to randomly
+// select a node from the test cluster.
+const randomServerIdx = -1
 
 type testTenant struct {
 	tenant         serverutils.TestTenantInterface
@@ -85,7 +90,7 @@ func newTestTenantHelper(
 	t.Helper()
 
 	params, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
 	server := testCluster.Server(0)
@@ -99,10 +104,12 @@ func newTestTenantHelper(
 			security.EmbeddedTenantIDs()[0],
 			knobs,
 		),
+		// Spin up a small tenant cluster under a different tenant ID to test
+		// tenant isolation.
 		tenantControlCluster: newTenantCluster(
 			t,
 			server,
-			tenantClusterSize,
+			1, // tenantClusterSize
 			security.EmbeddedTenantIDs()[1],
 			knobs,
 		),
@@ -147,27 +154,37 @@ func newTenantCluster(
 }
 
 func (c tenantCluster) tenantConn(idx int) *sqlutils.SQLRunner {
-	return c[idx].tenantDB
+	return c.tenant(idx).tenantDB
 }
 
 func (c tenantCluster) tenantHTTPClient(t *testing.T, idx int) *httpClient {
-	client, err := c[idx].tenant.RPCContext().GetHTTPClient()
+	client, err := c.tenant(idx).tenant.RPCContext().GetHTTPClient()
 	require.NoError(t, err)
 	return &httpClient{t: t, client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}
 }
 
 func (c tenantCluster) tenantSQLStats(idx int) *persistedsqlstats.PersistedSQLStats {
-	return c[idx].tenantSQLStats
+	return c.tenant(idx).tenantSQLStats
 }
 
 func (c tenantCluster) tenantStatusSrv(idx int) serverpb.SQLStatusServer {
-	return c[idx].tenantStatus
+	return c.tenant(idx).tenantStatus
 }
 
 func (c tenantCluster) cleanup(t *testing.T) {
 	for _, tenant := range c {
 		tenant.cleanup(t)
 	}
+}
+
+// tenant selects a tenant node from the tenant cluster. If randomServerIdx
+// is passed in, then a random node is selected.
+func (c tenantCluster) tenant(idx int) *testTenant {
+	if idx == randomServerIdx {
+		return c[rand.Intn(len(c))]
+	}
+
+	return c[idx]
 }
 
 type httpClient struct {
