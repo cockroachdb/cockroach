@@ -1050,6 +1050,15 @@ func (n *Node) setupSpanForIncomingRPC(
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
 	tr := n.storeCfg.AmbientCtx.Tracer
+
+	// We require redactability enabled on tenant requests.
+	// TODO(davidh): Once performance issues around redaction are
+	// resolved via #58610, this code can be removed so that all traces
+	// have redactability enabled.
+	if !tr.Redactable() && tenID != roachpb.SystemTenantID {
+		tr.SetRedactable(true)
+	}
+
 	// newSpan is set if we end up creating a new span.
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
