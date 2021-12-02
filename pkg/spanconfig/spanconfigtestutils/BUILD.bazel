@@ -2,13 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfigtestutils",
-    srcs = ["utils.go"],
+    srcs = [
+        "recorder.go",
+        "utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/spanconfig",
+        "//pkg/util/syncutil",
     ],
 )
 

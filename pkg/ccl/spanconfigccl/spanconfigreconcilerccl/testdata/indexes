@@ -1,0 +1,107 @@
+# Test behavior of span configs in the presence of indexes (we care about zone
+# config inheritance from database -> table -> indexes, with and without
+# ancestor nodes with explicit configs).
+
+reconcile
+----
+
+mutations discard
+----
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON db.t (j);
+----
+
+mutations
+----
+upsert /Table/5{6-7}                       range default
+
+state offset=41
+----
+...
+/Table/5{6-7}                              range default
+
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
+ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
+----
+
+# We should expect to find the following entries, in order:
+# - primary index (table's config)
+# - secondary index (overridden num_voters)
+# - any future indexes that may be added to this table (table's config)
+mutations
+----
+delete /Table/5{6-7}
+upsert /Table/56{-/2}                      num_replicas=7
+upsert /Table/56/{2-3}                     num_replicas=7 num_voters=5
+upsert /Table/5{6/3-7}                     num_replicas=7
+
+state offset=41
+----
+...
+/Table/56{-/2}                             num_replicas=7
+/Table/56/{2-3}                            num_replicas=7 num_voters=5
+/Table/5{6/3-7}                            num_replicas=7
+
+# Configure GC ttl on the database and override it for the index. The table
+# continues to hold a placeholder zone config.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 3600;
+ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
+----
+
+mutations
+----
+delete /Table/56{-/2}
+upsert /Table/56{-/2}                      ttl_seconds=3600 num_replicas=7
+delete /Table/56/{2-3}
+upsert /Table/56/{2-3}                     ttl_seconds=25 num_replicas=7 num_voters=5
+delete /Table/5{6/3-7}
+upsert /Table/5{6/3-7}                     ttl_seconds=3600 num_replicas=7
+
+state offset=41
+----
+...
+/Table/56{-/2}                             ttl_seconds=3600 num_replicas=7
+/Table/56/{2-3}                            ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/5{6/3-7}                            ttl_seconds=3600 num_replicas=7
+
+# Configure a zone config field on the table, so that it is no longer a
+# placeholder zone config.
+exec-sql
+ALTER TABLE db.t CONFIGURE ZONE USING num_replicas = 9
+----
+
+state offset=41
+----
+...
+/Table/56{-/2}                             ttl_seconds=3600 num_replicas=9
+/Table/56/{2-3}                            ttl_seconds=25 num_replicas=9 num_voters=5
+/Table/5{6/3-7}                            ttl_seconds=3600 num_replicas=9
+
+mutations
+----
+delete /Table/56{-/2}
+upsert /Table/56{-/2}                      ttl_seconds=3600 num_replicas=9
+delete /Table/56/{2-3}
+upsert /Table/56/{2-3}                     ttl_seconds=25 num_replicas=9 num_voters=5
+delete /Table/5{6/3-7}
+upsert /Table/5{6/3-7}                     ttl_seconds=3600 num_replicas=9
+
+exec-sql
+DROP TABLE db.t;
+----
+
+mutations
+----
+delete /Table/56{-/2}
+delete /Table/56/{2-3}
+delete /Table/5{6/3-7}
+
+state offset=40
+----
+...
+/Table/4{7-8}                              range system

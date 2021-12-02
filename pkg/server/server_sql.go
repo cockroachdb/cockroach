@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -137,12 +138,14 @@ type SQLServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	// sqlLivenessSessionID will be populated with a non-zero value for non-system
 	// tenants.
-	sqlLivenessSessionID sqlliveness.SessionID
-	sqlLivenessProvider  sqlliveness.Provider
-	sqlInstanceProvider  sqlinstance.Provider
-	metricsRegistry      *metric.Registry
-	diagnosticsReporter  *diagnostics.Reporter
-	spanconfigMgr        *spanconfigmanager.Manager
+	sqlLivenessSessionID    sqlliveness.SessionID
+	sqlLivenessProvider     sqlliveness.Provider
+	sqlInstanceProvider     sqlinstance.Provider
+	metricsRegistry         *metric.Registry
+	diagnosticsReporter     *diagnostics.Reporter
+	spanconfigMgr           *spanconfigmanager.Manager
+	spanconfigSQLTranslator *spanconfigsqltranslator.SQLTranslator
+	spanconfigSQLWatcher    *spanconfigsqlwatcher.SQLWatcher
 
 	// settingsWatcher is utilized by secondary tenants to watch for settings
 	// changes. It is nil on the system tenant.
@@ -855,13 +858,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.MigrationTestingKnobs = knobs
 	}
 
-	var spanConfigMgr *spanconfigmanager.Manager
+	spanConfig := struct {
+		manager       *spanconfigmanager.Manager
+		sqlTranslator *spanconfigsqltranslator.SQLTranslator
+		sqlWatcher    *spanconfigsqlwatcher.SQLWatcher
+	}{}
 	if !codec.ForSystemTenant() || cfg.SpanConfigsEnabled {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		sqlTranslator := spanconfigsqltranslator.New(execCfg, codec, spanConfigKnobs)
-		sqlWatcher := spanconfigsqlwatcher.New(
+		spanConfig.sqlTranslator = spanconfigsqltranslator.New(execCfg, codec, spanConfigKnobs)
+		spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
 			codec,
 			cfg.Settings,
 			cfg.rangeFeedFactory,
@@ -871,19 +878,26 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			30*time.Second, /* checkpointNoopsEvery */
 			spanConfigKnobs,
 		)
-		spanConfigMgr = spanconfigmanager.New(
+		spanConfigReconciler := spanconfigreconciler.New(
+			spanConfig.sqlWatcher,
+			spanConfig.sqlTranslator,
+			cfg.spanConfigAccessor,
+			execCfg,
+			codec,
+			cfg.TenantID,
+			spanConfigKnobs,
+		)
+		spanConfig.manager = spanconfigmanager.New(
 			cfg.db,
 			jobRegistry,
 			cfg.circularInternalExecutor,
 			cfg.stopper,
 			cfg.Settings,
-			cfg.spanConfigAccessor,
-			sqlWatcher,
-			sqlTranslator,
+			spanConfigReconciler,
 			spanConfigKnobs,
 		)
 
-		execCfg.SpanConfigReconciliationJobDeps = spanConfigMgr
+		execCfg.SpanConfigReconciliationJobDeps = spanConfig.manager
 	}
 	execCfg.SpanConfigKVAccessor = cfg.sqlServerOptionalKVArgs.spanConfigKVAccessor
 
@@ -948,7 +962,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlInstanceProvider:     cfg.sqlInstanceProvider,
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
-		spanconfigMgr:           spanConfigMgr,
+		spanconfigMgr:           spanConfig.manager,
+		spanconfigSQLTranslator: spanConfig.sqlTranslator,
+		spanconfigSQLWatcher:    spanConfig.sqlWatcher,
 		settingsWatcher:         settingsWatcher,
 	}, nil
 }

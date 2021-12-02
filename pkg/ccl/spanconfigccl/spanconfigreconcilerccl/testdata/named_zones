@@ -1,0 +1,163 @@
+# Test span config behavior with named zones. These affect reserved key spans,
+# can be discarded (except for RANGE DEFAULT), and in the specific case of RANGE
+# DEFAULT, is the top most ancestor of the zone config hierarchy.
+reconcile
+----
+
+mutations discard
+----
+
+state limit=5
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
+/System/{NodeLivenessMax-tsd}              range system
+/System{/tsd-tse}                          range default
+/System{tse-/Max}                          range system
+...
+
+# Adding an explicit zone configuration for the timeseries range should work
+# as expected.
+exec-sql
+ALTER RANGE timeseries CONFIGURE ZONE USING gc.ttlseconds = 42
+----
+
+mutations
+----
+delete /System{/tsd-tse}
+upsert /System{/tsd-tse}                   ttl_seconds=42
+
+# Change a field on the liveness range and ensure it behaves as expected.
+exec-sql
+ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 7
+----
+
+mutations
+----
+delete /System/NodeLiveness{-Max}
+upsert /System/NodeLiveness{-Max}          ttl_seconds=600 num_replicas=7
+
+# Discarding RANGE SYSTEM should re-parent the gaps between RANGE
+# {liveness,timeseries} under RANGE DEFAULT. Note that discarding RANGE DEFAULT
+# isn't allowed.
+exec-sql
+ALTER RANGE system CONFIGURE ZONE DISCARD
+----
+
+mutations
+----
+delete /System/{NodeLivenessMax-tsd}
+upsert /System/{NodeLivenessMax-tsd}       range default
+delete /System{tse-/Max}
+upsert /System{tse-/Max}                   range default
+
+state limit=5
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              range default
+/System{/tsd-tse}                          ttl_seconds=42
+/System{tse-/Max}                          range default
+...
+
+# Ensure that discarding other named zones behave as expected (reparenting them
+# under RANGE DEFAULT).
+exec-sql
+ALTER RANGE meta CONFIGURE ZONE DISCARD;
+ALTER RANGE timeseries CONFIGURE ZONE DISCARD;
+----
+
+mutations
+----
+delete /{Min-System/NodeLiveness}
+upsert /{Min-System/NodeLiveness}          range default
+delete /System{/tsd-tse}
+upsert /System{/tsd-tse}                   range default
+
+state limit=5
+----
+/{Min-System/NodeLiveness}                 range default
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              range default
+/System{/tsd-tse}                          range default
+/System{tse-/Max}                          range default
+...
+
+
+# Ensure that changes to RANGE DEFAULT propagate to descendants.
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+----
+
+mutations
+----
+upsert /Table/5{6-7}                       range default
+
+exec-sql
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 50;
+----
+
+mutations
+----
+delete /{Min-System/NodeLiveness}
+upsert /{Min-System/NodeLiveness}          ttl_seconds=50
+delete /System/{NodeLivenessMax-tsd}
+upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=50
+delete /System{/tsd-tse}
+upsert /System{/tsd-tse}                   ttl_seconds=50
+delete /System{tse-/Max}
+upsert /System{tse-/Max}                   ttl_seconds=50
+delete /Table/5{6-7}
+upsert /Table/5{6-7}                       ttl_seconds=50
+
+state limit=5
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=50
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              ttl_seconds=50
+/System{/tsd-tse}                          ttl_seconds=50
+/System{tse-/Max}                          ttl_seconds=50
+...
+
+state offset=40
+----
+...
+/Table/4{7-8}                              range system
+/Table/5{6-7}                              ttl_seconds=50
+
+# Make sure future descendants observe the same.
+exec-sql
+CREATE TABLE db.t2();
+----
+
+mutations
+----
+upsert /Table/5{7-8}                       ttl_seconds=50
+
+state offset=40
+----
+...
+/Table/4{7-8}                              range system
+/Table/5{6-7}                              ttl_seconds=50
+/Table/5{7-8}                              ttl_seconds=50
+
+exec-sql
+ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 100;
+----
+
+mutations
+----
+delete /System/{NodeLivenessMax-tsd}
+upsert /System/{NodeLivenessMax-tsd}       ttl_seconds=100
+delete /System{tse-/Max}
+upsert /System{tse-/Max}                   ttl_seconds=100
+
+state limit=5
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=50
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
+/System/{NodeLivenessMax-tsd}              ttl_seconds=100
+/System{/tsd-tse}                          ttl_seconds=50
+/System{tse-/Max}                          ttl_seconds=100
+...

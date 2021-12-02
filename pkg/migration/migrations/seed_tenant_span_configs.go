@@ -51,7 +51,7 @@ func seedTenantSpanConfigsMigration(
 			return err
 		}
 
-		scKVAccessor := d.SpanConfig.KVAccessor.WithTxn(txn)
+		scKVAccessor := d.SpanConfig.KVAccessor.WithTxn(ctx, txn)
 		for _, tenantID := range tenantIDs {
 			// Install a single key span config at the start of tenant's
 			// keyspace; elsewhere this ensures that we split on the tenant
@@ -79,7 +79,7 @@ func seedTenantSpanConfigsMigration(
 			if len(scEntries) != 0 {
 				// This tenant already has span config entries. It was either
 				// already migrated (migrations need to be idempotent) or it was
-				// created after PreSeedTenantSpanConfigs was activated. THere's
+				// created after PreSeedTenantSpanConfigs was activated. There's
 				// nothing left to do here.
 				continue
 			}
