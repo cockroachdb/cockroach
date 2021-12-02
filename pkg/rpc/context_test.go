@@ -1844,3 +1844,60 @@ func BenchmarkGRPCDial(b *testing.B) {
 		}
 	})
 }
+
+func TestRejectDialOnQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	clusID := uuid.MakeV4()
+	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
+	// Run vanilla server.
+	const serverNodeID = 1
+	var addr string
+	{
+		srvStopper := stop.NewStopper()
+		defer srvStopper.Stop(ctx)
+		serverCtx := newTestContext(clusID, clock, srvStopper)
+		serverCtx.NodeID.Set(ctx, serverNodeID)
+		s := NewServer(serverCtx)
+		ln, err := netutil.ListenAndServeGRPC(srvStopper, s, util.TestAddr)
+		require.NoError(t, err)
+		addr = ln.Addr().String()
+	}
+
+	// Set up client.
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	rpcCtx := newTestContext(clusID, clock, stopper)
+
+	// Set up one connection before quiesce to exercise the path in which
+	// the connection already exists and is healthy when the node shuts
+	// down.
+	conn, err := rpcCtx.GRPCDialNode(addr, serverNodeID, SystemClass).Connect(ctx)
+	require.NoError(t, err)
+	// Check that we can reach the server (though we don't bother to also register
+	// an endpoint on it; getting codes.Unimplemented back is proof enough).
+	err = conn.Invoke(ctx, "/Does/Not/Exist", &PingRequest{}, &PingResponse{})
+	require.Error(t, err)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+
+	// Now quiesce.
+	stopper.Quiesce(ctx)
+
+	// First, we shouldn't be able to dial again, even though we already have a
+	// connection.
+	_, err = rpcCtx.GRPCDialNode(addr, serverNodeID, SystemClass).Connect(ctx)
+	require.ErrorIs(t, err, errDialRejected)
+	require.True(t, grpcutil.IsConnectionRejected(err))
+	require.True(t, grpcutil.IsAuthError(err))
+
+	// If we use the existing connection, we'll get an error. It won't be the
+	// ideal one - it's an opaque grpc version of `context.Canceled` but it's
+	// the best we can hope for, since this is entirely within gRPC code.
+	// This is good enough to prevent hangs since callers won't be using
+	// this connection going forward; they need to call .Connect(ctx) again
+	// which gives the permanent error PermissionDenied.
+	err = conn.Invoke(ctx, "/Does/Not/Exist", &PingRequest{}, &PingResponse{})
+	require.Error(t, err)
+	require.Equal(t, codes.Canceled, status.Code(err))
+}

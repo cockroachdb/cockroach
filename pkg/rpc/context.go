@@ -45,9 +45,11 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -74,6 +76,12 @@ const (
 // GRPC Dialer connection timeout. 20s matches default value that is
 // suppressed when backoff config is provided.
 const minConnectionTimeout = 20 * time.Second
+
+// errDialRejected is returned from client interceptors when the server's
+// stopper is quiescing. The error is constructed to return true in
+// `grpcutil.IsConnectionRejected` which prevents infinite retry loops during
+// cluster shutdown, especially in unit testing.
+var errDialRejected = grpcstatus.Error(codes.PermissionDenied, "refusing to dial; node is quiescing")
 
 // sourceAddr is the environment-provided local address for outgoing
 // connections.
@@ -447,7 +455,7 @@ func NewContext(opts ContextOptions) *Context {
 				// conn. We need to set the error in case we win the race against the
 				// real initialization code.
 				if conn.dialErr == nil {
-					conn.dialErr = &roachpb.NodeUnavailableError{}
+					conn.dialErr = errDialRejected
 				}
 			})
 			ctx.removeConn(conn, k.(connKey))
@@ -1074,6 +1082,12 @@ func (rpcCtx *Context) grpcDialRaw(
 
 	log.Health.Infof(rpcCtx.masterCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
 	conn, err := grpc.DialContext(rpcCtx.masterCtx, target, dialOpts...)
+	if err != nil && rpcCtx.masterCtx.Err() != nil {
+		// If the node is draining, discard the error (which is likely gRPC's version
+		// of context.Canceled) and return errDialRejected which instructs callers not
+		// to retry.
+		err = errDialRejected
+	}
 	return conn, dialer.redialChan, err
 }
 
@@ -1161,7 +1175,10 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 					}
 					rpcCtx.removeConn(conn, thisConnKeys...)
 				}); err != nil {
-				conn.dialErr = err
+				// If node is draining (`err` will always equal stop.ErrUnavailable
+				// here), return special error (see its comments).
+				_ = err // ignore this error
+				conn.dialErr = errDialRejected
 			}
 		}
 		if conn.dialErr != nil {
