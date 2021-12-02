@@ -44,6 +44,9 @@ import (
 )
 
 const (
+	// maxRecordedSpansPerTrace limits the number of spans per recording, keeping
+	// recordings from getting too large.
+	maxRecordedSpansPerTrace = 1000
 	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
 	// use a comfortable limit.
 	maxLogBytesPerSpan        = 256 * (1 << 10) // 256 KiB
