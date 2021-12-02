@@ -20,12 +20,13 @@ import (
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent        *Span                         // see WithParentAndAutoCollection
-	RemoteParent  SpanMeta                      // see WithParentAndManualCollection
-	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
-	LogTags       *logtags.Buffer               // see WithLogTags
-	Tags          map[string]interface{}        // see WithTags
-	ForceRealSpan bool                          // see WithForceRealSpan
+	Parent          *Span                         // see WithParentAndAutoCollection
+	RemoteParent    SpanMeta                      // see WithParentAndManualCollection
+	RefType         opentracing.SpanReferenceType // see WithFollowsFrom
+	LogTags         *logtags.Buffer               // see WithLogTags
+	Tags            map[string]interface{}        // see WithTags
+	ForceRealSpan   bool                          // see WithForceRealSpan
+	ForceRedactable bool                          // see WithRedactable
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -93,8 +94,24 @@ func (opts *spanOptions) shadowContext() opentracing.SpanContext {
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
 // - WithTags: adds tags to a Span on creation.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
+// - WithRedactable: sets a flag used to force redactability on the span.
 type SpanOption interface {
 	apply(spanOptions) spanOptions
+}
+
+type redactableOption bool
+
+var _ SpanOption = redactableOption(false)
+
+func (r redactableOption) apply(opts spanOptions) spanOptions {
+	opts.ForceRedactable = bool(r)
+	return opts
+}
+
+// WithRedactable can set redactability to true, overriding the
+// tracer's redactability setting when we create the Span.
+func WithRedactable(to bool) SpanOption {
+	return redactableOption(to)
 }
 
 type parentAndAutoCollectionOption Span

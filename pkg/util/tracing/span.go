@@ -65,6 +65,13 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+func (sp *Span) SetRedactable(to bool) {
+	if sp == nil {
+		return
+	}
+	sp.i.SetRedactable(to)
+}
+
 // Redactable returns true if this Span records
 // redactable logs.
 func (sp *Span) Redactable() bool {
