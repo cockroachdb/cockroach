@@ -4356,6 +4356,46 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.is_at_least_version": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"version", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				arg, err := roachpb.ParseVersion(string(s))
+				if err != nil {
+					return nil, err
+				}
+				// The tag is of the form "v<major>.<minor>.<other stuff>", and
+				// we're only interested in the major/minor part.
+				tokens := strings.Split(strings.TrimPrefix(build.GetInfo().Tag, "v"), ".")
+				if len(tokens) < 3 {
+					return nil, errors.AssertionFailedf("unexpectedly couldn't parse the build tag")
+				}
+				major, err := strconv.Atoi(tokens[0])
+				if err != nil {
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly couldn't parse the major part of the build tag")
+				}
+				minor, err := strconv.Atoi(tokens[1])
+				if err != nil {
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly couldn't parse the minor part of the build tag")
+				}
+				atLeast := major > int(arg.Major) || (major == int(arg.Major) && minor >= int(arg.Minor))
+				value := tree.DBoolFalse
+				if atLeast {
+					value = tree.DBoolTrue
+				}
+				return value, nil
+			},
+			Info:       "Returns true if the cluster version is not older than the argument.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.approximate_timestamp": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
