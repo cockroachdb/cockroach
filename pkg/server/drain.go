@@ -28,14 +28,18 @@ import (
 var (
 	queryWait = settings.RegisterDurationSetting(
 		"server.shutdown.query_wait",
-		"the server will wait for at least this amount of time for active queries to finish",
+		"the server will wait for at least this amount of time for active queries to finish "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting)",
 		10*time.Second,
 	).WithPublic()
 
 	drainWait = settings.RegisterDurationSetting(
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
-			"of the shutdown process",
+			"of the shutdown process "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting)",
 		0*time.Second,
 	).WithPublic()
 )

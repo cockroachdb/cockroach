@@ -173,7 +173,9 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 var leaseTransferWait = func() *settings.DurationSetting {
 	s := settings.RegisterDurationSetting(
 		leaseTransferWaitSettingName,
-		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process",
+		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting)",
 		5*time.Second,
 		func(v time.Duration) error {
 			if v < 0 {

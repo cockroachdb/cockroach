@@ -113,7 +113,8 @@ func doDrain(
 	})
 	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
 		log.Infof(ctx, "drain timed out: %v", err)
-		err = errors.New("drain timeout")
+		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
+			"custom server.shutdown.{drain,query,lease_transfer}_wait cluster settings")
 	}
 	return
 }
