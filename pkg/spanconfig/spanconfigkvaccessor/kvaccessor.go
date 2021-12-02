@@ -61,7 +61,10 @@ func New(
 }
 
 // WithTxn is part of the KVAccessor interface.
-func (k *KVAccessor) WithTxn(txn *kv.Txn) spanconfig.KVAccessor {
+func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAccessor {
+	if k.optionalTxn != nil {
+		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?")
+	}
 	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, txn)
 }
 
