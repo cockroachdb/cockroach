@@ -12,6 +12,7 @@ package spanconfigtestutils
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -190,4 +191,48 @@ func PrintSpanConfig(conf roachpb.SpanConfig) string {
 // Parse{Span,Config} helpers above.
 func PrintSpanConfigEntry(entry roachpb.SpanConfigEntry) string {
 	return fmt.Sprintf("%s:%s", PrintSpan(entry.Span), PrintSpanConfig(entry.Config))
+}
+
+// PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given
+// config against RANGE {DEFAULT, SYSTEM} and returns a string for the
+// mismatched fields. If there are none, "range {default,system}" is returned.
+func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
+	if conf.Equal(roachpb.TestingDefaultSpanConfig()) {
+		return "range default"
+	}
+	if conf.Equal(roachpb.TestingSystemSpanConfig()) {
+		return "range system"
+	}
+
+	defaultConf := roachpb.TestingDefaultSpanConfig()
+	var diffs []string
+	if conf.RangeMaxBytes != defaultConf.RangeMaxBytes {
+		diffs = append(diffs, fmt.Sprintf("range_max_bytes=%d", conf.RangeMaxBytes))
+	}
+	if conf.RangeMinBytes != defaultConf.RangeMinBytes {
+		diffs = append(diffs, fmt.Sprintf("range_min_bytes=%d", conf.RangeMinBytes))
+	}
+	if conf.GCPolicy.TTLSeconds != defaultConf.GCPolicy.TTLSeconds {
+		diffs = append(diffs, fmt.Sprintf("ttl_seconds=%d", conf.GCPolicy.TTLSeconds))
+	}
+	if conf.GlobalReads != defaultConf.GlobalReads {
+		diffs = append(diffs, fmt.Sprintf("global_reads=%v", conf.GlobalReads))
+	}
+	if conf.NumReplicas != defaultConf.NumReplicas {
+		diffs = append(diffs, fmt.Sprintf("num_replicas=%d", conf.NumReplicas))
+	}
+	if conf.NumVoters != defaultConf.NumVoters {
+		diffs = append(diffs, fmt.Sprintf("num_voters=%d", conf.NumVoters))
+	}
+	if !reflect.DeepEqual(conf.Constraints, defaultConf.Constraints) {
+		diffs = append(diffs, fmt.Sprintf("constraints=%v", conf.Constraints))
+	}
+	if !reflect.DeepEqual(conf.VoterConstraints, defaultConf.VoterConstraints) {
+		diffs = append(diffs, fmt.Sprintf("voter_constraints=%v", conf.VoterConstraints))
+	}
+	if !reflect.DeepEqual(conf.LeasePreferences, defaultConf.LeasePreferences) {
+		diffs = append(diffs, fmt.Sprintf("lease_preferences=%v", conf.VoterConstraints))
+	}
+
+	return strings.Join(diffs, " ")
 }
