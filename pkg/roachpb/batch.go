@@ -558,7 +558,22 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		// enforcing are that a batch can't mix non-writes with writes.
 		// Checking isRead would cause ConditionalPut and Put to conflict,
 		// which is not what we want.
-		const mask = isWrite | isAdmin | isReverse
+		mask := isWrite | isAdmin
+		if (exFlags&isRange) != 0 && (newFlags&isRange) != 0 {
+			// The directions of requests in a batch need to be the same because
+			// the DistSender (in divideAndSendBatchToRanges) will perform a
+			// single traversal of all requests while advancing the
+			// RangeIterator. If we were to have requests with different
+			// directions in a single batch, the DistSender wouldn't know how to
+			// route the requests (without incurring a noticeable performance
+			// hit).
+			//
+			// At the same time, non-ranged operations are not directional, so
+			// we need to require the same value for isReverse flag iff the
+			// existing and the new requests are ranged. For example, this
+			// allows us to have Gets and ReverseScans in a single batch.
+			mask |= isReverse
+		}
 		return (mask & exFlags) == (mask & newFlags)
 	}
 	var parts [][]RequestUnion
