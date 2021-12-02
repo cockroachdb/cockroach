@@ -344,6 +344,36 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	require.Len(t, rec[0].StructuredRecords, 1)
 }
 
+// TestRecordingMaxSpans verifies that recordings don't grow over the limit.
+func TestRecordingMaxSpans(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	defer sp.Finish()
+	extraChildren := 10
+	numChildren := maxRecordedSpansPerTrace + extraChildren
+	for i := 0; i < numChildren; i++ {
+		child := tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
+		exp := i + 2
+		// maxRecordedSpansPerTrace technically limits the number of child spans, so
+		// we add one for the root.
+		over := false
+		if exp > maxRecordedSpansPerTrace+1 {
+			exp = maxRecordedSpansPerTrace + 1
+			over = true
+		}
+		if over {
+			// Structured events from children that are not included in the recording
+			// are still collected (subject to the structured recording bytes limit).
+			child.RecordStructured(&types.Int32Value{Value: int32(i)})
+		}
+		child.Finish()
+		require.Len(t, sp.GetRecording(RecordingVerbose), exp)
+	}
+	rec := sp.GetRecording(RecordingVerbose)
+	root := rec[0]
+	require.Len(t, root.StructuredRecords, extraChildren)
+}
+
 type explodyNetTr struct {
 	trace.Trace
 }
