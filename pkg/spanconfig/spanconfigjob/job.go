@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,11 +32,16 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	rc := execCtx.SpanConfigReconciliationJobDeps()
 
-	// TODO(irfansharif): Actually make use of these dependencies.
-	_ = rc
+	if err := rc.Reconcile(ctx, hlc.Timestamp{}, func(checkpoint hlc.Timestamp) error {
+		// TODO(irfansharif): Stash this checkpoint somewhere and use it when
+		// starting back up.
+		_ = checkpoint
+		return nil
+	}); err != nil {
+		return err
+	}
 
-	<-ctx.Done()
-	return ctx.Err()
+	return nil
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
