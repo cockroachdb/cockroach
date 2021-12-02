@@ -503,6 +503,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Insert the new stat.
 			if err := stats.InsertNewStat(
 				ctx,
+				s.FlowCtx.Cfg.Settings,
 				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,

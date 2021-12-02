@@ -1976,7 +1976,7 @@ func insertStats(
 	}
 
 	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn, latestStats); err != nil {
+		if err := stats.InsertNewStats(ctx, execCfg.Settings, execCfg.InternalExecutor, txn, latestStats); err != nil {
 			return errors.Wrapf(err, "inserting stats from backup")
 		}
 		details.StatsInserted = true

@@ -13,7 +13,9 @@ package stats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -25,6 +27,7 @@ import (
 // system table.
 func InsertNewStats(
 	ctx context.Context,
+	settings *cluster.Settings,
 	executor sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	tableStats []*TableStatisticProto,
@@ -33,6 +36,7 @@ func InsertNewStats(
 	for _, statistic := range tableStats {
 		err = InsertNewStat(
 			ctx,
+			settings,
 			executor,
 			txn,
 			statistic.TableID,
@@ -57,6 +61,7 @@ func InsertNewStats(
 // stats caches on all other nodes).
 func InsertNewStat(
 	ctx context.Context,
+	settings *cluster.Settings,
 	executor sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	tableID descpb.ID,
@@ -84,7 +89,28 @@ func InsertNewStat(
 			return err
 		}
 	}
-
+	if !settings.Version.IsActive(ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
+		_, err := executor.Exec(
+			ctx, "insert-statistic", txn,
+			`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			tableID,
+			nameVal,
+			columnIDsVal,
+			rowCount,
+			distinctCount,
+			nullCount,
+			histogramVal,
+		)
+		return err
+	}
 	_, err := executor.Exec(
 		ctx, "insert-statistic", txn,
 		`INSERT INTO system.table_statistics (
