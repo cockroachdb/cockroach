@@ -121,15 +121,9 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// of #58489 is being addressed.
 	_ = schemaChangeStep
 	backupStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// This check was introduced for the system.tenants table and the associated
-		// changes to full-cluster backup to include tenants. It mostly wants to
-		// check that 20.1 (which does not have system.tenants) and 20.2 (which
-		// does have the table) can both run full cluster backups.
-		//
-		// This step can be removed once 20.2 is released.
-		if u.binaryVersion(ctx, t, 1).Major != 20 {
-			return
-		}
+		// Verify that backups can be created in various configurations. This is
+		// important to test because changes in system tables might cause backups to
+		// fail in mixed-version clusters.
 		dest := fmt.Sprintf("nodelocal://0/%d", timeutil.Now().UnixNano())
 		_, err := u.conn(ctx, t, 1).ExecContext(ctx, `BACKUP TO $1`, dest)
 		require.NoError(t, err)
