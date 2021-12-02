@@ -1174,7 +1174,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */)
+	txn := roachpb.MakeTransaction("test", keyA, 1 /* userPriority */, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[1].SQLInstanceID()))
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, tc.Servers[1].Clock().NowAsClockTimestamp())
 

@@ -913,11 +913,17 @@ func (TransactionStatus) SafeValue() {}
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
+// TODO(sarkesian): Write comment about sqlNodeID
 //
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
 func MakeTransaction(
-	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
+	name string,
+	baseKey Key,
+	userPriority UserPriority,
+	now hlc.Timestamp,
+	maxOffsetNs int64,
+	sqlNodeID int32,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -933,6 +939,7 @@ func MakeTransaction(
 			MinTimestamp:   now,
 			Priority:       MakePriority(userPriority),
 			Sequence:       0, // 1-indexed, incremented before each Request
+			SQLNodeID:      sqlNodeID,
 		},
 		Name:                   name,
 		LastHeartbeat:          now,
@@ -1446,6 +1453,7 @@ func PrepareTransactionForRetry(
 			NormalUserPriority,
 			now.ToTimestamp(),
 			clock.MaxOffset().Nanoseconds(),
+			txn.SQLNodeID,
 		)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri

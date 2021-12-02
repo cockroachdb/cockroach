@@ -102,7 +102,8 @@ func TestClusterFlow(t *testing.T) {
 			nil, // baseKey
 			roachpb.NormalUserPriority,
 			now.ToTimestamp(),
-			0, // maxOffset
+			0, // maxOffsetNs
+			int32(tc.Server(0).SQLInstanceID()),
 		)
 		txn := kv.NewTxnFromProto(ctx, kvDB, tc.Server(0).NodeID(), now, kv.RootTxn, &txnProto)
 		leafInputState := txn.GetLeafTxnInputState(ctx)
@@ -422,7 +423,8 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		nil, // baseKey
 		roachpb.NormalUserPriority,
 		now.ToTimestamp(),
-		0, // maxOffset
+		0, // maxOffsetNs
+		int32(tc.Server(0).SQLInstanceID()),
 	)
 	txn := kv.NewTxnFromProto(
 		context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
@@ -713,7 +715,8 @@ func BenchmarkInfrastructure(b *testing.B) {
 						nil, // baseKey
 						roachpb.NormalUserPriority,
 						now.ToTimestamp(),
-						0, // maxOffset
+						0, // maxOffsetNs
+						int32(tc.Server(0).SQLInstanceID()),
 					)
 					txn := kv.NewTxnFromProto(
 						context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),

@@ -124,13 +124,8 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	}
 
 	now := db.clock.NowAsClockTimestamp()
-	kvTxn := roachpb.MakeTransaction(
-		"unnamed",
-		nil, // baseKey
-		roachpb.NormalUserPriority,
-		now.ToTimestamp(),
-		db.clock.MaxOffset().Nanoseconds(),
-	)
+	kvTxn := roachpb.MakeTransaction("unnamed", nil, roachpb.NormalUserPriority, now.ToTimestamp(),
+		db.clock.MaxOffset().Nanoseconds(), int32(db.ctx.NodeID.SQLInstanceID()))
 
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 }
@@ -1467,7 +1462,8 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 			txn.mu.userPriority,
 			now.ToTimestamp(),
 			txn.db.clock.MaxOffset().Nanoseconds(),
-		))
+			int32(txn.db.ctx.NodeID.SQLInstanceID())),
+	)
 }
 
 // PrepareRetryableError returns a

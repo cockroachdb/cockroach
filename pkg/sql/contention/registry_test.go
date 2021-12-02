@@ -146,7 +146,8 @@ func TestRegistry(t *testing.T) {
 			registry.AddContentionEvent(roachpb.ContentionEvent{
 				Key: keyBytes,
 				TxnMeta: enginepb.TxnMeta{
-					ID: contendingTxnID,
+					ID:        contendingTxnID,
+					SQLNodeID: 6,
 				},
 				Duration: time.Duration(contentionDuration),
 			})
@@ -233,8 +234,9 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 			r.AddContentionEvent(roachpb.ContentionEvent{
 				Key: key,
 				TxnMeta: enginepb.TxnMeta{
-					ID:  uuid.MakeV4(),
-					Key: getKey(),
+					ID:        uuid.MakeV4(),
+					Key:       getKey(),
+					SQLNodeID: 6,
 				},
 				Duration: time.Duration(int64(rng.Uint64())),
 			})

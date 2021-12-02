@@ -149,7 +149,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 	endKey := roachpb.Key("z")
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
 		StartKey: roachpb.RKey(k),

@@ -34,6 +34,7 @@ func TestFormatMVCCMetadata(t *testing.T) {
 		Epoch:          1,
 		WriteTimestamp: ts,
 		MinTimestamp:   ts,
+		SQLNodeID:      6,
 	}
 	val1 := roachpb.Value{}
 	val1.SetString("foo")

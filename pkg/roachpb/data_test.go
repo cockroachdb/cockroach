@@ -402,7 +402,7 @@ func TestSetGetChecked(t *testing.T) {
 
 func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
-	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
+	txn := MakeTransaction("test", Key("a"), 1, origNow, 0, 99)
 	// Advance the txn timestamp.
 	txn.WriteTimestamp = txn.WriteTimestamp.Add(10, 2)
 	txn.BumpEpoch()
@@ -476,6 +476,7 @@ var nonZeroTxn = Transaction{
 		MinTimestamp:   makeSynTS(10, 11),
 		Priority:       957356782,
 		Sequence:       123,
+		SQLNodeID:      3,
 	},
 	Name:                   "name",
 	Status:                 COMMITTED,
@@ -517,6 +518,7 @@ func TestTransactionUpdate(t *testing.T) {
 	txn3.Status = STAGING
 	txn3.Name = "carl"
 	txn3.Priority = 123
+	txn3.SQLNodeID = 3
 	txn3.Update(&txn)
 
 	expTxn3 := txn
@@ -531,6 +533,7 @@ func TestTransactionUpdate(t *testing.T) {
 	txn4.Sequence = txn.Sequence + 10
 	txn4.Name = "carl"
 	txn4.Priority = 123
+	txn4.SQLNodeID = 3
 	txn4.Update(&txn)
 
 	expTxn4 := txn
@@ -570,6 +573,7 @@ func TestTransactionUpdate(t *testing.T) {
 	txn5.Sequence = txn.Sequence - 10
 	txn5.Name = "carl"
 	txn5.Priority = 123
+	txn5.SQLNodeID = 3
 	txn5.Update(&txn)
 
 	expTxn5 := txn
@@ -2035,7 +2039,7 @@ func TestTxnLocksAsLockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := MakeTransaction("hello", Key("k"), 0, ts, 0)
+	txn := MakeTransaction("hello", Key("k"), 0, ts, 0, 99)
 
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}
