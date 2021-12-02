@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 type explainDDLNode struct {
@@ -46,35 +47,36 @@ func (n *explainDDLNode) Close(ctx context.Context) {
 
 var _ planNode = (*explainDDLNode)(nil)
 
+var explainNotPossibleError = pgerror.New(pgcode.FeatureNotSupported,
+	"cannot explain a statement which is not supported by the declarative schema changer")
+
 func (n *explainDDLNode) startExec(params runParams) error {
+	// TODO(postamar): better error messages for each error case
 	scNodes, ok := n.plan.main.planNode.(*schemaChangePlanNode)
 	if !ok {
 		if n.plan.main.physPlan == nil {
-			return pgerror.New(pgcode.FeatureNotSupported, "cannot explain a non-schema change statement\n")
+			return explainNotPossibleError
 		} else if len(n.plan.main.physPlan.planNodesToClose) > 0 {
 			scNodes, ok = n.plan.main.physPlan.planNodesToClose[0].(*schemaChangePlanNode)
 			if !ok {
-				return pgerror.New(pgcode.FeatureNotSupported, "cannot explain a non-schema change statement\n")
-
+				return explainNotPossibleError
 			}
 		} else {
-			return pgerror.New(pgcode.FeatureNotSupported, "cannot explain a non-schema change statement\n")
+			return explainNotPossibleError
 		}
 	}
-	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{
-		ExecutionPhase: scop.PostCommitPhase,
-	})
+	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{ExecutionPhase: scop.StatementPhase})
 	if err != nil {
-		return pgerror.Wrap(err, pgcode.FeatureNotSupported, "new schema changer failed executing this operation.")
+		return errors.WithAssertionFailure(err)
 	}
 	var vizURL string
 	if n.options.Flags[tree.ExplainFlagDeps] {
 		if vizURL, err = scgraphviz.DependenciesURL(sc); err != nil {
-			return err
+			return errors.WithAssertionFailure(err)
 		}
 	} else {
 		if vizURL, err = scgraphviz.StagesURL(sc); err != nil {
-			return err
+			return errors.WithAssertionFailure(err)
 		}
 	}
 	n.values = tree.Datums{

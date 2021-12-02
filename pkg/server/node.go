@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -114,6 +115,20 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Disk stalls detected",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaInternalBatchRPCMethodCount = metric.Metadata{
+		Name:        "rpc.method.%s.recv",
+		Help:        "Number of %s requests processed",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaInternalBatchRPCCount = metric.Metadata{
+		Name:        "rpc.batches.recv",
+		Help:        "Number of batches processed",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Cluster settings.
@@ -138,6 +153,9 @@ type nodeMetrics struct {
 	Success    *metric.Counter
 	Err        *metric.Counter
 	DiskStalls *metric.Counter
+
+	BatchCount   *metric.Counter
+	MethodCounts [roachpb.NumMethods]*metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -146,7 +164,17 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		Success:    metric.NewCounter(metaExecSuccess),
 		Err:        metric.NewCounter(metaExecError),
 		DiskStalls: metric.NewCounter(metaDiskStalls),
+		BatchCount: metric.NewCounter(metaInternalBatchRPCCount),
 	}
+
+	for i := range nm.MethodCounts {
+		method := roachpb.Method(i).String()
+		meta := metaInternalBatchRPCMethodCount
+		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(method))
+		meta.Help = fmt.Sprintf(meta.Help, method)
+		nm.MethodCounts[i] = metric.NewCounter(meta)
+	}
+
 	reg.AddMetricStruct(nm)
 	return nm
 }
@@ -942,10 +970,23 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
+// incrementBatchCounters increments counters to track the batch and composite
+// request methods.
+func (n *Node) incrementBatchCounters(ba *roachpb.BatchRequest) {
+	n.metrics.BatchCount.Inc(1)
+	for _, ru := range ba.Requests {
+		m := ru.GetInner().Method()
+		n.metrics.MethodCounts[m].Inc(1)
+	}
+}
+
 // Batch implements the roachpb.InternalServer interface.
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
+
+	n.incrementBatchCounters(args)
+
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
