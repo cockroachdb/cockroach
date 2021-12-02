@@ -65,6 +65,14 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+// SetRedactable sets the redactable flag on the span
+func (sp *Span) SetRedactable(to bool) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetRedactable(to)
+}
+
 // Redactable returns true if this Span records
 // redactable logs.
 func (sp *Span) Redactable() bool {
