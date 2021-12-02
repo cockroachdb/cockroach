@@ -1398,7 +1398,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 	//t.Run(`pubsub`, pubsubTest(testFn, feedTestNoTenants))
 	//failing on payloads violate CDC per-key ordering guarantees for multiple altars
-	//because mempubsub does not gurantee ordering of keys
+	//because mempubsub does not guarantee ordering of keys
 	//https://github.com/google/go-cloud/blob/master/pubsub/mempubsub/mem.go#L262-L264
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,

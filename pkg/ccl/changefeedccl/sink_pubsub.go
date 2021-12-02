@@ -105,15 +105,12 @@ func getGCPCredentials(u sinkURL, ctx context.Context) (*google.Credentials, err
 	var credsJSON []byte
 	var creds *google.Credentials
 	authOption := u.consumeParam(authParam)
-	log.Info(ctx, "credddd!!!!!!!!!!!!!!!!!!")
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
 	case authImplicit:
-		log.Info(ctx, "implicit!!!!!!!!!!!!!!!!!!!")
 		creds, err := google.FindDefaultCredentials(ctx, gcpScope)
 		if err != nil {
-			log.Info(ctx, err.Error())
 			return nil, err
 		}
 		return creds, nil
@@ -141,7 +138,6 @@ func createGCPURL(u sinkURL, topicName string) (string, error) {
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
 func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets) (Sink, error) {
-	log.Info(ctx, "\x1b[33m starting pubsub \x1b[0m")
 
 	sinkURL := sinkURL{u, u.Query()}
 	pubsubTopicName := sinkURL.consumeParam(changefeedbase.SinkParamTopicName)
@@ -267,7 +263,7 @@ func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder,
 	for topicId := range p.topics {
 		err = p.sendMessage(payload, topicId, "")
 		if err != nil {
-			return errors.Wrap(err, "emiting resolved timestamp")
+			return errors.Wrap(err, "emitting resolved timestamp")
 		}
 
 		// if with topic name option is set then you only need to send out to one of the topics
@@ -280,7 +276,6 @@ func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder,
 
 // Flush blocks until all messages in the event channels are sent
 func (p *pubsubSink) flush(ctx context.Context) error {
-	//log.Info(p.workerCtx, "\x1b[33m flush mes \x1b[0m")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -292,7 +287,7 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 			return err
 		}
 	}
-	//log.Info(p.workerCtx, "\x1b[33m flush mes 2 \x1b[0m")
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -372,10 +367,8 @@ func (p *pubsubSink) setupWorkers() {
 // workerLoop consumes any message sent to the channel corresponding to the worker index
 func (p *pubsubSink) workerLoop(workerIndex int) {
 	for {
-		//log.Info(p.workerCtx, "\x1b[33m workerselect \x1b[0m")
 		select {
 		case <-p.workerCtx.Done():
-			//log.Info(p.workerCtx, "\x1b[33m workerselect DONE\x1b[0m")
 			return
 		case msg := <-p.eventsChans[workerIndex]:
 			if msg.isFlush {
@@ -390,7 +383,6 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 			}
 			err = p.sendMessage(b, msg.topicId, string(msg.message.Key))
 			if err != nil {
-				log.Info(p.workerCtx, err.Error())
 				p.exitWorkersWithError(err)
 			}
 			msg.alloc.Release(p.workerCtx)
@@ -408,12 +400,10 @@ func (p *pubsubSink) exitWorkersWithError(err error) {
 		p.exitWorkers()
 	default:
 	}
-	//log.Info(p.workerCtx, "\x1b[33m exiting workers \x1b[0m")
 }
 
 // sinkError checks if there is an error in the error channel
 func (p *pubsubSink) sinkError() error {
-	//log.Info(p.workerCtx, "\x1b[33m select sinkError \x1b[0m")
 	select {
 	case err := <-p.errChan:
 		return err
@@ -431,14 +421,12 @@ func (p *pubsubSink) workerIndex(key []byte) uint32 {
 func (p *pubsubSink) flushWorkers() error {
 	for i := 0; i < p.numWorkers; i++ {
 		//flush message will be blocked until all the messages in the channel are processed
-		//log.Info(p.workerCtx, "\x1b[33m flush \x1b[0m")
 		select {
 		case <-p.workerCtx.Done():
 			return p.workerCtx.Err()
 		case p.eventsChans[i] <- pubsubMessage{isFlush: true}:
 		}
 	}
-	//log.Info(p.workerCtx, "\x1b[33m flush2 \x1b[0m")
 	select {
 	// signals sink that flush is complete
 	case <-p.workerCtx.Done():
