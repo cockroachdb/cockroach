@@ -118,10 +118,9 @@ func (s *Store) uncoalesceBeats(
 				StoreID:   toReplica.StoreID,
 				ReplicaID: beat.ToReplicaID,
 			},
-			Message:                           msg,
-			Quiesce:                           beat.Quiesce,
-			LaggingFollowersOnQuiesce:         beat.LaggingFollowersOnQuiesce,
-			LaggingFollowersOnQuiesceAccurate: beat.LaggingFollowersOnQuiesceAccurate,
+			Message:                   msg,
+			Quiesce:                   beat.Quiesce,
+			LaggingFollowersOnQuiesce: beat.LaggingFollowersOnQuiesce,
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -240,7 +239,6 @@ func (s *Store) processRaftRequestWithReplica(
 			ctx,
 			req.Message,
 			laggingReplicaSet(req.LaggingFollowersOnQuiesce),
-			req.LaggingFollowersOnQuiesceAccurate,
 		) {
 			return nil
 		}
@@ -562,9 +560,8 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
-		laggingAccurate := r.mu.laggingFollowersOnQuiesceAccurate
 		r.mu.RUnlock()
-		if quiescent && (lagging.MemberStale(l) || !laggingAccurate) {
+		if quiescent && lagging.MemberStale(l) {
 			r.unquiesce()
 		}
 	})
