@@ -53,6 +53,6 @@ func (k dummyKVAccessor) UpdateSpanConfigEntries(
 	return k.error
 }
 
-func (k dummyKVAccessor) WithTxn(*kv.Txn) spanconfig.KVAccessor {
+func (k dummyKVAccessor) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	return k
 }

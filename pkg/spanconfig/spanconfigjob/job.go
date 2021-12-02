@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,11 +32,25 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	rc := execCtx.SpanConfigReconciliationJobDeps()
 
-	// TODO(irfansharif): Actually make use of these dependencies.
-	_ = rc
+	// TODO(irfansharif): #73086 bubbles up retryable errors from the
+	// reconciler/underlying watcher in the (very) unlikely event that it's
+	// unable to generate incremental updates from the given timestamp (things
+	// could've been GC-ed from underneath us). For such errors, instead of
+	// failing this entire job, we should simply retry the reconciliation
+	// process here. Not doing so is still fine, the spanconfig.Manager starts
+	// the job all over again after some time, it's just that the checks for
+	// failed jobs happen infrequently.
 
-	<-ctx.Done()
-	return ctx.Err()
+	if err := rc.Reconcile(ctx, hlc.Timestamp{}, func(checkpoint hlc.Timestamp) error {
+		// TODO(irfansharif): Stash this checkpoint somewhere and use it when
+		// starting back up.
+		_ = checkpoint
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
