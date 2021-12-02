@@ -125,7 +125,7 @@ func CreateTenantRecord(
 	}
 
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PreSeedTenantSpanConfigs) {
-		return err
+		return nil
 	}
 
 	// Install a single key[1] span config at the start of tenant's keyspace;
@@ -158,7 +158,7 @@ func CreateTenantRecord(
 			Config: tenantSpanConfig,
 		},
 	}
-	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(txn)
+	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
 	return scKVAccessor.UpdateSpanConfigEntries(
 		ctx, nil /* toDelete */, toUpsert,
 	)
@@ -436,7 +436,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 			EndKey: tenantPrefix.PrefixEnd(),
 		}
 
-		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(txn)
+		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
 		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{tenantSpan})
 		if err != nil {
 			return err
