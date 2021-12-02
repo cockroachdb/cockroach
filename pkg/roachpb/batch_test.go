@@ -344,7 +344,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	{
 		txn := MakeTransaction(
 			"test", nil /* baseKey */, NormalUserPriority,
-			hlc.Timestamp{WallTime: 123}, 0, /* maxOffsetNs */
+			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99, /* sqlNodeID */
 		)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{

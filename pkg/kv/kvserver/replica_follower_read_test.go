@@ -79,9 +79,12 @@ func TestCanServeFollowerRead(t *testing.T) {
 
 			gArgs := getArgs(key)
 			txn := roachpb.MakeTransaction(
-				"test", key, roachpb.NormalUserPriority,
+				"test",
+				key,
+				roachpb.NormalUserPriority,
 				test.readTimestamp,
 				clock.MaxOffset().Nanoseconds(),
+				0, // sqlNodeID
 			)
 
 			ba := &roachpb.BatchRequest{}
@@ -155,9 +158,12 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 
 	gArgs := getArgs(key)
 	txn := roachpb.MakeTransaction(
-		"test", key, roachpb.NormalUserPriority,
+		"test",
+		key,
+		roachpb.NormalUserPriority,
 		tsBelowClosedTimestamp,
 		clock.MaxOffset().Nanoseconds(),
+		0, // sqlNodeID
 	)
 
 	ba := &roachpb.BatchRequest{}
