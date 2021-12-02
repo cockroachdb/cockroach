@@ -322,6 +322,7 @@ const (
 	InvalidLeaseErrType                     ErrorDetailType = 40
 	OptimisticEvalConflictsErrType          ErrorDetailType = 41
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
+	RefreshFailedErrType                    ErrorDetailType = 43
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -331,7 +332,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 43
+	NumErrors int = 44
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1311,3 +1312,40 @@ func (e *MinTimestampBoundUnsatisfiableError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
+
+// NewRefreshFailedError initializes a new RefreshFailedError. reason can be 'committed value'
+// or 'intent' which caused the failed refresh, key is the key that we failed
+// refreshing, and ts is the timestamp of the committed value or intent that was written.
+func NewRefreshFailedError(
+	reason RefreshFailedError_Reason, key Key, ts hlc.Timestamp,
+) *RefreshFailedError {
+	return &RefreshFailedError{
+		Reason:    reason,
+		Key:       key,
+		Timestamp: ts,
+	}
+}
+
+func (e *RefreshFailedError) Error() string {
+	return e.message(nil)
+}
+
+func (e *RefreshFailedError) message(_ *Error) string {
+	var r string
+	switch e.Reason {
+	case RefreshFailedError_REASON_COMMITTED_VALUE:
+		r = "committed value"
+	case RefreshFailedError_REASON_INTENT:
+		r = "intent"
+	default:
+		r = "UNKNOWN"
+	}
+	return fmt.Sprintf("encountered recently written %s %s @%s", r, e.Key, e.Timestamp)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *RefreshFailedError) Type() ErrorDetailType {
+	return RefreshFailedErrType
+}
+
+var _ ErrorDetailInterface = &RefreshFailedError{}
