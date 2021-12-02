@@ -26,22 +26,24 @@ import (
 )
 
 var (
-	pprofOpts         roachprod.PprofOpts
-	numNodes          int
-	numRacks          int
-	username          string
-	dryrun            bool
-	destroyAllMine    bool
-	destroyAllLocal   bool
-	extendLifetime    time.Duration
-	wipePreserveCerts bool
-	listDetails       bool
-	listJSON          bool
-	listMine          bool
-	listPattern       string
-	secure            = false
-	extraSSHOptions   = ""
-	nodeEnv           = []string{
+	// Do not populate providersOptsContainer here as we need to call initProviders() first.
+	providersOptsContainer vm.ProvidersOptionsContainer
+	pprofOpts              roachprod.PprofOpts
+	numNodes               int
+	numRacks               int
+	username               string
+	dryrun                 bool
+	destroyAllMine         bool
+	destroyAllLocal        bool
+	extendLifetime         time.Duration
+	wipePreserveCerts      bool
+	listDetails            bool
+	listJSON               bool
+	listMine               bool
+	listPattern            string
+	secure                 = false
+	extraSSHOptions        = ""
+	nodeEnv                = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
@@ -108,17 +110,20 @@ func initFlags() {
 			"international characters. Examples: usage=cloud-report-2021, namewithspaceinvalue='s o s'")
 
 	// Allow each Provider to inject additional configuration flags
-	for _, p := range vm.Providers {
-		p.Flags().ConfigureCreateFlags(createCmd.Flags())
+	for providerName, provider := range vm.Providers {
+		if provider.Active() {
+			providersOptsContainer.Providers[providerName].ConfigureCreateFlags(createCmd.Flags())
 
-		for _, cmd := range []*cobra.Command{
-			destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
-		} {
-			p.Flags().ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
+			for _, cmd := range []*cobra.Command{
+				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
+			} {
+				providersOptsContainer.Providers[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
+			}
+
+			// createCmd only accepts a single GCE project, as opposed to all the other
+			// commands.
+			providersOptsContainer.Providers[providerName].ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
 		}
-		// createCmd only accepts a single GCE project, as opposed to all the other
-		// commands.
-		p.Flags().ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
 	}
 
 	destroyCmd.Flags().BoolVarP(&destroyAllMine,

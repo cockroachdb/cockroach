@@ -214,36 +214,33 @@ const (
 	AcceptMultipleProjects = true
 )
 
-// ProviderFlags is a hook point for Providers to supply additional,
-// provider-specific flags to various roachprod commands. In general, the flags
+// ProviderOpts is a hook point for Providers to supply additional,
+// provider-specific options to various roachprod commands. In general, the flags
 // should be prefixed with the provider's name to prevent collision between
 // similar options.
 //
 // If a new command is added (perhaps `roachprod enlarge`) that needs
 // additional provider- specific flags, add a similarly-named method
 // `ConfigureEnlargeFlags` to mix in the additional flags.
-type ProviderFlags interface {
+type ProviderOpts interface {
 	// Configures a FlagSet with any options relevant to the `create` command.
 	ConfigureCreateFlags(*pflag.FlagSet)
 	// Configures a FlagSet with any options relevant to cluster manipulation
 	// commands (`create`, `destroy`, `list`, `sync` and `gc`).
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
-	// Updates provider opts values to match the passed provider opts struct
-	ConfigureProviderOpts(interface{})
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
+	CreateProviderOpts() ProviderOpts
 	CleanSSH() error
 	ConfigSSH() error
-	Create(names []string, opts CreateOpts) error
+	Create(names []string, opts CreateOpts, providerOpts ProviderOpts) error
 	Reset(vms List) error
 	Delete(vms List) error
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	// Returns a hook point for extending top-level roachprod tooling flags
-	Flags() ProviderFlags
 	List() (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
@@ -269,6 +266,27 @@ type DeleteCluster interface {
 
 // Providers contains all known Provider instances. This is initialized by subpackage init() functions.
 var Providers = map[string]Provider{}
+
+type ProvidersOptionsContainer struct {
+	Providers map[string]ProviderOpts
+}
+
+// CreateProvidersOptionsContainer returns a ProvidersOptionsContainer which is
+// populated with options for all registered providers. Only call it after
+// initiliazing providers (populating vm.Providers).
+func CreateProvidersOptionsContainer() ProvidersOptionsContainer {
+	container := ProvidersOptionsContainer{Providers: make(map[string]ProviderOpts)}
+	for providerName, providerInstance := range Providers {
+		container.Providers[providerName] = providerInstance.CreateProviderOpts()
+	}
+	return container
+}
+
+func (container *ProvidersOptionsContainer) SetProviderOpts(
+	providerName string, providerOpts ProviderOpts,
+) {
+	container.Providers[providerName] = providerOpts
+}
 
 // AllProviderNames returns the names of all known vm Providers.  This is useful with the
 // ProvidersSequential or ProvidersParallel methods.

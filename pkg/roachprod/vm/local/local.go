@@ -115,19 +115,15 @@ type Provider struct {
 	storage VMStorage
 }
 
-// No-op implementation of ProviderFlags
-type emptyFlags struct{}
+// No-op implementation of vm.ProviderOpts
+type ProviderOpts struct{}
 
-// ConfigureCreateFlags is part of ProviderFlags.  This implementation is a no-op.
-func (o *emptyFlags) ConfigureCreateFlags(flags *pflag.FlagSet) {
+// ConfigureCreateFlags is part of ProviderOpts.  This implementation is a no-op.
+func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 }
 
-// ConfigureClusterFlags is part of ProviderFlags.  This implementation is a no-op.
-func (o *emptyFlags) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
-}
-
-// ConfigureProviderOpts is part of ProviderFlags.  This implementation is a no-op.
-func (o *emptyFlags) ConfigureProviderOpts(newOpts interface{}) {
+// ConfigureClusterFlags is part of ProviderOpts.  This implementation is a no-op.
+func (o *ProviderOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
 // CleanSSH is part of the vm.Provider interface.  This implementation is a no-op.
@@ -141,7 +137,9 @@ func (p *Provider) ConfigSSH() error {
 }
 
 // Create just creates fake host-info entries in the local filesystem
-func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
+func (p *Provider) Create(
+	names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,
+) error {
 	now := timeutil.Now()
 	c := &cloud.Cluster{
 		Name:      opts.ClusterName,
@@ -229,8 +227,8 @@ func (p *Provider) FindActiveAccount() (string, error) {
 }
 
 // Flags is part of the vm.Provider interface. This implementation is a no-op.
-func (p *Provider) Flags() vm.ProviderFlags {
-	return &emptyFlags{}
+func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
+	return &ProviderOpts{}
 }
 
 // List reports all the local cluster "VM" instances.
