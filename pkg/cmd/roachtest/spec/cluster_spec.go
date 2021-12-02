@@ -97,7 +97,7 @@ func awsMachineSupportsSSD(machineType string) bool {
 	return false
 }
 
-func getAWSOpts(machineType string, zones []string, localSSD bool) aws.ProviderOpts {
+func getAWSOpts(machineType string, zones []string, localSSD bool) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if localSSD {
 		opts.SSDMachineType = machineType
@@ -112,7 +112,7 @@ func getAWSOpts(machineType string, zones []string, localSSD bool) aws.ProviderO
 
 func getGCEOpts(
 	machineType string, zones []string, volumeSize, localSSDCount int, localSSD bool, RAID0 bool,
-) gce.ProviderOpts {
+) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
 	if volumeSize != 0 {
@@ -132,7 +132,7 @@ func getGCEOpts(
 	return opts
 }
 
-func getAzureOpts(machineType string, zones []string) azure.ProviderOpts {
+func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
 	if len(zones) != 0 {
@@ -145,7 +145,7 @@ func getAzureOpts(machineType string, zones []string) azure.ProviderOpts {
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
 	clusterName string, useIOBarrier bool,
-) (vm.CreateOpts, interface{}, error) {
+) (vm.CreateOpts, vm.ProviderOpts, error) {
 
 	createVMOpts := vm.DefaultCreateOpts()
 	createVMOpts.ClusterName = clusterName
@@ -227,7 +227,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	var providerOpts interface{}
+	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD)
