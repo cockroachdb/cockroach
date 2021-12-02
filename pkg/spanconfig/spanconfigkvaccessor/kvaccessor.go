@@ -19,13 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -33,13 +33,17 @@ import (
 // KVAccessor provides read/write access to all the span configurations for a
 // CRDB cluster. It's a concrete implementation of the KVAccessor interface.
 type KVAccessor struct {
-	db       *kv.DB
-	ie       sqlutil.InternalExecutor
+	db *kv.DB
+	ie sqlutil.InternalExecutor
+	// txn captures the transaction we're scoped to; it's allowed to be nil. If
+	// nil of course, it's unsafe to use multiple times as part of the same
+	// request with expectation of transactionality -- we're responsible for
+	// opening a fresh txn.
+	txn      *kv.Txn
 	settings *cluster.Settings
 
-	// configurationsTableFQN is typically
-	// 'system.public.span_configurations', but left configurable
-	// ease-of-testing.
+	// configurationsTableFQN is typically 'system.public.span_configurations',
+	// but left configurable ease-of-testing.
 	configurationsTableFQN string
 }
 
@@ -62,24 +66,10 @@ func New(
 	}
 }
 
-// enabledSetting gates usage of the KVAccessor. It has no effect unless
-// COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is also set.
-var enabledSetting = settings.RegisterBoolSetting(
-	"spanconfig.experimental_kvaccessor.enabled",
-	"enable the use of the kv accessor", false).WithSystemOnly()
-
-// errDisabled is returned if the setting gating usage of the KVAccessor is
-// disabled.
-var errDisabled = errors.New("span config kv accessor disabled")
-
 // GetSpanConfigEntriesFor is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigEntriesFor(
 	ctx context.Context, spans []roachpb.Span,
 ) (resp []roachpb.SpanConfigEntry, retErr error) {
-	if !enabledSetting.Get(&k.settings.SV) {
-		return nil, errDisabled
-	}
-
 	if len(spans) == 0 {
 		return resp, nil
 	}
@@ -88,7 +78,7 @@ func (k *KVAccessor) GetSpanConfigEntriesFor(
 	}
 
 	getStmt, getQueryArgs := k.constructGetStmtAndArgs(spans)
-	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", nil,
+	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", k.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getStmt, getQueryArgs...,
 	)
@@ -128,8 +118,31 @@ func (k *KVAccessor) GetSpanConfigEntriesFor(
 func (k *KVAccessor) UpdateSpanConfigEntries(
 	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
 ) error {
-	if !enabledSetting.Get(&k.settings.SV) {
-		return errDisabled
+	if k.txn != nil {
+		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, toUpsert, k.txn)
+	}
+
+	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, toUpsert, txn)
+	})
+}
+
+// WithTxn is part of the KVAccessor interface.
+func (k *KVAccessor) WithTxn(txn *kv.Txn) spanconfig.KVAccessor {
+	return &KVAccessor{
+		db:                     k.db,
+		ie:                     k.ie,
+		txn:                    txn,
+		settings:               k.settings,
+		configurationsTableFQN: k.configurationsTableFQN,
+	}
+}
+
+func (k *KVAccessor) updateSpanConfigEntriesWithTxn(
+	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry, txn *kv.Txn,
+) error {
+	if txn == nil {
+		log.Fatalf(ctx, "expected non-nil txn")
 	}
 
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {
@@ -154,47 +167,42 @@ func (k *KVAccessor) UpdateSpanConfigEntries(
 		validationStmt, validationQueryArgs = k.constructValidationStmtAndArgs(toUpsert)
 	}
 
-	if err := k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if len(toDelete) > 0 {
-			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				deleteStmt, deleteQueryArgs...,
-			)
-			if err != nil {
-				return err
-			}
-			if n != len(toDelete) {
-				return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDelete), n)
-			}
-		}
-
-		if len(toUpsert) == 0 {
-			// Nothing left to do
-			return nil
-		}
-
-		if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
+	if len(toDelete) > 0 {
+		n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			upsertStmt, upsertQueryArgs...,
-		); err != nil {
+			deleteStmt, deleteQueryArgs...,
+		)
+		if err != nil {
 			return err
-		} else if n != len(toUpsert) {
-			return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsert), n)
 		}
-
-		if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			validationStmt, validationQueryArgs...,
-		); err != nil {
-			return err
-		} else if valid := bool(tree.MustBeDBool(datums[0])); !valid {
-			return errors.AssertionFailedf("expected to find single row containing upserted spans")
+		if n != len(toDelete) {
+			return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDelete), n)
 		}
-
-		return nil
-	}); err != nil {
-		return err
 	}
+
+	if len(toUpsert) == 0 {
+		// Nothing left to do
+		return nil
+	}
+
+	if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		upsertStmt, upsertQueryArgs...,
+	); err != nil {
+		return err
+	} else if n != len(toUpsert) {
+		return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsert), n)
+	}
+
+	if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		validationStmt, validationQueryArgs...,
+	); err != nil {
+		return err
+	} else if valid := bool(tree.MustBeDBool(datums[0])); !valid {
+		return errors.AssertionFailedf("expected to find single row containing upserted spans")
+	}
+
 	return nil
 }
 
