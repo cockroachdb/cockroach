@@ -93,7 +93,7 @@ func newParquetExporter(
 	var exporter *parquetExporter
 
 	buf := bytes.NewBuffer([]byte{})
-	parquetColumns, err := newParquetColumns(typs)
+	parquetColumns, err := newParquetColumns(typs, sp)
 	if err != nil {
 		return nil, err
 	}
@@ -119,13 +119,11 @@ type parquetColumn struct {
 	encodeFn func(datum tree.Datum) (interface{}, error)
 }
 
-// newParquetColumns creates a list of parquet columns, given the input relation's column types
-func newParquetColumns(typs []*types.T) ([]parquetColumn, error) {
+// newParquetColumns creates a list of parquet columns, given the input relation's column types.
+func newParquetColumns(typs []*types.T, sp execinfrapb.ParquetWriterSpec) ([]parquetColumn, error) {
 	parquetColumns := make([]parquetColumn, len(typs))
 	for i := 0; i < len(typs); i++ {
-		// TODO(mbutler): figure out how to pass column names to export processor
-		name := fmt.Sprintf("Col%d", i)
-		parquetCol, err := newParquetColumn(typs[i], name)
+		parquetCol, err := newParquetColumn(typs[i], sp.ColNames[i], sp.ColNullability[i])
 		if err != nil {
 			return nil, err
 		}
@@ -135,8 +133,8 @@ func newParquetColumns(typs []*types.T) ([]parquetColumn, error) {
 }
 
 // newParquetColumn populates a parquetColumn by finding the right parquet type and defining the
-// encodeFn
-func newParquetColumn(typ *types.T, name string) (parquetColumn, error) {
+// encodeFn.
+func newParquetColumn(typ *types.T, name string, nullable bool) (parquetColumn, error) {
 	col := parquetColumn{}
 	col.definition = new(parquetschema.ColumnDefinition)
 	col.definition.SchemaElement = parquet.NewSchemaElement()
@@ -148,18 +146,20 @@ func newParquetColumn(typ *types.T, name string) (parquetColumn, error) {
 		  an array in crdb) or a primitive type (e.g., int, float, boolean,
 		  string) and the repetition can be one of the three following cases:
 
-		  - required: exactly one occurrence (i.e. the column value is a scalar, and cannot have null values)
+		  - required: exactly one occurrence (i.e. the column value is a scalar, and
+		  cannot have null values). A column is set to required if the user
+		  specified the CRDB column as NOT NULL.
 		  - optional: 0 or 1 occurrence (i.e. same as above, but can have values)
 		  - repeated: 0 or more occurrences (the column value can be an array of values,
 		  so the value within the array will have its own repetition type)
-
-		  Right now, the parquet exporter hardcodes each crdb table column to have the `optional`
-		  repetition type.
 
 			See this blog post for more on parquet type specification:
 			https://blog.twitter.com/engineering/en_us/a/2013/dremel-made-simple-with-parquet
 	*/
 	col.definition.SchemaElement.RepetitionType = parquet.FieldRepetitionTypePtr(parquet.FieldRepetitionType_OPTIONAL)
+	if !nullable {
+		col.definition.SchemaElement.RepetitionType = parquet.FieldRepetitionTypePtr(parquet.FieldRepetitionType_REQUIRED)
+	}
 	col.definition.SchemaElement.Name = col.name
 
 	// MB figured out the low level properties of the encoding by running the goland debugger on
@@ -290,6 +290,8 @@ func (sp *parquetWriterProcessor) OutputTypes() []*types.T {
 	return res
 }
 
+// MustBeStreaming currently never gets called by the parquetWriterProcessor as
+// the function only applies to implementation.
 func (sp *parquetWriterProcessor) MustBeStreaming() bool {
 	return false
 }

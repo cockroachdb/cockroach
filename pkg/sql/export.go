@@ -46,6 +46,8 @@ type exportNode struct {
 	chunkRows       int
 	chunkSize       int64
 	fileCompression execinfrapb.FileCompression
+	colNames        []string
+	colNullability  []bool
 }
 
 func (e *exportNode) startExec(params runParams) error {
@@ -98,7 +100,11 @@ var featureExportEnabled = settings.RegisterBoolSetting(
 
 // ConstructExport is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExport(
-	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
+	input exec.Node,
+	fileName tree.TypedExpr,
+	fileFormat string,
+	options []exec.KVOption,
+	notNullCols exec.NodeColumnOrdinalSet,
 ) (exec.Node, error) {
 	fileFormat = strings.ToLower(fileFormat)
 
@@ -150,7 +156,6 @@ func (ef *execFactory) ConstructExport(
 				"only users with the admin role are allowed to EXPORT to the specified URI"))
 		}
 	}
-
 	optVals, err := evalStringOptions(ef.planner.EvalContext(), options, exportOptionExpectValues)
 	if err != nil {
 		return nil, err
@@ -161,6 +166,15 @@ func (ef *execFactory) ConstructExport(
 		csvOpts           *roachpb.CSVOptions
 		parquetOpts       *roachpb.ParquetOptions
 	)
+
+	cols := planColumns(input.(planNode))
+	colNames := make([]string, len(cols))
+	colNullability := make([]bool, len(cols))
+	for i, col := range cols {
+		colNames[i] = col.Name
+		colNullability[i] = !notNullCols.Contains(i)
+	}
+
 	switch fileFormat {
 	case csvSuffix:
 		csvOpts = &roachpb.CSVOptions{}
@@ -225,5 +239,7 @@ func (ef *execFactory) ConstructExport(
 		chunkRows:       chunkRows,
 		chunkSize:       chunkSize,
 		fileCompression: codec,
+		colNames:        colNames,
+		colNullability:  colNullability,
 	}, nil
 }

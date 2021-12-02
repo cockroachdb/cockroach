@@ -3945,12 +3945,14 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		}
 	} else if n.parquetOpts != nil {
 		core.ParquetWriter = &execinfrapb.ParquetWriterSpec{
-			Destination: n.destination,
-			NamePattern: n.fileNamePattern,
-			Options:     *n.parquetOpts,
-			ChunkRows:   int64(n.chunkRows),
-			ChunkSize:   n.chunkSize,
-			UserProto:   planCtx.planner.User().EncodeProto(),
+			Destination:    n.destination,
+			NamePattern:    n.fileNamePattern,
+			Options:        *n.parquetOpts,
+			ChunkRows:      int64(n.chunkRows),
+			ChunkSize:      n.chunkSize,
+			UserProto:      planCtx.planner.User().EncodeProto(),
+			ColNames:       n.colNames,
+			ColNullability: n.colNullability,
 		}
 	} else {
 		return nil, errors.AssertionFailedf("parquetOpts and csvOpts are both empty. " +
