@@ -665,3 +665,18 @@ CREATE INDEX h2 ON drop_earlier_hash_column(k) USING HASH WITH BUCKET_COUNT = 8
 
 statement ok
 DROP INDEX h1
+
+subtest test_table_indexes
+
+statement ok
+CREATE TABLE poor_t (a INT PRIMARY KEY, b INT, INDEX t_idx_b (b) USING HASH WITH BUCKET_COUNT = 8)
+
+query ITITTBBB colnames
+SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = 'poor_t'
+----
+descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded
+80             poor_t           1         poor_t_pkey  primary     true       false        false
+80             poor_t           2         t_idx_b      secondary   false      false        true
+
+statement ok
+DROP TABLE poor_t
