@@ -121,7 +121,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				pts, err := mgr.UpdateReplicationStreamProgress(evalCtx, evalCtx.Txn, streamID, frontier)
+				pts, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalCtx.Txn)
 				if err != nil {
 					return nil, err
 				}

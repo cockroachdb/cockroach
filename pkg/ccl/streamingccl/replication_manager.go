@@ -46,17 +46,18 @@ func (r replicationStreamManagerImpl) StartReplicationStream(
 	return StartReplicationStreamHook(evalCtx, txn, tenantID)
 }
 
-// UpdateReplicationStreamProgressHook hooks an UpdateReplicationStreamProgress implementation inside streamingccl package.
-var UpdateReplicationStreamProgressHook func(evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
-	frontier hlc.Timestamp) (jobspb.StreamReplicationStatus, error)
+// UpdateReplicationStreamProgressHook hooks an UpdateReplicationStreamProgress implementation
+// inside streamingccl package.
+var UpdateReplicationStreamProgressHook func(evalCtx *tree.EvalContext, streamID streaming.StreamID,
+	frontier hlc.Timestamp, txn *kv.Txn) (jobspb.StreamReplicationStatus, error)
 
 // UpdateReplicationStreamProgress implements ReplicationStreamManager interface.
 func (r replicationStreamManagerImpl) UpdateReplicationStreamProgress(
-	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID, frontier hlc.Timestamp,
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (jobspb.StreamReplicationStatus, error) {
 	if UpdateReplicationStreamProgressHook == nil {
 		return jobspb.StreamReplicationStatus{},
 			errors.New("UpdateReplicationStreamProgress is not registered")
 	}
-	return UpdateReplicationStreamProgressHook(evalCtx, txn, streamID, frontier)
+	return UpdateReplicationStreamProgressHook(evalCtx, streamID, frontier, txn)
 }

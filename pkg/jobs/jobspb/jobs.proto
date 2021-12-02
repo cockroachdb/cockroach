@@ -107,12 +107,16 @@ message StreamIngestionProgress {
 
 
 message StreamReplicationStatus {
-
   enum StreamStatus {
-    RUNNING = 0;
-    PAUSED = 1;
-    // STOPPED can mean replication is complete or stream is closed due to timeout
-    STOPPED = 2;
+    // Stream is running. Consumers should continue to heartbeat.
+    STREAM_ACTIVE = 0;
+    // Stream stopped running. Consumers should stop heartbeating and
+    // optionally start a new replication stream.
+    STREAM_INACTIVE = 1;
+    // Stream replication is paused. Consumers can resume the job and start heartbeating.
+    STREAM_PAUSED = 2;
+    // Stream status is unknown. Consumers should retry heartbeating.
+    UNKNOWN_STREAM_STATUS_RETRY = 4;
   }
 
   StreamStatus stream_status = 1;

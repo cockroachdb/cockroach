@@ -200,7 +200,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 		expectedStatus := jobspb.StreamReplicationStatus{StreamStatus: expectedStreamStatus}
 		// A running stream is expected to report the current protected timestamp for the replicating spans.
-		if expectedStatus.StreamStatus == jobspb.StreamReplicationStatus_RUNNING {
+		if expectedStatus.StreamStatus == jobspb.StreamReplicationStatus_STREAM_ACTIVE {
 			expectedStatus.ProtectedTimestamp = &hlcTime
 		}
 		require.Equal(t, expectedStatus.String(), rows[0][0])
@@ -215,7 +215,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 			[][]string{{"failed"}})
-		checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STOPPED)
+		checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 
 	// Make sure the stream does not time out within the test timeout
@@ -232,7 +232,11 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
 			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 				[][]string{{"running"}})
-			checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_RUNNING)
+			checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
+	})
+
+	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
+		checkStreamStatus(t, "123", jobspb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 }

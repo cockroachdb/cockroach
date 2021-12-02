@@ -188,11 +188,11 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			var status jobspb.StreamReplicationStatus
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				status, err = updateReplicationStreamProgress(
-					ctx, timeutil.Now(), ptp, registry, txn, streaming.StreamID(jr.JobID),
-					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+					ctx, timeutil.Now(), ptp, registry, streaming.StreamID(jr.JobID),
+					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn)
 				return err
 			}))
-			require.Equal(t, jobspb.StreamReplicationStatus_STOPPED, status.StreamStatus)
+			require.Equal(t, jobspb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		}
 
 		{ // Job starts running and eventually fails after it's timed out
@@ -220,11 +220,10 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				streamStatus, err = updateReplicationStreamProgress(
 					ctx, expire,
-					ptp, registry, txn, streaming.StreamID(jr.JobID), updatedFrontier,
-				)
+					ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn)
 				return err
 			}))
-			require.Equal(t, jobspb.StreamReplicationStatus_RUNNING, streamStatus.StreamStatus)
+			require.Equal(t, jobspb.StreamReplicationStatus_STREAM_ACTIVE, streamStatus.StreamStatus)
 			require.Equal(t, updatedFrontier, *streamStatus.ProtectedTimestamp)
 
 			r, err := getPTSRecord(ptsID)
