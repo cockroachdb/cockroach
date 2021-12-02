@@ -131,6 +131,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.

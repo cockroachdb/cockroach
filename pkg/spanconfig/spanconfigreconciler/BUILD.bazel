@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigreconciler",
+    srcs = ["reconciler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigsqltranslator",
+        "//pkg/spanconfig/spanconfigstore",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanconfigreconciler_test",
+    srcs = ["reconciler_test.go"],
+    data = glob(["testdata/**"]),
+)
