@@ -258,7 +258,6 @@ export class NodeGraphs extends React.Component<
       ? selectedDashboard
       : defaultDashboard;
 
-    const title = dashboards[dashboard].label + " Dashboard";
     const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
 
@@ -327,8 +326,8 @@ export class NodeGraphs extends React.Component<
 
     return (
       <div style={{ paddingBottom }}>
-        <Helmet title={title} />
-        <h3 className="base-heading">{title}</h3>
+        <Helmet title={"Metrics"} />
+        <h3 className="base-heading">Metrics</h3>
         <PageConfig>
           <PageConfigItem>
             <Dropdown
