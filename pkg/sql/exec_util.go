@@ -1159,6 +1159,9 @@ type ExecutorConfig struct {
 	// reconciliation job.
 	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
 
+	// SpanConfigKVAccessor is used when creating and deleting tenant records.
+	SpanConfigKVAccessor spanconfig.KVAccessorWithTxn
+
 	// InternalExecutorFactory is used to create an InternalExecutor binded with
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
