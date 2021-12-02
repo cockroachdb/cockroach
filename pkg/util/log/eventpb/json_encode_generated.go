@@ -271,6 +271,18 @@ func (m *AlterDefaultPrivileges) AppendJSONFields(printComma bool, b redact.Reda
 		b = append(b, "\"ForAllRoles\":true"...)
 	}
 
+	if m.SchemaName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SchemaName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.SchemaName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
