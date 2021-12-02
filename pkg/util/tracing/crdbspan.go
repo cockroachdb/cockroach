@@ -285,7 +285,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 	s.mu.tags[key] = value
 }
 
-func (s *crdbSpan) record(maybeRedactableString string) {
+func (s *crdbSpan) record(maybeRedactableString tracingpb.MaybeRedactableString) {
 	if s.recordingType() != RecordingVerbose {
 		return
 	}
@@ -299,7 +299,7 @@ func (s *crdbSpan) record(maybeRedactableString string) {
 	logRecord := &tracingpb.LogRecord{
 		Time: now,
 		Fields: []tracingpb.LogRecord_Field{
-			{Key: tracingpb.LogMessageField, Value: tracingpb.MaybeRedactableString(maybeRedactableString)},
+			{Key: tracingpb.LogMessageField, Value: maybeRedactableString},
 		},
 	}
 
