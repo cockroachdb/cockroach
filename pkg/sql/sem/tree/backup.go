@@ -131,6 +131,7 @@ type RestoreOptions struct {
 	Detached                  bool
 	SkipLocalitiesCheck       bool
 	DebugPauseOn              Expr
+	IncrementalStorage        StringOrPlaceholderOptList
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -139,10 +140,22 @@ var _ NodeFormatter = &RestoreOptions{}
 type Restore struct {
 	Targets            TargetList
 	DescriptorCoverage DescriptorCoverage
-	From               []StringOrPlaceholderOptList
-	AsOf               AsOfClause
-	Options            RestoreOptions
-	Subdir             Expr
+
+	// From contains the URIs for the backup(s) we seek to restore.
+	//   - len(From)>1 implies the user explicitly passed incremental backup paths,
+	//     which is only allowed using the old syntax, `RESTORE <targets> FROM <destination>.
+	//     In this case, From[0] contains the URI(s) for the full backup.
+	//   - len(From)==1 implies we'll have to look for incremental backups in planning
+	//   - len(From[0]) > 1 implies the backups are locality aware
+	//   - From[i][0] must be the default locality.
+	From    []StringOrPlaceholderOptList
+	AsOf    AsOfClause
+	Options RestoreOptions
+
+	// Subdir may be set by the parser when the SQL query is of the form `RESTORE
+	// ... FROM 'from' IN 'subdir'...`. Alternatively, restore_planning.go will set
+	// it for the query `RESTORE ... FROM 'from' IN LATEST...`
+	Subdir Expr
 }
 
 var _ Statement = &Restore{}
@@ -383,6 +396,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("skip_localities_check")
 	}
+
+	if o.IncrementalStorage != nil {
+		maybeAddSep()
+		ctx.WriteString("incremental_storage = ")
+		ctx.FormatNode(&o.IncrementalStorage)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -460,6 +479,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("debug_pause_on specified multiple times")
 	}
 
+	if o.IncrementalStorage == nil {
+		o.IncrementalStorage = other.IncrementalStorage
+	} else if other.IncrementalStorage != nil {
+		return errors.New("incremental_storage option specified multiple times")
+	}
+
 	return nil
 }
 
@@ -475,5 +500,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.IntoDB == options.IntoDB &&
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
-		o.DebugPauseOn == options.DebugPauseOn
+		o.DebugPauseOn == options.DebugPauseOn &&
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
 }

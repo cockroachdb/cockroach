@@ -659,22 +659,24 @@ func checkForLatestFileInCollection(
 	return true, nil
 }
 
-// resolveBackupManifests resolves a list of list of URIs that point to the
-// incremental layers (each of which can be partitioned) of backups into the
-// actual backup manifests and metadata required to RESTORE. If only one layer
-// is explicitly provided, it is inspected to see if it contains "appended"
-// layers internally that are then expanded into the result layers returned,
-// similar to if those layers had been specified in `from` explicitly.
+// resolveBackupManifests resolves the URIs that point to the incremental layers
+// (each of which can be partitioned) of backups into the actual backup
+// manifests and metadata required to RESTORE. If only one layer is explicitly
+// provided, it is inspected to see if it contains "appended" layers internally
+// that are then expanded into the result layers returned, similar to if those
+// layers had been specified in `from` explicitly.
 func resolveBackupManifests(
 	ctx context.Context,
 	baseStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
+	incFrom []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	user security.SQLUsername,
 ) (
 	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
 	mainBackupManifests []BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	_ error,
@@ -720,10 +722,27 @@ func resolveBackupManifests(
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
-		prev, err := FindPriorBackups(ctx, baseStores[0], IncludeManifest)
+
+		var incStores []cloud.ExternalStorage
+		if len(incFrom) != 0 {
+			incStores = make([]cloud.ExternalStorage, len(incFrom))
+			for i := range incFrom {
+				store, err := mkStore(ctx, incFrom[i], user)
+				if err != nil {
+					return nil, nil, nil, errors.Wrapf(err, "failed to open backup storage location")
+				}
+				defer store.Close()
+				incStores[i] = store
+			}
+		} else {
+			incFrom = from[0]
+			incStores = baseStores
+		}
+
+		prev, err := FindPriorBackups(ctx, incStores[0], IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
-				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
+				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", incStores[0])
 				// If we do not support listing, we have to just assume there are none
 				// and restore the specified base.
 				prev = nil
@@ -738,7 +757,7 @@ func resolveBackupManifests(
 		mainBackupManifests = make([]BackupManifest, numLayers)
 		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
 
-		// Setup the base layer explicitly.
+		// Setup the full backup layer explicitly.
 		defaultURIs[0] = from[0][0]
 		mainBackupManifests[0] = baseManifest
 		localityInfo[0], err = getLocalityInfo(
@@ -750,21 +769,21 @@ func resolveBackupManifests(
 
 		// If we discovered additional layers, handle them too.
 		if numLayers > 1 {
-			numPartitions := len(from[0])
-			// We need the parsed baseURI for each partition to calculate the URI to
-			// each layer in that partition below.
+			numPartitions := len(incFrom)
+			// We need the parsed base URI (<prefix>/<subdir>) for each partition to calculate the
+			// URI to each layer in that partition below.
 			baseURIs := make([]*url.URL, numPartitions)
-			for i := range from[0] {
-				baseURIs[i], err = url.Parse(from[0][i])
+			for i := range incFrom {
+				baseURIs[i], err = url.Parse(incFrom[i])
 				if err != nil {
 					return nil, nil, nil, err
 				}
 			}
 
-			// For each layer, we need to load the base manifest then calculate the URI and the
+			// For each layer, we need to load the default manifest then calculate the URI and the
 			// locality info for each partition.
 			for i := range prev {
-				defaultManifestForLayer, err := readBackupManifest(ctx, baseStores[0], prev[i], encryption)
+				defaultManifestForLayer, err := readBackupManifest(ctx, incStores[0], prev[i], encryption)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -773,15 +792,16 @@ func resolveBackupManifests(
 				// prev[i] is the path to the manifest file itself for layer i -- the
 				// dirname piece of that path is the subdirectory in each of the
 				// partitions in which we'll also expect to find a partition manifest.
-				subDir := path.Dir(prev[i])
+				// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
+				incSubDir := path.Dir(prev[i])
 				partitionURIs := make([]string, numPartitions)
 				for j := range baseURIs {
 					u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
-					u.Path = path.Join(u.Path, subDir)
+					u.Path = path.Join(u.Path, incSubDir)
 					partitionURIs[j] = u.String()
 				}
 				defaultURIs[i+1] = partitionURIs[0]
-				localityInfo[i+1], err = getLocalityInfo(ctx, baseStores, partitionURIs, defaultManifestForLayer, encryption, subDir)
+				localityInfo[i+1], err = getLocalityInfo(ctx, incStores, partitionURIs, defaultManifestForLayer, encryption, incSubDir)
 				if err != nil {
 					return nil, nil, nil, err
 				}
