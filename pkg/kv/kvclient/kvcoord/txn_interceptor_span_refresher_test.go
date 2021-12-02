@@ -489,7 +489,7 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, br)
 	require.NotNil(t, pErr)
-	require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, pErr)
+	require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh of span\(s\): \[\{a\-b\}\]\)`, pErr)
 	require.Equal(t, int64(2), tsr.refreshSuccess.Count())
 	require.Equal(t, int64(1), tsr.refreshFail.Count())
 	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())

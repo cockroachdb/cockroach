@@ -2704,7 +2704,7 @@ func TestTxnManualRefresh(t *testing.T) {
 					pErr := roachpb.NewErrorf("encountered recently written key")
 					r.respCh <- resp{pErr: pErr}
 				}
-				require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, <-errCh)
+				require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh of span\(s\): \[foo\]\)`, <-errCh)
 			},
 		},
 	}
