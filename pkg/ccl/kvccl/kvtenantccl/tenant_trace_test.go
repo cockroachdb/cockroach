@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +68,6 @@ SET tracing = off;
 	var args base.TestClusterArgs
 	args.ServerArgs.Knobs.Store = knobs
 	tc := serverutils.StartNewTestCluster(t, 1, args)
-	tc.Server(0).Tracer().(*tracing.Tracer).SetRedactable(redactable)
 	defer tc.Stopper().Stop(ctx)
 
 	t.Run("system-tenant", func(t *testing.T) {
@@ -117,20 +115,10 @@ SET tracing = off;
 			}
 		}
 
-		if redactable {
-			// If redaction was on, we expect the tenant to see safe information in its
-			// trace.
-			require.True(t, found, "did not see expected trace message '%q':\n%s",
-				visibleString, sqlutils.MatrixToStr(results))
-			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
-				redactedMarkerString, sqlutils.MatrixToStr(results))
-		} else {
-			// Otherwise, expect the opposite: not even safe information makes it through,
-			// because it gets replaced with foundRedactedMarker.
-			require.False(t, found, "unexpectedly saw message '%q':\n%s",
-				visibleString, sqlutils.MatrixToStr(results))
-			require.True(t, foundRedactedMarker, "not not find expected message '%q':\n%s",
-				redactedMarkerString, sqlutils.MatrixToStr(results))
-		}
+		// Redactability is always enabled for tenants
+		require.True(t, found, "did not see expected trace message '%q':\n%s",
+			visibleString, sqlutils.MatrixToStr(results))
+		require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
+			redactedMarkerString, sqlutils.MatrixToStr(results))
 	})
 }

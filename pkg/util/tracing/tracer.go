@@ -389,7 +389,7 @@ func (t *Tracer) startSpanGeneric(
 	helper.crdbSpan = crdbSpan{
 		traceID:      traceID,
 		spanID:       spanID,
-		redactable:   t.Redactable(),
+		redactable:   t.Redactable() || opts.ForceRedactable,
 		goroutineID:  goroutineID,
 		startTime:    startTime,
 		parentSpanID: opts.parentSpanID(),

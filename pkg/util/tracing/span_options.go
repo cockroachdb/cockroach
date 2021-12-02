@@ -20,12 +20,13 @@ import (
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent        *Span                         // see WithParentAndAutoCollection
-	RemoteParent  SpanMeta                      // see WithParentAndManualCollection
-	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
-	LogTags       *logtags.Buffer               // see WithLogTags
-	Tags          map[string]interface{}        // see WithTags
-	ForceRealSpan bool                          // see WithForceRealSpan
+	Parent          *Span                         // see WithParentAndAutoCollection
+	RemoteParent    SpanMeta                      // see WithParentAndManualCollection
+	RefType         opentracing.SpanReferenceType // see WithFollowsFrom
+	LogTags         *logtags.Buffer               // see WithLogTags
+	Tags            map[string]interface{}        // see WithTags
+	ForceRealSpan   bool                          // see WithForceRealSpan
+	ForceRedactable bool                          // see WithForceRedactable
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -93,8 +94,26 @@ func (opts *spanOptions) shadowContext() opentracing.SpanContext {
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
 // - WithTags: adds tags to a Span on creation.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
+// - WithForceRedactable: sets a flag used to force redactability on the span.
 type SpanOption interface {
 	apply(spanOptions) spanOptions
+}
+
+type forceRedactableOption struct {
+	redactable bool
+}
+
+var _ SpanOption = &forceRedactableOption{false}
+
+func (r *forceRedactableOption) apply(opts spanOptions) spanOptions {
+	opts.ForceRedactable = r.redactable
+	return opts
+}
+
+// WithForceRedactable can set redactability to true, overriding the
+// tracer's redactability setting when we create the Span.
+func WithForceRedactable(to bool) SpanOption {
+	return &forceRedactableOption{to}
 }
 
 type parentAndAutoCollectionOption Span
