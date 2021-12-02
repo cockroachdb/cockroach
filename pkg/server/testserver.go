@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -315,6 +314,8 @@ type TestServer struct {
 	}
 }
 
+var _ serverutils.TestServerInterface = &TestServer{}
+
 // Node returns the Node as an interface{}.
 func (ts *TestServer) Node() interface{} {
 	return ts.node
@@ -421,6 +422,16 @@ func (ts *TestServer) HeartbeatNodeLiveness() error {
 	return err
 }
 
+// SQLInstanceID is part of TestServerInterface.
+func (ts *TestServer) SQLInstanceID() base.SQLInstanceID {
+	return ts.sqlServer.sqlIDContainer.SQLInstanceID()
+}
+
+// StatusServer is part of TestServerInterface.
+func (ts *TestServer) StatusServer() interface{} {
+	return ts.status
+}
+
 // RPCContext returns the rpc context used by the TestServer.
 func (ts *TestServer) RPCContext() *rpc.Context {
 	if ts != nil {
@@ -445,8 +456,9 @@ func (ts *TestServer) DB() *kv.DB {
 	return nil
 }
 
-// PGServer returns the pgwire.Server used by the TestServer.
-func (ts *TestServer) PGServer() *pgwire.Server {
+// PGServer exposes the pgwire.Server instance used by the TestServer as an
+// interface{}.
+func (ts *TestServer) PGServer() interface{} {
 	if ts != nil {
 		return ts.sqlServer.pgServer
 	}
@@ -499,49 +511,91 @@ type TestTenant struct {
 	httpAddr string
 }
 
-// SQLAddr is part of the TestTenantInterface interface.
+var _ serverutils.TestTenantInterface = &TestTenant{}
+
+// SQLAddr is part of TestTenantInterface interface.
 func (t *TestTenant) SQLAddr() string {
 	return t.sqlAddr
 }
 
-// HTTPAddr is part of the TestTenantInterface interface.
+// HTTPAddr is part of TestTenantInterface interface.
 func (t *TestTenant) HTTPAddr() string {
 	return t.httpAddr
 }
 
-// PGServer is part of the TestTenantInterface interface.
+// PGServer is part of TestTenantInterface.
 func (t *TestTenant) PGServer() interface{} {
 	return t.pgServer
 }
 
-// DiagnosticsReporter is part of the TestTenantInterface interface.
+// DiagnosticsReporter is part of TestTenantInterface.
 func (t *TestTenant) DiagnosticsReporter() interface{} {
 	return t.diagnosticsReporter
 }
 
-// StatusServer is part of the TestTenantInterface interface.
+// StatusServer is part of TestTenantInterface.
 func (t *TestTenant) StatusServer() interface{} {
 	return t.execCfg.SQLStatusServer
 }
 
-// DistSQLServer is part of the TestTenantInterface interface.
+// DistSQLServer is part of TestTenantInterface.
 func (t *TestTenant) DistSQLServer() interface{} {
 	return t.SQLServer.distSQLServer
 }
 
-// RPCContext is part of the TestTenantInterface interface
+// RPCContext is part of TestTenantInterface.
 func (t *TestTenant) RPCContext() *rpc.Context {
 	return t.execCfg.RPCContext
 }
 
-// JobRegistry is part of the TestTenantInterface interface.
+// JobRegistry is part of TestTenantInterface.
 func (t *TestTenant) JobRegistry() interface{} {
 	return t.SQLServer.jobRegistry
 }
 
-// TestingKnobs is part of the TestTenantInterface interface.
+// ExecutorConfig is part of TestTenantInterface.
+func (t *TestTenant) ExecutorConfig() interface{} {
+	return *t.SQLServer.execCfg
+}
+
+// RangeFeedFactory is part of TestTenantInterface.
+func (t *TestTenant) RangeFeedFactory() interface{} {
+	return t.SQLServer.execCfg.RangeFeedFactory
+}
+
+// ClusterSettings is part of TestTenantInterface.
+func (t *TestTenant) ClusterSettings() *cluster.Settings {
+	return t.Cfg.Settings
+}
+
+// Stopper is part of TestTenantInterface.
+func (t *TestTenant) Stopper() *stop.Stopper {
+	return t.stopper
+}
+
+// Clock is part of TestTenantInterface.
+func (t *TestTenant) Clock() *hlc.Clock {
+	return t.SQLServer.execCfg.Clock
+}
+
+// TestingKnobs is part TestTenantInterface.
 func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
 	return &t.Cfg.TestingKnobs
+}
+
+// SpanConfigKVAccessor is part TestTenantInterface.
+func (t *TestTenant) SpanConfigKVAccessor() interface{} {
+	return t.SQLServer.tenantConnect
+}
+
+// SpanConfigSQLTranslator is part TestTenantInterface.
+func (t *TestTenant) SpanConfigSQLTranslator() interface{} {
+	return t.SQLServer.spanconfigMgr.SQLTranslator
+}
+
+// SpanConfigSQLWatcher is part TestTenantInterface.
+func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
+	return t.SQLServer.spanconfigMgr.SQLTranslator
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
@@ -984,8 +1038,8 @@ func (ts *TestServer) MigrationServer() interface{} {
 	return ts.migrationServer
 }
 
-// SpanConfigAccessor is part of TestServerInterface.
-func (ts *TestServer) SpanConfigAccessor() interface{} {
+// SpanConfigKVAccessor is part of TestServerInterface.
+func (ts *TestServer) SpanConfigKVAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
 }
 
@@ -1011,7 +1065,7 @@ func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
 
 // SQLServer is part of TestServerInterface.
 func (ts *TestServer) SQLServer() interface{} {
-	return ts.PGServer().SQLServer
+	return ts.sqlServer.pgServer.SQLServer
 }
 
 // DistSQLServer is part of TestServerInterface.
