@@ -468,6 +468,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 						roachpb.MaxUserPriority,
 						now.ToTimestamp(),
 						srv.Clock().MaxOffset().Nanoseconds(),
+						int32(srv.SQLInstanceID()),
 					)
 					pusher := kv.NewTxnFromProto(ctx, db, srv.NodeID(), now, kv.RootTxn, &pusherProto)
 					if err := pusher.Put(ctx, txnKey, []byte("pushit")); err != nil {

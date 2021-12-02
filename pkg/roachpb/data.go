@@ -914,10 +914,20 @@ func (TransactionStatus) SafeValue() {}
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
 //
+// coordinatorNodeID is provided to track the SQL (or possibly KV) node
+// that created this transaction, in order to be used (as
+// of this writing) to enable observability on contention events
+// between different transactions.
+//
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
 func MakeTransaction(
-	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
+	name string,
+	baseKey Key,
+	userPriority UserPriority,
+	now hlc.Timestamp,
+	maxOffsetNs int64,
+	coordinatorNodeID int32,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -927,12 +937,13 @@ func MakeTransaction(
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:            baseKey,
-			ID:             u,
-			WriteTimestamp: now,
-			MinTimestamp:   now,
-			Priority:       MakePriority(userPriority),
-			Sequence:       0, // 1-indexed, incremented before each Request
+			Key:               baseKey,
+			ID:                u,
+			WriteTimestamp:    now,
+			MinTimestamp:      now,
+			Priority:          MakePriority(userPriority),
+			Sequence:          0, // 1-indexed, incremented before each Request
+			CoordinatorNodeID: coordinatorNodeID,
 		},
 		Name:                   name,
 		LastHeartbeat:          now,
@@ -1446,6 +1457,7 @@ func PrepareTransactionForRetry(
 			NormalUserPriority,
 			now.ToTimestamp(),
 			clock.MaxOffset().Nanoseconds(),
+			txn.CoordinatorNodeID,
 		)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri

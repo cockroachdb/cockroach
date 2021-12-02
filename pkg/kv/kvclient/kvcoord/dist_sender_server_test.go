@@ -75,7 +75,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// engine.
 	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
-	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, now, 0)
+	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, now, 0, int32(s.SQLInstanceID()))
 	if err := storage.MVCCPutProto(
 		context.Background(), s.Engines()[0],
 		nil, key, now, &txn, &roachpb.RangeDescriptor{}); err != nil {
@@ -1218,7 +1218,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	now := s.Clock().NowAsClockTimestamp()
-	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, now.ToTimestamp(), 0)
+	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, now.ToTimestamp(), 0, int32(s.SQLInstanceID()))
 	txn := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)

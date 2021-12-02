@@ -60,10 +60,11 @@ func TestBatchRequestString(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	txn := roachpb.MakeTransaction(
 		"test",
-		nil, /* baseKey */
+		nil, // baseKey
 		roachpb.NormalUserPriority,
 		hlc.Timestamp{}, // now
 		0,               // maxOffsetNs
+		99,              // coordinatorNodeID
 	)
 	txn.ID = uuid.NamespaceDNS
 	ba.Txn = &txn

@@ -774,7 +774,7 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 			scan := roachpb.ScanRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
 			}
-			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, resTS, 0)
+			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, resTS, 0, 0)
 			scanHeader := roachpb.Header{
 				RangeID:         rangeID,
 				ReadConsistency: roachpb.CONSISTENT,
