@@ -35,6 +35,17 @@ message RaftHeartbeat {
   bool quiesce = 6;
   reserved 7;
   repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  // This field helps migrate in the lagging_followers_on_quiesce field. For
+  // messages sent by versions of Cockroach that do not know about the
+  // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
+  // replicas are lagging, not that none of them are.
+  //
+  // TODO(nvanbenschoten): Migration path:
+  // v20.2: Add this field. Always set to true when quiesce == true.
+  //        Consult field on receiver. Consider all replicas "lagging"
+  //        if not set to true on liveness change.
+  // v22.1: Keep sending. Stop consulting.
+  // v22.2: Remove field.
   bool lagging_followers_on_quiesce_accurate = 10;
 }
 
@@ -71,23 +82,13 @@ message RaftMessageRequest {
   // become live, it should unquiesce the range so that the replica can
   // be caught back up.
   repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
-  // This field helps migrate in the lagging_followers_on_quiesce field. For
-  // messages sent by versions of Cockroach that do not know about the
-  // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
-  // replicas are lagging, not that none of them are.
-  //
-  // TODO(nvanbenschoten): Migration path:
-  // v20.2: Add this field. Always set to true when quiesce == true.
-  //        Consult field on receiver. Consider all replicas "lagging"
-  //        if not set to true on liveness change.
-  // v21.1: Keep sending. Stop consulting.
-  // v21.2: Remove field.
-  bool lagging_followers_on_quiesce_accurate = 10;
 
   // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
   // heartbeats or heartbeat_resps.
   repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  reserved 10;
 }
 
 message RaftMessageRequestBatch {
