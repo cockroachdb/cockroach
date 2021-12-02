@@ -217,3 +217,16 @@ ROLLBACK;
 
 statement ok
 DROP TABLE create_idx_drop_column;
+
+subtest names-with-escaped-chars
+
+# Similarly try using special characters making an index for a new table, we
+# will attempt to recreate it and expect the look up to find the old one.
+statement ok
+CREATE TABLE "'t1-esc'"(name int);
+
+statement ok
+CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
+
+statement error index with name "'t1-esc-index'" already exists
+CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
