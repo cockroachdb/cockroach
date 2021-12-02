@@ -322,6 +322,7 @@ const (
 	InvalidLeaseErrType                     ErrorDetailType = 40
 	OptimisticEvalConflictsErrType          ErrorDetailType = 41
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
+	RefreshSpanErrType                      ErrorDetailType = 43
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -331,7 +332,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 43
+	NumErrors int = 44
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -631,6 +632,35 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
+
+// NewRefreshSpanError initializes a new RefreshSpanError. reason can be key
+// or intent which cause the failed refresh, key is the key that we failed
+// refreshing, and ts is the timestamp of the key or intent that was written.
+func NewRefreshSpanError(
+	reason RefreshSpanError_Reason, key Key, ts hlc.Timestamp,
+) *RefreshSpanError {
+	return &RefreshSpanError{
+		Reason:    reason,
+		Key:       key,
+		Timestamp: ts,
+	}
+}
+
+func (e *RefreshSpanError) Error() string {
+	return e.message(nil)
+}
+
+func (e *RefreshSpanError) message(_ *Error) string {
+	keyOrIntent := "key"
+	if e.Reason == RefreshSpanError_REASON_INTENT {
+		keyOrIntent = "intent"
+	}
+	return fmt.Sprintf("encountered recently written %s %s @%s", keyOrIntent, e.Key, e.Timestamp)
+}
+
+func (e *RefreshSpanError) Type() ErrorDetailType {
+	return RefreshSpanErrType
+}
 
 // NewAmbiguousResultError initializes a new AmbiguousResultError with
 // an explanatory message.

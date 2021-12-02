@@ -104,6 +104,20 @@ message RangeKeyMismatchError {
   reserved 3, 4;
 }
 
+// A RefreshSpanError indicates that a refresh or a range refresh failed because
+// of a recently written key or intent.
+message RefreshSpanError {
+  enum Reason {
+    REASON_KEY = 0;
+    REASON_INTENT = 1;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
+
+  // The timestamp the key/intent was last updated.
+  optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a write within the uncertainty interval of the reader.
 // The read should be retried at a higher timestamp; the timestamps contained
@@ -585,6 +599,7 @@ message ErrorDetail {
     InvalidLeaseError invalid_lease_error = 40;
     OptimisticEvalConflictsError optimistic_eval_conflicts = 41;
     MinTimestampBoundUnsatisfiableError min_timestamp_bound_unsatisfiable = 42;
+    RefreshSpanError refresh_span_error = 43;
   }
 }
 
