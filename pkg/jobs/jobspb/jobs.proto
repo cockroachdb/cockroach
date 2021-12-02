@@ -138,6 +138,25 @@ message SchedulePTSChainingRecord {
 }
 
 message BackupDetails {
+  message Destination {
+    repeated string to = 1;
+    string subdir = 2;
+    repeated string incremental_storage = 3;
+  }
+  
+  message Arguments {
+    bool revision_history = 1;
+    repeated string incremental_from = 2;
+    
+    bool full_cluster = 4;
+    repeated uint64 specific_tenant_ids = 5;
+    repeated sqlbase.Descriptor resolved_targets = 6 [(gogoproto.nullable) = false];
+    repeated uint32 resolved_complete_dbs = 7 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
+   
+  }
+  
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
   // URI is the URI for the main backup destination. For partitioned backups,
@@ -145,6 +164,8 @@ message BackupDetails {
   // written to this location. For regular backups, all files are written to
   // this location.
   string uri = 3 [(gogoproto.customname) = "URI"];
+  Destination destination = 11 [(gogoproto.nullable) = false];
+  
   // URIsByLocalityKV is a map of locality KVs to store URIs, used for
   // partitioned backups.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
@@ -167,10 +188,16 @@ message BackupDetails {
   // to its path.
   string collection_URI = 8 [(gogoproto.customname) = "CollectionURI"];
 
+  int64 schedule_id = 12 [(gogoproto.customname) = "ScheduleID"];
+
   // SchedulePTSChainingRecord is used by scheduled backups to chain protected
   // timestamp records. For more details about the chaining scheme refer to
   // ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
   SchedulePTSChainingRecord schedule_pts_chaining_record = 10 [(gogoproto.customname) = "SchedulePTSChainingRecord"];
+  
+
+  Arguments arguments = 13;
+  // NEXT ID: 13;
 }
 
 message BackupProgress {
