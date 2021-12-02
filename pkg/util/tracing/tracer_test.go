@@ -329,8 +329,8 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	// Verify that when a span is put on the wire on one end, and is checked
 	// against the span inclusion functions both on the client and server, a real
 	// span results in a real span.
-	tr1 := NewTracer()
-	sp1 := tr1.StartSpan("tr1.root", WithForceRealSpan())
+	tr1 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+	sp1 := tr1.StartSpan("tr1.root")
 	defer sp1.Finish()
 	carrier := metadataCarrier{MD: metadata.MD{}}
 	require.True(t, spanInclusionFuncForClient(sp1))
@@ -384,9 +384,9 @@ func TestOtelTracer(t *testing.T) {
 }
 
 func TestTracer_RegistryMaxSize(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 	for i := 0; i < maxSpanRegistrySize+10; i++ {
-		_ = tr.StartSpan("foo", WithForceRealSpan()) // intentionally not closed
+		_ = tr.StartSpan("foo") // intentionally not closed
 		exp := i + 1
 		if exp > maxSpanRegistrySize {
 			exp = maxSpanRegistrySize
@@ -399,8 +399,8 @@ func TestTracer_RegistryMaxSize(t *testing.T) {
 // activeSpans registry gracefully exits upon receiving a sentinel error from
 // `iterutil.StopIteration()`.
 func TestActiveSpanVisitorErrors(t *testing.T) {
-	tr := NewTracer()
-	root := tr.StartSpan("root", WithForceRealSpan())
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+	root := tr.StartSpan("root")
 	defer root.Finish()
 
 	child := tr.StartSpan("root.child", WithParent(root))
