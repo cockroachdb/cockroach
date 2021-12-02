@@ -1049,6 +1049,11 @@ func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }
 
+// AvgSize is part of the cat.TableStatistic interface.
+func (ts *TableStat) AvgSize() uint64 {
+	return ts.js.AvgSize
+}
+
 // Histogram is part of the cat.TableStatistic interface.
 func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())

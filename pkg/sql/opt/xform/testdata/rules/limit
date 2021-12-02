@@ -1810,7 +1810,7 @@ INDEX df (d, f)
 memo expect=GenerateLimitedTopKScans
 SELECT d, e FROM defg ORDER BY d, e LIMIT 10
 ----
-memo (optimized, ~13KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
+memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
  ├── G1: (limit G2 G3 ordering=+1,+2) (top-k G2 &{10 +1,+2 }) (top-k G4 &{10 +1,+2 }) (top-k G5 &{10 +1,+2 }) (top-k G6 &{10 +1,+2 }) (top-k G2 &{10 +1,+2 +1}) (top-k G4 &{10 +1,+2 +1}) (top-k G5 &{10 +1,+2 +1}) (top-k G6 &{10 +1,+2 +1})
  │    ├── [presentation: d:1,e:2] [ordering: +1,+2]
  │    │    ├── best: (top-k G2 &{10 +1,+2 })
@@ -2037,7 +2037,7 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+
 memo expect=GeneratePartialOrderTopK disable=GenerateLimitedTopKScans
 SELECT d, f, g FROM defg ORDER BY d, g LIMIT 10
 ----
-memo (optimized, ~4KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
+memo (optimized, ~5KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
  ├── G1: (limit G2 G3 ordering=+1,+4) (top-k G2 &{10 +1,+4 }) (top-k G2 &{10 +1,+4 +1})
  │    ├── [presentation: d:1,f:3,g:4] [ordering: +1,+4]
  │    │    ├── best: (top-k G2="[ordering: +1] [limit hint: 104.58]" &{10 +1,+4 +1})
