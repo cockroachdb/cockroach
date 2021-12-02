@@ -39,6 +39,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTenantStatusAPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The liveness session might expire before the stress race can finish.
+	skip.UnderStressRace(t, "expensive tests")
+
+	ctx := context.Background()
+
+	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
+	knobs := tests.CreateTestingKnobs()
+	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
+		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+	}
+
+	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	defer testHelper.cleanup(ctx, t)
+
+	t.Run("reset_sql_stats", func(t *testing.T) {
+		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
+	})
+
+	t.Run("reset_index_usage_stats", func(t *testing.T) {
+		testResetIndexUsageStatsRPCForTenant(ctx, t, testHelper, statsIngestionNotifier)
+	})
+
+	t.Run("tenant_contention_event", func(t *testing.T) {
+		testContentionEventsForTenant(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_cancel_session", func(t *testing.T) {
+		testTenantStatusCancelSession(t, testHelper)
+	})
+
+	t.Run("tenant_cancel_query", func(t *testing.T) {
+		testTenantStatusCancelQuery(ctx, t, testHelper)
+	})
+
+	t.Run("index_usage_stats", func(t *testing.T) {
+		testIndexUsageForTenants(t, testHelper, statsIngestionNotifier)
+	})
+}
+
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -205,22 +248,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	})
 }
 
-func TestResetSQLStatsRPCForTenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t, "expensive tests")
-
-	ctx := context.Background()
-
+func testResetSQLStatsRPCForTenant(
+	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
+) {
 	stmts := []string{
 		"SELECT 1",
 		"SELECT 1, 1",
 		"SELECT 1, 1, 1",
 	}
-
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, tests.CreateTestingKnobs())
-	defer testHelper.cleanup(ctx, t)
 
 	testCluster := testHelper.testCluster()
 	controlCluster := testHelper.controlCluster()
@@ -230,6 +265,15 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
 	controlCluster.tenantConn(0 /* idx */).
 		Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
+
+	defer func() {
+		// Cleanup
+		testCluster.tenantConn(0 /* idx */).
+			Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
+		controlCluster.tenantConn(0 /* idx */).
+			Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = true")
+
+	}()
 
 	for _, flushed := range []bool{false, true} {
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
@@ -300,31 +344,44 @@ func TestResetSQLStatsRPCForTenant(t *testing.T) {
 	}
 }
 
-func TestResetIndexUsageStatsRPCForTenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t, "expensive tests")
-
-	ctx := context.Background()
-
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
-
-	knobs := tests.CreateTestingKnobs()
-	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
-		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
+func testResetIndexUsageStatsRPCForTenant(
+	ctx context.Context,
+	t *testing.T,
+	testHelper *tenantTestHelper,
+	ingestedNotifier chan roachpb.IndexUsageKey,
+) {
+	testCases := []struct {
+		name    string
+		resetFn func(helper *tenantTestHelper)
+	}{
+		{
+			name: "sql-cli",
+			resetFn: func(helper *tenantTestHelper) {
+				// Reset index usage stats using SQL shell built-in.
+				testingCluster := helper.testCluster()
+				testingCluster.tenantConn(0).Exec(t, "SELECT crdb_internal.reset_index_usage_stats()")
+			},
+		},
+		{
+			name: "http",
+			resetFn: func(helper *tenantTestHelper) {
+				// Reset index usage stats over HTTP on tenant SQL pod 1.
+				httpPod1 := helper.testCluster().tenantHTTPClient(t, 1)
+				defer httpPod1.Close()
+				httpPod1.PostJSON("/_status/resetindexusagestats", &serverpb.ResetIndexUsageStatsRequest{}, &serverpb.ResetIndexUsageStatsResponse{})
+			},
+		},
 	}
 
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
-	defer testHelper.cleanup(ctx, t)
+	for _, testCase := range testCases {
+		testingCluster := testHelper.testCluster()
+		controlCluster := testHelper.controlCluster()
 
-	testingCluster := testHelper.testCluster()
-	controlCluster := testHelper.controlCluster()
-	var testingTableID, controlTableID string
-
-	for i, cluster := range []tenantCluster{testingCluster, controlCluster} {
-		// Create tables and insert data.
-		cluster.tenantConn(0).Exec(t, `
+		t.Run(testCase.name, func(t *testing.T) {
+			var testingTableID, controlTableID string
+			for i, cluster := range []tenantCluster{testingCluster, controlCluster} {
+				// Create tables and insert data.
+				cluster.tenantConn(0).Exec(t, `
 CREATE TABLE test (
   k INT PRIMARY KEY,
   a INT,
@@ -333,42 +390,42 @@ CREATE TABLE test (
 )
 `)
 
-		cluster.tenantConn(0).Exec(t, `
+				cluster.tenantConn(0).Exec(t, `
 INSERT INTO test
 VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 `)
 
-		// Record scan on primary index.
-		cluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+				// Record scan on primary index.
+				cluster.tenantConn(0).Exec(t, "SELECT * FROM test")
 
-		// Record scan on secondary index.
-		cluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
-		testTableIDStr := cluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
-		testTableID, err := strconv.Atoi(testTableIDStr)
-		require.NoError(t, err)
+				// Record scan on secondary index.
+				cluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
+				testTableIDStr := cluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+				testTableID, err := strconv.Atoi(testTableIDStr)
+				require.NoError(t, err)
 
-		// Set table ID outside of loop.
-		if i == 0 {
-			testingTableID = testTableIDStr
-		} else {
-			controlTableID = testTableIDStr
-		}
+				// Set table ID outside of loop.
+				if i == 0 {
+					testingTableID = testTableIDStr
+				} else {
+					controlTableID = testTableIDStr
+				}
 
-		// Wait for the stats to be ingested.
-		require.NoError(t,
-			idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
-				{
-					TableID: roachpb.TableID(testTableID),
-					IndexID: 1,
-				}: {},
-				{
-					TableID: roachpb.TableID(testTableID),
-					IndexID: 2,
-				}: {},
-			}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
-		)
+				// Wait for the stats to be ingested.
+				require.NoError(t,
+					idxusage.WaitForIndexStatsIngestionForTest(ingestedNotifier, map[roachpb.IndexUsageKey]struct{}{
+						{
+							TableID: roachpb.TableID(testTableID),
+							IndexID: 1,
+						}: {},
+						{
+							TableID: roachpb.TableID(testTableID),
+							IndexID: 2,
+						}: {},
+					}, 2 /* expectedEventCnt*/, 5*time.Second /* timeout */),
+				)
 
-		query := `
+				query := `
 SELECT
   table_id,
   index_id,
@@ -378,35 +435,36 @@ FROM
   crdb_internal.index_usage_statistics
 WHERE
   table_id = ` + testTableIDStr
-		// Assert index usage data was inserted.
-		expected := [][]string{
-			{testTableIDStr, "1", "1", "true"},
-			{testTableIDStr, "2", "1", "true"},
-		}
-		cluster.tenantConn(2).CheckQueryResults(t, query, expected)
-	}
+				// Assert index usage data was inserted.
+				expected := [][]string{
+					{testTableIDStr, "1", "1", "true"},
+					{testTableIDStr, "2", "1", "true"},
+				}
+				cluster.tenantConn(2).CheckQueryResults(t, query, expected)
+			}
 
-	// Reset index usage stats.
-	timePreReset := timeutil.Now()
-	status := testingCluster.tenantStatusSrv(1 /* idx */)
-	_, err := status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
-	require.NoError(t, err)
+			// Reset index usage stats.
+			timePreReset := timeutil.Now()
+			status := testingCluster.tenantStatusSrv(1 /* idx */)
 
-	// Check that last reset time was updated for test cluster.
-	resp, err := status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
-	require.NoError(t, err)
-	require.True(t, resp.LastReset.After(timePreReset))
+			// Reset index usage stats.
+			testCase.resetFn(testHelper)
 
-	// Ensure tenant data isolation.
-	// Check that last reset time was not updated for control cluster.
-	status = controlCluster.tenantStatusSrv(1 /* idx */)
-	resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
-	require.NoError(t, err)
-	require.Equal(t, resp.LastReset, time.Time{})
+			// Check that last reset time was updated for test cluster.
+			resp, err := status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+			require.NoError(t, err)
+			require.True(t, resp.LastReset.After(timePreReset))
 
-	// Query to fetch index usage stats. We do this instead of sending
-	// an RPC request so that we can filter by table id.
-	query := `
+			// Ensure tenant data isolation.
+			// Check that last reset time was not updated for control cluster.
+			status = controlCluster.tenantStatusSrv(1 /* idx */)
+			resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+			require.NoError(t, err)
+			require.Equal(t, resp.LastReset, time.Time{})
+
+			// Query to fetch index usage stats. We do this instead of sending
+			// an RPC request so that we can filter by table id.
+			query := `
 SELECT
   table_id,
   total_reads,
@@ -417,22 +475,28 @@ WHERE
   table_id = $1
 `
 
-	// Check that index usage stats were reset.
-	rows := testingCluster.tenantConn(2).QueryStr(t, query, testingTableID)
-	require.NotNil(t, rows)
-	for _, row := range rows {
-		require.Equal(t, row[1], "0", "expected total reads for table %s to be reset, but got %s",
-			row[0], row[1])
-		require.Equal(t, row[2], "NULL", "expected last read time for table %s to be reset, but got %s",
-			row[0], row[2])
-	}
+			// Check that index usage stats were reset.
+			rows := testingCluster.tenantConn(2).QueryStr(t, query, testingTableID)
+			require.NotNil(t, rows)
+			for _, row := range rows {
+				require.Equal(t, row[1], "0", "expected total reads for table %s to be reset, but got %s",
+					row[0], row[1])
+				require.Equal(t, row[2], "NULL", "expected last read time for table %s to be reset, but got %s",
+					row[0], row[2])
+			}
 
-	// Ensure tenant data isolation.
-	rows = controlCluster.tenantConn(2).QueryStr(t, query, controlTableID)
-	require.NotNil(t, rows)
-	for _, row := range rows {
-		require.NotEqual(t, row[1], "0", "expected total reads for table %s to not be reset, but got %s", row[0], row[1])
-		require.NotEqual(t, row[2], "NULL", "expected last read time for table %s to not be reset, but got %s", row[0], row[2])
+			// Ensure tenant data isolation.
+			rows = controlCluster.tenantConn(2).QueryStr(t, query, controlTableID)
+			require.NotNil(t, rows)
+			for _, row := range rows {
+				require.NotEqual(t, row[1], "0", "expected total reads for table %s to not be reset, but got %s", row[0], row[1])
+				require.NotEqual(t, row[2], "NULL", "expected last read time for table %s to not be reset, but got %s", row[0], row[2])
+			}
+
+			// Cleanup.
+			testingCluster.tenantConn(0).Exec(t, "DROP TABLE IF EXISTS test")
+			controlCluster.tenantConn(0).Exec(t, "DROP TABLE IF EXISTS test")
+		})
 	}
 }
 
@@ -457,18 +521,9 @@ func ensureExpectedStmtFingerprintExistsInRPCResponse(
 	}
 }
 
-func TestContentionEventsForTenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t, "expensive tests")
-
-	ctx := context.Background()
-
-	testHelper :=
-		newTestTenantHelper(t, 3 /* tenantClusterSize */, tests.CreateTestingKnobs())
-	defer testHelper.cleanup(ctx, t)
-
+func testContentionEventsForTenant(
+	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
+) {
 	testingCluster := testHelper.testCluster()
 	controlledCluster := testHelper.controlCluster()
 
@@ -532,28 +587,19 @@ SET TRACING=off;
 	}
 }
 
-func TestIndexUsageForTenants(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t, "expensive tests")
-
-	ctx := context.Background()
-
-	statsIngestionCb, statsIngestionNotifier := idxusage.CreateIndexStatsIngestedCallbackForTest()
-
-	knobs := tests.CreateTestingKnobs()
-	knobs.IndexUsageStatsKnobs = &idxusage.TestingKnobs{
-		OnIndexUsageStatsProcessedCallback: statsIngestionCb,
-	}
-	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
-	defer testHelper.cleanup(ctx, t)
-
+func testIndexUsageForTenants(
+	t *testing.T, testHelper *tenantTestHelper, ingestNotifier chan roachpb.IndexUsageKey,
+) {
 	testingCluster := testHelper.testCluster()
 	controlledCluster := testHelper.controlCluster()
 
+	testingCluster.tenantConn(0).Exec(t, "USE defaultdb")
+	testingCluster.tenantConn(1).Exec(t, "USE defaultdb")
+	testingCluster.tenantConn(2).Exec(t, "USE defaultdb")
+	testingCluster.tenantConn(0).Exec(t, `CREATE SCHEMA idx_test`)
+
 	testingCluster.tenantConn(0).Exec(t, `
-CREATE TABLE test (
+CREATE TABLE idx_test.test (
   k INT PRIMARY KEY,
   a INT,
   b INT,
@@ -561,23 +607,27 @@ CREATE TABLE test (
 )
 `)
 
+	defer func() {
+		testingCluster.tenantConn(0).Exec(t, "DROP TABLE idx_test.test")
+	}()
+
 	testingCluster.tenantConn(0).Exec(t, `
-INSERT INTO test
+INSERT INTO idx_test.test
 VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 `)
 
 	// Record scan on primary index.
-	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM idx_test.test")
 
 	// Record scan on secondary index.
-	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
-	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM idx_test.test@test_a_idx")
+	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'idx_test.test'::regclass::oid")[0][0]
 	testTableID, err := strconv.Atoi(testTableIDStr)
 	require.NoError(t, err)
 
 	// Wait for the stats to be ingested.
 	require.NoError(t,
-		idxusage.WaitForIndexStatsIngestionForTest(statsIngestionNotifier, map[roachpb.IndexUsageKey]struct{}{
+		idxusage.WaitForIndexStatsIngestionForTest(ingestNotifier, map[roachpb.IndexUsageKey]struct{}{
 			{
 				TableID: roachpb.TableID(testTableID),
 				IndexID: 1,
@@ -624,16 +674,7 @@ func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 	return sessionIDs
 }
 
-func TestTenantStatusCancelSession(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t, "expensive tests")
-
-	ctx := context.Background()
-	helper := newTestTenantHelper(t, 3, base.TestingKnobs{})
-	defer helper.cleanup(ctx, t)
-
+func testTenantStatusCancelSession(t *testing.T, helper *tenantTestHelper) {
 	// Open a SQL session on tenant SQL pod 0.
 	sqlPod0 := helper.testCluster().tenantConn(0)
 	sqlPod0.Exec(t, "SELECT 1")
@@ -685,16 +726,7 @@ func selectClusterQueryIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 	return queryIDs
 }
 
-func TestTenantStatusCancelQuery(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t, "expensive tests")
-
-	ctx := context.Background()
-	helper := newTestTenantHelper(t, 3, base.TestingKnobs{})
-	defer helper.cleanup(ctx, t)
-
+func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tenantTestHelper) {
 	// Open a SQL session on tenant SQL pod 0 and start a long-running query.
 	sqlPod0 := helper.testCluster().tenantConn(0)
 	resultCh := make(chan struct{})
