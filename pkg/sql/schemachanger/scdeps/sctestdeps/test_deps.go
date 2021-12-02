@@ -784,10 +784,8 @@ func (s *TestState) WithTxnInJob(
 
 var _ scrun.JobTxnRunDependencies = (*TestState)(nil)
 
-// UpdateSchemaChangeJob implements the scrun.JobTxnRunDependencies interface.
-func (s *TestState) UpdateSchemaChangeJob(
-	ctx context.Context, fn func(md jobs.JobMetadata, ju scrun.JobProgressUpdater) error,
-) error {
+// UpdateState implements the scrun.JobTxnRunDependencies interface.
+func (s *TestState) UpdateState(ctx context.Context, state *scpb.State) error {
 	var scjob *jobs.Record
 	for i, job := range s.jobs {
 		if job.Username == s.User() {
@@ -830,24 +828,14 @@ func (s *TestState) UpdateSchemaChangeJob(
 			RunStats: nil,
 		},
 	}
-	err := fn(ju.md, &ju)
-	if err != nil {
-		return err
-	}
-	scjob.Progress = *ju.md.Progress.GetNewSchemaChange()
+	scprogress := progress.GetNewSchemaChange()
+	scprogress.States = state.Statuses()
 	s.LogSideEffectf("update progress of schema change job #%d", scjob.JobID)
 	return nil
 }
 
 type testJobUpdater struct {
 	md jobs.JobMetadata
-}
-
-var _ scrun.JobProgressUpdater = (*testJobUpdater)(nil)
-
-// UpdateProgress implements the JobProgressUpdater interface
-func (ju *testJobUpdater) UpdateProgress(progress *jobspb.Progress) {
-	ju.md.Progress = progress
 }
 
 // ExecutorDependencies implements the scrun.JobTxnRunDependencies interface.
