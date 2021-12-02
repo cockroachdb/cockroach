@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -449,9 +450,18 @@ func (sc *TableStatisticsCache) parseStats(
 		return nil, nil
 	}
 
+	avgSizeColVerActive := sc.Settings.Version.IsActive(ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol)
+
+	hgIndex := histogramIndex
+	numStats := statsLen
+	if !avgSizeColVerActive {
+		hgIndex = histogramIndex - 1
+		numStats = statsLen - 1
+	}
+
 	// Validate the input length.
-	if datums.Len() != statsLen {
-		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), statsLen)
+	if datums.Len() != numStats {
+		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), numStats)
 	}
 
 	// Validate the input types.
@@ -469,8 +479,19 @@ func (sc *TableStatisticsCache) parseStats(
 		{"rowCount", rowCountIndex, types.Int, false},
 		{"distinctCount", distinctCountIndex, types.Int, false},
 		{"nullCount", nullCountIndex, types.Int, false},
-		{"avgSize", avgSizeIndex, types.Int, false},
-		{"histogram", histogramIndex, types.Bytes, true},
+		{"histogram", hgIndex, types.Bytes, true},
+	}
+	if avgSizeColVerActive {
+		expectedTypes = append(expectedTypes,
+			struct {
+				fieldName    string
+				fieldIndex   int
+				expectedType *types.T
+				nullable     bool
+			}{
+				"avgSize", avgSizeIndex, types.Int, false,
+			},
+		)
 	}
 	for _, v := range expectedTypes {
 		if !datums[v.fieldIndex].ResolvedType().Equivalent(v.expectedType) &&
@@ -489,8 +510,10 @@ func (sc *TableStatisticsCache) parseStats(
 			RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
 			DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
 			NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
-			AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
 		},
+	}
+	if avgSizeColVerActive {
+		res.AvgSize = (uint64)(*datums[avgSizeIndex].(*tree.DInt))
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
 	res.ColumnIDs = make([]descpb.ColumnID, len(columnIDs.Array))
@@ -500,10 +523,10 @@ func (sc *TableStatisticsCache) parseStats(
 	if datums[nameIndex] != tree.DNull {
 		res.Name = string(*datums[nameIndex].(*tree.DString))
 	}
-	if datums[histogramIndex] != tree.DNull {
+	if datums[hgIndex] != tree.DNull {
 		res.HistogramData = &HistogramData{}
 		if err := protoutil.Unmarshal(
-			[]byte(*datums[histogramIndex].(*tree.DBytes)),
+			[]byte(*datums[hgIndex].(*tree.DBytes)),
 			res.HistogramData,
 		); err != nil {
 			return nil, err
@@ -592,14 +615,33 @@ SELECT
 	"rowCount",
 	"distinctCount",
 	"nullCount",
+	histogram
+FROM system.table_statistics
+WHERE "tableID" = $1
+ORDER BY "createdAt" DESC
+`
+	const getTableStatisticsStmtAvgSizeColVer = `
+SELECT
+  "tableID",
+	"statisticID",
+	name,
+	"columnIDs",
+	"createdAt",
+	"rowCount",
+	"distinctCount",
+	"nullCount",
 	"avgSize",
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC
 `
+	stmt := getTableStatisticsStmtAvgSizeColVer
+	if !sc.Settings.Version.IsActive(ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
+		stmt = getTableStatisticsStmt
+	}
 	it, err := sc.SQLExecutor.QueryIterator(
-		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
+		ctx, "get-table-statistics", nil /* txn */, stmt, tableID,
 	)
 	if err != nil {
 		return nil, err
