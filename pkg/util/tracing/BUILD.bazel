@@ -67,7 +67,6 @@ go_test(
     ],
     embed = [":tracing"],
     deps = [
-        "//pkg/settings",
         "//pkg/testutils",
         "//pkg/testutils/grpcutils",
         "//pkg/util",

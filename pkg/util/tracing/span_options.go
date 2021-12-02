@@ -297,8 +297,8 @@ type forceRealSpanOption struct{}
 
 var forceRealSpanSingleton = SpanOption(forceRealSpanOption{})
 
-// WithForceRealSpan forces StartSpan to create of a real Span instead of
-// a low-overhead non-recordable noop span.
+// WithForceRealSpan forces StartSpan to create of a real Span regardless of the
+// Tracer's tracing mode (instead of a low-overhead non-recordable noop span).
 //
 // When tracing is disabled all spans are noopSpans; these spans aren't
 // capable of recording, so this option should be passed to StartSpan if the
