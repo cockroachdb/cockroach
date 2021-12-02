@@ -983,6 +983,8 @@ func (c *coster) computeIndexLookupJoinCost(
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
+	// TODO(harding): Add the cost of reading all columns in the lookup table when
+	// we cost rows by column size.
 	numLookupCols := cols.Difference(input.Relational().OutputCols).Len()
 	perRowCost := lookupJoinRetrieveRowCost + filterPerRow +
 		c.rowScanCost(table, index, numLookupCols)

@@ -175,6 +175,10 @@ type TableStatistic interface {
 	// any column in the statistic.
 	NullCount() uint64
 
+	// AvgSize returns the estimated average number of bytes in all columns of
+	// the statistic.
+	AvgSize() uint64
+
 	// Histogram returns a slice of histogram buckets, sorted by UpperBound.
 	// It is only used for single-column stats (i.e., when ColumnCount() = 1),
 	// and it represents the distribution of values for that column.
