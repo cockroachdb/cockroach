@@ -12,10 +12,10 @@ DROP SCHEMA db.sc;
 ----
 begin transaction #1
 # begin StatementPhase
-## stage 1 in StatementPhase: 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 1 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 2 with 1 MutationType ops
 upsert descriptor #56
   ...
          userProto: root
@@ -23,7 +23,7 @@ upsert descriptor #56
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## stage 2 in PreCommitPhase: 2 MutationType ops
+## PreCommitPhase non-revertible stage 2 of 2 with 2 MutationType ops
 delete schema namespace entry {54 0 sc} -> 56
 create job #1: "Schema change job"
   descriptor IDs: [56]
@@ -50,10 +50,10 @@ DROP TABLE db.sc.t;
 ----
 begin transaction #1
 # begin StatementPhase
-## stage 1 in StatementPhase: 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 2 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
 delete object namespace entry {54 57 t} -> 58
 upsert descriptor #58
   ...
@@ -77,13 +77,9 @@ upsert descriptor #58
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## stage 1 in PostCommitPhase: 2 MutationType ops
+## PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
 create job #2: "GC for dropping descriptor 58"
   descriptor IDs: [58]
-update progress of schema change job #1
-commit transaction #2
-begin transaction #3
-## stage 2 in PostCommitPhase: is empty
 update progress of schema change job #1
 upsert descriptor #58
   ...
@@ -93,7 +89,7 @@ upsert descriptor #58
      nextColumnId: 4
      nextFamilyId: 1
   ...
-commit transaction #3
+commit transaction #2
 # end PostCommitPhase
 
 test
@@ -101,10 +97,10 @@ DROP SCHEMA db.sc CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## stage 1 in StatementPhase: 3 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 3 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 2 with 3 MutationType ops
 upsert descriptor #57
   ...
          userProto: root
@@ -126,7 +122,7 @@ upsert descriptor #60
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## stage 2 in PreCommitPhase: 4 MutationType ops
+## PreCommitPhase non-revertible stage 2 of 2 with 4 MutationType ops
 delete schema namespace entry {54 0 sc} -> 57
 delete object namespace entry {54 57 e} -> 59
 delete object namespace entry {54 57 _e} -> 60
@@ -144,10 +140,10 @@ DROP DATABASE db CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## stage 1 in StatementPhase: 2 MutationType ops
+## StatementPhase stage 1 of 1 with 2 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 2 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 2 with 2 MutationType ops
 upsert descriptor #54
   ...
        public:
@@ -162,7 +158,7 @@ upsert descriptor #55
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## stage 2 in PreCommitPhase: 4 MutationType ops
+## PreCommitPhase non-revertible stage 2 of 2 with 4 MutationType ops
 delete database namespace entry {0 0 db} -> 54
 delete schema namespace entry {54 0 public} -> 55
 create job #1: "Schema change job"
@@ -209,10 +205,10 @@ DROP DATABASE db1 CASCADE
 ----
 begin transaction #1
 # begin StatementPhase
-## stage 1 in StatementPhase: 14 MutationType ops
+## StatementPhase stage 1 of 1 with 14 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## stage 1 in PreCommitPhase: 37 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 2 with 37 MutationType ops
 delete object namespace entry {61 62 sq1} -> 64
 delete object namespace entry {61 63 sq1} -> 65
 delete object namespace entry {61 63 t1} -> 66
@@ -457,7 +453,7 @@ upsert descriptor #74
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
-## stage 2 in PreCommitPhase: 4 MutationType ops
+## PreCommitPhase non-revertible stage 2 of 2 with 4 MutationType ops
 delete database namespace entry {0 0 db1} -> 61
 delete object namespace entry {61 63 typ} -> 72
 delete object namespace entry {61 63 _typ} -> 73
@@ -539,15 +535,11 @@ upsert descriptor #74
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## stage 1 in PostCommitPhase: 22 MutationType ops
+## PostCommitPhase non-revertible stage 1 of 1 with 22 MutationType ops
 create job #2: "GC for dropping descriptors 64 67 65 66 68 69 70 71 74"
   descriptor IDs: [64 67 65 66 68 69 70 71 74]
 delete schema namespace entry {61 0 public} -> 62
 delete schema namespace entry {61 0 sc1} -> 63
-update progress of schema change job #1
-commit transaction #2
-begin transaction #3
-## stage 2 in PostCommitPhase: is empty
 update progress of schema change job #1
 upsert descriptor #64
   ...
@@ -621,5 +613,5 @@ upsert descriptor #74
      nextColumnId: 4
      nextMutationId: 1
   ...
-commit transaction #3
+commit transaction #2
 # end PostCommitPhase

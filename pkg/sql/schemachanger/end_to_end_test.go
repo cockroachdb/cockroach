@@ -82,20 +82,9 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 				defer execStmts()
 
 				var deps *sctestdeps.TestState
-				stageCounters := make(map[scop.Phase]int)
 				testingKnobs := &scrun.TestingKnobs{
 					BeforeStage: func(p scplan.Plan, stageIdx int) error {
-						phase := p.Params.ExecutionPhase
-						stage := p.Stages[stageIdx]
-						phaseStageCount := stageCounters[phase] + 1
-						stageCounters[phase] = phaseStageCount
-						if stage.Ops != nil {
-							deps.LogSideEffectf("## stage %d in %s: %d %s ops",
-								phaseStageCount, phase, len(stage.Ops.Slice()), stage.Ops.Type())
-						} else {
-							deps.LogSideEffectf("## stage %d in %s: is empty",
-								phaseStageCount, phase)
-						}
+						deps.LogSideEffectf("## %s", p.StagesForCurrentPhase()[stageIdx].String())
 						return nil
 					},
 				}
@@ -281,9 +270,9 @@ func countRevertiblePostCommitStages(
 ) (numTotalPostCommitStages int, numRevertiblePostCommitStages int) {
 	var nTotal, nRevertible uint32
 	beforeRevertiblePostCommitStage := func(p scplan.Plan, stageIdx int) error {
-		atomic.StoreUint32(&nTotal, uint32(len(p.Stages)))
+		atomic.StoreUint32(&nTotal, uint32(len(p.StagesForCurrentPhase())))
 		n := uint32(0)
-		for _, stage := range p.Stages {
+		for _, stage := range p.StagesForCurrentPhase() {
 			if !stage.Revertible {
 				break
 			}
@@ -324,7 +313,7 @@ func execRolledBackStatements(
 			Knobs: base.TestingKnobs{
 				SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
 					BeforeStage: func(p scplan.Plan, stageIdx int) error {
-						if p.Params.ExecutionPhase != scop.PostCommitPhase || !p.Stages[stageIdx].Revertible {
+						if p.Params.ExecutionPhase != scop.PostCommitPhase || !p.StagesForCurrentPhase()[stageIdx].Revertible {
 							return nil
 						}
 						return beforeRevertiblePostCommitStageCallback(p, stageIdx)

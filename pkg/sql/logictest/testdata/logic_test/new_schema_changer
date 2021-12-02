@@ -8,7 +8,7 @@ CREATE TABLE foo (i INT PRIMARY KEY)
 
 # Declarative is not fully enabled for this statement,
 # so it should error out.
-statement error cannot explain a non-schema change statement
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 
 statement ok
@@ -187,7 +187,7 @@ j  b
 statement ok
 SET experimental_use_new_schema_changer = 'unsafe'
 
-statement error pq: cannot explain a non-schema change statement
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
 
 statement ok

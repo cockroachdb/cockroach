@@ -24,8 +24,10 @@ func makeGoCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comman
 }
 
 func (d *dev) gocmd(cmd *cobra.Command, commandLine []string) error {
+	beforeDash, afterDash := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	args := []string{"run", "@go_sdk//:bin/go", "--ui_event_filters=-DEBUG,-info,-stdout,-stderr", "--noshow_progress", "--"}
-	args = append(args, commandLine...)
+	args = append(args, beforeDash...)
+	args = append(args, afterDash...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
