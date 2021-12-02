@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -72,6 +73,8 @@ SET tracing = off;
 	tc.Server(0).Tracer().(*tracing.Tracer).SetRedactable(redactable)
 	defer tc.Stopper().Stop(ctx)
 
+	// Queries from the system tenant will receive unredacted traces
+	// since the tracer will not have the redactable flag set.
 	t.Run("system-tenant", func(t *testing.T) {
 		db := tc.ServerConn(0)
 		defer db.Close()
@@ -97,7 +100,6 @@ SET tracing = off;
 		defer tenDB.Close()
 		results := getTrace(t, tenDB)
 
-		const redactedMarkerString = "verbose trace message redacted"
 		var found bool
 		var foundRedactedMarker bool
 		for _, sl := range results {
@@ -111,26 +113,29 @@ SET tracing = off;
 				if strings.Contains(s, visibleString) {
 					found = true
 				}
-				if strings.Contains(s, redactedMarkerString) {
+				if strings.Contains(s, string(server.TraceRedactedMarker)) {
 					foundRedactedMarker = true
 				}
 			}
 		}
 
+		// In both cases we don't expect to see the `TraceRedactedMarker`
+		// since that's only shown when the server is in an inconsistent
+		// state or if there's a version mismatch between client and server.
 		if redactable {
 			// If redaction was on, we expect the tenant to see safe information in its
 			// trace.
 			require.True(t, found, "did not see expected trace message '%q':\n%s",
 				visibleString, sqlutils.MatrixToStr(results))
 			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
-				redactedMarkerString, sqlutils.MatrixToStr(results))
+				string(server.TraceRedactedMarker), sqlutils.MatrixToStr(results))
 		} else {
 			// Otherwise, expect the opposite: not even safe information makes it through,
 			// because it gets replaced with foundRedactedMarker.
 			require.False(t, found, "unexpectedly saw message '%q':\n%s",
 				visibleString, sqlutils.MatrixToStr(results))
-			require.True(t, foundRedactedMarker, "not not find expected message '%q':\n%s",
-				redactedMarkerString, sqlutils.MatrixToStr(results))
+			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
+				string(server.TraceRedactedMarker), sqlutils.MatrixToStr(results))
 		}
 	})
 }

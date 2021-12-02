@@ -70,6 +70,18 @@ const (
 	fieldNameShadowType = prefixTracerState + "shadowtype"
 )
 
+// TODO(davidh): Once performance issues around redaction are
+// resolved via #58610, this setting can be removed so that all traces
+// have redactability enabled.
+var enableTraceRedactable = settings.RegisterBoolSetting(
+	"trace.redactable.enabled",
+	"set to true to enable redactability for unstructured events "+
+		"in traces and to redact traces sent to tenants. "+
+		"Set to false to coarsely mark unstructured events as redactable "+
+		" and eliminate them from tenant traces.",
+	false,
+)
+
 var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
@@ -216,6 +228,8 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
 	}
+	enableRedactable := enableTraceRedactable.Get(sv)
+	t.SetRedactable(enableRedactable)
 
 	reconfigure(ctx)
 
@@ -224,6 +238,7 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 	ZipkinCollector.SetOnChange(sv, reconfigure)
 	dataDogAgentAddr.SetOnChange(sv, reconfigure)
 	dataDogProjectName.SetOnChange(sv, reconfigure)
+	enableTraceRedactable.SetOnChange(sv, reconfigure)
 }
 
 // HasExternalSink returns whether the tracer is configured to report
