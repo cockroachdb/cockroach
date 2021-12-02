@@ -1,37 +1,32 @@
 package changefeedccl
 
 import (
+	_ "cloud.google.com/go/pubsub"
+	gcpClient "cloud.google.com/go/pubsub/apiv1"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"golang.org/x/oauth2/google"
-	"hash/crc32"
-	"net/url"
-	"path"
-	"regexp"
-	"strings"
-
-	_ "cloud.google.com/go/pubsub"
-	gcpClient "cloud.google.com/go/pubsub/apiv1"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/errors"
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/gcppubsub"
 	_ "gocloud.dev/pubsub/mempubsub"
+	"golang.org/x/oauth2/google"
 	pbapi "google.golang.org/genproto/googleapis/pubsub/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"hash/crc32"
+	"net/url"
+	"path"
 )
 
-const googleApplicationCredentials = "GOOGLE_APPLICATION_CREDENTIALS"
 const credentialsParam = "CREDENTIALS"
 const authParam = "AUTH"
 const authSpecified = "specified"
@@ -40,12 +35,6 @@ const authDefault = "default"
 const gcpScheme = "gcppubsub"
 const memScheme = "mem"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
-const gcpTopicFullPAth = "projects/%s/topics/%s"
-
-var (
-	fullTopicPathRE  = regexp.MustCompile("^projects/[^/]+/topics/[^/]+$")
-	shortTopicPathRE = regexp.MustCompile("^[^/]+/[^/]+$")
-)
 
 // isPubsubSInk returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
@@ -61,7 +50,7 @@ func isPubsubSink(u *url.URL) bool {
 type payload struct {
 	Key   json.RawMessage `json:"key"`
 	Value json.RawMessage `json:"value"`
-	Topic string `json:"topic"`
+	Topic string          `json:"topic"`
 }
 
 // pubsubMessage is sent to worker channels for workers to consume
@@ -70,7 +59,7 @@ type pubsubMessage struct {
 	message payload
 	isFlush bool
 	topicId descpb.ID
-	logIt func()
+	logIt   func()
 }
 
 type gcpPubsubSink struct {
@@ -86,13 +75,13 @@ type memPubsubSink struct {
 }
 
 type topicStruct struct {
-	topicName string
-	pathName string
+	topicName   string
+	pathName    string
 	topicClient *pubsub.Topic
 }
 
 type pubsubSink struct {
-	topics			map[descpb.ID]*topicStruct
+	topics     map[descpb.ID]*topicStruct
 	url        sinkURL
 	numWorkers int
 
@@ -145,32 +134,16 @@ func getGCPCredentials(u sinkURL, ctx context.Context) (*google.Credentials, err
 	}
 }
 
-// parseGCPURL returns fullpath of url if properly formatted
-func parseGCPURL(u sinkURL) (string, error) {
-	fullPath := path.Join(u.Host, u.Path)
-	if fullTopicPathRE.MatchString(fullPath) {
-		parts := strings.SplitN(fullPath, "/", 4)
-		if len(parts) < 4 {
-			return "", errors.Errorf("unexpected number of components in %s", fullPath)
-		}
-		return fullPath, nil
-	} else if shortTopicPathRE.MatchString(fullPath) {
-		return path.Join("projects", u.Host, "topics", u.Path), nil
-	}
-	return "", errors.Errorf("could not parse project and topic from %s", fullPath)
-}
-
-func createGCPURL(u sinkURL, topicName string) (string, error){
+func createGCPURL(u sinkURL, topicName string) (string, error) {
 	// TODO: look into topic name validation https://cloud.google.com/pubsub/docs/admin#resource_names
 	return path.Join("projects", u.Host, "topics", topicName), nil
 }
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
-func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
-	settings *cluster.Settings) (Sink, error) {
+func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets) (Sink, error) {
 	log.Info(ctx, "\x1b[33m starting pubsub \x1b[0m")
 
-	sinkURL  := sinkURL{u, u.Query()}
+	sinkURL := sinkURL{u, u.Query()}
 	pubsubTopicName := sinkURL.consumeParam(changefeedbase.SinkParamTopicName)
 
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
@@ -193,14 +166,14 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, tar
 
 	ctx, cancel := context.WithCancel(ctx)
 	// currently just hardcoding numWorkers to 128, it will be a config option later down the road
-	p := &pubsubSink {
+	p := &pubsubSink{
 		workerCtx: ctx, url: sinkURL, numWorkers: 1024,
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
 	//creates a topic for each target
 	for id, topic := range targets {
 		var topicName string
-		if pubsubTopicName == ""{
+		if pubsubTopicName == "" {
 			topicName = topic.StatementTimeName
 		} else {
 			topicName = pubsubTopicName
@@ -260,10 +233,10 @@ func (p *pubsubSink) emitRow(
 ) error {
 	m := pubsubMessage{logIt: timeIt(ctx, "key:%s, mvcc:%s", string(key), mvcc),
 		alloc: alloc, isFlush: false, topicId: topic.GetID(), message: payload{
-		Key:   key,
-		Value: value,
-		Topic: p.topics[topic.GetID()].topicName,
-	}}
+			Key:   key,
+			Value: value,
+			Topic: p.topics[topic.GetID()].topicName,
+		}}
 
 	// calculate index by hashing key
 	i := p.workerIndex(key)
@@ -291,7 +264,7 @@ func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder,
 		return errors.Wrap(err, "encoding resolved timestamp")
 	}
 
-	for topicId, _ := range p.topics {
+	for topicId := range p.topics {
 		err = p.sendMessage(payload, topicId, "")
 		if err != nil {
 			return errors.Wrap(err, "emiting resolved timestamp")
@@ -355,7 +328,7 @@ func (p *pubsubSink) close() error {
 func (p *pubsubSink) sendMessage(m []byte, topicId descpb.ID, key string) error {
 	var c *gcpClient.PublisherClient
 	var err error
-	if p.topics[topicId].topicClient.As(&c){
+	if p.topics[topicId].topicClient.As(&c) {
 		gcpMessage := &pbapi.PublishRequest{Topic: p.topics[topicId].pathName}
 		ts := timestamppb.Now()
 		gcpMessage.Messages = append(gcpMessage.Messages, &pbapi.PubsubMessage{Data: m, OrderingKey: key, PublishTime: ts})
@@ -415,7 +388,7 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
-			err = p.sendMessage(b, msg.topicId, string(msg.message.Key), )
+			err = p.sendMessage(b, msg.topicId, string(msg.message.Key))
 			if err != nil {
 				log.Info(p.workerCtx, err.Error())
 				p.exitWorkersWithError(err)
@@ -527,7 +500,7 @@ func (p *gcpPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,  _ hlc.Timestamp,
+	updated hlc.Timestamp, _ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
@@ -557,10 +530,10 @@ func (p *gcpPubsubSink) Close() error {
 		}
 	}
 	if p.client != nil {
-		p.client.Close()
+		_ = p.client.Close()
 	}
 	if p.conn != nil {
-		p.conn.Close()
+		_ = p.conn.Close()
 	}
 	if p.cleanup != nil {
 		p.cleanup()

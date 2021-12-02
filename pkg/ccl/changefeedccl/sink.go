@@ -111,7 +111,7 @@ func getSink(
 			})
 		case isPubsubSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.PubsubValidOptions, func() (Sink, error) {
-				return MakePubsubSink(ctx, u, feedCfg.Opts, feedCfg.Targets, serverCfg.Settings)
+				return MakePubsubSink(ctx, u, feedCfg.Opts, feedCfg.Targets)
 			})
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
