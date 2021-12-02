@@ -10,4 +10,5 @@
 
 package spanconfigsqltranslator_test
 
-// Tests for this package can be found under pkg/ccl/spanconfigccl.
+// Tests for this package can be found under
+// pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl.
