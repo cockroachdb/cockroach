@@ -3,6 +3,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -10,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/oauth2/google"
 	"hash/crc32"
 	"net/url"
@@ -26,6 +28,7 @@ import (
 	_ "gocloud.dev/pubsub/mempubsub"
 	pbapi "google.golang.org/genproto/googleapis/pubsub/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const googleApplicationCredentials = "GOOGLE_APPLICATION_CREDENTIALS"
@@ -67,6 +70,7 @@ type pubsubMessage struct {
 	message payload
 	isFlush bool
 	topicId descpb.ID
+	logIt func()
 }
 
 type gcpPubsubSink struct {
@@ -112,12 +116,15 @@ func getGCPCredentials(u sinkURL, ctx context.Context) (*google.Credentials, err
 	var credsJSON []byte
 	var creds *google.Credentials
 	authOption := u.consumeParam(authParam)
+	log.Info(ctx, "credddd!!!!!!!!!!!!!!!!!!")
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
 	case authImplicit:
+		log.Info(ctx, "implicit!!!!!!!!!!!!!!!!!!!")
 		creds, err := google.FindDefaultCredentials(ctx, gcpScope)
 		if err != nil {
+			log.Info(ctx, err.Error())
 			return nil, err
 		}
 		return creds, nil
@@ -187,7 +194,7 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, tar
 	ctx, cancel := context.WithCancel(ctx)
 	// currently just hardcoding numWorkers to 128, it will be a config option later down the road
 	p := &pubsubSink {
-		workerCtx: ctx, url: sinkURL, numWorkers: 128,
+		workerCtx: ctx, url: sinkURL, numWorkers: 1024,
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
 	//creates a topic for each target
@@ -234,20 +241,30 @@ func (p *pubsubSink) getUrl() sinkURL {
 	return p.url
 }
 
+func timeIt(ctx context.Context,
+	fmtOrStr string, args ...interface{}) func() {
+	start := timeutil.Now()
+	return func() {
+		log.Infof(ctx, "%s took duration=%s",
+			fmt.Sprintf(fmtOrStr, args...), timeutil.Since(start))
+	}
+}
+
 // EmitRow pushes a message to event channel where it is consumed by workers
 func (p *pubsubSink) emitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	_ hlc.Timestamp,
+	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	m := pubsubMessage{alloc: alloc, isFlush: false, topicId: topic.GetID(), message: payload{
+	m := pubsubMessage{logIt: timeIt(ctx, "key:%s, mvcc:%s", string(key), mvcc),
+		alloc: alloc, isFlush: false, topicId: topic.GetID(), message: payload{
 		Key:   key,
 		Value: value,
 		Topic: p.topics[topic.GetID()].topicName,
 	}}
-	//log.Info(ctx, "\x1b[33m sending message \x1b[0m")
+
 	// calculate index by hashing key
 	i := p.workerIndex(key)
 	select {
@@ -340,7 +357,8 @@ func (p *pubsubSink) sendMessage(m []byte, topicId descpb.ID, key string) error 
 	var err error
 	if p.topics[topicId].topicClient.As(&c){
 		gcpMessage := &pbapi.PublishRequest{Topic: p.topics[topicId].pathName}
-		gcpMessage.Messages = append(gcpMessage.Messages, &pbapi.PubsubMessage{Data: m, OrderingKey: key})
+		ts := timestamppb.Now()
+		gcpMessage.Messages = append(gcpMessage.Messages, &pbapi.PubsubMessage{Data: m, OrderingKey: key, PublishTime: ts})
 		_, err = c.Publish(context.Background(), gcpMessage)
 	} else {
 		// this is for mempubsub since As() on mempubsub returns an unexported topic type that we cannot interact with
@@ -399,9 +417,11 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 			}
 			err = p.sendMessage(b, msg.topicId, string(msg.message.Key), )
 			if err != nil {
+				log.Info(p.workerCtx, err.Error())
 				p.exitWorkersWithError(err)
 			}
 			msg.alloc.Release(p.workerCtx)
+			msg.logIt()
 		}
 	}
 }
