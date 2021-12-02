@@ -122,6 +122,13 @@ message TxnMeta {
   int32 sequence = 7 [(gogoproto.casttype) = "TxnSeq"];
 
   reserved 8;
+
+  // The ID of the node where this transaction originated.
+  // This field represents either a SQLInstanceID of a SQL pod, a SQL
+  // gateway NodeID, or a KV node ID (in the case of KV-initiated
+  // transactions) and was introduced for the purposes of SQL Observability.
+  // TODO(sarkesian): Refactor to use gogoproto.casttype GenericNodeID when #73309 completes.
+  int32 coordinator_node_id = 10 [(gogoproto.customname) = "CoordinatorNodeID"];
 }
 
 // IgnoredSeqNumRange describes a range of ignored seqnums.
