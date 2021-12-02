@@ -302,9 +302,15 @@ message ParquetWriterSpec {
   // compression_codec specifies compression used for exported file. THIS IS ISN'T USED RIGHT NOW
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];
 
+  // logical_col_names specifies the logical column names for the exported parquet file
+  repeated string logical_col_names = 6 [(gogoproto.nullable) = false];
+
+  // nullable_cols specifies which columns allow null values in the exported parquet file
+  repeated bool nullable_cols = 9 [(gogoproto.nullable) = false];
+
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional string user_proto = 8 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

@@ -249,7 +249,9 @@ var SequenceSelectColumns = ResultColumns{
 	{Name: `is_called`, Typ: types.Bool},
 }
 
-// ExportColumns are the result columns of an EXPORT statement.
+// ExportColumns are the result columns of an EXPORT statement (i.e. a user will
+// see a table with these columns in their sql shell after EXPORT returns).
+// These columns differ from the logical columns in the export file.
 var ExportColumns = ResultColumns{
 	{Name: "filename", Typ: types.String},
 	{Name: "rows", Typ: types.Int},
