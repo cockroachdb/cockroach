@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
 
@@ -169,10 +170,18 @@ func (dbc *dbAdapter) scanSpan(
 func allRangeSpans(
 	ctx context.Context, ds *kvcoord.DistSender, spans []roachpb.Span,
 ) ([]roachpb.Span, error) {
-
-	var sg roachpb.SpanGroup
+	// Build small frontier for spans.
+	// We will iterate over ranges to figure out reasonable split points and
+	// intersect those ange boundaries with span frontier (this ignores
+	// parts outside the spans tracked by this frontier)
+	frontier, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, err
+	}
 
 	it := kvcoord.NewRangeIterator(ds)
+	var synthetic int64 = 1
+
 	for i := range spans {
 		rSpan, err := keys.SpanAddr(spans[i])
 		if err != nil {
@@ -182,13 +191,29 @@ func allRangeSpans(
 			if !it.Valid() {
 				return nil, it.Error()
 			}
-			sg.Add(roachpb.Span{
-				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
-			})
+
+			_, err := frontier.Forward(
+				roachpb.Span{
+					Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
+				}, hlc.Timestamp{WallTime: synthetic})
+
+			if err != nil {
+				return nil, err
+			}
+
+			// Increment synthetic counter so that span frontier doesn't merge adjacent spans.
+			synthetic++
+
 			if !it.NeedAnother(rSpan) {
 				break
 			}
 		}
 	}
-	return sg.Slice(), nil
+
+	allRanges := make([]roachpb.Span, 0, synthetic)
+	frontier.Entries(func(sp roachpb.Span, _ hlc.Timestamp) (done span.OpResult) {
+		allRanges = append(allRanges, sp)
+		return span.ContinueMatch
+	})
+	return allRanges, nil
 }
