@@ -279,21 +279,21 @@ func testResetSQLStatsRPCForTenant(
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			// Clears the SQL Stats at the end of each test via builtin.
 			defer func() {
-				testCluster.tenantConn(0 /* idx */).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
-				controlCluster.tenantConn(0 /* idx */).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				testCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				controlCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
 			}()
 
 			for _, stmt := range stmts {
-				testCluster.tenantConn(0 /* idx */).Exec(t, stmt)
-				controlCluster.tenantConn(0 /* idx */).Exec(t, stmt)
+				testCluster.tenantConn(randomServer).Exec(t, stmt)
+				controlCluster.tenantConn(randomServer).Exec(t, stmt)
 			}
 
 			if flushed {
-				testCluster.tenantSQLStats(0 /* idx */).Flush(ctx)
-				controlCluster.tenantSQLStats(0 /* idx */).Flush(ctx)
+				testCluster.tenantSQLStats(randomServer).Flush(ctx)
+				controlCluster.tenantSQLStats(randomServer).Flush(ctx)
 			}
 
-			status := testCluster.tenantStatusSrv(1 /* idx */)
+			status := testCluster.tenantStatusSrv(randomServer)
 
 			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
 				Combined: true,
@@ -334,7 +334,7 @@ func testResetSQLStatsRPCForTenant(
 
 			// Ensures that sql stats reset is isolated by tenant boundary.
 			statsFromControlCluster, err :=
-				controlCluster.tenantStatusSrv(1 /* idx */).Statements(ctx, &serverpb.StatementsRequest{
+				controlCluster.tenantStatusSrv(randomServer).Statements(ctx, &serverpb.StatementsRequest{
 					Combined: true,
 				})
 			require.NoError(t, err)
@@ -396,11 +396,14 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 `)
 
 				// Record scan on primary index.
-				cluster.tenantConn(0).Exec(t, "SELECT * FROM test")
+				cluster.tenantConn(randomServer).
+					Exec(t, "SELECT * FROM test")
 
 				// Record scan on secondary index.
-				cluster.tenantConn(1).Exec(t, "SELECT * FROM test@test_a_idx")
-				testTableIDStr := cluster.tenantConn(2).QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
+				cluster.tenantConn(randomServer).
+					Exec(t, "SELECT * FROM test@test_a_idx")
+				testTableIDStr := cluster.tenantConn(randomServer).
+					QueryStr(t, "SELECT 'test'::regclass::oid")[0][0]
 				testTableID, err := strconv.Atoi(testTableIDStr)
 				require.NoError(t, err)
 
@@ -440,12 +443,12 @@ WHERE
 					{testTableIDStr, "1", "1", "true"},
 					{testTableIDStr, "2", "1", "true"},
 				}
-				cluster.tenantConn(2).CheckQueryResults(t, query, expected)
+				cluster.tenantConn(randomServer).CheckQueryResults(t, query, expected)
 			}
 
 			// Reset index usage stats.
 			timePreReset := timeutil.Now()
-			status := testingCluster.tenantStatusSrv(1 /* idx */)
+			status := testingCluster.tenantStatusSrv(randomServer)
 
 			// Reset index usage stats.
 			testCase.resetFn(testHelper)
@@ -457,7 +460,7 @@ WHERE
 
 			// Ensure tenant data isolation.
 			// Check that last reset time was not updated for control cluster.
-			status = controlCluster.tenantStatusSrv(1 /* idx */)
+			status = controlCluster.tenantStatusSrv(randomServer)
 			resp, err = status.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
 			require.NoError(t, err)
 			require.Equal(t, resp.LastReset, time.Time{})
@@ -486,7 +489,7 @@ WHERE
 			}
 
 			// Ensure tenant data isolation.
-			rows = controlCluster.tenantConn(2).QueryStr(t, query, controlTableID)
+			rows = controlCluster.tenantConn(0).QueryStr(t, query, controlTableID)
 			require.NotNil(t, rows)
 			for _, row := range rows {
 				require.NotEqual(t, row[1], "0", "expected total reads for table %s to not be reset, but got %s", row[0], row[1])
@@ -659,7 +662,7 @@ WHERE
 	require.Equal(t, expected, actual)
 
 	// Ensure tenant data isolation.
-	actual = controlledCluster.tenantConn(2).QueryStr(t, query, testTableID)
+	actual = controlledCluster.tenantConn(0).QueryStr(t, query, testTableID)
 	expected = [][]string{}
 
 	require.Equal(t, expected, actual)
