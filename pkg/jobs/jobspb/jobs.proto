@@ -158,6 +158,20 @@ message SchedulePTSChainingRecord {
 }
 
 message BackupDetails {
+  // Destination describes the specification of where to backup to, either the
+  // path or collection and subdir of that collection. This may not be the same
+  // however as the actual path this backup will end up writing to, as that is
+  // determined by scanning this destination for existing backups, composing new
+  // sub-paths of it based on date and time, etc. The actual path -- which is 
+  // derived from this destination -- is then captured in the field "URI" below.
+  message Destination {
+    // To is either a backup path, path, or a collection path if subdir is set.
+    repeated string to = 1;
+    // Subdir is the path within the collection path in to to backup to.
+    string subdir = 2;
+    repeated string incremental_storage = 3;
+  }
+
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
   // URI is the URI for the main backup destination. For partitioned backups,
@@ -165,6 +179,8 @@ message BackupDetails {
   // written to this location. For regular backups, all files are written to
   // this location.
   string uri = 3 [(gogoproto.customname) = "URI"];
+  Destination destination = 11 [(gogoproto.nullable) = false];
+  
   // URIsByLocalityKV is a map of locality KVs to store URIs, used for
   // partitioned backups.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
@@ -187,10 +203,23 @@ message BackupDetails {
   // to its path.
   string collection_URI = 8 [(gogoproto.customname) = "CollectionURI"];
 
+  int64 schedule_id = 12 [(gogoproto.customname) = "ScheduleID"];
+
   // SchedulePTSChainingRecord is used by scheduled backups to chain protected
   // timestamp records. For more details about the chaining scheme refer to
   // ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
   SchedulePTSChainingRecord schedule_pts_chaining_record = 10 [(gogoproto.customname) = "SchedulePTSChainingRecord"];
+
+  bool revision_history = 13;
+  repeated string incremental_from = 14;
+  bool full_cluster = 15;
+  repeated uint64 specific_tenant_ids = 16;
+  repeated sqlbase.Descriptor resolved_targets = 17 [(gogoproto.nullable) = false];
+  repeated uint32 resolved_complete_dbs = 18 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  // NEXT ID: 19;
 }
 
 message BackupProgress {
