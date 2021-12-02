@@ -921,7 +921,12 @@ func (f *clusterFactory) newCluster(
 		}
 
 		if cfg.spec.Cloud != spec.Local {
-			vm.Providers[cfg.spec.Cloud].Flags().ConfigureProviderOpts(providerOpts)
+			for name, provider := range vm.Providers {
+				if name == cfg.spec.Cloud {
+					provider.SetOpts(createVMOpts.ClusterName, providerOpts)
+					break
+				}
+			}
 		}
 
 		// Logs for creating a new cluster go to a dedicated log file.

@@ -228,12 +228,14 @@ type ProviderFlags interface {
 	// Configures a FlagSet with any options relevant to cluster manipulation
 	// commands (`create`, `destroy`, `list`, `sync` and `gc`).
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
-	// Updates provider opts values to match the passed provider opts struct
-	ConfigureProviderOpts(interface{})
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
+	// GetOpts reads the provider options for the given cluster name.
+	GetOpts(clusterName string) interface{}
+	// SetOpts writes the given provider options for the given cluster name.
+	SetOpts(clusterName string, providerOpts interface{})
 	CleanSSH() error
 	ConfigSSH() error
 	Create(names []string, opts CreateOpts) error
@@ -242,8 +244,6 @@ type Provider interface {
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	// Returns a hook point for extending top-level roachprod tooling flags
-	Flags() ProviderFlags
 	List() (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string

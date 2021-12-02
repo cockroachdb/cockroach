@@ -178,10 +178,10 @@ func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error)
 }
 
 // runCommand is used to invoke an AWS command.
-func (p *Provider) runCommand(args []string) ([]byte, error) {
+func (p *Provider) runCommand(args []string, profile string) ([]byte, error) {
 
-	if p.opts.Profile != "" {
-		args = append(args[:len(args):len(args)], "--profile", p.opts.Profile)
+	if profile != "" {
+		args = append(args[:len(args):len(args)], "--profile", profile)
 	}
 	var stderrBuf bytes.Buffer
 	cmd := exec.Command("aws", args...)
@@ -198,10 +198,10 @@ func (p *Provider) runCommand(args []string) ([]byte, error) {
 }
 
 // runJSONCommand invokes an aws command and parses the json output.
-func (p *Provider) runJSONCommand(args []string, parsed interface{}) error {
+func (p *Provider) runJSONCommand(args []string, parsed interface{}, profile string) error {
 	// Force json output in case the user has overridden the default behavior.
 	args = append(args[:len(args):len(args)], "--output", "json")
-	rawJSON, err := p.runCommand(args)
+	rawJSON, err := p.runCommand(args, profile)
 	if err != nil {
 		return err
 	}

@@ -27,6 +27,7 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -123,6 +124,16 @@ Local Clusters
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		createVMOpts.ClusterName = args[0]
+		for name, provider := range vm.Providers {
+			switch name {
+			case "gce":
+				provider.SetOpts(createVMOpts.ClusterName, gceOpts)
+			case "aws":
+				provider.SetOpts(createVMOpts.ClusterName, awsOpts)
+			case "azure":
+				provider.SetOpts(createVMOpts.ClusterName, azureOpts)
+			}
+		}
 		return roachprod.Create(username, numNodes, createVMOpts)
 	}),
 }

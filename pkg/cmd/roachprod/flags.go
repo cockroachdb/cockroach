@@ -20,12 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/spf13/cobra"
 )
 
 var (
+	gceOpts           = gce.DefaultProviderOpts()
+	awsOpts           = aws.DefaultProviderOpts()
+	azureOpts         = azure.DefaultProviderOpts()
 	pprofOpts         roachprod.PprofOpts
 	numNodes          int
 	numRacks          int
@@ -108,18 +113,22 @@ func initFlags() {
 			"international characters. Examples: usage=cloud-report-2021, namewithspaceinvalue='s o s'")
 
 	// Allow each Provider to inject additional configuration flags
-	for _, p := range vm.Providers {
-		p.Flags().ConfigureCreateFlags(createCmd.Flags())
+	gceOpts.ConfigureCreateFlags(createCmd.Flags())
+	awsOpts.ConfigureCreateFlags(createCmd.Flags())
+	azureOpts.ConfigureCreateFlags(createCmd.Flags())
 
-		for _, cmd := range []*cobra.Command{
-			destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
-		} {
-			p.Flags().ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
-		}
-		// createCmd only accepts a single GCE project, as opposed to all the other
-		// commands.
-		p.Flags().ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
+	for _, cmd := range []*cobra.Command{
+		destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
+	} {
+		gceOpts.ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
+		awsOpts.ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
+		azureOpts.ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 	}
+	// createCmd only accepts a single GCE project, as opposed to all the other
+	// commands.
+	gceOpts.ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
+	awsOpts.ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
+	azureOpts.ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
 
 	destroyCmd.Flags().BoolVarP(&destroyAllMine,
 		"all-mine", "m", false, "Destroy all non-local clusters belonging to the current user")

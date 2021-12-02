@@ -31,6 +31,16 @@ type provider struct {
 	unimplemented string
 }
 
+// GetOpts implements vm.Provider and is a no-op.
+func (p *provider) GetOpts(clusterName string) interface{} {
+	return nil
+}
+
+// SetOpts implements vm.Provider and is a no-op.
+func (p *provider) SetOpts(clusterName string, providerOpts interface{}) {
+
+}
+
 // CleanSSH implements vm.Provider and is a no-op.
 func (p *provider) CleanSSH() error {
 	return nil
@@ -64,11 +74,6 @@ func (p *provider) Extend(vms vm.List, lifetime time.Duration) error {
 // FindActiveAccount implements vm.Provider and returns an empty account.
 func (p *provider) FindActiveAccount() (string, error) {
 	return "", nil
-}
-
-// Flags implements vm.Provider and returns the delegate's name.
-func (p *provider) Flags() vm.ProviderFlags {
-	return p.delegate.Flags()
 }
 
 // List implements vm.Provider and returns an empty list.

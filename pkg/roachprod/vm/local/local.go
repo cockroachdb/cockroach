@@ -126,10 +126,6 @@ func (o *emptyFlags) ConfigureCreateFlags(flags *pflag.FlagSet) {
 func (o *emptyFlags) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
-// ConfigureProviderOpts is part of ProviderFlags.  This implementation is a no-op.
-func (o *emptyFlags) ConfigureProviderOpts(newOpts interface{}) {
-}
-
 // CleanSSH is part of the vm.Provider interface.  This implementation is a no-op.
 func (p *Provider) CleanSSH() error {
 	return nil
@@ -138,6 +134,15 @@ func (p *Provider) CleanSSH() error {
 // ConfigSSH is part of the vm.Provider interface.  This implementation is a no-op.
 func (p *Provider) ConfigSSH() error {
 	return nil
+}
+
+// GetOpts is part of the vm.Provider interface.  This implementation is a no-op.
+func (p *Provider) GetOpts(string) interface{} {
+	return nil
+}
+
+// SetOpts is part of the vm.Provider interface.  This implementation is a no-op.
+func (p *Provider) SetOpts(string, interface{}) {
 }
 
 // Create just creates fake host-info entries in the local filesystem
