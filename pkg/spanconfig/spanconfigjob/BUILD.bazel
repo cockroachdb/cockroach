@@ -10,6 +10,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

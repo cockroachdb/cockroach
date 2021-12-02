@@ -19,6 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,6 +76,26 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 			cleanupPGUrl()
 		}
 	}
+
+	var tenKnobs *spanconfig.TestingKnobs
+	if scKnobs := tenantState.TestingKnobs().SpanConfig; scKnobs != nil {
+		tenKnobs = scKnobs.(*spanconfig.TestingKnobs)
+	}
+	tenExecCfg := tenantState.ExecutorConfig().(sql.ExecutorConfig)
+	tenKVAccessor := tenantState.SpanConfigKVAccessor().(spanconfig.KVAccessor)
+	tenSQLTranslator := tenantState.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
+	tenSQLWatcher := tenantState.SpanConfigSQLWatcher().(spanconfig.SQLWatcher)
+
+	tenantState.recorder = spanconfigtestutils.NewKVAccessorRecorder(tenKVAccessor)
+	tenantState.reconciler = spanconfigreconciler.New(
+		tenSQLWatcher,
+		tenSQLTranslator,
+		tenantState.recorder,
+		&tenExecCfg,
+		tenExecCfg.Codec,
+		tenID,
+		tenKnobs,
+	)
 
 	h.ts[tenID] = tenantState
 	return tenantState
