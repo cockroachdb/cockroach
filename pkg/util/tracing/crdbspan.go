@@ -666,8 +666,15 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	case RecordingOff:
 		panic("should have been handled above")
 	case RecordingVerbose:
-		verbose = true
 		rec = child.GetRecording(RecordingVerbose)
+		if len(s.mu.recording.finishedChildren)+len(rec) <= maxRecordedSpansPerTrace {
+			verbose = true
+			break
+		}
+		// We don't have space for this recording. Let's collect just the structured
+		// records by falling through.
+		rec = nil
+		fallthrough
 	case RecordingStructured:
 		events = make([]*tracingpb.StructuredRecord, 0, 3)
 		events = child.getStructuredEventsRecursively(events, false /* includeDetachedChildren */)
