@@ -13,7 +13,7 @@ SELECT count(*) FROM system.zones WHERE id=18
 
 translate named-zone=timeseries
 ----
-/System{/tsd-tse}              DEFAULT
+/System{/tsd-tse}                          range default
 
 # Adding an explicit zone configuration for the timeseries range should work
 # as expected.
@@ -23,7 +23,7 @@ ALTER RANGE timeseries CONFIGURE ZONE USING gc.ttlseconds=1000
 
 translate named-zone=timeseries
 ----
-/System{/tsd-tse}              ttl_seconds=1000
+/System{/tsd-tse}                          ttl_seconds=1000
 
 # Change a field on the liveness range and ensure it behaves as expected.
 exec-sql
@@ -32,7 +32,7 @@ ALTER RANGE liveness CONFIGURE ZONE USING num_replicas=7;
 
 translate named-zone=liveness
 ----
-/System/NodeLiveness{-Max}     ttl_seconds=600 num_replicas=7
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=7
 
 # We are allowed to discard the liveness range's zone configuration. The
 # generated span should have the RANGE DEFAULT config.
@@ -42,4 +42,9 @@ ALTER RANGE liveness CONFIGURE ZONE DISCARD
 
 translate named-zone=liveness
 ----
-/System/NodeLiveness{-Max}     DEFAULT
+/System/NodeLiveness{-Max}                 range default
+
+translate named-zone=system
+----
+/System/{NodeLivenessMax-tsd}              range system
+/System{tse-/Max}                          range system

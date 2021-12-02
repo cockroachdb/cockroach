@@ -1426,7 +1426,13 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 	}
 }
 
-func TestDefaultZoneAndSpanConfigs(t *testing.T) {
-	converted := DefaultZoneConfigRef().AsSpanConfig()
-	require.True(t, converted.Equal(roachpb.TestingDefaultSpanConfig()))
+func TestHardCodedSpanConfigs(t *testing.T) {
+	{
+		converted := DefaultZoneConfigRef().AsSpanConfig()
+		require.True(t, converted.Equal(roachpb.TestingDefaultSpanConfig()))
+	}
+	{
+		converted := DefaultSystemZoneConfigRef().AsSpanConfig()
+		require.True(t, converted.Equal(roachpb.TestingSystemSpanConfig()))
+	}
 }
