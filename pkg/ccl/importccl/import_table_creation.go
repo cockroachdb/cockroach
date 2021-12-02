@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -67,18 +68,27 @@ func MakeTestingSimpleTableDescriptor(
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
 	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
-	sc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
-		Name:     "foo",
-		ID:       parentSchemaID,
-		Version:  1,
-		ParentID: parentID,
-		Privileges: descpb.NewPrivilegeDescriptor(
-			security.PublicRoleName(),
-			privilege.SchemaPrivileges,
-			privilege.List{},
-			security.RootUserName(),
-		),
-	}).BuildCreatedMutableSchema()
+	var sc catalog.SchemaDescriptor
+	if !st.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) && parentSchemaID == keys.PublicSchemaIDForBackup {
+		// If we're not on version PublicSchemasWithDescriptors, continue to
+		// use a synthetic public schema, the migration when we update to
+		// PublicSchemasWithDescriptors will handle creating the explicit public
+		// schema.
+		sc = schemadesc.GetPublicSchema()
+	} else {
+		sc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+			Name:     "foo",
+			ID:       parentSchemaID,
+			Version:  1,
+			ParentID: parentID,
+			Privileges: descpb.NewPrivilegeDescriptor(
+				security.PublicRoleName(),
+				privilege.SchemaPrivileges,
+				privilege.List{},
+				security.RootUserName(),
+			),
+		}).BuildCreatedMutableSchema()
+	}
 	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
 }
 
