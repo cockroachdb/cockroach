@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package spanconfigccl_test
+package spanconfigsqltranslatorccl
 
 import (
 	"context"
