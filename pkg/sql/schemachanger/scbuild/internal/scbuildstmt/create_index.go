@@ -46,7 +46,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"index %q being dropped, try again later", n.Name.String()))
 		}
-		panic(sqlerrors.NewRelationAlreadyExistsError(n.Name.String()))
+		panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
 	}
 
 	if rel.MaterializedView() {
@@ -197,7 +197,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	secondaryIndexName := &scpb.IndexName{
 		TableID: secondaryIndex.TableID,
 		IndexID: secondaryIndex.IndexID,
-		Name:    n.Name.String(),
+		Name:    string(n.Name),
 	}
 	// Convert partitioning information for the execution
 	// side of things.

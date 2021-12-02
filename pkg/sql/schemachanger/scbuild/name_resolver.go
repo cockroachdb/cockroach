@@ -170,7 +170,7 @@ func (b buildCtx) ResolveIndex(
 	if !rel.IsPhysicalTable() || rel.IsSequence() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not an indexable table or a materialized view", rel.GetName()))
 	}
-	idx, _ := rel.FindIndexWithName(indexName.String())
+	idx, _ := rel.FindIndexWithName(string(indexName))
 	if idx == nil {
 		if indexName == "" || indexName == tabledesc.LegacyPrimaryKeyIndexName {
 			// Fallback to primary index

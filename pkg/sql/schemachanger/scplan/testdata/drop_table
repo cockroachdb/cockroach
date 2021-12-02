@@ -143,7 +143,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
       Metadata:
         Statement: DROP TABLE defaultdb.shipments CASCADE
         TargetMetadata:
-          SourceElementID: 2
+          SourceElementID: 3
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
