@@ -989,7 +989,7 @@ group-by (streaming)
  ├── columns: b:2 count:5
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
- ├── stats: [rows=9.5617925, distinct(2)=9.5617925, null(2)=0]
+ ├── stats: [rows=9.5617925, distinct(2)=9.5617925, null(2)=0, avgsize(2)=4]
  ├── cost: 25.1456179
  ├── key: (2)
  ├── fd: (2)-->(5)
@@ -998,7 +998,7 @@ group-by (streaming)
  ├── scan data2
  │    ├── columns: a:1 b:2
  │    ├── constraint: /1/2: [/1 - /1]
- │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=9.5617925, null(2)=0]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=9.5617925, null(2)=0, avgsize(2)=4]
  │    ├── cost: 24.82
  │    ├── key: (2)
  │    ├── fd: ()-->(1)

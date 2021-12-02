@@ -21,10 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// Most of the functionality in statistics.go is tested by the data-driven
-// testing in logical_props_factory_test.go. This file contains tests for
-// functions in statistics.go that cannot be tested using the data-driven
-// testing framework.
+// Most of the functionality in statistics.go is tested by data-driven
+// testing. This file contains tests for functions in statistics.go that cannot
+// be tested using the data-driven testing framework.
 
 // Test getting statistics from constraints that cannot yet be inferred
 // by the optimizer.
@@ -155,79 +154,79 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs1 := constraint.SingleConstraint(&c1)
 	statsFunc(
 		cs1,
-		"[rows=140000000, distinct(1)=7, null(1)=0]",
+		"[rows=140000000, distinct(1)=7, null(1)=0, avgsize(1)=4]",
 	)
 
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc(
 		cs2,
-		"[rows=3.33333333e+09, distinct(2)=166.666667, null(2)=0]",
+		"[rows=3.33333333e+09, distinct(2)=166.666667, null(2)=0, avgsize(2)=4]",
 	)
 
 	cs3 := constraint.SingleConstraint(&c3)
 	statsFunc(
 		cs3,
-		"[rows=20000000, distinct(3)=1, null(3)=0]",
+		"[rows=20000000, distinct(3)=1, null(3)=0, avgsize(3)=4]",
 	)
 
 	cs12 := constraint.SingleConstraint(&c12)
 	statsFunc(
 		cs12,
-		"[rows=20000000, distinct(1)=1, null(1)=0]",
+		"[rows=20000000, distinct(1)=1, null(1)=0, avgsize(1)=4]",
 	)
 
 	cs123 := constraint.SingleConstraint(&c123)
 	statsFunc(
 		cs123,
-		"[rows=36040, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=5, null(3)=0, distinct(1,2)=1, null(1,2)=0, distinct(1-3)=5, null(1-3)=0]",
+		"[rows=36040, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=5, null(1-3)=0, avgsize(1-3)=12]",
 	)
 
 	cs123n := constraint.SingleConstraint(&c123n)
 	statsFunc(
 		cs123n,
-		"[rows=40000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]",
+		"[rows=40000, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]",
 	)
 
 	cs32 := constraint.SingleConstraint(&c32)
 	statsFunc(
 		cs32,
-		"[rows=80000, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2, null(2,3)=0]",
+		"[rows=80000, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(2,3)=2, null(2,3)=0, avgsize(2,3)=8]",
 	)
 
 	cs321 := constraint.SingleConstraint(&c321)
 	statsFunc(
 		cs321,
-		"[rows=160000, distinct(2)=2, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=4, null(2,3)=0]",
+		"[rows=160000, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(2,3)=4, null(2,3)=0, avgsize(2,3)=8]",
 	)
 
 	cs312 := constraint.SingleConstraint(&c312)
 	statsFunc(
 		cs312,
-		"[rows=24490654.6, distinct(1)=2, null(1)=0, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(1-3)=26.9394737, null(1-3)=0]",
+		"[rows=24490654.6, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(2)=7, null(2)=0, avgsize(2)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(1-3)=26.9394737, null(1-3)=0, avgsize(1-3)=12]",
 	)
 
 	cs312n := constraint.SingleConstraint(&c312n)
 	statsFunc(
 		cs312n,
-		"[rows=160000, distinct(1)=2, null(1)=0, distinct(3)=2, null(3)=0, distinct(1,3)=4, null(1,3)=0]",
+		"[rows=160000, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(3)=2, null(3)=0, avgsize(3)=4, distinct(1,3)=4, null(1,3)=0, avgsize(1,3)=8]",
 	)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
 	statsFunc(
 		cs,
-		"[rows=909098.909, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
+		"[rows=909098.909, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]",
 	)
 
 	cs = cs32.Intersect(&evalCtx, cs123)
 	statsFunc(
 		cs,
-		"[rows=909098.909, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
+		"[rows=909098.909, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]",
 	)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc(
 		cs45,
-		"[rows=1e+09, distinct(4)=1, null(4)=0]",
+		"[rows=1e+09, distinct(4)=1, null(4)=0, avgsize(4)=4]",
 	)
 }
 
