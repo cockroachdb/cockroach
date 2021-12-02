@@ -246,7 +246,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
       Metadata:
         Statement: DROP VIEW defaultdb.v1 CASCADE
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -260,7 +260,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
       Metadata:
         Statement: DROP VIEW defaultdb.v1 CASCADE
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 3
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -274,7 +274,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
       Metadata:
         Statement: DROP VIEW defaultdb.v1 CASCADE
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 3
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -288,7 +288,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
       Metadata:
         Statement: DROP VIEW defaultdb.v1 CASCADE
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 5
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor

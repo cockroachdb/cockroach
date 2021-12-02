@@ -41,26 +41,26 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 65             test_uwi_child   1          a            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
 65             test_uwi_child   2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
 
-query ITITTBB colnames
+query ITITTBBB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
 ----
-descriptor_id  descriptor_name  index_id  index_name            index_type  is_unique  is_inverted
-56             test_kv          1         test_kv_pkey          primary     true       false
-56             test_kv          2         test_v_idx            secondary   true       false
-56             test_kv          3         test_v_idx2           secondary   false      false
-56             test_kv          4         test_v_idx3           secondary   false      false
-57             test_kvr1        1         test_kvr1_pkey        primary     true       false
-58             test_kvr2        1         test_kvr2_pkey        primary     true       false
-58             test_kvr2        2         test_kvr2_v_key       secondary   true       false
-59             test_kvr3        1         test_kvr3_pkey        primary     true       false
-59             test_kvr3        2         test_kvr3_v_key       secondary   true       false
-60             test_kvi1        1         test_kvi1_pkey        primary     true       false
-61             test_kvi2        1         test_kvi2_pkey        primary     true       false
-61             test_kvi2        2         test_kvi2_idx         secondary   true       false
-62             test_v1          0         ·                     primary     false      false
-63             test_v2          0         ·                     primary     false      false
-64             test_uwi_parent  1         test_uwi_parent_pkey  primary     true       false
-65             test_uwi_child   1         test_uwi_child_pkey   primary     true       false
+descriptor_id  descriptor_name  index_id  index_name            index_type  is_unique  is_inverted  is_sharded
+56             test_kv          1         test_kv_pkey          primary     true       false        false
+56             test_kv          2         test_v_idx            secondary   true       false        false
+56             test_kv          3         test_v_idx2           secondary   false      false        false
+56             test_kv          4         test_v_idx3           secondary   false      false        false
+57             test_kvr1        1         test_kvr1_pkey        primary     true       false        false
+58             test_kvr2        1         test_kvr2_pkey        primary     true       false        false
+58             test_kvr2        2         test_kvr2_v_key       secondary   true       false        false
+59             test_kvr3        1         test_kvr3_pkey        primary     true       false        false
+59             test_kvr3        2         test_kvr3_v_key       secondary   true       false        false
+60             test_kvi1        1         test_kvi1_pkey        primary     true       false        false
+61             test_kvi2        1         test_kvi2_pkey        primary     true       false        false
+61             test_kvi2        2         test_kvi2_idx         secondary   true       false        false
+62             test_v1          0         ·                     primary     false      false        false
+63             test_v2          0         ·                     primary     false      false        false
+64             test_uwi_parent  1         test_uwi_parent_pkey  primary     true       false        false
+65             test_uwi_child   1         test_uwi_child_pkey   primary     true       false        false
 
 query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
