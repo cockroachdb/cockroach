@@ -74,6 +74,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.OptimisticEvalConflicts
 	case *ErrorDetail_MinTimestampBoundUnsatisfiable:
 		return t.MinTimestampBoundUnsatisfiable
+	case *ErrorDetail_RefreshSpanError:
+		return t.RefreshSpanError
 	default:
 		return nil
 	}
@@ -344,6 +346,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_OptimisticEvalConflicts{t}
 	case *MinTimestampBoundUnsatisfiableError:
 		union = &ErrorDetail_MinTimestampBoundUnsatisfiable{t}
+	case *RefreshSpanError:
+		union = &ErrorDetail_RefreshSpanError{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
