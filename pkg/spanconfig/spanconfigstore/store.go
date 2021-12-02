@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -71,7 +72,7 @@ func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
 }
 
 // ComputeSplitKey is part of the spanconfig.StoreReader interface.
-func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *Store) ComputeSplitKey(_ context.Context, start, end roachpb.RKey) roachpb.RKey {
 	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
 
 	// We don't want to split within the system config span while we're still
@@ -139,6 +140,57 @@ func (s *Store) Apply(
 		log.Fatalf(ctx, "%v", err)
 	}
 	return deleted, added
+}
+
+// Clone returns a copy of the underlying Store.
+func (s *Store) Clone(ctx context.Context) *Store {
+	clone := New(s.fallback)
+	for _, entry := range s.GetAllOverlapping(ctx, keys.EverythingSpan) {
+		clone.Apply(ctx, false /* dryrun */, spanconfig.Update{
+			Span:   entry.Span,
+			Config: entry.Config,
+		})
+	}
+	return clone
+}
+
+// GetAllOverlapping retrieves the set of entries that overlap with the given
+// span in sorted order.
+func (s *Store) GetAllOverlapping(_ context.Context, sp roachpb.Span) []roachpb.SpanConfigEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Iterate over all overlapping ranges and return corresponding span config
+	// entries.
+	var res []roachpb.SpanConfigEntry
+	for _, overlapping := range s.mu.tree.Get(sp.AsRange()) {
+		res = append(res, overlapping.(*storeEntry).SpanConfigEntry)
+	}
+	return res
+}
+
+// ForEachOverlapping iterates through the set of entries that overlap with the
+// given span, in sorted order.
+func (s *Store) ForEachOverlapping(
+	_ context.Context,
+	sp roachpb.Span,
+	f func(roachpb.SpanConfigEntry) error,
+) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Iterate over all overlapping ranges and invoke the callback with the
+	// corresponding span config entries.
+	for _, overlapping := range s.mu.tree.Get(sp.AsRange()) {
+		entry := overlapping.(*storeEntry).SpanConfigEntry
+		if err := f(entry); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) applyInternal(
