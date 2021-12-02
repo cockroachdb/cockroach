@@ -86,6 +86,18 @@ const (
 	spanKindTagKey = "span.kind"
 )
 
+// TODO(davidh): Once performance issues around redaction are
+// resolved via #58610, this setting can be removed so that all traces
+// have redactability enabled.
+var enableTraceRedactable = settings.RegisterBoolSetting(
+	"trace.redactable.enabled",
+	"set to true to enable redactability for unstructured events "+
+		"in traces and to redact traces sent to tenants. "+
+		"Set to false to coarsely mark unstructured events as redactable "+
+		" and eliminate them from tenant traces.",
+	false,
+)
+
 var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
@@ -412,6 +424,9 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 		jaegerAgentAddr := jaegerAgent.Get(sv)
 		otlpCollectorAddr := openTelemetryCollector.Get(sv)
 		zipkinAddr := ZipkinCollector.Get(sv)
+		enableRedactable := enableTraceRedactable.Get(sv)
+
+		t.SetRedactable(enableRedactable)
 
 		var nt int32
 		if enableNetTrace.Get(sv) {
@@ -494,6 +509,7 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 	openTelemetryCollector.SetOnChange(sv, reconfigure)
 	ZipkinCollector.SetOnChange(sv, reconfigure)
 	jaegerAgent.SetOnChange(sv, reconfigure)
+	enableTraceRedactable.SetOnChange(sv, reconfigure)
 }
 
 func createOTLPSpanProcessor(
