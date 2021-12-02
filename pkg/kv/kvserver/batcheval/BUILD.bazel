@@ -104,6 +104,7 @@ go_test(
         "cmd_query_resolved_timestamp_test.go",
         "cmd_recover_txn_test.go",
         "cmd_refresh_range_test.go",
+        "cmd_refresh_test.go",
         "cmd_resolve_intent_test.go",
         "cmd_revert_range_test.go",
         "cmd_scan_test.go",

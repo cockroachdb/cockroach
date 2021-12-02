@@ -65,7 +65,7 @@ func RefreshRange(
 		},
 		func(kv roachpb.KeyValue) error {
 			if ts := kv.Value.Timestamp; refreshFrom.LessEq(ts) {
-				return errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
+				return roachpb.NewRefreshSpanError(roachpb.RefreshSpanError_REASON_KEY, kv.Key, ts)
 			}
 			return nil
 		})
@@ -81,7 +81,7 @@ func RefreshRange(
 			continue
 		}
 		// Return an error if an intent was written to the span.
-		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
+		return result.Result{}, roachpb.NewRefreshSpanError(roachpb.RefreshSpanError_REASON_INTENT,
 			i.Key, i.Txn.WriteTimestamp)
 	}
 
