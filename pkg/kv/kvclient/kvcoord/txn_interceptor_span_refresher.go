@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -447,7 +448,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 
 	canRefreshTxn, refreshTxn := roachpb.PrepareTransactionForRefresh(ba.Txn, ba.Txn.WriteTimestamp)
 	if !canRefreshTxn || !sr.canAutoRetry {
-		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, sr.refreshFootprint.asSlice())
 	}
 	log.VEventf(ctx, 2, "preemptively refreshing to timestamp %s before issuing %s",
 		refreshTxn.ReadTimestamp, ba)
@@ -455,7 +456,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	// Try updating the txn spans at a timestamp that will allow us to commit.
 	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
 		log.Eventf(ctx, "preemptive refresh failed; propagating retry error")
-		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, sr.refreshFootprint.asSlice())
 	}
 
 	log.Eventf(ctx, "preemptive refresh succeeded")
@@ -463,12 +464,14 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	return ba, nil
 }
 
-func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.Error {
+func newRetryErrorOnFailedPreemptiveRefresh(
+	txn *roachpb.Transaction, spans []roachpb.Span,
+) *roachpb.Error {
 	reason := roachpb.RETRY_SERIALIZABLE
 	if txn.WriteTooOld {
 		reason = roachpb.RETRY_WRITE_TOO_OLD
 	}
-	err := roachpb.NewTransactionRetryError(reason, "failed preemptive refresh")
+	err := roachpb.NewTransactionRetryError(reason, fmt.Sprintf("failed preemptive refresh of span(s): %s", spans))
 	return roachpb.NewErrorWithTxn(err, txn)
 }
 
