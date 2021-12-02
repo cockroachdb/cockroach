@@ -157,12 +157,7 @@ func RunSchemaChangesInJob(
 			if err := executeStage(ctx, td, sc, i); err != nil {
 				return err
 			}
-			if err := td.UpdateSchemaChangeJob(ctx, func(md jobs.JobMetadata, ju JobProgressUpdater) error {
-				pg := md.Progress.GetNewSchemaChange()
-				pg.States = makeStatuses(stage.After)
-				ju.UpdateProgress(md.Progress)
-				return nil
-			}); err != nil {
+			if err := td.UpdateState(ctx, stage.After); err != nil {
 				return err
 			}
 			if isLastStage {
@@ -179,14 +174,6 @@ func RunSchemaChangesInJob(
 	}
 
 	return nil
-}
-
-func makeStatuses(next scpb.State) []scpb.Status {
-	states := make([]scpb.Status, len(next.Nodes))
-	for i := range next.Nodes {
-		states[i] = next.Nodes[i].Status
-	}
-	return states
 }
 
 func makeState(
