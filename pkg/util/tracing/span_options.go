@@ -76,6 +76,8 @@ type spanOptions struct {
 	// not set, recordingType() looks at the parent.
 	recordingTypeExplicit bool
 	recordingTypeOpt      RecordingType
+
+	ForceRedactable bool // see WithRedactable
 }
 
 func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
@@ -134,9 +136,27 @@ func (opts *spanOptions) otelContext() (oteltrace.Span, oteltrace.SpanContext) {
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
 // - WithTags: adds tags to a Span on creation.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
+// - WithRedactable: sets a flag used to force redactability on the span.
 // - WithDetachedRecording: don't include the recording in the parent.
 type SpanOption interface {
 	apply(spanOptions) spanOptions
+}
+
+type redactableOption struct {
+	redactable bool
+}
+
+var _ SpanOption = &redactableOption{false}
+
+func (r *redactableOption) apply(opts spanOptions) spanOptions {
+	opts.ForceRedactable = r.redactable
+	return opts
+}
+
+// WithRedactable can set redactability to true, overriding the
+// tracer's redactability setting when we create the Span.
+func WithRedactable(to bool) SpanOption {
+	return &redactableOption{to}
 }
 
 type parentOption Span

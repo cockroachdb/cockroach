@@ -1050,20 +1050,28 @@ func (n *Node) setupSpanForIncomingRPC(
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
 	tr := n.storeCfg.AmbientCtx.Tracer
+
+	// We require redactability enabled on tenant requests.
+	// TODO(obs-inf): Once performance issues around redaction are
+	// resolved via #58610, this code can be removed so that all traces
+	// have redactability enabled.
+	forceRedactable := tenID != roachpb.SystemTenantID
+
 	// newSpan is set if we end up creating a new span.
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
 	localRequest := grpcutil.IsLocalRequestContext(ctx)
 	if localRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, opName, tracing.WithServerSpanKind)
+		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, opName, tracing.WithServerSpanKind, tracing.WithRedactable(forceRedactable))
 	} else {
 		if parentSpan == nil {
 			// If tracing information was passed via gRPC metadata, the gRPC interceptor
 			// should have opened a span for us. If not, open a span now (if tracing is
 			// disabled, this will be a noop span).
-			ctx, newSpan = tr.StartSpanCtx(ctx, opName)
+			ctx, newSpan = tr.StartSpanCtx(ctx, opName, tracing.WithRedactable(forceRedactable))
 		} else {
+			parentSpan.SetRedactable(forceRedactable)
 			parentSpan.SetTag("node", attribute.IntValue(int(n.Descriptor.NodeID)))
 		}
 	}

@@ -136,6 +136,13 @@ func (s *spanInner) Meta() SpanMeta {
 	}
 }
 
+func (s *spanInner) SetRedactable(to bool) {
+	if s.isNoop() {
+		return
+	}
+	s.crdb.redactable = to
+}
+
 func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s

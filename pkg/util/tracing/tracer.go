@@ -727,7 +727,7 @@ func (t *Tracer) startSpanGeneric(
 		tracer:       t,
 		traceID:      traceID,
 		spanID:       spanID,
-		redactable:   t.Redactable(),
+		redactable:   t.Redactable() || opts.ForceRedactable,
 		goroutineID:  goroutineID,
 		startTime:    startTime,
 		parentSpanID: opts.parentSpanID(),

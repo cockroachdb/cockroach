@@ -45,7 +45,10 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			Add("tag_sensitive", tagSensitive).
 			Add("tag_not_sensitive", log.Safe(tagNotSensitive))
 		ctx := logtags.WithTags(context.Background(), tags)
+		tracer := tracing.NewTracer()
+		tracer.SetRedactable(true)
 		ctx, sp := tracing.NewTracer().StartSpanCtx(ctx, "foo", tracing.WithRecording(tracing.RecordingVerbose))
+		sp.SetVerbose(true)
 
 		log.Eventf(ctx, "%s %s", msgSensitive, log.Safe(msgNotSensitive))
 		sp.SetTag("all_span_tags_are_stripped", attribute.StringValue("because_no_redactability"))
@@ -59,7 +62,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		require.NoError(t, redactRecordingForTenant(roachpb.MakeTenantID(100), rec))
 		require.Zero(t, rec[0].Tags)
 		require.Len(t, rec[0].Logs, 1)
-		msg := rec[0].Logs[0].Msg().StripMarkers()
+		msg := rec[0].Logs[0].Msg(true)
 		t.Log(msg)
 		require.NotContains(t, msg, msgSensitive)
 		require.NotContains(t, msg, tagSensitive)
@@ -77,7 +80,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			"tag_sensitive":              tagSensitive,
 		}, rec[0].Tags)
 		require.Len(t, rec[0].Logs, 1)
-		msg := rec[0].Logs[0].Msg().StripMarkers()
+		msg := rec[0].Logs[0].Msg(true)
 		t.Log(msg)
 		require.Contains(t, msg, msgSensitive)
 		require.Contains(t, msg, tagSensitive)

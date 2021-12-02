@@ -74,6 +74,14 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+// SetRedactable sets the redactable flag on the span
+func (sp *Span) SetRedactable(to bool) {
+	if sp.done() {
+		return
+	}
+	sp.i.SetRedactable(to)
+}
+
 // Redactable returns true if this Span records
 // redactable logs.
 func (sp *Span) Redactable() bool {
@@ -83,14 +91,6 @@ func (sp *Span) Redactable() bool {
 	// NB: doesn't matter what sp.Tracer().Redactable() returns now, this Span's
 	// redactability is constant across its lifetime.
 	return sp.i.crdb.redactable
-}
-
-// SetOperationName sets the name of the operation.
-func (sp *Span) SetOperationName(operationName string) {
-	if sp.done() {
-		return
-	}
-	sp.i.SetOperationName(operationName)
 }
 
 // Finish idempotently marks the Span as completed (at which point it will
