@@ -543,6 +543,7 @@ var ignoredErrorPatterns = []string{
 	// TODO(mjibson): fix these
 	"column .* must appear in the GROUP BY clause or be used in an aggregate function",
 	"aggregate functions are not allowed in ON",
+	"ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column",
 }
 
 var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
