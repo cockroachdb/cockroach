@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -64,21 +63,13 @@ func fetchPreviousBackups(
 // explicitly, or due to the auto-append feature), it will resolve the
 // encryption options based on the base backup, as well as find all previous
 // backup manifests in the backup chain.
-//
-// TODO(pbardea): Cleanup list for after stability
-//  - We shouldn't need to pass `to` and (`defaultURI`, `urisByLocalityKV`). We
-//  can determine the latter from the former.
 func resolveDest(
 	ctx context.Context,
 	user security.SQLUsername,
-	nested, appendToLatest bool,
-	defaultURI string,
-	urisByLocalityKV map[string]string,
+	dest jobspb.BackupDetails_Destination,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	endTime hlc.Timestamp,
-	to []string,
 	incrementalFrom []string,
-	subdir string,
 ) (
 	string, /* collectionURI */
 	string, /* defaultURI */
@@ -94,14 +85,22 @@ func resolveDest(
 	var chosenSuffix string
 	var err error
 
-	if nested {
-		collectionURI, chosenSuffix, err = resolveBackupCollection(ctx, user, defaultURI,
-			appendToLatest, makeCloudStorage, endTime, subdir)
-		if err != nil {
-			return "", "", "", nil, nil, err
-		}
+	defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(dest.To, "")
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
 
-		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, chosenSuffix)
+	if dest.Subdir != "" {
+		collectionURI = defaultURI
+		chosenSuffix = dest.Subdir
+		if chosenSuffix == latestFileName {
+			latest, err := readLatestFile(ctx, defaultURI, makeCloudStorage, user)
+			if err != nil {
+				return "", "", "", nil, nil, err
+			}
+			chosenSuffix = latest
+		}
+		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, chosenSuffix)
 		if err != nil {
 			return "", "", "", nil, nil, err
 		}
@@ -137,8 +136,7 @@ func resolveDest(
 
 			// Pick a piece-specific suffix and update the destination path(s).
 			partName := endTime.GoTime().Format(DateBasedIncFolderName)
-			partName = path.Join(chosenSuffix, partName)
-			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
+			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, path.Join(chosenSuffix, partName))
 			if err != nil {
 				return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 			}
@@ -230,35 +228,6 @@ func getEncryptionFromBase(
 		}
 	}
 	return encryptionOptions, nil
-}
-
-// resolveBackupCollection returns the collectionURI and chosenSuffix that we
-// should use for a backup that is pointing to a collection.
-func resolveBackupCollection(
-	ctx context.Context,
-	user security.SQLUsername,
-	defaultURI string,
-	appendToLatest bool,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	endTime hlc.Timestamp,
-	subdir string,
-) (string, string, error) {
-	var chosenSuffix string
-	collectionURI := defaultURI
-	if appendToLatest {
-		latest, err := readLatestFile(ctx, collectionURI, makeCloudStorage, user)
-		if err != nil {
-			return "", "", err
-		}
-		chosenSuffix = latest
-	} else if subdir != "" {
-		// User has specified a subdir via `BACKUP INTO 'subdir' IN...`.
-		chosenSuffix = strings.TrimPrefix(subdir, "/")
-		chosenSuffix = "/" + chosenSuffix
-	} else {
-		chosenSuffix = endTime.GoTime().Format(DateBasedIntoFolderName)
-	}
-	return collectionURI, chosenSuffix, nil
 }
 
 func readLatestFile(
