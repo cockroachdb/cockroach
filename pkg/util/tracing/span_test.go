@@ -350,13 +350,18 @@ func TestSpanMaxChildren(t *testing.T) {
 	tr := NewTracer()
 	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 	defer sp.Finish()
-	for i := 0; i < maxChildrenPerSpan+123; i++ {
-		tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
+	numChildren := maxChildrenPerSpan + 123
+	children := make([]*Span, numChildren)
+	for i := 0; i < numChildren; i++ {
+		children[i] = tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
 		exp := i + 1
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
 		}
 		require.Len(t, sp.i.crdb.mu.recording.openChildren, exp)
+	}
+	for _, s := range children {
+		s.Finish()
 	}
 }
 

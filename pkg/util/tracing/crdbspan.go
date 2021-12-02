@@ -587,22 +587,31 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	return rs
 }
 
-func (s *crdbSpan) addChild(child *crdbSpan, collectChildRec bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// addChildLocked adds a child to the receiver.
+//
+// The receiver's lock must be held.
+//
+// The adding fails if the receiver is not recording  (non-recording spans don't
+// accumulate children) or if the reciver has reached the maximum number of
+// spans it can keep track off. Returns false in these cases.
+func (s *crdbSpan) addChildLocked(child *crdbSpan, collectChildRec bool) bool {
+	s.mu.AssertHeld()
 	if s.recordingType() == RecordingOff {
 		// We're not recording; there's nothing to do. The caller also checks the
 		// recording status, but we want to also check it here under the lock
 		// (double-checked locking).
-		return
+		return false
 	}
 
-	if len(s.mu.recording.openChildren) < maxChildrenPerSpan {
-		s.mu.recording.openChildren = append(
-			s.mu.recording.openChildren,
-			childRef{crdbSpan: child, collectRecording: collectChildRec},
-		)
+	if len(s.mu.recording.openChildren) >= maxChildrenPerSpan {
+		return false
 	}
+
+	s.mu.recording.openChildren = append(
+		s.mu.recording.openChildren,
+		childRef{crdbSpan: child, collectRecording: collectChildRec},
+	)
+	return true
 }
 
 // childFinished is called when a child is Finish()ed. Depending on the
