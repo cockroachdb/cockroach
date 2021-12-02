@@ -188,6 +188,9 @@ type sqlServerOptionalKVArgs struct {
 
 	// The admission queue to use for SQLSQLResponseWork.
 	sqlSQLResponseAdmissionQ *admission.WorkQueue
+
+	// Used when creating and deleting tenant records.
+	spanConfigKVAccessor spanconfig.KVAccessor
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -879,8 +882,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			sqlTranslator,
 			spanConfigKnobs,
 		)
+
 		execCfg.SpanConfigReconciliationJobDeps = spanConfigMgr
 	}
+	execCfg.SpanConfigKVAccessor = cfg.sqlServerOptionalKVArgs.spanConfigKVAccessor
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,

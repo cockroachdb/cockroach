@@ -61,8 +61,9 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 	return nil
 }
 
-// CreateTenantRecord creates a tenant in system.tenants, and optionally
-// initializes the usage data in system.tenant_usage (if info.Usage is set).
+// CreateTenantRecord creates a tenant in system.tenants and installs an initial
+// span config (in system.span_configurations) for it. It also initializes the
+// usage data in system.tenant_usage if info.Usage is set.
 func CreateTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfoWithUsage,
 ) error {
@@ -122,7 +123,45 @@ func CreateTenantRecord(
 			log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 		}
 	}
-	return nil
+
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PreSeedTenantSpanConfigs) {
+		return err
+	}
+
+	// Install a single key[1] span config at the start of tenant's keyspace;
+	// elsewhere this ensures that we split on the tenant boundary. The subset
+	// of entries with spans in the tenant keyspace are, henceforth, governed
+	// by the tenant's SQL pods. This entry may be replaced with others when the
+	// SQL pods reconcile their zone configs for the first time. When destroying
+	// the tenant for good, we'll clear out any left over entries as part of the
+	// GC-ing the tenant's record.
+	//
+	// [1]: It doesn't actually matter what span is inserted here as long as it
+	//      starts at the tenant prefix and is fully contained within the tenant
+	//      keyspace. The span does not need to extend all the way to the
+	//      tenant's prefix end because we only look at start keys for split
+	//      boundaries. Whatever is inserted will get cleared out by the
+	//      tenant's reconciliation process.
+
+	// TODO(irfansharif): What should this initial default be? Could be this
+	// static one, could use host's RANGE TENANT or host's RANGE DEFAULT?
+	// Does it even matter given it'll disappear as soon as tenant starts
+	// reconciling?
+	tenantSpanConfig := execCfg.DefaultZoneConfig.AsSpanConfig()
+	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+	toUpsert := []roachpb.SpanConfigEntry{
+		{
+			Span: roachpb.Span{
+				Key:    tenantPrefix,
+				EndKey: tenantPrefix.Next(),
+			},
+			Config: tenantSpanConfig,
+		},
+	}
+	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(txn)
+	return scKVAccessor.UpdateSpanConfigEntries(
+		ctx, nil /* toDelete */, toUpsert,
+	)
 }
 
 // GetTenantRecord retrieves a tenant in system.tenants.
@@ -232,7 +271,8 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 	// transaction did happen to take long enough that the manual splits'
 	// expirations did elapse and the splits were merged away, they would
 	// quickly (but asynchronously) be recreated once the KV layer notices the
-	// updated system.tenants table in the gossipped SystemConfig.
+	// updated system.tenants table in the gossipped SystemConfig, or if using
+	// the span configs infrastructure, in `system.span_configurations`.
 	expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, key := range splits {
 		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime); err != nil {
@@ -388,7 +428,29 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d usage", info.ID)
 		}
-		return nil
+
+		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PreSeedTenantSpanConfigs) {
+			return nil
+		}
+
+		// Clear out all span config entries left over by the tenant.
+		tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+		tenantSpan := roachpb.Span{
+			Key:    tenantPrefix,
+			EndKey: tenantPrefix.PrefixEnd(),
+		}
+
+		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(txn)
+		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{tenantSpan})
+		if err != nil {
+			return err
+		}
+
+		toDelete := make([]roachpb.Span, len(entries))
+		for i, entry := range entries {
+			toDelete[i] = entry.Span
+		}
+		return scKVAccessor.UpdateSpanConfigEntries(ctx, toDelete, nil /* toUpsert */)
 	})
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
 }

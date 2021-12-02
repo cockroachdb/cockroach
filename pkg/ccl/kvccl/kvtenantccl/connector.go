@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -451,6 +452,11 @@ func (c *Connector) UpdateSpanConfigEntries(
 		})
 		return err
 	})
+}
+
+// WithTxn implements the spanconfig.KVAccessor interface.
+func (c *Connector) WithTxn(*kv.Txn) spanconfig.KVAccessor {
+	panic("not applicable")
 }
 
 // withClient is a convenience wrapper that executes the given closure while

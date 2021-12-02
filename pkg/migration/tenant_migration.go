@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -34,7 +36,12 @@ type TenantDeps struct {
 	CollectionFactory *descs.CollectionFactory
 	LeaseManager      *lease.Manager
 	InternalExecutor  sqlutil.InternalExecutor
-	TestingKnobs      *TestingKnobs
+	SpanConfig        struct { // deps for SeedTenantSpanConfigs; can be removed accordingly
+		spanconfig.KVAccessor
+		Default roachpb.SpanConfig
+	}
+
+	TestingKnobs *TestingKnobs
 }
 
 // TenantMigrationFunc is used to perform sql-level migrations. It may be run from
