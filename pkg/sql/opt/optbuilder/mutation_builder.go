@@ -914,13 +914,19 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 	cols := opt.ColSet{}
 	for _, col := range mb.insertColIDs {
-		cols.Add(col)
+		if col != 0 {
+			cols.Add(col)
+		}
 	}
 	for _, col := range mb.updateColIDs {
-		cols.Add(col)
+		if col != 0 {
+			cols.Add(col)
+		}
 	}
 	for _, col := range mb.upsertColIDs {
-		cols.Add(col)
+		if col != 0 {
+			cols.Add(col)
+		}
 	}
 	return cols
 }
