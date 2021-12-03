@@ -293,8 +293,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Wrap the input in one ANTI JOIN per UNIQUE index, and filter out rows
 		// that have conflicts. See the buildInputForDoNothing comment for more
 		// details.
-		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForDoNothing(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate)
+		mb.buildInputForDoNothing(inScope, ins.OnConflict)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
@@ -311,8 +310,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if mb.needExistingRows() {
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
-			primaryOrds := getExplicitPrimaryKeyOrdinals(mb.tab)
-			mb.buildInputForUpsert(inScope, primaryOrds, nil /* arbiterPredicate */, nil /* whereClause */)
+			mb.buildInputForUpsert(inScope, nil /* onConflict */, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns, as well as mutation columns with default values.
@@ -326,8 +324,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	default:
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
-		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate, ins.OnConflict.Where)
+		mb.buildInputForUpsert(inScope, ins.OnConflict, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
@@ -700,13 +697,10 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 // buildInputForDoNothing wraps the input expression in ANTI JOIN expressions,
 // one for each arbiter on the target table. See the comment header for
 // Builder.buildInsert for an example.
-func (mb *mutationBuilder) buildInputForDoNothing(
-	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
-) {
+func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tree.OnConflict) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
-
+	mb.arbiters = mb.getArbitersFromOnConflict(onConflict)
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
 
@@ -748,12 +742,11 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 // given insert row conflicts with an existing row in the table. If it is null,
 // then there is no conflict.
 func (mb *mutationBuilder) buildInputForUpsert(
-	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr, whereClause *tree.Where,
+	inScope *scope, onConflict *tree.OnConflict, whereClause *tree.Where,
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
-
+	mb.arbiters = mb.getArbitersFromOnConflict(onConflict)
 	// TODO(mgartner): Add support for multiple arbiter indexes or constraints,
 	//  similar to buildInputForDoNothing.
 	if mb.arbiters.Len() > 1 {
@@ -1007,12 +1000,63 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 	mb.outScope = projectionsScope
 }
 
-// mapPublicColumnNamesToOrdinals returns the set of ordinal positions within
-// the target table that correspond to the given names. Mutation and system
-// columns are ignored.
-func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
+// getArbitersFromOnConflict returns the set of arbiters within
+// the target table that correspond to the given On Conflict clause. Mutation
+// and system columns are ignored.
+func (mb *mutationBuilder) getArbitersFromOnConflict(onConflict *tree.OnConflict) arbiterSet {
+	if onConflict == nil {
+		arbiters := makeArbiterSet(mb)
+		// No on conflict constraint means that we're in the UPSERT case, which should
+		// use the primary constraint as the arbiter.
+		arbiters.AddIndex(cat.PrimaryIndex)
+		return arbiters
+	} else if onConflict.Constraint != "" {
+		arbiters := makeArbiterSet(mb)
+		// We have a constraint explicitly named, so we can set the arbiter to use
+		// it directly.
+		for i, ic := 0, mb.tab.IndexCount(); i < ic; i++ {
+			index := mb.tab.Index(i)
+			if !index.IsUnique() {
+				continue
+			}
+			if index.Name() == onConflict.Constraint {
+				if _, partial := index.Predicate(); partial {
+					panic(
+						errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "unique index %q for table %q is partial, "+
+							"so cannot be used as an arbiter index directly",
+							onConflict.Constraint, mb.tab.Name()),
+							"use the ON CONFLICT (columns...) WHERE <predicate> form to select this partial unique index as an"+
+								" arbiter",
+						))
+
+				}
+				arbiters.AddIndex(i)
+				return arbiters
+			}
+		}
+		for i, uc := 0, mb.tab.UniqueCount(); i < uc; i++ {
+			constraint := mb.tab.Unique(i)
+			if constraint.Name() == string(onConflict.Constraint) {
+				if _, partial := constraint.Predicate(); partial {
+					panic(
+						errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "unique constraint %q for table %q is partial, "+
+							"so cannot be used as an arbiter index directly",
+							onConflict.Constraint, mb.tab.Name()),
+							"use the ON CONFLICT (columns...) WHERE <predicate> form to select this partial unique index as an"+
+								" arbiter",
+						))
+
+				}
+				arbiters.AddUniqueConstraint(i)
+				return arbiters
+			}
+		}
+		// Found nothing, we have to return an error.
+		panic(pgerror.Newf(pgcode.UndefinedObject, "constraint %q for table %q does not exist", onConflict.Constraint, mb.tab.Name()))
+	}
+	// We have to infer an arbiter set.
 	var ords util.FastIntSet
-	for _, name := range names {
+	for _, name := range onConflict.Columns {
 		found := false
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
@@ -1027,5 +1071,5 @@ func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) u
 			panic(colinfo.NewUndefinedColumnError(string(name)))
 		}
 	}
-	return ords
+	return mb.findArbiters(ords, onConflict.ArbiterPredicate)
 }
