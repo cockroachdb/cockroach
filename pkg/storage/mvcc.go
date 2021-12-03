@@ -1352,8 +1352,13 @@ func replayTransactionalWrite(
 		writtenValue, found = meta.GetIntentValue(txn.Sequence)
 	}
 	if !found {
-		return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
+		// NB: This error may be due to a `DelRange` operation that, upon being replayed, finds a new key to delete
+		// which already has a write intent.  See issue #71236.
+		err := errors.AssertionFailedf("transaction %s with sequence %d missing an intent with lower sequence %d",
 			txn.ID, meta.Txn.Sequence, txn.Sequence)
+		errWithIssue := errors.WithIssueLink(err,
+			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/71236"})
+		return errWithIssue
 	}
 
 	// If the valueFn is specified, we must apply it to the would-be value at the key.
