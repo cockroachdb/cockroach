@@ -86,6 +86,9 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	)
 
 	return scrun.RunSchemaChangesInJob(
-		ctx, deps, n.job.ID(), payload.DescriptorIDs, *newSchemaChangeDetails, *newSchemaChangeProgress, n.rollback,
+		ctx, execCfg.DeclarativeSchemaChangerTestingKnobs, execCfg.Settings,
+		deps, n.job.ID(), payload.DescriptorIDs,
+		*newSchemaChangeDetails, *newSchemaChangeProgress,
+		n.rollback,
 	)
 }

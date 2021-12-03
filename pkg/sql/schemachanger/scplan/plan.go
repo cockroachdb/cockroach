@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -29,6 +30,10 @@ import (
 type Params struct {
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
 	ExecutionPhase scop.Phase
+
+	// JobIDGenerator is used in the PreCommit phase to generate the JobID for a
+	// job if one should exist. In the PostCommit phase, the value retu
+	JobIDGenerator func() jobspb.JobID
 }
 
 // A Plan is a schema change plan, primarily containing ops to be executed that
@@ -37,6 +42,7 @@ type Plan struct {
 	Params  Params
 	Initial scpb.State
 	Graph   *scgraph.Graph
+	JobID   jobspb.JobID
 	stages  []Stage
 }
 
@@ -120,6 +126,7 @@ func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid basic execution plan"))
 	}
 	p.stages = collapseStages(p.stages)
+	p.stages, p.JobID = augmentStagesForJob(p.Params, p.stages)
 	if err = validateStages(p.stages); err != nil {
 		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid improved execution plan"))
 	}

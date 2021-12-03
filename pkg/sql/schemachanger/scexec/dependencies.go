@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -37,6 +38,7 @@ type Dependencies interface {
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
+	User() security.SQLUsername
 }
 
 // Catalog encapsulates the catalog-related dependencies for the executor.
@@ -80,10 +82,20 @@ type CatalogChangeBatcher interface {
 // TransactionalJobCreator creates a job in the current transaction.
 type TransactionalJobCreator interface {
 
+	// UpdateSchemaChangeJob triggers the update of the current schema change job
+	// via the supplied callback.
+	UpdateSchemaChangeJob(ctx context.Context, id jobspb.JobID, fn JobProgressUpdateFunc) error
+
+	// MakeJobID is used to make a JobID.
+	MakeJobID() jobspb.JobID
+
 	// CreateJob creates a job in the current transaction and returns the
 	// id which was assigned to that job, or an error otherwise.
-	CreateJob(ctx context.Context, record jobs.Record) (jobspb.JobID, error)
+	CreateJob(ctx context.Context, record jobs.Record) error
 }
+
+// JobProgressUpdateFunc is for updating the progress of a job.
+type JobProgressUpdateFunc = func(md jobs.JobMetadata, updateProgress func(*jobspb.Progress)) error
 
 // IndexBackfiller is an abstract index backfiller that performs index backfills
 // when provided with a specification of tables and indexes and a way to track
