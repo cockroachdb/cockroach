@@ -752,10 +752,11 @@ func TestStoreTimeSeries(t *testing.T) {
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
+		tr := tm.Cfg.AmbientCtx.Tracer
 		testSource := modelDataSource{
 			model:   tm,
 			r:       Resolution10s,
-			stopper: stop.NewStopper(),
+			stopper: stop.NewStopper(stop.WithTracer(tr)),
 			datasets: [][]tspb.TimeSeriesData{
 				{
 					tsd("test.metric.float", "cpu01",
@@ -777,7 +778,7 @@ func TestPollSource(t *testing.T) {
 			},
 		}
 
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ambient := log.AmbientContext{Tracer: tr}
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		<-testSource.stopper.IsStopped()
 		if a, e := testSource.calledCount, 2; a != e {
