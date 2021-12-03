@@ -247,14 +247,14 @@ func TestRandomized(t *testing.T) {
 			},
 		)
 	} else {
-		found := false
+		var foundEntry roachpb.SpanConfigEntry
 		_ = store.ForEachOverlapping(ctx, testSpan,
 			func(entry roachpb.SpanConfigEntry) error {
-				if found {
+				if !foundEntry.Empty() {
 					t.Fatalf("expected single overlapping entry, found second: %s",
 						spanconfigtestutils.PrintSpanConfigEntry(entry))
 				}
-				found = true
+				foundEntry = entry
 
 				// Check that the entry is exactly what we'd expect.
 				gotSpan, gotConfig := entry.Span, entry.Config
@@ -266,15 +266,15 @@ func TestRandomized(t *testing.T) {
 					"mismatched configs: expected %s, got %s",
 					spanconfigtestutils.PrintSpanConfig(expConfig), spanconfigtestutils.PrintSpanConfig(gotConfig))
 
-				// Ensure that the config accessed through the StoreReader interface is
-				// the same as above.
-				storeReaderConfig, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
-				require.NoError(t, err)
-				require.True(t, gotConfig.Equal(storeReaderConfig))
-
 				return nil
 			},
 		)
+
+		// Ensure that the config accessed through the StoreReader interface is
+		// the same as above.
+		storeReaderConfig, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
+		require.NoError(t, err)
+		require.True(t, foundEntry.Config.Equal(storeReaderConfig))
 	}
 
 	everythingSpan := spanconfigtestutils.ParseSpan(t, fmt.Sprintf("[%s,%s)",
