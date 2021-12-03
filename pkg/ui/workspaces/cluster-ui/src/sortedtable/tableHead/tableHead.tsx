@@ -69,7 +69,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
             !sortSetting.ascending && picked && "sorted__cell--descending",
             firstCellBordered && idx === 0 && "cell-header",
           );
-          const titleClasses = cx("column-title");
+          const titleClasses = c.hideTitleUnderline ? "" : cx("column-title");
 
           return (
             <th
