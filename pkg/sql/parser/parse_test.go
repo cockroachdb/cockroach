@@ -512,7 +512,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
 
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
-		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``, ``},
 
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``},
 
