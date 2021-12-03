@@ -1462,7 +1462,7 @@ insert decimals
            ├── round(column1:9) = column1:9 [as=check1:13]
            └── column2:10[0] > 1 [as=check2:14]
 
-assign-placeholders-norm query-args=(1.1, (ARRAY[0.95, NULL, 15]))
+assign-placeholders-build query-args=(1.1, (ARRAY[0.95, NULL, 15]))
 INSERT INTO decimals (a, b) VALUES ($1, $2)
 ----
 insert decimals
@@ -1473,9 +1473,29 @@ insert decimals
  │    ├── c_default:11 => c:3
  │    └── d_comp:12 => d:4
  ├── check columns: check1:13 check2:14
- └── values
-      ├── columns: column1:9!null column2:10!null c_default:11!null check1:13!null check2:14 d_comp:12!null
-      └── (1, ARRAY[1.0,NULL,15.0], 1.2, true, NULL, 2.2)
+ └── project
+      ├── columns: check1:13 check2:14 column1:9!null column2:10!null c_default:11!null d_comp:12!null
+      ├── project
+      │    ├── columns: d_comp:12!null column1:9!null column2:10!null c_default:11!null
+      │    ├── project
+      │    │    ├── columns: c_default:11!null column1:9!null column2:10!null
+      │    │    ├── project
+      │    │    │    ├── columns: column1:9!null column2:10!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
+      │    │    │    └── projections
+      │    │    │         ├── assignment-cast: DECIMAL(10) [as=column1:9]
+      │    │    │         │    └── column1:7
+      │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=column2:10]
+      │    │    │              └── column2:8
+      │    │    └── projections
+      │    │         └── 1.23::DECIMAL(10,1) [as=c_default:11]
+      │    └── projections
+      │         └── (column1:9::DECIMAL + c_default:11::DECIMAL)::DECIMAL(10,1) [as=d_comp:12]
+      └── projections
+           ├── round(column1:9) = column1:9 [as=check1:13]
+           └── column2:10[0] > 1 [as=check2:14]
 
 build
 INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
@@ -1507,7 +1527,7 @@ insert assn_cast
       └── projections
            └── unique_rowid() [as=rowid_default:16]
 
-assign-placeholders-norm query-args=(' ', 'foo', '1')
+assign-placeholders-build query-args=(' ', 'foo', '1')
 INSERT INTO assn_cast (c, qc, i) VALUES ($1, $2, $3)
 ----
 insert assn_cast
@@ -1518,9 +1538,23 @@ insert assn_cast
  │    ├── column3:13 => i:3
  │    ├── s_default:14 => s:4
  │    └── rowid_default:15 => rowid:5
- └── values
-      ├── columns: column1:11!null column2:12!null column3:13!null s_default:14 rowid_default:15
-      └── ('', 'f', 1, CAST(NULL AS STRING), unique_rowid())
+ └── project
+      ├── columns: s_default:14 rowid_default:15 column1:11!null column2:12!null column3:13!null
+      ├── project
+      │    ├── columns: column1:11!null column2:12!null column3:13!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    └── (' ', 'foo', 1)
+      │    └── projections
+      │         ├── assignment-cast: CHAR [as=column1:11]
+      │         │    └── column1:8
+      │         ├── assignment-cast: "char" [as=column2:12]
+      │         │    └── column2:9
+      │         └── assignment-cast: INT8 [as=column3:13]
+      │              └── column3:10
+      └── projections
+           ├── NULL::STRING [as=s_default:14]
+           └── unique_rowid() [as=rowid_default:15]
 
 # Regression test for #38293; the default values should be separate projections.
 exec-ddl
