@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
@@ -81,7 +83,8 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 				return sb.String()
 			}
 			record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-			if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
+			record.JobID = deps.TransactionalJobCreator().MakeJobID()
+			if err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
 				return err
 			}
 		}
@@ -104,15 +107,35 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		}
 
 		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		if _, err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
+		record.JobID = deps.TransactionalJobCreator().MakeJobID()
+		if err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
 			return err
 		}
 	}
+	if mvs.schemaChangerJob != nil {
+		if err := deps.TransactionalJobCreator().CreateJob(ctx, *mvs.schemaChangerJob); err != nil {
+			return err
+		}
+	}
+
 	if err := deps.EventLogger().ProcessAndSubmitEvents(ctx); err != nil {
 		return err
 	}
+
 	for _, id := range mvs.descriptorsToDelete.Ordered() {
 		if err := b.DeleteDescriptor(ctx, id); err != nil {
+			return err
+		}
+	}
+	for id, update := range mvs.schemaChangerStatusUpdates {
+		if err := deps.TransactionalJobCreator().UpdateSchemaChangeJob(ctx, id, func(
+			md jobs.JobMetadata, updateProgress func(*jobspb.Progress),
+		) error {
+			progress := *md.Progress
+			progress.GetNewSchemaChange().States = update
+			updateProgress(&progress)
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
@@ -120,13 +143,27 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 }
 
 type mutationVisitorState struct {
-	c                     Catalog
-	checkedOutDescriptors nstree.Map
-	drainedNames          map[descpb.ID][]descpb.NameInfo
-	descriptorsToDelete   catalog.DescriptorIDSet
-	descriptorGCJobs      map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
-	dbGCJobs              catalog.DescriptorIDSet
-	indexGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
+	c                          Catalog
+	checkedOutDescriptors      nstree.Map
+	drainedNames               map[descpb.ID][]descpb.NameInfo
+	descriptorsToDelete        catalog.DescriptorIDSet
+	dbGCJobs                   catalog.DescriptorIDSet
+	descriptorGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
+	indexGCJobs                map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
+	schemaChangerJob           *jobs.Record
+	schemaChangerStatusUpdates map[jobspb.JobID][]scpb.Status
+}
+
+func (mvs *mutationVisitorState) UpdateSchemaChangerJobProgress(
+	jobID jobspb.JobID, statuses []scpb.Status,
+) error {
+	if mvs.schemaChangerStatusUpdates == nil {
+		mvs.schemaChangerStatusUpdates = make(map[jobspb.JobID][]scpb.Status)
+	} else if _, exists := mvs.schemaChangerStatusUpdates[jobID]; exists {
+		return errors.AssertionFailedf("cannot update job %d more than once", jobID)
+	}
+	mvs.schemaChangerStatusUpdates[jobID] = statuses
+	return nil
 }
 
 func newMutationVisitorState(c Catalog) *mutationVisitorState {
@@ -189,6 +226,14 @@ func (mvs *mutationVisitorState) AddNewGCJobForIndex(
 			IndexID:  index.GetID(),
 			DropTime: timeutil.Now().UnixNano(),
 		})
+}
+
+func (mvs *mutationVisitorState) AddNewSchemaChangerJob(rec jobs.Record) error {
+	if mvs.schemaChangerJob != nil {
+		return errors.AssertionFailedf("cannot create more than one new schema change job")
+	}
+	mvs.schemaChangerJob = &rec
+	return nil
 }
 
 // createGCJobRecord creates the job record for a GC job, setting some
