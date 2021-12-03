@@ -154,9 +154,10 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 // this won't be the case if the cluster settings move away from using global
 // state.
 type Tracer struct {
-	// Preallocated noopSpan, used to avoid creating spans when we are not using
-	// x/net/trace or lightstep and we are not recording.
-	noopSpan *Span
+	// Preallocated noopSpans, used to avoid creating spans when we are not using
+	// x/net/trace or OpenTelemetry and we are not recording.
+	noopSpan        *Span
+	sterileNoopSpan *Span
 
 	// backardsCompatibilityWith211, if set, makes the Tracer
 	// work with 21.1 remote nodes.
@@ -311,7 +312,8 @@ func NewTracer() *Tracer {
 	}
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
-	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
+	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
+	t.sterileNoopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t, sterile: true}}
 	return t
 }
 
@@ -605,12 +607,6 @@ func (t *Tracer) startSpanGeneric(
 		if !opts.RemoteParent.Empty() {
 			panic("can't specify both Parent and RemoteParent")
 		}
-		if opts.Parent.IsNoop() {
-			// This method relies on the parent, if any, not being a no-op. A no-op
-			// parent should have been optimized away by the
-			// WithParent option.
-			panic("invalid no-op parent")
-		}
 		if opts.Parent.IsSterile() {
 			// A sterile parent should have been optimized away by
 			// WithParent.
@@ -626,13 +622,20 @@ func (t *Tracer) startSpanGeneric(
 			panic(fmt.Sprintf("attempting to start span with parent from different Tracer. parent: %s, child: %s",
 				opts.Parent.OperationName(), opName))
 		}
+		if opts.Parent.IsNoop() {
+			// If the parent is a no-op, we'll create a root span.
+			opts.Parent = nil
+		}
 	}
 
 	// Are we tracing everything, or have a parent, or want a real span, or were
 	// asked for a recording? Then we create a real trace span. In all other
 	// cases, a noop span will do.
 	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != RecordingOff) {
-		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
+		if !opts.Sterile {
+			return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
+		}
+		return maybeWrapCtx(ctx, nil /* octx */, t.sterileNoopSpan)
 	}
 
 	if opts.LogTags == nil {
