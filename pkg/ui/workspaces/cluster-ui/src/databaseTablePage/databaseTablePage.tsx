@@ -229,6 +229,7 @@ export class DatabaseTablePage extends React.Component<
     {
       name: "indexes",
       title: "Indexes",
+      hideTitleUnderline: true,
       className: cx("index-stats-table__col-indexes"),
       cell: indexStat => (
         <>
@@ -241,12 +242,14 @@ export class DatabaseTablePage extends React.Component<
     {
       name: "total reads",
       title: "Total Reads",
+      hideTitleUnderline: true,
       cell: indexStat => indexStat.totalReads,
       sort: indexStat => indexStat.totalReads,
     },
     {
       name: "last used",
       title: "Last Used (UTC)",
+      hideTitleUnderline: true,
       className: cx("index-stats-table__col-last-used"),
       cell: indexStat => this.getLastUsedString(indexStat),
       sort: indexStat => indexStat.lastUsed,
