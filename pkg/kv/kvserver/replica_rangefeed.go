@@ -627,6 +627,22 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 }
 
+// handleSSTableRaftMuLocked emits an ingested SSTable from AddSSTable via the
+// rangefeed. These can be expected to have timestamps at the write timestamp
+// (i.e. submitted with WriteAtRequestTimestamp) since we assert elsewhere that
+// MVCCHistoryMutation commands disconnect rangefeeds.
+func (r *Replica) handleSSTableRaftMuLocked(
+	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
+) {
+	p, _ := r.getRangefeedProcessorAndFilter()
+	if p == nil {
+		return
+	}
+	if !p.ConsumeSSTable(sst, sstSpan, writeTS) {
+		r.unsetRangefeedProcessor(p)
+	}
+}
+
 // handleClosedTimestampUpdate takes the a closed timestamp for the replica
 // and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.

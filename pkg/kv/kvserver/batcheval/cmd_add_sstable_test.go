@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -666,8 +667,6 @@ func TestEvalAddSSTable(t *testing.T) {
 					require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
 					require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
 				}
-				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
-				require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans, []roachpb.Span{{Key: start, EndKey: end}})
 
 				// Scan resulting data from engine.
 				iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{
@@ -721,6 +720,99 @@ func TestEvalAddSSTable(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestEvalAddSSTableRangefeed tests EvalAddSSTable rangefeed-related
+// behavior.
+func TestEvalAddSSTableRangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	reqTS := hlc.Timestamp{WallTime: 10}
+
+	testcases := map[string]struct {
+		sst                   []sstutil.KV
+		atReqTS               bool // WriteAtRequestTimestamp
+		asWrites              bool // IngestAsWrites
+		expectHistoryMutation bool
+		expectLogicalOps      []enginepb.MVCCLogicalOp
+	}{
+		"Default": {
+			sst:                   []sstutil.KV{{"a", 1, "a1"}},
+			expectHistoryMutation: true,
+			expectLogicalOps:      nil,
+		},
+		"WriteAtRequestTimestamp alone": {
+			sst:                   []sstutil.KV{{"a", 1, "a1"}},
+			atReqTS:               true,
+			expectHistoryMutation: false,
+			expectLogicalOps:      nil,
+		},
+		"IngestAsWrites alone": {
+			sst:                   []sstutil.KV{{"a", 1, "a1"}},
+			asWrites:              true,
+			expectHistoryMutation: true,
+			expectLogicalOps:      nil,
+		},
+		"IngestAsWrites and WriteAtRequestTimestamp": {
+			sst:                   []sstutil.KV{{"a", 1, "a1"}, {"b", 2, "b2"}},
+			asWrites:              true,
+			atReqTS:               true,
+			expectHistoryMutation: false,
+			expectLogicalOps: []enginepb.MVCCLogicalOp{
+				// NOTE: Value is populated by the rangefeed processor, not MVCC, so it
+				// won't show up here.
+				{WriteValue: &enginepb.MVCCWriteValueOp{Key: roachpb.Key("a"), Timestamp: reqTS}},
+				{WriteValue: &enginepb.MVCCWriteValueOp{Key: roachpb.Key("b"), Timestamp: reqTS}},
+			},
+		},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			ctx := context.Background()
+
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
+
+			// Build and add SST.
+			sst, start, end := sstutil.MakeSST(t, tc.sst)
+			result, err := batcheval.EvalAddSSTable(ctx, opLogger, batcheval.CommandArgs{
+				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
+				Header: roachpb.Header{
+					Timestamp: reqTS,
+				},
+				Stats: &enginepb.MVCCStats{},
+				Args: &roachpb.AddSSTableRequest{
+					RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
+					Data:                    sst,
+					MVCCStats:               sstutil.ComputeStats(t, sst),
+					WriteAtRequestTimestamp: tc.atReqTS,
+					IngestAsWrites:          tc.asWrites,
+				},
+			}, &roachpb.AddSSTableResponse{})
+			require.NoError(t, err)
+
+			if tc.asWrites {
+				require.Nil(t, result.Replicated.AddSSTable)
+			} else {
+				require.NotNil(t, result.Replicated.AddSSTable)
+				require.Equal(t, roachpb.Span{Key: start, EndKey: end}, result.Replicated.AddSSTable.Span)
+				require.Equal(t, tc.atReqTS, result.Replicated.AddSSTable.AtWriteTimestamp)
+			}
+			if tc.expectHistoryMutation {
+				require.Equal(t, &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+					Spans: []roachpb.Span{{Key: start, EndKey: end}},
+				}, result.Replicated.MVCCHistoryMutation)
+				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+			} else {
+				require.Nil(t, result.Replicated.MVCCHistoryMutation)
+			}
+			require.Equal(t, tc.expectLogicalOps, opLogger.LogicalOps())
+		})
+	}
 }
 
 // TestDBAddSSTable tests application of an SST to a database, both in-memory

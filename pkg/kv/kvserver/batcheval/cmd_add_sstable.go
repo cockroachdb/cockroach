@@ -216,6 +216,13 @@ func EvalAddSSTable(
 
 	ms.Add(stats)
 
+	var mvccHistoryMutation *kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation
+	if !args.WriteAtRequestTimestamp {
+		mvccHistoryMutation = &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
+		}
+	}
+
 	if args.IngestAsWrites {
 		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))})
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))
@@ -240,13 +247,22 @@ func EvalAddSSTable(
 					return result.Result{}, err
 				}
 			}
+			// The above MVCC functions do not record logical operations, but we must
+			// use them because e.g. storage.MVCCPut() changes the semantics of the
+			// write by not allowing writing below existing keys, and we want to
+			// retain parity with regular SST ingestion which does allow this. We
+			// therefore record these operations ourselves.
+			if args.WriteAtRequestTimestamp {
+				readWriter.LogLogicalOp(storage.MVCCWriteValueOpType, storage.MVCCLogicalOpDetails{
+					Key:       k.Key,
+					Timestamp: k.Timestamp,
+				})
+			}
 			sstIter.Next()
 		}
 		return result.Result{
 			Replicated: kvserverpb.ReplicatedEvalResult{
-				MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
-					Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
-				},
+				MVCCHistoryMutation: mvccHistoryMutation,
 			},
 			Local: result.LocalResult{
 				Metrics: &result.Metrics{
@@ -259,12 +275,12 @@ func EvalAddSSTable(
 	return result.Result{
 		Replicated: kvserverpb.ReplicatedEvalResult{
 			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
-				Data:  sst,
-				CRC32: util.CRC32(sst),
+				Data:             sst,
+				CRC32:            util.CRC32(sst),
+				Span:             roachpb.Span{Key: start.Key, EndKey: end.Key},
+				AtWriteTimestamp: args.WriteAtRequestTimestamp,
 			},
-			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
-				Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
-			},
+			MVCCHistoryMutation: mvccHistoryMutation,
 		},
 	}, nil
 }

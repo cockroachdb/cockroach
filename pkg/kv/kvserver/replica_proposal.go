@@ -579,8 +579,12 @@ func addSSTablePreApply(
 
 	copied := false
 	if eng.InMem() {
+		// Ingest a copy of the SST. Otherwise, Pebble will claim and mutate the
+		// sst.Data byte slice, which will also be used later by e.g. rangefeeds.
+		data := make([]byte, len(sst.Data))
+		copy(data, sst.Data)
 		path = fmt.Sprintf("%x", checksum)
-		if err := eng.WriteFile(path, sst.Data); err != nil {
+		if err := eng.WriteFile(path, data); err != nil {
 			log.Fatalf(ctx, "unable to write sideloaded SSTable at term %d, index %d: %s", term, index, err)
 		}
 	} else {

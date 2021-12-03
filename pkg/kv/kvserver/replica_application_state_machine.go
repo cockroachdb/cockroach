@@ -657,6 +657,13 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		if added := res.Delta.KeyCount; added > 0 {
 			b.r.writeStats.recordCount(float64(added), 0)
 		}
+		// TODO(erikgrinaker): In 22.2 or later, it may be possible to remove the
+		// AtWriteTimestamp field and replace this check with
+		// MVCCHistoryMutation == nil. See doc comment for details.
+		if res.AddSSTable.AtWriteTimestamp {
+			b.r.handleSSTableRaftMuLocked(
+				ctx, res.AddSSTable.Data, res.AddSSTable.Span, res.WriteTimestamp)
+		}
 		res.AddSSTable = nil
 	}
 
