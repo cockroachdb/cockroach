@@ -12,8 +12,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -103,21 +105,27 @@ func (s *statusServer) StatementDiagnosticsRequests(
 
 	var err error
 
+	// TODO(yuzefovich): remove this version gating in 22.2.
+	var extraColumns string
+	if s.admin.server.st.Version.IsActive(ctx, clusterversion.AlterSystemStmtDiagReqs) {
+		extraColumns = `,
+			min_execution_latency,
+			expires_at`
+	}
+
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User: security.RootUserName(),
 		},
-		`SELECT
+		fmt.Sprintf(`SELECT
 			id,
 			statement_fingerprint,
 			completed,
 			statement_diagnostics_id,
-			requested_at,
-			min_execution_latency,
-			expires_at
+			requested_at%s
 		FROM
-			system.statement_diagnostics_requests`)
+			system.statement_diagnostics_requests`, extraColumns))
 	if err != nil {
 		return nil, err
 	}
@@ -141,11 +149,13 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		if requestedAt, ok := row[4].(*tree.DTimestampTZ); ok {
 			req.RequestedAt = requestedAt.Time
 		}
-		if minExecutionLatency, ok := row[5].(*tree.DInterval); ok {
-			req.MinExecutionLatency = time.Duration(minExecutionLatency.Duration.Nanos())
-		}
-		if expiresAt, ok := row[6].(*tree.DTimestampTZ); ok {
-			req.ExpiresAt = expiresAt.Time
+		if extraColumns != "" {
+			if minExecutionLatency, ok := row[5].(*tree.DInterval); ok {
+				req.MinExecutionLatency = time.Duration(minExecutionLatency.Duration.Nanos())
+			}
+			if expiresAt, ok := row[6].(*tree.DTimestampTZ); ok {
+				req.ExpiresAt = expiresAt.Time
+			}
 		}
 
 		requests = append(requests, req)
