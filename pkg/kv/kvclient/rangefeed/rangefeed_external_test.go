@@ -38,7 +38,8 @@ func TestRangeFeedIntegration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Server(0).DB()
+	srv0 := tc.Server(0)
+	db := srv0.DB()
 	scratchKey := tc.ScratchRange(t)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
@@ -66,7 +67,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
 	require.NoError(t, err)
 	rows := make(chan *roachpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})
@@ -128,7 +129,8 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Server(0).DB()
+	srv0 := tc.Server(0)
+	db := srv0.DB()
 	scratchKey := tc.ScratchRange(t)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
@@ -155,7 +157,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	_, _, err := tc.SplitRange(mkKey("b"))
 	require.NoError(t, err)
 
-	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
 	require.NoError(t, err)
 
 	// mu protects secondWriteTS.
@@ -247,7 +249,8 @@ func TestWithOnCheckpoint(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Server(0).DB()
+	srv0 := tc.Server(0)
+	db := srv0.DB()
 	scratchKey := tc.ScratchRange(t)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
@@ -269,7 +272,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
 	require.NoError(t, err)
 
 	var mu syncutil.RWMutex
@@ -345,7 +348,8 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Server(0).DB()
+	srv0 := tc.Server(0)
+	db := srv0.DB()
 	scratchKey := tc.ScratchRange(t)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
@@ -367,7 +371,7 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, nil)
 	require.NoError(t, err)
 
 	rows := make(chan *roachpb.RangeFeedValue)
@@ -456,7 +460,8 @@ func TestUnrecoverableErrors(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Server(0).DB()
+	srv0 := tc.Server(0)
+	db0 := srv0.DB()
 	scratchKey := tc.ScratchRange(t)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 
@@ -475,7 +480,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, nil)
 	require.NoError(t, err)
 
 	preGCThresholdTS := hlc.Timestamp{WallTime: 1}
