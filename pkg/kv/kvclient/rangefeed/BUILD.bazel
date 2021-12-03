@@ -79,6 +79,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",

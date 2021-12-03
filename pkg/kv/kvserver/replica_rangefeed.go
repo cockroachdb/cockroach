@@ -612,6 +612,20 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 }
 
+// handleSSTable takes an SSTable that was written with AddSSTable using
+// WriteAtRequestTimestamp, i.e. that respects the closed timestamp.
+func (r *Replica) handleSSTableRaftMuLocked(
+	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
+) {
+	p, _ := r.getRangefeedProcessorAndFilter()
+	if p == nil {
+		return
+	}
+	if !p.ConsumeSSTable(sst, sstSpan, writeTS) {
+		r.unsetRangefeedProcessor(p)
+	}
+}
+
 // handleClosedTimestampUpdate takes the a closed timestamp for the replica
 // and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.

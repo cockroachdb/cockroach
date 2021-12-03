@@ -361,6 +361,13 @@ func (f *RangeFeed) processEvents(
 				if advanced && f.onFrontierAdvance != nil {
 					f.onFrontierAdvance(ctx, frontier.Frontier())
 				}
+			case ev.SST != nil:
+				// FIXME(erikgrinaker): Callers who do not set onSSTable will be oblivious
+				// to these events -- we may want to send such callers an error and force
+				// them to do a catchup scan.
+				if f.onSSTable != nil {
+					f.onSSTable(ctx, ev.SST)
+				}
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.

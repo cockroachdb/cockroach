@@ -1573,6 +1573,7 @@ message AdminVerifyProtectedTimestampResponse {
 //
 // * WriteAtRequestTimestamp: ensures compliance with the timestamp cache and
 //   closed timestamp, by rewriting SST timestamps to the request timestamp.
+//   Also emits the SST via the range feed.
 //
 // * DisallowConflicts, DisallowShadowing, or DisallowShadowingBelow: ensures
 //   compliance with MVCC, by checking for conflicting keys in existing data
@@ -1600,7 +1601,9 @@ message AddSSTableRequest {
 
   // WriteAtRequestTimestamp updates all MVCC timestamps in the SST to the
   // request timestamp, even if the request gets pushed. This ensures the writes
-  // comply with the timestamp cache and closed timestamp.
+  // comply with the timestamp cache and closed timestamp. It also causes the
+  // AddSSTable to be emitted via the range feed, since it respects the closed
+  // timestamp.
   //
   // Callers should always set this, except in very special circumstances when
   // the timestamp cache and closed timestamp can safely be ignored (e.g.
@@ -2535,6 +2538,23 @@ message RangeFeedError {
   kv.kvpb.Error error = 1 [(gogoproto.nullable) = false];
 }
 
+// RangeFeedSSTable is a variant of RangeFeedEvent that represents an AddSSTable
+// operation, containing the entire ingested SST. It is only emitted for
+// SSTables written with WriteAtRequestTimestamp enabled, so it is guaranteed to
+// comply with the closed timestamp. The Span and WriteTS fields are advisory,
+// and contain the client-provided SST key span (may be wider than the SST data)
+// and the MVCC timestamp used for all contained entries.
+//
+// The entire SST is emitted even for registrations that have a narrower span,
+// it is up to the caller to prune the SST as appropriate. Catchup scans emit
+// the data as RangeFeedValue events instead (i.e. it reads the ingested KV
+// pairs), but Raft log replay will emit RangeFeedSSTable events.
+message RangeFeedSSTable {
+  bytes              data     = 1;
+  Span               span     = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp write_ts = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "WriteTS"];
+}
+
 // RangeFeedEvent is a union of all event types that may be returned on a
 // RangeFeed response stream.
 message RangeFeedEvent {
@@ -2543,6 +2563,7 @@ message RangeFeedEvent {
   RangeFeedValue      val        = 1;
   RangeFeedCheckpoint checkpoint = 2;
   RangeFeedError      error      = 3;
+  RangeFeedSSTable    sst        = 4 [(gogoproto.customname) = "SST"];
 }
 
 

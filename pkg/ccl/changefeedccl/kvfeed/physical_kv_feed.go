@@ -111,6 +111,11 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				); err != nil {
 					return err
 				}
+			case *roachpb.RangeFeedSSTable:
+				// For now, we just error on SST ingestion, since we currently don't
+				// expect SST ingestion into spans with active changefeeds.
+				return errors.Errorf("unexpected SST ingestion: %v", t)
+
 			default:
 				return errors.Errorf("unexpected RangeFeedEvent variant %v", t)
 			}

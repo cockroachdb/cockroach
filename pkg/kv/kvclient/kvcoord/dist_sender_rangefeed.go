@@ -162,7 +162,7 @@ func (a *activeRangeFeed) onRangeEvent(
 ) {
 	a.Lock()
 	defer a.Unlock()
-	if event.Val != nil {
+	if event.Val != nil || event.SST != nil {
 		a.LastValueReceived = timeutil.Now()
 	} else if event.Checkpoint != nil {
 		a.Resolved = event.Checkpoint.ResolvedTS

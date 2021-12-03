@@ -150,10 +150,10 @@ message ReplicatedEvalResult {
   // since these Ranges are not user-visible, but it is a general concern assuming
   // other such side effects are added.
   message AddSSTable {
-    option (gogoproto.equal) = true;
-
     bytes data = 1;
     uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
+    roachpb.Span span = 3 [(gogoproto.nullable) = false];
+    bool emit_rangefeed = 4;
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
