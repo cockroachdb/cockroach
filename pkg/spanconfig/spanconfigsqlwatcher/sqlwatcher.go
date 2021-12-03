@@ -216,7 +216,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			return
 		}
 
-		table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, value.Timestamp)
+		table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, ev.Value.Timestamp)
 
 		var id descpb.ID
 		var descType catalog.DescriptorType
