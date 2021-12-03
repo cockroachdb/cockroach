@@ -1704,7 +1704,8 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(context.Background())
 
 	n := simulation.NewNetwork(stopper, 3, true, zonepb.DefaultZoneConfigRef())
@@ -1714,7 +1715,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	}
 	n.Start()
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:         log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:         log.AmbientContext{Tracer: tr},
 		NodeDescs:          n.Nodes[0].Gossip,
 		RPCContext:         n.RPCContext,
 		NodeDialer:         nodedialer.New(n.RPCContext, gossip.AddressResolver(n.Nodes[0].Gossip)),
@@ -2098,7 +2099,8 @@ func TestGetNodeDescriptor(t *testing.T) {
 func TestMultiRangeGapReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -2152,16 +2154,13 @@ func TestMultiRangeGapReverse(t *testing.T) {
 	})
 
 	cfg := DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: rdb,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: SenderTransportFactory(
-				tracing.NewTracer(),
-				sender,
-			),
+			TransportFactory: SenderTransportFactory(tr, sender),
 		},
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
@@ -2391,7 +2390,8 @@ func TestClockUpdateOnResponse(t *testing.T) {
 func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -2471,7 +2471,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: log.AmbientContext{Tracer: tr},
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -2516,7 +2516,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -2596,7 +2597,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: log.AmbientContext{Tracer: tr},
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -3249,7 +3250,8 @@ func TestGatewayNodeID(t *testing.T) {
 func TestMultipleErrorsMerged(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -3431,7 +3433,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 				}
 
 				cfg := DistSenderConfig{
-					AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+					AmbientCtx: log.AmbientContext{Tracer: tr},
 					Clock:      clock,
 					NodeDescs:  g,
 					RPCContext: rpcContext,
@@ -4186,7 +4188,8 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -4271,7 +4274,7 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,

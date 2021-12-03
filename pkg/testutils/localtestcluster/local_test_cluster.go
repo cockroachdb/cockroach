@@ -105,12 +105,15 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
-	ltc.stopper = stop.NewStopper()
+	manualClock := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manualClock.UnixNano, 50*time.Millisecond)
+	cfg := kvserver.TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(clock)
+	tr := cfg.AmbientCtx.Tracer
+	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
+	ltc.Manual = manualClock
+	ltc.Clock = clock
 
-	ltc.Manual = hlc.NewManualClock(123)
-	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
-	cfg := kvserver.TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(ltc.Clock)
-	ambient := log.AmbientContext{Tracer: cfg.AmbientCtx.Tracer}
+	ambient := log.AmbientContext{Tracer: tr}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
