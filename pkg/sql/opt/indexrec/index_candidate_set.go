@@ -23,10 +23,8 @@ import (
 //
 // 	1. Add a single index on all columns in a Group By or Order By expression if
 //	   the columns are from the same table. Otherwise, group expressions into
-//	   indexes by table. For Order By, the first column of each index will be
-//     ascending. If that is the opposite of the column's ordering, each
-//     subsequent column will also be ordered opposite to its ordering (and vice
-//     versa).
+//	   indexes by table. For Order By, the index column ordering and column
+//     directions are the same as how it is in the Order By.
 //  2. Add a single-column index on any Range expression, comparison
 //     expression (=, <, >, <=, >=), and IS expression.
 // 	3. Add a single-column index on any column that appears in a JOIN predicate.
@@ -141,41 +139,20 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 
 // addOrderingIndex adds indexes for a *memo.SortExpr. One index is constructed
 // per table, with a column corresponding to each of the table's columns in the
-// sort, in order of appearance. The first column of each table's index will be
-// ordered ascending. If that matches the column's actual sort ordering (it's
-// ascending), then each subsequent index column will also be ordered the same
-// way it is in the sort. However, if the first column's ordering in the sort is
-// actually descending, then each subsequent column in the index will also be
-// ordered opposite to its ordering in the sort. This will allow the index to be
-// useful for scans or reverse scans.
-//
-// TODO(neha): The convention of having the first column being ascending is to
-// avoid redundant indexes. However, since reverse scans are slightly less
-// efficient than forward scans, we shouldn't have this convention and should
-// remove redundant indexes later.
+// sort, in order of appearance. For example, if we have ORDER BY k DESC, i ASC,
+// where k and i come from the same table, the index candidate's key columns
+// would be (k DESC, i ASC).
 func (ics indexCandidateSet) addOrderingIndex(ordering opt.Ordering) {
 	if len(ordering) == 0 {
 		return
 	}
 	columnList := make(opt.ColList, len(ordering))
 	descList := make([]bool, len(ordering))
-	numTables := len(ics.md.AllTables())
-	reverseOrder := make(map[cat.Table]bool, numTables)
 
 	for i, orderingCol := range ordering {
 		colID := orderingCol.ID()
 		columnList[i] = colID
-		colTable := ics.md.Table(ics.md.ColumnMeta(colID).Table)
-
-		// Set descending bool for ordering column.
-		if _, found := reverseOrder[colTable]; !found {
-			reverseOrder[colTable] = orderingCol.Descending()
-		}
-		if reverseOrder[colTable] {
-			descList[i] = orderingCol.Ascending()
-		} else {
-			descList[i] = orderingCol.Descending()
-		}
+		descList[i] = orderingCol.Descending()
 	}
 
 	addMultiColumnIndex(columnList, descList, ics.md, ics.overallCandidates)
