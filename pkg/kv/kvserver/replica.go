@@ -947,7 +947,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
-	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
+	if st.State != kvserverpb.LeaseState_VALID || c.readAt.IsEmpty() || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
 		return *r.mu.state.GCThreshold
 	}
 
