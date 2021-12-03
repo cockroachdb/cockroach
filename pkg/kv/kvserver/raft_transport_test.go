@@ -107,14 +107,15 @@ type raftTransportTestContext struct {
 }
 
 func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
+	tr := tracing.NewTracer()
 	rttc := &raftTransportTestContext{
 		t:          t,
-		stopper:    stop.NewStopper(),
+		stopper:    stop.NewStopper(stop.WithTracer(tr)),
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
 	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx: log.AmbientContext{Tracer: tr},
 		Config:     testutils.NewNodeTestBaseContext(),
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Stopper:    rttc.stopper,
