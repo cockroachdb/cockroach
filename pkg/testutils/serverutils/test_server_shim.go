@@ -28,10 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,9 +43,14 @@ import (
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
 type TestServerInterface interface {
-	Stopper() *stop.Stopper
-
 	Start(context.Context) error
+
+	// TestTenantInterface embeds SQL-only APIs that tests need to interact with
+	// the host tenant.
+	//
+	// TODO(irfansharif): Audit the remaining symbols in TestServerInterface to
+	// see if they're better suited to TestTenantInterface.
+	TestTenantInterface
 
 	// Node returns the server.Node as an interface{}.
 	Node() interface{}
@@ -65,22 +68,12 @@ type TestServerInterface interface {
 	// ServingSQLAddr returns the server's advertised SQL address.
 	ServingSQLAddr() string
 
-	// HTTPAddr returns the server's http address.
-	HTTPAddr() string
-
 	// RPCAddr returns the server's RPC address.
 	// Note: use ServingRPCAddr() instead unless specific reason not to.
 	RPCAddr() string
 
-	// SQLAddr returns the server's SQL address.
-	// Note: use ServingSQLAddr() instead unless specific reason not to.
-	SQLAddr() string
-
 	// DB returns a *client.DB instance for talking to this KV server.
 	DB() *kv.DB
-
-	// RPCContext returns the rpc context used by the test server.
-	RPCContext() *rpc.Context
 
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
@@ -89,23 +82,12 @@ type TestServerInterface interface {
 	// also implements sqlutil.InternalExecutor if the test cannot depend on sql).
 	InternalExecutor() interface{}
 
-	// ExecutorConfig returns a copy of the server's ExecutorConfig.
-	// The real return type is sql.ExecutorConfig.
-	ExecutorConfig() interface{}
-
 	// TracerI returns a *tracing.Tracer as an interface{}.
 	TracerI() interface{}
 
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
 	GossipI() interface{}
-
-	// RangeFeedFactory returns the range feed factory used by the TestServer.
-	// The real return type is *rangefeed.Factory.
-	RangeFeedFactory() interface{}
-
-	// Clock returns the clock used by the TestServer.
-	Clock() *hlc.Clock
 
 	// DistSenderI returns the DistSender used by the TestServer.
 	// The real return type is *kv.DistSender.
@@ -114,29 +96,11 @@ type TestServerInterface interface {
 	// MigrationServer returns the internal *migrationServer as in interface{}
 	MigrationServer() interface{}
 
-	// SpanConfigAccessor returns the underlying spanconfig.KVAccessor as an
-	// interface{}.
-	SpanConfigAccessor() interface{}
-
-	// SpanConfigSQLTranslator returns the underlying spanconfig.SQLTranslator as
-	// an interface{}.
-	SpanConfigSQLTranslator() interface{}
-
-	// SpanConfigSQLWatcher returns the underlying spanconfig.SQLWatcher as an
-	// interface{}.
-	SpanConfigSQLWatcher() interface{}
-
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
-	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
-	DistSQLServer() interface{}
-
-	// SQLLivenessStorage returns the sqlliveness.Provider as an interface{}.
+	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
 	SQLLivenessProvider() interface{}
-
-	// JobRegistry returns the *jobs.Registry as an interface{}.
-	JobRegistry() interface{}
 
 	// StartupMigrationsManager returns the *startupmigrations.Manager as an interface{}.
 	StartupMigrationsManager() interface{}
@@ -197,10 +161,6 @@ type TestServerInterface interface {
 	// The return value is of type *kvserver.Stores.
 	GetStores() interface{}
 
-	// ClusterSettings returns the ClusterSettings shared by all components of
-	// this server.
-	ClusterSettings() *cluster.Settings
-
 	// Decommission idempotently sets the decommissioning flag for specified nodes.
 	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
 
@@ -228,11 +188,6 @@ type TestServerInterface interface {
 	// updates that are available.
 	UpdateChecker() interface{}
 
-	// DiagnosticsReporter returns the server's *diagnostics.Reporter as an
-	// interface{}. The DiagnosticsReporter periodically phones home to report
-	// diagnostics and usage.
-	DiagnosticsReporter() interface{}
-
 	// StartTenant spawns off tenant process connecting to this TestServer.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
@@ -251,10 +206,6 @@ type TestServerInterface interface {
 
 	// CollectionFactory returns a *descs.CollectionFactory.
 	CollectionFactory() interface{}
-
-	// TestingKnobs returns the TestingKnobs in use by the test
-	// server.
-	TestingKnobs() *base.TestingKnobs
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
