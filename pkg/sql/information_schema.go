@@ -422,7 +422,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			for _, column := range table.PublicColumns() {
+			for _, column := range table.AccessibleColumns() {
 				collationCatalog := tree.DNull
 				collationSchema := tree.DNull
 				collationName := tree.DNull
