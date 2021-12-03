@@ -2,10 +2,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scplan",
-    srcs = ["plan.go"],
+    srcs = [
+        "job_augmentation.go",
+        "plan.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
