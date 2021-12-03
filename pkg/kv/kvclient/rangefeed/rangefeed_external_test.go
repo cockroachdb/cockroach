@@ -14,10 +14,13 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -445,6 +448,113 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		require.False(t, v.PrevValue.IsPresent())
 		require.True(t, v.PrevValue.Timestamp.IsEmpty())
 	}
+}
+
+// TestWithOnSSTable tests that the rangefeed emits SST ingestions correctly.
+func TestWithOnSSTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Server(0).DB()
+
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	mkKey := func(k string) roachpb.Key {
+		return append(scratchKey, []byte(k)...)
+	}
+	mkValue := func(key roachpb.Key, value int64) roachpb.Value {
+		v := roachpb.Value{}
+		v.SetInt(value)
+		v.InitChecksum(key)
+		return v
+	}
+
+	_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
+	require.NoError(t, err)
+
+	// We start the rangefeed over a narrower span than the AddSSTable (c-e vs
+	// a-f), to ensure the entire SST is emitted even if the registration is
+	// narrower.
+	ssts := make(chan *roachpb.RangeFeedSSTable)
+	span := roachpb.Span{Key: mkKey("c"), EndKey: mkKey("e")}
+	r, err := f.RangeFeed(ctx, "test", span, db.Clock().Now(),
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
+		rangefeed.WithOnSSTable(func(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+			select {
+			case ssts <- sst:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Ingest an SST.
+	type mvccKV struct {
+		key   string
+		value int64
+	}
+	sstKVs := []mvccKV{{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}, {"e", 5}}
+	sstStart, sstEnd := mkKey("a"), mkKey("f")
+
+	sstFile := &storage.MemFile{}
+	sstWriter := storage.MakeIngestionSSTWriter(sstFile)
+	defer sstWriter.Close()
+
+	now := db.Clock().Now()
+	for _, kv := range sstKVs {
+		require.NoError(t, sstWriter.PutMVCC(
+			storage.MVCCKey{Key: mkKey(kv.key), Timestamp: now},
+			mkValue(mkKey(kv.key), kv.value).RawBytes))
+	}
+	require.NoError(t, sstWriter.Finish())
+
+	pErr := db.AddSSTable(ctx, sstStart, sstEnd, sstFile.Data(),
+		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* ingestAsWrites */, now, true /* writeAtBatchTs */)
+	require.Nil(t, pErr)
+
+	// Wait for the SST event and check the contents.
+	var sstEvent *roachpb.RangeFeedSSTable
+	select {
+	case sstEvent = <-ssts:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for SST event")
+	}
+
+	require.Equal(t, roachpb.Span{Key: sstStart, EndKey: sstEnd}, sstEvent.Span)
+	require.Equal(t, now, sstEvent.WriteTS)
+
+	var eventKVs []mvccKV
+	iter, err := storage.NewMemSSTIterator(sstEvent.Data, true)
+	require.NoError(t, err)
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+	for {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+
+		k := iter.UnsafeKey()
+		require.Equal(t, now, k.Timestamp)
+		v := roachpb.Value{RawBytes: iter.UnsafeValue()}
+		value, err := v.GetInt()
+		require.NoError(t, err)
+
+		eventKVs = append(eventKVs, mvccKV{
+			key:   string(k.Key[len(scratchKey):]),
+			value: value,
+		})
+		iter.Next()
+	}
+	require.Equal(t, sstKVs, eventKVs)
 }
 
 // TestUnrecoverableErrors verifies that unrecoverable internal errors are surfaced

@@ -620,6 +620,10 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		if added := res.Delta.KeyCount; added > 0 {
 			b.r.writeStats.recordCount(float64(added), 0)
 		}
+		if res.AddSSTable.EmitRangefeed {
+			b.r.handleSSTableRaftMuLocked(
+				ctx, res.AddSSTable.Data, res.AddSSTable.Span, res.WriteTimestamp)
+		}
 		res.AddSSTable = nil
 	}
 

@@ -32,6 +32,7 @@ type config struct {
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
+	onSSTable            OnSSTable
 }
 
 type optionFunc func(*config)
@@ -108,6 +109,17 @@ type OnCheckpoint func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpo
 func WithOnCheckpoint(f OnCheckpoint) Option {
 	return optionFunc(func(c *config) {
 		c.onCheckpoint = f
+	})
+}
+
+// OnSST is called when a SSTable is ingested.
+type OnSSTable func(ctx context.Context, sst *roachpb.RangeFeedSSTable)
+
+// WithOnSSTable sets up a callback that's invoked whenever an SSTable is
+// ingestd.
+func WithOnSSTable(f OnSSTable) Option {
+	return optionFunc(func(c *config) {
+		c.onSSTable = f
 	})
 }
 
