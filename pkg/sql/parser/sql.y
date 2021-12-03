@@ -9064,7 +9064,21 @@ on_conflict:
       Where: tree.NewWhere(tree.AstWhere, $11.expr()),
     }
   }
-| ON CONFLICT ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
+| ON CONFLICT ON CONSTRAINT constraint_name DO NOTHING
+  {
+    $$.val = &tree.OnConflict{
+      Constraint: tree.Name($5),
+      DoNothing: true,
+    }
+  }
+| ON CONFLICT ON CONSTRAINT constraint_name DO UPDATE SET set_clause_list opt_where_clause
+  {
+    $$.val = &tree.OnConflict{
+      Constraint: tree.Name($5),
+      Exprs: $9.updateExprs(),
+      Where: tree.NewWhere(tree.AstWhere, $10.expr()),
+    }
+  }
 
 returning_clause:
   RETURNING target_list
