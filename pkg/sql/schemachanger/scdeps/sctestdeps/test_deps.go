@@ -784,70 +784,26 @@ func (s *TestState) WithTxnInJob(
 
 var _ scrun.JobTxnRunDependencies = (*TestState)(nil)
 
-// UpdateSchemaChangeJob implements the scrun.JobTxnRunDependencies interface.
-func (s *TestState) UpdateSchemaChangeJob(
-	ctx context.Context, fn func(md jobs.JobMetadata, ju scrun.JobProgressUpdater) error,
-) error {
-	var scjob *jobs.Record
+// UpdateState implements the scrun.JobTxnRunDependencies interface.
+func (s *TestState) UpdateState(ctx context.Context, state scpb.State) error {
+	var scJob *jobs.Record
 	for i, job := range s.jobs {
 		if job.Username == s.User() {
-			scjob = &s.jobs[i]
+			scJob = &s.jobs[i]
 			break
 		}
 	}
-	if scjob == nil {
+	if scJob == nil {
 		return errors.AssertionFailedf("schema change job not found")
 	}
-	progress := jobspb.Progress{
-		Progress:       nil,
-		ModifiedMicros: 0,
-		RunningStatus:  "",
-		Details:        jobspb.WrapProgressDetails(scjob.Progress),
-		TraceID:        0,
-	}
-	payload := jobspb.Payload{
-		Description:                  scjob.Description,
-		Statement:                    scjob.Statements,
-		UsernameProto:                scjob.Username.EncodeProto(),
-		StartedMicros:                0,
-		FinishedMicros:               0,
-		DescriptorIDs:                scjob.DescriptorIDs,
-		Error:                        "",
-		ResumeErrors:                 nil,
-		CleanupErrors:                nil,
-		FinalResumeError:             nil,
-		Noncancelable:                false,
-		Details:                      jobspb.WrapPayloadDetails(scjob.Details),
-		PauseReason:                  "",
-		RetriableExecutionFailureLog: nil,
-	}
-	ju := testJobUpdater{
-		md: jobs.JobMetadata{
-			ID:       scjob.JobID,
-			Status:   jobs.StatusRunning,
-			Payload:  &payload,
-			Progress: &progress,
-			RunStats: nil,
-		},
-	}
-	err := fn(ju.md, &ju)
-	if err != nil {
-		return err
-	}
-	scjob.Progress = *ju.md.Progress.GetNewSchemaChange()
-	s.LogSideEffectf("update progress of schema change job #%d", scjob.JobID)
+	// This fun little dance is the way to get a pointer handle to the job
+	// progress details.
+	scProgress := (&jobspb.Progress{
+		Details: jobspb.WrapProgressDetails(scJob.Progress),
+	}).GetNewSchemaChange()
+	scProgress.States = state.Statuses()
+	s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
 	return nil
-}
-
-type testJobUpdater struct {
-	md jobs.JobMetadata
-}
-
-var _ scrun.JobProgressUpdater = (*testJobUpdater)(nil)
-
-// UpdateProgress implements the JobProgressUpdater interface
-func (ju *testJobUpdater) UpdateProgress(progress *jobspb.Progress) {
-	ju.md.Progress = progress
 }
 
 // ExecutorDependencies implements the scrun.JobTxnRunDependencies interface.

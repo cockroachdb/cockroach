@@ -26,6 +26,15 @@ type State struct {
 	Authorization Authorization
 }
 
+// Statuses returns a slice of statuses extracted from the Nodes.
+func (s *State) Statuses() []Status {
+	statuses := make([]Status, len(s.Nodes))
+	for i := range s.Nodes {
+		statuses[i] = s.Nodes[i].Status
+	}
+	return statuses
+}
+
 // NumStatus is the number of values which Status may take on.
 var NumStatus = len(Status_name)
 
