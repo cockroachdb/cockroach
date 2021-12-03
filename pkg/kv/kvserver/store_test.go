@@ -163,6 +163,7 @@ func createTestStoreWithoutStart(
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
 	})
+	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	server := rpc.NewServer(rpcContext) // never started
 
 	// Some tests inject their own Gossip and StorePool, via

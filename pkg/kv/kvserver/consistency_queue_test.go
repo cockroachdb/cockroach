@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -615,33 +616,43 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	tc := testcluster.StartTestCluster(t, numNodes, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	db0 := tc.Servers[0].DB()
+	srv0 := tc.Servers[0]
+	db0 := srv0.DB()
 
 	// Run a goroutine that writes to the range in a tight loop. This tests that
 	// RecomputeStats does not see any skew in its MVCC stats when they are
 	// modified concurrently. Note that these writes don't interfere with the
 	// field we modified (SysCount).
-	_ = tc.Stopper().RunAsyncTask(ctx, "recompute-loop", func(ctx context.Context) {
-		// This channel terminates the loop early if the test takes more than five
-		// seconds. This is useful for stress race runs in CI where the tight loop
-		// can starve the actual work to be done.
-		done := time.After(5 * time.Second)
-		for {
-			if err := db0.Put(ctx, fmt.Sprintf("%s%d", key, rand.Int63()), "ballast"); err != nil {
-				t.Error(err)
-			}
+	_ = tc.Stopper().RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName: "recompute-loop",
+			// We want to run this task under the cluster's stopper, so that the
+			// quiesce signal is delivered below before individual nodes start
+			// shutting down. Since we're going to operate on a specific node, we
+			// can't mix the cluster stopper's tracer with the node's tracer, hence
+			// the Sterile option.
+			SpanOpt: stop.SterileRootSpan,
+		}, func(ctx context.Context) {
+			// This channel terminates the loop early if the test takes more than five
+			// seconds. This is useful for stress race runs in CI where the tight loop
+			// can starve the actual work to be done.
+			done := time.After(5 * time.Second)
+			for {
+				if err := db0.Put(ctx, fmt.Sprintf("%s%d", key, rand.Int63()), "ballast"); err != nil {
+					t.Error(err)
+				}
 
-			select {
-			case <-ctx.Done():
-				return
-			case <-tc.Stopper().ShouldQuiesce():
-				return
-			case <-done:
-				return
-			default:
+				select {
+				case <-ctx.Done():
+					return
+				case <-tc.Stopper().ShouldQuiesce():
+					return
+				case <-done:
+					return
+				default:
+				}
 			}
-		}
-	})
+		})
 
 	var targets []roachpb.ReplicationTarget
 	for i := 1; i < numNodes; i++ {
