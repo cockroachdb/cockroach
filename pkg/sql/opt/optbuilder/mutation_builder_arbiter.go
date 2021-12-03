@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -46,6 +47,75 @@ import (
 //   1. Must have columns that match the columns in conflictOrds.
 //   2. If it is a partial constraint, its predicate must be implied by the
 //      arbiterPredicate supplied by the user.
+func (mb *mutationBuilder) findArbiters(onConflict *tree.OnConflict) arbiterSet {
+	if onConflict == nil {
+		// No on conflict constraint means that we're in the UPSERT case, which should
+		// use the primary constraint as the arbiter.
+		primaryOrds := getExplicitPrimaryKeyOrdinals(mb.tab)
+		return mb.inferArbitersFromConflictOrds(primaryOrds, nil /* arbiterPredicate */)
+	} else if onConflict.Constraint != "" {
+		arbiters := makeArbiterSet(mb)
+		// We have a constraint explicitly named, so we can set the arbiter to use
+		// it directly.
+		for i, ic := 0, mb.tab.IndexCount(); i < ic; i++ {
+			index := mb.tab.Index(i)
+			if !index.IsUnique() {
+				continue
+			}
+			if index.Name() == onConflict.Constraint {
+				if _, partial := index.Predicate(); partial {
+					panic(partialIndexArbiterError(onConflict, mb.tab.Name()))
+
+				}
+				arbiters.AddIndex(i)
+				return arbiters
+			}
+		}
+		for i, uc := 0, mb.tab.UniqueCount(); i < uc; i++ {
+			constraint := mb.tab.Unique(i)
+			if constraint.Name() == string(onConflict.Constraint) {
+				if _, partial := constraint.Predicate(); partial {
+					panic(partialIndexArbiterError(onConflict, mb.tab.Name()))
+				}
+				arbiters.AddUniqueConstraint(i)
+				return arbiters
+			}
+		}
+		// Found nothing, we have to return an error.
+		panic(pgerror.Newf(pgcode.UndefinedObject, "constraint %q for table %q does not exist", onConflict.Constraint, mb.tab.Name()))
+	}
+	// We have to infer an arbiter set.
+	var ords util.FastIntSet
+	for _, name := range onConflict.Columns {
+		found := false
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			tabCol := mb.tab.Column(i)
+			if tabCol.ColName() == name && !tabCol.IsMutation() && tabCol.Kind() != cat.System {
+				ords.Add(i)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			panic(colinfo.NewUndefinedColumnError(string(name)))
+		}
+	}
+	return mb.inferArbitersFromConflictOrds(ords, onConflict.ArbiterPredicate)
+}
+
+func partialIndexArbiterError(onConflict *tree.OnConflict, tableName tree.Name) error {
+	return errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "unique constraint %q for table %q is partial, "+
+		"so cannot be used as an arbiter via the ON CONSTRAINT syntax",
+		onConflict.Constraint, tableName),
+		"use the ON CONFLICT (columns...) WHERE <predicate> form to select this partial unique constraint as an arbiter",
+	)
+}
+
+// inferArbitersFromConflictOrds is a helper function for findArbiters that
+// infers a set of conflict arbiters from a list of column ordinals that a
+// user specified in an ON CONFLICT clause. See the comment above findArbiters
+// for more information about what arbiters are.
 //
 // If conflictOrds is empty then all unique indexes and unique without index
 // constraints are returned as arbiters. This is required to support a
@@ -68,7 +138,7 @@ import (
 //      found.
 //   3. Otherwise, returns all partial arbiter indexes and constraints.
 //
-func (mb *mutationBuilder) findArbiters(
+func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
 ) arbiterSet {
 	arbiters := makeArbiterSet(mb)

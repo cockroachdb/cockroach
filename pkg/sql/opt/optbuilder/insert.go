@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -294,8 +293,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Wrap the input in one ANTI JOIN per UNIQUE index, and filter out rows
 		// that have conflicts. See the buildInputForDoNothing comment for more
 		// details.
-		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForDoNothing(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate)
+		mb.buildInputForDoNothing(inScope, ins.OnConflict)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
@@ -312,8 +310,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if mb.needExistingRows() {
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
-			primaryOrds := getExplicitPrimaryKeyOrdinals(mb.tab)
-			mb.buildInputForUpsert(inScope, primaryOrds, nil /* arbiterPredicate */, nil /* whereClause */)
+			mb.buildInputForUpsert(inScope, nil /* onConflict */, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns, as well as mutation columns with default values.
@@ -327,8 +324,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	default:
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
-		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate, ins.OnConflict.Where)
+		mb.buildInputForUpsert(inScope, ins.OnConflict, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
@@ -708,13 +704,10 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 // buildInputForDoNothing wraps the input expression in ANTI JOIN expressions,
 // one for each arbiter on the target table. See the comment header for
 // Builder.buildInsert for an example.
-func (mb *mutationBuilder) buildInputForDoNothing(
-	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
-) {
+func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tree.OnConflict) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
-
+	mb.arbiters = mb.findArbiters(onConflict)
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
 
@@ -756,12 +749,11 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 // given insert row conflicts with an existing row in the table. If it is null,
 // then there is no conflict.
 func (mb *mutationBuilder) buildInputForUpsert(
-	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr, whereClause *tree.Where,
+	inScope *scope, onConflict *tree.OnConflict, whereClause *tree.Where,
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
-
+	mb.arbiters = mb.findArbiters(onConflict)
 	// TODO(mgartner): Add support for multiple arbiter indexes or constraints,
 	//  similar to buildInputForDoNothing.
 	if mb.arbiters.Len() > 1 {
@@ -1013,27 +1005,4 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
-}
-
-// mapPublicColumnNamesToOrdinals returns the set of ordinal positions within
-// the target table that correspond to the given names. Mutation and system
-// columns are ignored.
-func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
-	var ords util.FastIntSet
-	for _, name := range names {
-		found := false
-		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			tabCol := mb.tab.Column(i)
-			if tabCol.ColName() == name && !tabCol.IsMutation() && tabCol.Kind() != cat.System {
-				ords.Add(i)
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			panic(colinfo.NewUndefinedColumnError(string(name)))
-		}
-	}
-	return ords
 }

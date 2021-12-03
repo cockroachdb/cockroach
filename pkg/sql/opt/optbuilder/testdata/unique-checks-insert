@@ -449,6 +449,75 @@ insert uniq
                           ├── y:36 = uniq.y:29
                           └── k:32 != uniq.k:25
 
+# On conflict clause references unique without index constraint explicitly.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT ON CONSTRAINT unique_w DO NOTHING
+----
+insert uniq
+ ├── columns: <none>
+ ├── arbiter constraints: unique_w
+ ├── insert-mapping:
+ │    ├── column1:13 => uniq.k:1
+ │    ├── column2:14 => uniq.v:2
+ │    ├── column3:15 => uniq.w:3
+ │    ├── column4:16 => uniq.x:4
+ │    └── column5:17 => uniq.y:5
+ ├── input binding: &1
+ ├── upsert-distinct-on
+ │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+ │    ├── grouping columns: column3:15!null
+ │    ├── anti-join (hash)
+ │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+ │    │    ├── project
+ │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    │    └── projections
+ │    │    │         ├── assignment-cast: INT8 [as=column1:13]
+ │    │    │         │    └── column1:8
+ │    │    │         ├── assignment-cast: INT8 [as=column2:14]
+ │    │    │         │    └── column2:9
+ │    │    │         ├── assignment-cast: INT8 [as=column3:15]
+ │    │    │         │    └── column3:10
+ │    │    │         ├── assignment-cast: INT8 [as=column4:16]
+ │    │    │         │    └── column4:11
+ │    │    │         └── assignment-cast: INT8 [as=column5:17]
+ │    │    │              └── column5:12
+ │    │    ├── scan uniq
+ │    │    │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
+ │    │    └── filters
+ │    │         └── column3:15 = uniq.w:20
+ │    └── aggregations
+ │         ├── first-agg [as=column1:13]
+ │         │    └── column1:13
+ │         ├── first-agg [as=column2:14]
+ │         │    └── column2:14
+ │         ├── first-agg [as=column4:16]
+ │         │    └── column4:16
+ │         └── first-agg [as=column5:17]
+ │              └── column5:17
+ └── unique-checks
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:35!null y:36!null
+                └── semi-join (hash)
+                     ├── columns: k:32!null v:33!null w:34!null x:35!null y:36!null
+                     ├── with-scan &1
+                     │    ├── columns: k:32!null v:33!null w:34!null x:35!null y:36!null
+                     │    └── mapping:
+                     │         ├──  column1:13 => k:32
+                     │         ├──  column2:14 => v:33
+                     │         ├──  column3:15 => w:34
+                     │         ├──  column4:16 => x:35
+                     │         └──  column5:17 => y:36
+                     ├── scan uniq
+                     │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     └── filters
+                          ├── x:35 = uniq.x:28
+                          ├── y:36 = uniq.y:29
+                          └── k:32 != uniq.k:25
+
 exec-ddl
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 ----
@@ -1087,6 +1156,13 @@ build
 INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT (a) DO NOTHING
 ----
 error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+# Error when trying to select a partial unique without index constraint
+# explicitly, which is not allowed.
+build
+INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT ON CONSTRAINT unique_a DO NOTHING
+----
+error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 # On conflict clause references unique without index constraint.
 build
