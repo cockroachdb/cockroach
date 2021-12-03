@@ -81,7 +81,7 @@ func getRecordWithTimestamp(
 
 func makeVerificationBatch(r *ptpb.Record, aliveAt hlc.Timestamp) kv.Batch {
 	// Need to perform validation, build a batch and run it.
-	mergedSpans, _ := roachpb.MergeSpans(&r.Spans)
+	mergedSpans, _ := roachpb.MergeSpans(&r.DeprecatedSpans)
 	var b kv.Batch
 	for _, s := range mergedSpans {
 		var req roachpb.AdminVerifyProtectedTimestampRequest

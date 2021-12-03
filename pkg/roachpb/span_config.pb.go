@@ -5,6 +5,8 @@ package roachpb
 
 import (
 	fmt "fmt"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
@@ -22,6 +24,31 @@ var _ = math.Inf
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
+
+// ProtectionMode defines the semantics of a ProtectedTimestampRecord.
+type ProtectionMode int32
+
+const (
+	// PROTECT_AFTER ensures that all data values live at or after the specified
+	// timestamp will be protected from GC.
+	PROTECT_AFTER ProtectionMode = 0
+)
+
+var ProtectionMode_name = map[int32]string{
+	0: "PROTECT_AFTER",
+}
+
+var ProtectionMode_value = map[string]int32{
+	"PROTECT_AFTER": 0,
+}
+
+func (x ProtectionMode) String() string {
+	return proto.EnumName(ProtectionMode_name, int32(x))
+}
+
+func (ProtectionMode) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_91c9f1dcea14470a, []int{0}
+}
 
 type Constraint_Type int32
 
@@ -210,6 +237,73 @@ func (m *LeasePreference) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LeasePreference proto.InternalMessageInfo
 
+// ProtectedTimestampRecord corresponds to a protected timestamp.
+// This message definition is a mirror of `ptpb.Record`.
+//
+// TODO(adityamaru): We cannot reuse the message in `protected_ts.proto` because
+// of a circular dependency with `roachpb`. In 22.2 we will be able to remove
+// the DeprecatedSpans field from the `ptpb.Record` and that will break the
+// circular dependency, allowing us to reuse `ptpb.Record` here.
+type ProtectedTimestampRecord struct {
+	// ID uniquely identifies this row.
+	ID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"id"`
+	// Timestamp is the timestamp which is protected.
+	Timestamp hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp"`
+	// Mode specifies whether this record protects all values live at timestamp
+	// or all values live at or after that timestamp.
+	Mode ProtectionMode `protobuf:"varint,3,opt,name=mode,proto3,enum=cockroach.roachpb.ProtectionMode" json:"mode,omitempty"`
+	// MetaType is used to interpret the data stored in Meta.
+	// Users of Meta should set a unique value for MetaType which provides enough
+	// information to interpret the data in Meta. See the comment on Meta for how
+	// these two fields should be used in tandem.
+	MetaType string `protobuf:"bytes,4,opt,name=meta_type,json=metaType,proto3" json:"meta_type,omitempty"`
+	// Meta is client-provided metadata about the record.
+	// This data allows the Record to be correlated with data from another
+	// subsystem. For example, this field may contain the ID of a job which
+	// created this record. The metadata allows an out-of-band reconciliation
+	// process to discover and remove records which no longer correspond to
+	// running jobs. Such a mechanism acts as a failsafe against unreliable
+	// jobs infrastructure.
+	Meta []byte `protobuf:"bytes,5,opt,name=meta,proto3" json:"meta,omitempty"`
+	// Verified marks that this Record is known to have successfully provided
+	// protection. It is updated after Verification. Updates to this field do not
+	// change the Version of the subsystem.
+	Verified bool `protobuf:"varint,6,opt,name=verified,proto3" json:"verified,omitempty"`
+	// DeprecatedSpans are the spans which this Record protects.
+	DeprecatedSpans []Span `protobuf:"bytes,7,rep,name=deprecated_spans,json=deprecatedSpans,proto3" json:"deprecated_spans"`
+	// SchemaObjectIDs are the schema objects which this Record protects.
+	SchemaObjectIDs []uint32 `protobuf:"varint,8,rep,packed,name=schema_object_ids,json=schemaObjectIds,proto3" json:"schema_object_ids,omitempty"`
+}
+
+func (m *ProtectedTimestampRecord) Reset()         { *m = ProtectedTimestampRecord{} }
+func (m *ProtectedTimestampRecord) String() string { return proto.CompactTextString(m) }
+func (*ProtectedTimestampRecord) ProtoMessage()    {}
+func (*ProtectedTimestampRecord) Descriptor() ([]byte, []int) {
+	return fileDescriptor_91c9f1dcea14470a, []int{4}
+}
+func (m *ProtectedTimestampRecord) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProtectedTimestampRecord) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *ProtectedTimestampRecord) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProtectedTimestampRecord.Merge(m, src)
+}
+func (m *ProtectedTimestampRecord) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProtectedTimestampRecord) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProtectedTimestampRecord.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProtectedTimestampRecord proto.InternalMessageInfo
+
 // SpanConfig holds the configuration that applies to a given keyspan. It
 // parallels the definition found in zonepb/zone.proto.
 type SpanConfig struct {
@@ -255,13 +349,16 @@ type SpanConfig struct {
 	// preferred option to least. The first preference that an existing replica of
 	// a range matches will take priority for the lease.
 	LeasePreferences []LeasePreference `protobuf:"bytes,9,rep,name=lease_preferences,json=leasePreferences,proto3" json:"lease_preferences"`
+	// ProtectedTimestampRecords stores the records that are protecting the spans
+	// of the ranges the ZoneConfig applies to, from GC.
+	ProtectedTimestampRecords []ProtectedTimestampRecord `protobuf:"bytes,16,rep,name=protected_timestamp_records,json=protectedTimestampRecords,proto3" json:"protected_timestamp_records"`
 }
 
 func (m *SpanConfig) Reset()         { *m = SpanConfig{} }
 func (m *SpanConfig) String() string { return proto.CompactTextString(m) }
 func (*SpanConfig) ProtoMessage()    {}
 func (*SpanConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_91c9f1dcea14470a, []int{4}
+	return fileDescriptor_91c9f1dcea14470a, []int{5}
 }
 func (m *SpanConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -298,7 +395,7 @@ func (m *SpanConfigEntry) Reset()         { *m = SpanConfigEntry{} }
 func (m *SpanConfigEntry) String() string { return proto.CompactTextString(m) }
 func (*SpanConfigEntry) ProtoMessage()    {}
 func (*SpanConfigEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_91c9f1dcea14470a, []int{5}
+	return fileDescriptor_91c9f1dcea14470a, []int{6}
 }
 func (m *SpanConfigEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -335,7 +432,7 @@ func (m *GetSpanConfigsRequest) Reset()         { *m = GetSpanConfigsRequest{} }
 func (m *GetSpanConfigsRequest) String() string { return proto.CompactTextString(m) }
 func (*GetSpanConfigsRequest) ProtoMessage()    {}
 func (*GetSpanConfigsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_91c9f1dcea14470a, []int{6}
+	return fileDescriptor_91c9f1dcea14470a, []int{7}
 }
 func (m *GetSpanConfigsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -375,7 +472,7 @@ func (m *GetSpanConfigsResponse) Reset()         { *m = GetSpanConfigsResponse{}
 func (m *GetSpanConfigsResponse) String() string { return proto.CompactTextString(m) }
 func (*GetSpanConfigsResponse) ProtoMessage()    {}
 func (*GetSpanConfigsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_91c9f1dcea14470a, []int{7}
+	return fileDescriptor_91c9f1dcea14470a, []int{8}
 }
 func (m *GetSpanConfigsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -427,7 +524,7 @@ func (m *UpdateSpanConfigsRequest) Reset()         { *m = UpdateSpanConfigsReque
 func (m *UpdateSpanConfigsRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdateSpanConfigsRequest) ProtoMessage()    {}
 func (*UpdateSpanConfigsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_91c9f1dcea14470a, []int{8}
+	return fileDescriptor_91c9f1dcea14470a, []int{9}
 }
 func (m *UpdateSpanConfigsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -459,7 +556,7 @@ func (m *UpdateSpanConfigsResponse) Reset()         { *m = UpdateSpanConfigsResp
 func (m *UpdateSpanConfigsResponse) String() string { return proto.CompactTextString(m) }
 func (*UpdateSpanConfigsResponse) ProtoMessage()    {}
 func (*UpdateSpanConfigsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_91c9f1dcea14470a, []int{9}
+	return fileDescriptor_91c9f1dcea14470a, []int{10}
 }
 func (m *UpdateSpanConfigsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -485,11 +582,13 @@ func (m *UpdateSpanConfigsResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_UpdateSpanConfigsResponse proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.roachpb.ProtectionMode", ProtectionMode_name, ProtectionMode_value)
 	proto.RegisterEnum("cockroach.roachpb.Constraint_Type", Constraint_Type_name, Constraint_Type_value)
 	proto.RegisterType((*GCPolicy)(nil), "cockroach.roachpb.GCPolicy")
 	proto.RegisterType((*Constraint)(nil), "cockroach.roachpb.Constraint")
 	proto.RegisterType((*ConstraintsConjunction)(nil), "cockroach.roachpb.ConstraintsConjunction")
 	proto.RegisterType((*LeasePreference)(nil), "cockroach.roachpb.LeasePreference")
+	proto.RegisterType((*ProtectedTimestampRecord)(nil), "cockroach.roachpb.ProtectedTimestampRecord")
 	proto.RegisterType((*SpanConfig)(nil), "cockroach.roachpb.SpanConfig")
 	proto.RegisterType((*SpanConfigEntry)(nil), "cockroach.roachpb.SpanConfigEntry")
 	proto.RegisterType((*GetSpanConfigsRequest)(nil), "cockroach.roachpb.GetSpanConfigsRequest")
@@ -501,54 +600,74 @@ func init() {
 func init() { proto.RegisterFile("roachpb/span_config.proto", fileDescriptor_91c9f1dcea14470a) }
 
 var fileDescriptor_91c9f1dcea14470a = []byte{
-	// 752 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0x41, 0x4f, 0xdb, 0x48,
-	0x14, 0xce, 0x90, 0x04, 0x9c, 0x17, 0x16, 0x92, 0x59, 0x96, 0x35, 0x20, 0x9c, 0x60, 0xad, 0x56,
-	0xe1, 0x12, 0xb4, 0x41, 0xda, 0x03, 0xbd, 0x25, 0x44, 0x94, 0x8a, 0xaa, 0x60, 0x92, 0xaa, 0xaa,
-	0xaa, 0x5a, 0x8e, 0x33, 0xa4, 0x2e, 0xce, 0x8c, 0xeb, 0x99, 0x20, 0x72, 0xec, 0xbd, 0x87, 0x1e,
-	0x2b, 0xb5, 0x95, 0xf8, 0x19, 0xfd, 0x09, 0x1c, 0x39, 0x72, 0x42, 0x6d, 0xb8, 0xf4, 0x67, 0x54,
-	0x1e, 0x3b, 0xc4, 0x40, 0x44, 0x11, 0xb7, 0xc9, 0xe7, 0xef, 0x7d, 0xef, 0x7b, 0xcf, 0x9f, 0x27,
-	0xb0, 0xe0, 0x33, 0xcb, 0x7e, 0xe3, 0xb5, 0xd6, 0xb8, 0x67, 0x51, 0xd3, 0x66, 0xf4, 0xc0, 0xe9,
-	0x94, 0x3d, 0x9f, 0x09, 0x86, 0xf3, 0x36, 0xb3, 0x0f, 0xe5, 0xe3, 0x72, 0x44, 0x5a, 0xc4, 0x43,
-	0x76, 0xdb, 0x12, 0x56, 0x48, 0x5b, 0x9c, 0xeb, 0xb0, 0x0e, 0x93, 0xc7, 0xb5, 0xe0, 0x14, 0xa2,
-	0x7a, 0x1d, 0x94, 0xad, 0xda, 0x2e, 0x73, 0x1d, 0xbb, 0x8f, 0xd7, 0x20, 0x2b, 0x84, 0x6b, 0x72,
-	0x62, 0x33, 0xda, 0xe6, 0x2a, 0x2a, 0xa2, 0x52, 0xba, 0x3a, 0x33, 0xb8, 0x28, 0x40, 0xa3, 0xb1,
-	0xb3, 0x1f, 0xa2, 0x06, 0x08, 0xe1, 0x46, 0xe7, 0x0d, 0xe5, 0xdb, 0x49, 0x01, 0xfd, 0x3c, 0x29,
-	0x20, 0xfd, 0x0b, 0x02, 0xa8, 0x31, 0xca, 0x85, 0x6f, 0x39, 0x54, 0xe0, 0xff, 0x21, 0x25, 0xfa,
-	0x1e, 0x91, 0x12, 0x33, 0x15, 0xbd, 0x7c, 0xcb, 0x61, 0x79, 0x44, 0x2e, 0x37, 0xfa, 0x1e, 0x31,
-	0x24, 0x1f, 0xe7, 0x20, 0x79, 0x48, 0xfa, 0xea, 0x44, 0x11, 0x95, 0x32, 0x46, 0x70, 0xc4, 0x73,
-	0x90, 0x3e, 0xb2, 0xdc, 0x1e, 0x51, 0x93, 0x12, 0x0b, 0x7f, 0xe8, 0xff, 0x40, 0x2a, 0xa8, 0xc2,
-	0xd3, 0xa0, 0x18, 0xf5, 0xbd, 0xe6, 0xb6, 0x51, 0xdf, 0xcc, 0x25, 0xf0, 0x0c, 0xc0, 0xae, 0xf1,
-	0xec, 0xf1, 0x76, 0x75, 0xbb, 0x51, 0xdf, 0xcc, 0xa1, 0x0d, 0xe5, 0xd3, 0x49, 0x21, 0x21, 0xed,
-	0x7d, 0x40, 0x30, 0x3f, 0xea, 0xc8, 0x6b, 0x8c, 0xbe, 0xed, 0x51, 0x5b, 0x38, 0x8c, 0xe2, 0x15,
-	0x98, 0xa6, 0xbd, 0xae, 0xe9, 0x13, 0xcf, 0x75, 0x6c, 0x2b, 0x9a, 0xda, 0xc8, 0xd2, 0x5e, 0xd7,
-	0x88, 0x20, 0x5c, 0x87, 0xac, 0x3d, 0x2a, 0x56, 0x27, 0x8a, 0xc9, 0x52, 0xb6, 0xb2, 0x7c, 0xe7,
-	0x50, 0xd5, 0xd4, 0xe9, 0x45, 0x21, 0x61, 0xc4, 0xeb, 0x62, 0x76, 0x5e, 0xc3, 0xec, 0x0e, 0xb1,
-	0x38, 0xd9, 0xf5, 0xc9, 0x01, 0xf1, 0x09, 0xb5, 0xc9, 0xcd, 0x1e, 0xe8, 0x81, 0x3d, 0x52, 0x52,
-	0xff, 0x73, 0x0a, 0x60, 0xdf, 0xb3, 0x68, 0x4d, 0xc6, 0x04, 0xff, 0x0b, 0xb3, 0xbe, 0x45, 0x3b,
-	0xc4, 0xec, 0x3a, 0xd4, 0x6c, 0xf5, 0x05, 0x09, 0xa7, 0x4c, 0x1a, 0x7f, 0x48, 0xf8, 0xa9, 0x43,
-	0xab, 0x01, 0x18, 0xe3, 0x59, 0xc7, 0x11, 0x6f, 0x22, 0xce, 0xb3, 0x8e, 0x43, 0xde, 0x13, 0xc8,
-	0x74, 0x6c, 0xd3, 0x93, 0xa1, 0x91, 0xef, 0x25, 0x5b, 0x59, 0x1a, 0xe3, 0x74, 0x98, 0xab, 0x6a,
-	0x2e, 0xf0, 0x39, 0xb8, 0x28, 0x5c, 0x25, 0xcd, 0x50, 0x3a, 0x76, 0x94, 0xb9, 0x15, 0x98, 0xee,
-	0xb8, 0xac, 0x65, 0xb9, 0xa6, 0x4f, 0xac, 0x36, 0x57, 0x53, 0x45, 0x54, 0x52, 0x8c, 0x6c, 0x88,
-	0x19, 0x01, 0x74, 0xeb, 0x0d, 0xa5, 0x6f, 0xbf, 0xa1, 0x65, 0x80, 0x80, 0x72, 0xc4, 0x04, 0xf1,
-	0xb9, 0x3a, 0x29, 0x09, 0x19, 0xda, 0xeb, 0x3e, 0x97, 0x00, 0xde, 0xbb, 0xbe, 0xdc, 0x29, 0xb9,
-	0xdc, 0xd5, 0x3b, 0x97, 0x1b, 0xcf, 0xc8, 0x98, 0x45, 0xe3, 0x57, 0x90, 0x97, 0xdd, 0xcc, 0xb8,
-	0xb0, 0xf2, 0x30, 0xe1, 0x9c, 0x54, 0x8a, 0x51, 0x70, 0x13, 0xf2, 0x6e, 0x10, 0x10, 0xd3, 0xbb,
-	0x4a, 0x08, 0x57, 0x33, 0x52, 0x7d, 0xdc, 0xc7, 0x74, 0x23, 0x4c, 0x43, 0x59, 0xf7, 0x3a, 0x3c,
-	0x4c, 0xc7, 0x7b, 0x04, 0xb3, 0xa3, 0x74, 0xd4, 0xa9, 0xf0, 0xfb, 0xf8, 0x3f, 0x48, 0x05, 0x17,
-	0x8b, 0xcc, 0x45, 0xb6, 0xf2, 0xf7, 0x98, 0x1e, 0x41, 0x45, 0x24, 0x2c, 0xa9, 0xf8, 0x11, 0x4c,
-	0x86, 0xd7, 0x90, 0x0c, 0xc9, 0xf8, 0xb0, 0x8e, 0xda, 0x44, 0xa5, 0x51, 0x89, 0xbe, 0x03, 0x7f,
-	0x6d, 0x11, 0x31, 0x7a, 0xcc, 0x0d, 0xf2, 0xae, 0x47, 0xb8, 0xc0, 0xeb, 0x90, 0x0e, 0xd4, 0x87,
-	0x5f, 0xc0, 0x6f, 0x9c, 0x84, 0x5c, 0xdd, 0x87, 0xf9, 0x9b, 0x6a, 0xdc, 0x63, 0x94, 0x13, 0xfc,
-	0x02, 0xfe, 0x8c, 0x5d, 0x98, 0x26, 0xa1, 0xc2, 0x77, 0xc8, 0x50, 0x5c, 0xbf, 0xd3, 0xb1, 0x5c,
-	0x4c, 0xd4, 0x27, 0xcf, 0xaf, 0xc1, 0x0e, 0xe1, 0xfa, 0x57, 0x04, 0x6a, 0xd3, 0x6b, 0x5b, 0x82,
-	0x8c, 0x99, 0x62, 0x03, 0x32, 0x82, 0x99, 0x6d, 0xe2, 0x12, 0x41, 0xee, 0x37, 0x89, 0x22, 0xd8,
-	0xa6, 0xa4, 0xe3, 0xba, 0xac, 0xed, 0x79, 0x9c, 0xf8, 0x22, 0xba, 0x6b, 0xee, 0x6f, 0x54, 0x11,
-	0xac, 0x29, 0x2b, 0xf5, 0x25, 0x58, 0x18, 0x63, 0x2f, 0x5c, 0x4b, 0x75, 0xf5, 0xf4, 0x87, 0x96,
-	0x38, 0x1d, 0x68, 0xe8, 0x6c, 0xa0, 0xa1, 0xf3, 0x81, 0x86, 0xbe, 0x0f, 0x34, 0xf4, 0xf1, 0x52,
-	0x4b, 0x9c, 0x5d, 0x6a, 0x89, 0xf3, 0x4b, 0x2d, 0xf1, 0x72, 0x2a, 0xea, 0xd3, 0x9a, 0x94, 0xff,
-	0x13, 0xeb, 0xbf, 0x02, 0x00, 0x00, 0xff, 0xff, 0xc2, 0x30, 0xc2, 0x33, 0x81, 0x06, 0x00, 0x00,
+	// 1067 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x56, 0x4f, 0x6f, 0xe3, 0x44,
+	0x14, 0x8f, 0xf3, 0xa7, 0xeb, 0xbc, 0xb4, 0x4d, 0x32, 0xbb, 0x2c, 0x6e, 0xab, 0x4d, 0xda, 0x08,
+	0xa1, 0x16, 0xa4, 0x44, 0xb4, 0x82, 0x43, 0x39, 0xa0, 0xa6, 0x09, 0xbb, 0x41, 0x5d, 0xb5, 0x9d,
+	0x26, 0x08, 0x21, 0x84, 0xe5, 0xd8, 0xd3, 0xd4, 0x5b, 0x67, 0xc6, 0x78, 0xc6, 0xd5, 0xe6, 0xc8,
+	0x8d, 0x03, 0x42, 0x1c, 0x39, 0x80, 0x54, 0x89, 0x2b, 0x1f, 0x80, 0x8f, 0x50, 0x6e, 0x7b, 0x5c,
+	0x71, 0x88, 0x20, 0xbd, 0xf0, 0x31, 0x90, 0xc7, 0x4e, 0xe2, 0xb6, 0x69, 0xb7, 0xda, 0xdb, 0xe4,
+	0x37, 0xbf, 0xf7, 0xcf, 0xef, 0xfd, 0xde, 0x04, 0x96, 0x3c, 0x66, 0x98, 0x27, 0x6e, 0xb7, 0xc6,
+	0x5d, 0x83, 0xea, 0x26, 0xa3, 0xc7, 0x76, 0xaf, 0xea, 0x7a, 0x4c, 0x30, 0x54, 0x34, 0x99, 0x79,
+	0x2a, 0xaf, 0xab, 0x11, 0x69, 0x19, 0x8d, 0xd9, 0x96, 0x21, 0x8c, 0x90, 0xb6, 0xfc, 0xa8, 0xc7,
+	0x7a, 0x4c, 0x1e, 0x6b, 0xc1, 0x29, 0x42, 0x35, 0x5f, 0xd8, 0x4e, 0xed, 0xc4, 0x31, 0x6b, 0xc2,
+	0xee, 0x13, 0x2e, 0x8c, 0xbe, 0x1b, 0xde, 0x54, 0x9a, 0xa0, 0x3e, 0xdd, 0x3d, 0x60, 0x8e, 0x6d,
+	0x0e, 0x50, 0x0d, 0x72, 0x42, 0x38, 0x3a, 0x27, 0x26, 0xa3, 0x16, 0xd7, 0x94, 0x55, 0x65, 0x3d,
+	0x53, 0x5f, 0x1c, 0x0d, 0xcb, 0xd0, 0x6e, 0xef, 0x1d, 0x85, 0x28, 0x06, 0x21, 0x9c, 0xe8, 0xbc,
+	0xad, 0xfe, 0x79, 0x5e, 0x56, 0xfe, 0x3b, 0x2f, 0x2b, 0x95, 0x5f, 0x15, 0x80, 0x5d, 0x46, 0xb9,
+	0xf0, 0x0c, 0x9b, 0x0a, 0xf4, 0x09, 0xa4, 0xc5, 0xc0, 0x25, 0xd2, 0xc5, 0xe2, 0x66, 0xa5, 0x7a,
+	0x23, 0xf7, 0xea, 0x94, 0x5c, 0x6d, 0x0f, 0x5c, 0x82, 0x25, 0x1f, 0x15, 0x20, 0x75, 0x4a, 0x06,
+	0x5a, 0x72, 0x55, 0x59, 0xcf, 0xe2, 0xe0, 0x88, 0x1e, 0x41, 0xe6, 0xcc, 0x70, 0x7c, 0xa2, 0xa5,
+	0x24, 0x16, 0xfe, 0xa8, 0xbc, 0x07, 0xe9, 0xc0, 0x0a, 0xcd, 0x83, 0x8a, 0x9b, 0x87, 0x9d, 0x16,
+	0x6e, 0x36, 0x0a, 0x09, 0xb4, 0x08, 0x70, 0x80, 0xf7, 0x9f, 0xb5, 0xea, 0xad, 0x76, 0xb3, 0x51,
+	0x50, 0xb6, 0xd5, 0x5f, 0xce, 0xcb, 0x09, 0x99, 0xde, 0x8f, 0x0a, 0x3c, 0x9e, 0x46, 0xe4, 0xbb,
+	0x8c, 0xbe, 0xf0, 0xa9, 0x29, 0x6c, 0x46, 0xd1, 0x1a, 0xcc, 0x53, 0xbf, 0xaf, 0x7b, 0xc4, 0x75,
+	0x6c, 0xd3, 0x88, 0xaa, 0xc6, 0x39, 0xea, 0xf7, 0x71, 0x04, 0xa1, 0x26, 0xe4, 0xcc, 0xa9, 0xb1,
+	0x96, 0x5c, 0x4d, 0xad, 0xe7, 0x36, 0x9f, 0xdc, 0x59, 0x54, 0x3d, 0x7d, 0x31, 0x2c, 0x27, 0x70,
+	0xdc, 0x2e, 0x96, 0xce, 0xb7, 0x90, 0xdf, 0x23, 0x06, 0x27, 0x07, 0x1e, 0x39, 0x26, 0x1e, 0xa1,
+	0x26, 0xb9, 0x1e, 0x43, 0x79, 0xcb, 0x18, 0x69, 0xe9, 0xff, 0xaf, 0x14, 0x68, 0x07, 0x1e, 0x13,
+	0xc4, 0x14, 0xc4, 0x6a, 0x8f, 0x3b, 0x8e, 0x89, 0xc9, 0x3c, 0x0b, 0x1d, 0x42, 0xd2, 0xb6, 0x64,
+	0x99, 0xf3, 0xf5, 0x9d, 0xc0, 0xc3, 0xdf, 0xc3, 0xf2, 0x56, 0xcf, 0x16, 0x27, 0x7e, 0xb7, 0x6a,
+	0xb2, 0x7e, 0x6d, 0x12, 0xd2, 0xea, 0x4e, 0xcf, 0x35, 0xf7, 0xb4, 0x57, 0x93, 0x43, 0xe4, 0xfb,
+	0xb6, 0x55, 0xed, 0x74, 0x5a, 0x8d, 0xd1, 0xb0, 0x9c, 0x6c, 0x35, 0x70, 0xd2, 0xb6, 0xd0, 0x0e,
+	0x64, 0x27, 0x73, 0x25, 0x9b, 0x77, 0x35, 0xf5, 0xc0, 0xae, 0x7a, 0xe2, 0x98, 0xd5, 0x49, 0x2a,
+	0x51, 0xea, 0x53, 0x2b, 0xf4, 0x31, 0xa4, 0xfb, 0xcc, 0x0a, 0xdb, 0xbc, 0xb8, 0xb9, 0x36, 0xa3,
+	0xf0, 0xa8, 0x20, 0x9b, 0xd1, 0xe7, 0xcc, 0x22, 0x58, 0xd2, 0xd1, 0x0a, 0x64, 0xfb, 0x44, 0x18,
+	0xba, 0x9c, 0xb6, 0xb4, 0x1c, 0x11, 0x35, 0x00, 0xe4, 0x74, 0x20, 0x48, 0x07, 0x67, 0x2d, 0x13,
+	0xd4, 0x8a, 0xe5, 0x19, 0x2d, 0x83, 0x7a, 0x46, 0x3c, 0xfb, 0xd8, 0x26, 0x96, 0x36, 0xb7, 0xaa,
+	0xac, 0xab, 0x78, 0xf2, 0x1b, 0x3d, 0x83, 0x82, 0x45, 0x5c, 0x8f, 0x98, 0x86, 0x20, 0x96, 0x1e,
+	0x48, 0x90, 0x6b, 0x0f, 0x64, 0x23, 0xde, 0x9d, 0x91, 0xcf, 0x91, 0x6b, 0xd0, 0xa8, 0x8e, 0xfc,
+	0xd4, 0x2c, 0x40, 0x39, 0xfa, 0x0c, 0x8a, 0xdc, 0x3c, 0x21, 0x7d, 0x43, 0x67, 0xdd, 0x17, 0xc4,
+	0x14, 0xba, 0x6d, 0x71, 0x4d, 0x5d, 0x4d, 0xad, 0x2f, 0xd4, 0x1f, 0x8e, 0x86, 0xe5, 0xfc, 0x91,
+	0xbc, 0xdc, 0x97, 0x77, 0xad, 0x06, 0xc7, 0x79, 0x1e, 0x07, 0x62, 0xca, 0x4a, 0x54, 0xfe, 0xc8,
+	0x00, 0x04, 0x4e, 0x77, 0xe5, 0x32, 0x40, 0xef, 0x43, 0xde, 0x33, 0x68, 0x8f, 0xe8, 0x7d, 0x9b,
+	0xea, 0xdd, 0x81, 0x20, 0xe1, 0xc4, 0xa6, 0xf0, 0x82, 0x84, 0x9f, 0xdb, 0xb4, 0x1e, 0x80, 0x31,
+	0x9e, 0xf1, 0x32, 0xe2, 0x25, 0xe3, 0x3c, 0xe3, 0x65, 0xc8, 0xfb, 0x02, 0xb2, 0x3d, 0x53, 0x77,
+	0xe5, 0x02, 0x90, 0x1f, 0x3f, 0xb7, 0xb9, 0x32, 0xa3, 0xd8, 0xf1, 0x8e, 0xa8, 0x17, 0x82, 0x82,
+	0x47, 0xc3, 0xf2, 0x64, 0x6b, 0x60, 0xb5, 0x67, 0x46, 0xfb, 0x63, 0x0d, 0xe6, 0x7b, 0x0e, 0xeb,
+	0x1a, 0x8e, 0xee, 0x11, 0xc3, 0xe2, 0xb2, 0x1f, 0x2a, 0xce, 0x85, 0x18, 0x0e, 0xa0, 0x1b, 0x6a,
+	0xcb, 0xdc, 0x54, 0xdb, 0x13, 0x80, 0x80, 0x72, 0xc6, 0x04, 0xf1, 0xb8, 0xec, 0x51, 0x06, 0x67,
+	0xa9, 0xdf, 0xff, 0x52, 0x02, 0xe8, 0xf0, 0xaa, 0x50, 0xc2, 0xfe, 0x6c, 0xdc, 0x29, 0x94, 0xb8,
+	0xde, 0x67, 0x88, 0x06, 0x7d, 0x03, 0x45, 0x19, 0x4d, 0x8f, 0x3b, 0x56, 0xdf, 0xce, 0x71, 0x41,
+	0x7a, 0x8a, 0x51, 0x50, 0x07, 0x8a, 0x4e, 0x20, 0x76, 0xdd, 0x9d, 0xa8, 0x9d, 0x6b, 0x59, 0xe9,
+	0x7d, 0xd6, 0x62, 0xbc, 0xb6, 0x18, 0xc6, 0x6e, 0x9d, 0xab, 0x30, 0x47, 0x3f, 0x29, 0xb0, 0xe2,
+	0x8e, 0x35, 0xae, 0x4f, 0x84, 0xa4, 0x7b, 0x52, 0xe5, 0x5c, 0x2b, 0xc8, 0x08, 0x1f, 0xde, 0x2e,
+	0xa4, 0x1b, 0x9b, 0xa1, 0xbe, 0x16, 0xf5, 0x76, 0xe9, 0x36, 0x06, 0xc7, 0x4b, 0xee, 0x6d, 0x57,
+	0xd1, 0xea, 0xf9, 0x5e, 0x81, 0xfc, 0x74, 0x5c, 0x9b, 0x54, 0x78, 0x03, 0xf4, 0x11, 0xa4, 0x03,
+	0x31, 0xc9, 0x41, 0x7d, 0xa3, 0x96, 0x24, 0x15, 0x7d, 0x0a, 0x73, 0xe1, 0xeb, 0x37, 0x63, 0x9d,
+	0xc4, 0x8d, 0xc2, 0x30, 0x91, 0x69, 0x64, 0x52, 0xd9, 0x83, 0x77, 0x9e, 0x12, 0x31, 0xbd, 0xe6,
+	0x98, 0x7c, 0xe7, 0x13, 0x2e, 0xd0, 0x16, 0x64, 0x42, 0x55, 0x2b, 0xf7, 0x51, 0x75, 0xc8, 0xad,
+	0x78, 0xf0, 0xf8, 0xba, 0x37, 0xee, 0x32, 0xca, 0x09, 0xfa, 0x0a, 0x1e, 0xc6, 0xde, 0x69, 0x9d,
+	0x50, 0xe1, 0xd9, 0x64, 0xec, 0xbc, 0x72, 0x67, 0xc6, 0xf2, 0xc3, 0x44, 0x71, 0x8a, 0xfc, 0x0a,
+	0x6c, 0x13, 0x5e, 0xf9, 0x4d, 0x01, 0xad, 0xe3, 0x5a, 0x86, 0x20, 0x33, 0xaa, 0xd8, 0x86, 0xac,
+	0x60, 0xba, 0x45, 0x1c, 0x22, 0xc8, 0xfd, 0x2a, 0x51, 0x05, 0x6b, 0x48, 0x3a, 0x6a, 0x4a, 0x5b,
+	0xdf, 0xe5, 0xc4, 0x13, 0xd1, 0x43, 0x76, 0xff, 0x44, 0x55, 0xc1, 0x3a, 0xd2, 0xb2, 0xb2, 0x02,
+	0x4b, 0x33, 0xd2, 0x0b, 0x3f, 0xcb, 0x07, 0x1b, 0xb0, 0x78, 0x75, 0x57, 0xa3, 0x22, 0x2c, 0x1c,
+	0xe0, 0xfd, 0x76, 0x73, 0xb7, 0xad, 0xef, 0x7c, 0xde, 0x6e, 0xe2, 0x42, 0x62, 0x39, 0xfd, 0xc3,
+	0xef, 0xa5, 0x44, 0x7d, 0xe3, 0xe2, 0xdf, 0x52, 0xe2, 0x62, 0x54, 0x52, 0x5e, 0x8d, 0x4a, 0xca,
+	0xeb, 0x51, 0x49, 0xf9, 0x67, 0x54, 0x52, 0x7e, 0xbe, 0x2c, 0x25, 0x5e, 0x5d, 0x96, 0x12, 0xaf,
+	0x2f, 0x4b, 0x89, 0xaf, 0x1f, 0x44, 0x29, 0x75, 0xe7, 0xe4, 0xff, 0x95, 0xad, 0xff, 0x03, 0x00,
+	0x00, 0xff, 0xff, 0x1a, 0xe5, 0x42, 0x32, 0x23, 0x09, 0x00, 0x00,
 }
 
 func (this *GCPolicy) Equal(that interface{}) bool {
@@ -727,6 +846,14 @@ func (this *SpanConfig) Equal(that interface{}) bool {
 			return false
 		}
 	}
+	if len(this.ProtectedTimestampRecords) != len(that1.ProtectedTimestampRecords) {
+		return false
+	}
+	for i := range this.ProtectedTimestampRecords {
+		if !this.ProtectedTimestampRecords[i].Equal(&that1.ProtectedTimestampRecords[i]) {
+			return false
+		}
+	}
 	return true
 }
 func (m *GCPolicy) Marshal() (dAtA []byte, err error) {
@@ -878,6 +1005,110 @@ func (m *LeasePreference) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ProtectedTimestampRecord) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ProtectedTimestampRecord) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ProtectedTimestampRecord) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.SchemaObjectIDs) > 0 {
+		dAtA2 := make([]byte, len(m.SchemaObjectIDs)*10)
+		var j1 int
+		for _, num := range m.SchemaObjectIDs {
+			for num >= 1<<7 {
+				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j1++
+			}
+			dAtA2[j1] = uint8(num)
+			j1++
+		}
+		i -= j1
+		copy(dAtA[i:], dAtA2[:j1])
+		i = encodeVarintSpanConfig(dAtA, i, uint64(j1))
+		i--
+		dAtA[i] = 0x42
+	}
+	if len(m.DeprecatedSpans) > 0 {
+		for iNdEx := len(m.DeprecatedSpans) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.DeprecatedSpans[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintSpanConfig(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x3a
+		}
+	}
+	if m.Verified {
+		i--
+		if m.Verified {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
+	}
+	if len(m.Meta) > 0 {
+		i -= len(m.Meta)
+		copy(dAtA[i:], m.Meta)
+		i = encodeVarintSpanConfig(dAtA, i, uint64(len(m.Meta)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if len(m.MetaType) > 0 {
+		i -= len(m.MetaType)
+		copy(dAtA[i:], m.MetaType)
+		i = encodeVarintSpanConfig(dAtA, i, uint64(len(m.MetaType)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.Mode != 0 {
+		i = encodeVarintSpanConfig(dAtA, i, uint64(m.Mode))
+		i--
+		dAtA[i] = 0x18
+	}
+	{
+		size, err := m.Timestamp.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSpanConfig(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size := m.ID.Size()
+		i -= size
+		if _, err := m.ID.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintSpanConfig(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func (m *SpanConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -898,6 +1129,22 @@ func (m *SpanConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.ProtectedTimestampRecords) > 0 {
+		for iNdEx := len(m.ProtectedTimestampRecords) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.ProtectedTimestampRecords[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintSpanConfig(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1
+			i--
+			dAtA[i] = 0x82
+		}
+	}
 	if len(m.LeasePreferences) > 0 {
 		for iNdEx := len(m.LeasePreferences) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -1196,6 +1443,38 @@ func NewPopulatedGCPolicy(r randySpanConfig, easy bool) *GCPolicy {
 	return this
 }
 
+func NewPopulatedProtectedTimestampRecord(r randySpanConfig, easy bool) *ProtectedTimestampRecord {
+	this := &ProtectedTimestampRecord{}
+	v1 := github_com_cockroachdb_cockroach_pkg_util_uuid.NewPopulatedUUID(r)
+	this.ID = *v1
+	v2 := hlc.NewPopulatedTimestamp(r, easy)
+	this.Timestamp = *v2
+	this.Mode = ProtectionMode([]int32{0}[r.Intn(1)])
+	this.MetaType = string(randStringSpanConfig(r))
+	v3 := r.Intn(100)
+	this.Meta = make([]byte, v3)
+	for i := 0; i < v3; i++ {
+		this.Meta[i] = byte(r.Intn(256))
+	}
+	this.Verified = bool(bool(r.Intn(2) == 0))
+	if r.Intn(5) != 0 {
+		v4 := r.Intn(5)
+		this.DeprecatedSpans = make([]Span, v4)
+		for i := 0; i < v4; i++ {
+			v5 := NewPopulatedSpan(r, easy)
+			this.DeprecatedSpans[i] = *v5
+		}
+	}
+	v6 := r.Intn(10)
+	this.SchemaObjectIDs = make([]uint32, v6)
+	for i := 0; i < v6; i++ {
+		this.SchemaObjectIDs[i] = uint32(r.Uint32())
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
 type randySpanConfig interface {
 	Float32() float32
 	Float64() float64
@@ -1215,9 +1494,9 @@ func randUTF8RuneSpanConfig(r randySpanConfig) rune {
 	return rune(ru + 61)
 }
 func randStringSpanConfig(r randySpanConfig) string {
-	v1 := r.Intn(100)
-	tmps := make([]rune, v1)
-	for i := 0; i < v1; i++ {
+	v7 := r.Intn(100)
+	tmps := make([]rune, v7)
+	for i := 0; i < v7; i++ {
 		tmps[i] = randUTF8RuneSpanConfig(r)
 	}
 	return string(tmps)
@@ -1239,11 +1518,11 @@ func randFieldSpanConfig(dAtA []byte, r randySpanConfig, fieldNumber int, wire i
 	switch wire {
 	case 0:
 		dAtA = encodeVarintPopulateSpanConfig(dAtA, uint64(key))
-		v2 := r.Int63()
+		v8 := r.Int63()
 		if r.Intn(2) == 0 {
-			v2 *= -1
+			v8 *= -1
 		}
-		dAtA = encodeVarintPopulateSpanConfig(dAtA, uint64(v2))
+		dAtA = encodeVarintPopulateSpanConfig(dAtA, uint64(v8))
 	case 1:
 		dAtA = encodeVarintPopulateSpanConfig(dAtA, uint64(key))
 		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
@@ -1333,6 +1612,46 @@ func (m *LeasePreference) Size() (n int) {
 	return n
 }
 
+func (m *ProtectedTimestampRecord) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.ID.Size()
+	n += 1 + l + sovSpanConfig(uint64(l))
+	l = m.Timestamp.Size()
+	n += 1 + l + sovSpanConfig(uint64(l))
+	if m.Mode != 0 {
+		n += 1 + sovSpanConfig(uint64(m.Mode))
+	}
+	l = len(m.MetaType)
+	if l > 0 {
+		n += 1 + l + sovSpanConfig(uint64(l))
+	}
+	l = len(m.Meta)
+	if l > 0 {
+		n += 1 + l + sovSpanConfig(uint64(l))
+	}
+	if m.Verified {
+		n += 2
+	}
+	if len(m.DeprecatedSpans) > 0 {
+		for _, e := range m.DeprecatedSpans {
+			l = e.Size()
+			n += 1 + l + sovSpanConfig(uint64(l))
+		}
+	}
+	if len(m.SchemaObjectIDs) > 0 {
+		l = 0
+		for _, e := range m.SchemaObjectIDs {
+			l += sovSpanConfig(uint64(e))
+		}
+		n += 1 + sovSpanConfig(uint64(l)) + l
+	}
+	return n
+}
+
 func (m *SpanConfig) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1372,6 +1691,12 @@ func (m *SpanConfig) Size() (n int) {
 		for _, e := range m.LeasePreferences {
 			l = e.Size()
 			n += 1 + l + sovSpanConfig(uint64(l))
+		}
+	}
+	if len(m.ProtectedTimestampRecords) > 0 {
+		for _, e := range m.ProtectedTimestampRecords {
+			l = e.Size()
+			n += 2 + l + sovSpanConfig(uint64(l))
 		}
 	}
 	return n
@@ -1845,6 +2170,337 @@ func (m *LeasePreference) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ProtectedTimestampRecord) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowSpanConfig
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ProtectedTimestampRecord: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ProtectedTimestampRecord: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mode", wireType)
+			}
+			m.Mode = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Mode |= ProtectionMode(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MetaType", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.MetaType = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Meta", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Meta = append(m.Meta[:0], dAtA[iNdEx:postIndex]...)
+			if m.Meta == nil {
+				m.Meta = []byte{}
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Verified", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Verified = bool(v != 0)
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DeprecatedSpans", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DeprecatedSpans = append(m.DeprecatedSpans, Span{})
+			if err := m.DeprecatedSpans[len(m.DeprecatedSpans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 8:
+			if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowSpanConfig
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= uint32(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.SchemaObjectIDs = append(m.SchemaObjectIDs, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowSpanConfig
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthSpanConfig
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthSpanConfig
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.SchemaObjectIDs) == 0 {
+					m.SchemaObjectIDs = make([]uint32, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowSpanConfig
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= uint32(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.SchemaObjectIDs = append(m.SchemaObjectIDs, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field SchemaObjectIDs", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipSpanConfig(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *SpanConfig) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2102,6 +2758,40 @@ func (m *SpanConfig) Unmarshal(dAtA []byte) error {
 			}
 			m.LeasePreferences = append(m.LeasePreferences, LeasePreference{})
 			if err := m.LeasePreferences[len(m.LeasePreferences)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProtectedTimestampRecords", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowSpanConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSpanConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ProtectedTimestampRecords = append(m.ProtectedTimestampRecords, ProtectedTimestampRecord{})
+			if err := m.ProtectedTimestampRecords[len(m.ProtectedTimestampRecords)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

@@ -98,12 +98,12 @@ func MakeRecord(
 	metaType MetaType,
 ) *ptpb.Record {
 	return &ptpb.Record{
-		ID:        recordID,
-		Timestamp: tsToProtect,
-		Mode:      ptpb.PROTECT_AFTER,
-		MetaType:  metaTypes[metaType],
-		Meta:      encodeID(metaID),
-		Spans:     spans,
+		ID:              recordID,
+		Timestamp:       tsToProtect,
+		Mode:            ptpb.PROTECT_AFTER,
+		MetaType:        metaTypes[metaType],
+		Meta:            encodeID(metaID),
+		DeprecatedSpans: spans,
 	}
 }
 

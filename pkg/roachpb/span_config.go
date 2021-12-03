@@ -11,7 +11,9 @@
 package roachpb
 
 import (
+	"bytes"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -104,6 +106,16 @@ func (s *SpanConfigEntry) Equal(o SpanConfigEntry) bool {
 // Empty returns true if the span config entry is empty.
 func (s *SpanConfigEntry) Empty() bool {
 	return s.Equal(SpanConfigEntry{})
+}
+
+// Equal compares two protected timestamp record entries.
+func (r *ProtectedTimestampRecord) Equal(o *ProtectedTimestampRecord) bool {
+	return r.ID.Equal(o.ID) &&
+		r.Timestamp.Equal(o.Timestamp) &&
+		r.Mode == o.Mode &&
+		r.MetaType == o.MetaType &&
+		bytes.Equal(r.Meta, o.Meta) &&
+		reflect.DeepEqual(r.SchemaObjectIDs, o.SchemaObjectIDs)
 }
 
 // TestingDefaultSpanConfig exports the default span config for testing purposes.

@@ -78,7 +78,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if txn == nil {
 		return errNoTxn
 	}
-	encodedSpans, err := protoutil.Marshal(&Spans{Spans: r.Spans})
+	encodedSpans, err := protoutil.Marshal(&Spans{Spans: r.DeprecatedSpans})
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
@@ -95,10 +95,10 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		protectQuery,
-		s.maxSpans, s.maxBytes, len(r.Spans),
+		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
 		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
-		len(r.Spans), encodedSpans)
+		len(r.DeprecatedSpans), encodedSpans)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
@@ -115,10 +115,10 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	}
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
-		if s.maxSpans > 0 && curNumSpans+int64(len(r.Spans)) > s.maxSpans {
+		if s.maxSpans > 0 && curNumSpans+int64(len(r.DeprecatedSpans)) > s.maxSpans {
 			return errors.WithHint(
 				errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans", curNumSpans,
-					len(r.Spans), s.maxSpans),
+					len(r.DeprecatedSpans), s.maxSpans),
 				"SET CLUSTER SETTING kv.protectedts.max_spans to a higher value")
 		}
 		curBytes := int64(*row[2].(*tree.DInt))
@@ -271,7 +271,7 @@ func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record) error {
 	if err := protoutil.Unmarshal([]byte(*row[4].(*tree.DBytes)), &spans); err != nil {
 		return errors.Wrapf(err, "failed to unmarshal spans for %v", r.ID)
 	}
-	r.Spans = spans.Spans
+	r.DeprecatedSpans = spans.Spans
 	r.Verified = bool(*row[5].(*tree.DBool))
 	return nil
 }
@@ -303,7 +303,7 @@ func validateRecordForProtect(r *ptpb.Record) error {
 	if r.ID == uuid.Nil {
 		return errZeroID
 	}
-	if len(r.Spans) == 0 {
+	if len(r.DeprecatedSpans) == 0 {
 		return errEmptySpans
 	}
 	if len(r.Meta) > 0 && len(r.MetaType) == 0 {

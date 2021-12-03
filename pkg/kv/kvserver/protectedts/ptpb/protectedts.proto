@@ -17,6 +17,7 @@ import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
+import "sql/catalog/descpb/structured.proto";
 
 
 // TODO(ajwerner): Consider splitting up Record into two pieces. It would
@@ -118,9 +119,13 @@ message Record {
   // protection. It is updated after Verification. Updates to this field do not
   // change the Version of the subsystem.
   bool verified = 6;
-  
-  // Spans are the spans which this Record protects.
-  repeated roachpb.Span spans = 7 [(gogoproto.nullable) = false];
+
+  // DeprecatedSpans are the spans which this Record protects.
+  repeated roachpb.Span deprecated_spans = 7 [(gogoproto.nullable) = false];
+
+  // SchemaObjectIDs are the schema objects which this Record protects.
+  repeated uint32 schema_object_ids = 8 [(gogoproto.customname) = "SchemaObjectIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 // State is the complete system state.

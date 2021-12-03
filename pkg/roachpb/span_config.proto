@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // TODO(irfansharif): We could have the proto definitions in pkg/config/zonepb
 // use these messages instead of duplicating everything.
@@ -85,6 +86,78 @@ message LeasePreference {
   repeated Constraint constraints = 1 [(gogoproto.nullable) = false];
 }
 
+
+// ProtectionMode defines the semantics of a ProtectedTimestampRecord.
+enum ProtectionMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // PROTECT_AFTER ensures that all data values live at or after the specified
+  // timestamp will be protected from GC.
+  PROTECT_AFTER = 0;
+
+  // PROTECT_AT ensures that data values which are live at the specified
+  // timestamp will be protected but newer data which is no longer live
+  // can be GC'd.
+  //
+  // TODO(ajwerner): Implement PROTECT_AT. This mode will be useful for
+  // incremental GC or for long-running queries. It adds substantial complexity
+  // to the GC heuristic and process. Until there is an understood strategy to
+  // deal with that complexity we leave it unimplemented.
+  // PROTECT_AT = 1;
+}
+
+// ProtectedTimestampRecord corresponds to a protected timestamp.
+// This message definition is a mirror of `ptpb.Record`.
+//
+// TODO(adityamaru): We cannot reuse the message in `protected_ts.proto` because
+// of a circular dependency with `roachpb`. In 22.2 we will be able to remove
+// the DeprecatedSpans field from the `ptpb.Record` and that will break the
+// circular dependency, allowing us to reuse `ptpb.Record` here.
+message ProtectedTimestampRecord {
+  // We implement the Equal method by hand so that it can ignore deprecated
+  // fields. This can be reverted in 22.2 once the "previous version" no longer
+  // populates deprecated_spans.
+  option (gogoproto.equal) = false;
+  option (gogoproto.populate) = true;
+
+  // ID uniquely identifies this row.
+  bytes id = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", (gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+
+  // Timestamp is the timestamp which is protected.
+  util.hlc.Timestamp timestamp = 2  [(gogoproto.nullable) = false];
+
+  // Mode specifies whether this record protects all values live at timestamp
+  // or all values live at or after that timestamp.
+  ProtectionMode mode = 3;
+
+  // MetaType is used to interpret the data stored in Meta.
+  // Users of Meta should set a unique value for MetaType which provides enough
+  // information to interpret the data in Meta. See the comment on Meta for how
+  // these two fields should be used in tandem.
+  string meta_type = 4;
+
+  // Meta is client-provided metadata about the record.
+  // This data allows the Record to be correlated with data from another
+  // subsystem. For example, this field may contain the ID of a job which
+  // created this record. The metadata allows an out-of-band reconciliation
+  // process to discover and remove records which no longer correspond to
+  // running jobs. Such a mechanism acts as a failsafe against unreliable
+  // jobs infrastructure.
+  bytes meta = 5;
+
+  // Verified marks that this Record is known to have successfully provided
+  // protection. It is updated after Verification. Updates to this field do not
+  // change the Version of the subsystem.
+  bool verified = 6;
+
+
+  // DeprecatedSpans are the spans which this Record protects.
+  repeated roachpb.Span deprecated_spans = 7 [(gogoproto.nullable) = false];
+
+  // SchemaObjectIDs are the schema objects which this Record protects.
+  repeated uint32 schema_object_ids = 8 [(gogoproto.customname) = "SchemaObjectIDs"];
+}
+
 // SpanConfig holds the configuration that applies to a given keyspan. It
 // parallels the definition found in zonepb/zone.proto.
 message SpanConfig {
@@ -140,6 +213,10 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestampRecords stores the records that are protecting the spans
+  // the SpanConfig applies to, from GC.
+  repeated ProtectedTimestampRecord protected_timestamp_records = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProtectedTimestampRecords"];
 }
 
 // SpanConfigEntry ties a span to its corresponding config.
