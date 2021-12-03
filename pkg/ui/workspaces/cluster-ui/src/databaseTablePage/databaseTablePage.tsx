@@ -398,6 +398,7 @@ export class DatabaseTablePage extends React.Component<
                     sortSetting={this.state.sortSetting}
                     onChangeSortSetting={this.changeSortSetting.bind(this)}
                     loading={this.props.indexStats.loading}
+                    noHeaderTooltips={true}
                   />
                 </Row>
               </SummaryCard>

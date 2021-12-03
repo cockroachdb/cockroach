@@ -21,6 +21,7 @@ interface TableHeadProps {
   onChangeSortSetting?: { (ss: SortSetting): void };
   sortSetting?: SortSetting;
   firstCellBordered: boolean;
+  noHeaderTooltips?: boolean;
 }
 
 export const TableHead: React.FC<TableHeadProps> = ({
@@ -29,6 +30,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
   sortSetting,
   onChangeSortSetting,
   firstCellBordered,
+  noHeaderTooltips,
 }) => {
   const trClass = cx("head-wrapper__row", "head-wrapper__row--header");
   const thClass = cx("head-wrapper__cell");
@@ -69,7 +71,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
             !sortSetting.ascending && picked && "sorted__cell--descending",
             firstCellBordered && idx === 0 && "cell-header",
           );
-          const titleClasses = cx("column-title");
+          const titleClasses = noHeaderTooltips ? "" : cx("column-title");
 
           return (
             <th

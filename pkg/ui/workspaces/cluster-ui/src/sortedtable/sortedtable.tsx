@@ -94,6 +94,7 @@ interface SortedTableProps<T> {
     expansionKey: (obj: T) => string;
   };
   firstCellBordered?: boolean;
+  noHeaderTooltips?: boolean;
   renderNoResult?: React.ReactNode;
   pagination?: ISortedTablePagination;
   loading?: boolean;
@@ -327,6 +328,7 @@ export class SortedTable<T> extends React.Component<
       sortSetting,
       onChangeSortSetting,
       firstCellBordered,
+      noHeaderTooltips,
       renderNoResult,
       loadingLabel,
       empty,
@@ -362,6 +364,7 @@ export class SortedTable<T> extends React.Component<
             onChangeSortSetting={onChangeSortSetting}
             expandableConfig={expandableConfig}
             firstCellBordered={firstCellBordered}
+            noHeaderTooltips={noHeaderTooltips}
           />
           <tbody>
             {!loading &&
