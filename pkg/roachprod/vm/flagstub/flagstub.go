@@ -42,7 +42,7 @@ func (p *provider) ConfigSSH() error {
 }
 
 // Create implements vm.Provider and returns Unimplemented.
-func (p *provider) Create(names []string, opts vm.CreateOpts) error {
+func (p *provider) Create(names []string, opts vm.CreateOpts, providerOpts vm.ProviderOpts) error {
 	return errors.Newf("%s", p.unimplemented)
 }
 
@@ -66,11 +66,6 @@ func (p *provider) FindActiveAccount() (string, error) {
 	return "", nil
 }
 
-// Flags implements vm.Provider and returns the delegate's name.
-func (p *provider) Flags() vm.ProviderFlags {
-	return p.delegate.Flags()
-}
-
 // List implements vm.Provider and returns an empty list.
 func (p *provider) List() (vm.List, error) {
 	return nil, nil
@@ -89,4 +84,9 @@ func (p *provider) Active() bool {
 // ProjectActive is part of the vm.Provider interface.
 func (p *provider) ProjectActive(project string) bool {
 	return false
+}
+
+// CreateProviderFlags is part of the vm.Provider interface.
+func (p *provider) CreateProviderOpts() vm.ProviderOpts {
+	return nil
 }

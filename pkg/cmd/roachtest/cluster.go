@@ -906,23 +906,19 @@ func (f *clusterFactory) newCluster(
 		}
 		c.status("creating cluster")
 
-		var createVMOpts vm.CreateOpts
-		var providerOpts interface{}
-		{
-			var err error
-			createVMOpts, providerOpts, err = cfg.spec.RoachprodOpts(c.name, cfg.useIOBarrier)
-			if err != nil {
-				return nil, err
-			}
-			createFlagsOverride(overrideFlagset, &createVMOpts)
-			// Make sure c.expiration is changed if --lifetime override flag is passed.
-			cfg.spec.Lifetime = createVMOpts.Lifetime
-			c.expiration = cfg.spec.Expiration()
+		providerOptsContainer := vm.CreateProviderOptionsContainer()
+		createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts(c.name, cfg.useIOBarrier)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.spec.Cloud != spec.Local {
+			providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
 		}
 
-		if cfg.spec.Cloud != spec.Local {
-			vm.Providers[cfg.spec.Cloud].Flags().ConfigureProviderOpts(providerOpts)
-		}
+		createFlagsOverride(overrideFlagset, &createVMOpts)
+		// Make sure c.expiration is changed if --lifetime override flag is passed.
+		cfg.spec.Lifetime = createVMOpts.Lifetime
+		c.expiration = cfg.spec.Expiration()
 
 		// Logs for creating a new cluster go to a dedicated log file.
 		var retryStr string
@@ -937,7 +933,7 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		err = roachprod.Create(cfg.username, cfg.spec.NodeCount, createVMOpts)
+		err = roachprod.Create(cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, err

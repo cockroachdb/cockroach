@@ -27,6 +27,7 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -123,7 +124,7 @@ Local Clusters
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		createVMOpts.ClusterName = args[0]
-		return roachprod.Create(username, numNodes, createVMOpts)
+		return roachprod.Create(username, numNodes, createVMOpts, providerOptsContainer)
 	}),
 }
 
@@ -857,7 +858,7 @@ var versionCmd = &cobra.Command{
 
 func main() {
 	roachprod.InitProviders()
-
+	providerOptsContainer = vm.CreateProviderOptionsContainer()
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
 	// order to separate the commands into logical groups.
