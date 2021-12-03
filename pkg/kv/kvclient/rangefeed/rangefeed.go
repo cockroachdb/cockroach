@@ -37,8 +37,8 @@ import (
 // TODO(ajwerner): Expose better control over how the exponential backoff gets
 // reset when the feed has been running successfully for a while.
 
-// kvDB is an adapter to the underlying KV store.
-type kvDB interface {
+// Client is an adapter to the underlying KV store.
+type Client interface {
 
 	// RangeFeed runs a rangefeed on a given span with the given arguments.
 	// It encapsulates the RangeFeed method on roachpb.Internal.
@@ -66,7 +66,7 @@ type kvDB interface {
 // Factory is used to construct RangeFeeds.
 type Factory struct {
 	stopper *stop.Stopper
-	client  kvDB
+	client  Client
 	knobs   *TestingKnobs
 }
 
@@ -91,7 +91,7 @@ func NewFactory(stopper *stop.Stopper, db *kv.DB, knobs *TestingKnobs) (*Factory
 	return newFactory(stopper, kvDB, knobs), nil
 }
 
-func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factory {
+func newFactory(stopper *stop.Stopper, client Client, knobs *TestingKnobs) *Factory {
 	return &Factory{
 		stopper: stopper,
 		client:  client,
@@ -140,6 +140,12 @@ func (f *Factory) New(
 	return &r
 }
 
+// Client returns the underlying low level Client impllementation.
+// Most users of this library should use RangeFeed APIs defined below.
+func (f *Factory) Client() Client {
+	return f.client
+}
+
 // OnValue is called for each rangefeed value.
 type OnValue func(ctx context.Context, value *roachpb.RangeFeedValue)
 
@@ -147,7 +153,7 @@ type OnValue func(ctx context.Context, value *roachpb.RangeFeedValue)
 type RangeFeed struct {
 	config
 	name    string
-	client  kvDB
+	client  Client
 	stopper *stop.Stopper
 	knobs   *TestingKnobs
 

@@ -13,7 +13,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockkvDB is a mock of kvDB interface.
+// MockkvDB is a mock of Client interface.
 type MockkvDB struct {
 	ctrl     *gomock.Controller
 	recorder *MockkvDBMockRecorder
@@ -37,7 +37,13 @@ func (m *MockkvDB) EXPECT() *MockkvDBMockRecorder {
 }
 
 // RangeFeed mocks base method.
-func (m *MockkvDB) RangeFeed(ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent) error {
+func (m *MockkvDB) RangeFeed(
+	ctx context.Context,
+	spans []roachpb.Span,
+	startFrom hlc.Timestamp,
+	withDiff bool,
+	eventC chan<- *roachpb.RangeFeedEvent,
+) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RangeFeed", ctx, spans, startFrom, withDiff, eventC)
 	ret0, _ := ret[0].(error)
@@ -45,13 +51,21 @@ func (m *MockkvDB) RangeFeed(ctx context.Context, spans []roachpb.Span, startFro
 }
 
 // RangeFeed indicates an expected call of RangeFeed.
-func (mr *MockkvDBMockRecorder) RangeFeed(ctx, spans, startFrom, withDiff, eventC interface{}) *gomock.Call {
+func (mr *MockkvDBMockRecorder) RangeFeed(
+	ctx, spans, startFrom, withDiff, eventC interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockkvDB)(nil).RangeFeed), ctx, spans, startFrom, withDiff, eventC)
 }
 
 // Scan mocks base method.
-func (m *MockkvDB) Scan(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp, rowFn func(roachpb.KeyValue), parallelism func() int) error {
+func (m *MockkvDB) Scan(
+	ctx context.Context,
+	spans []roachpb.Span,
+	asOf hlc.Timestamp,
+	rowFn func(roachpb.KeyValue),
+	parallelism func() int,
+) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scan", ctx, spans, asOf, rowFn, parallelism)
 	ret0, _ := ret[0].(error)
@@ -59,7 +73,9 @@ func (m *MockkvDB) Scan(ctx context.Context, spans []roachpb.Span, asOf hlc.Time
 }
 
 // Scan indicates an expected call of Scan.
-func (mr *MockkvDBMockRecorder) Scan(ctx, spans, asOf, rowFn, parallelism interface{}) *gomock.Call {
+func (mr *MockkvDBMockRecorder) Scan(
+	ctx, spans, asOf, rowFn, parallelism interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockkvDB)(nil).Scan), ctx, spans, asOf, rowFn, parallelism)
 }

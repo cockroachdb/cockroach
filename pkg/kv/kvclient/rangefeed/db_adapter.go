@@ -26,14 +26,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// dbAdapter is an implementation of the kvDB interface using a real *kv.DB.
+// dbAdapter is an implementation of the Client interface using a real *kv.DB.
 type dbAdapter struct {
 	db              *kv.DB
 	distSender      *kvcoord.DistSender
 	targetScanBytes int64
 }
 
-var _ kvDB = (*dbAdapter)(nil)
+var _ Client = (*dbAdapter)(nil)
 
 // TODO(ajwerner): Hook up a memory monitor. Fortunately most users of the
 // initial scan are reading scant amounts of data.
@@ -42,7 +42,7 @@ var _ kvDB = (*dbAdapter)(nil)
 // this thing is not hooked up to a memory monitor.
 const defaultTargetScanBytes = 1 << 19 // 512 KiB
 
-// newDBAdapter construct a kvDB using a *kv.DB.
+// newDBAdapter construct a Client using a *kv.DB.
 func newDBAdapter(db *kv.DB) (*dbAdapter, error) {
 	var distSender *kvcoord.DistSender
 	{
@@ -64,7 +64,7 @@ func newDBAdapter(db *kv.DB) (*dbAdapter, error) {
 	}, nil
 }
 
-// RangeFeed is part of the kvDB interface.
+// RangeFeed is part of the Client interface.
 func (dbc *dbAdapter) RangeFeed(
 	ctx context.Context,
 	spans []roachpb.Span,
@@ -75,7 +75,7 @@ func (dbc *dbAdapter) RangeFeed(
 	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC)
 }
 
-// Scan is part of the kvDB interface.
+// Scan is part of the Client interface.
 func (dbc *dbAdapter) Scan(
 	ctx context.Context,
 	spans []roachpb.Span,

@@ -16,8 +16,8 @@ var NewDBAdapter = newDBAdapter
 // NewFactoryWithDB allows tests to construct a factory with an injected db.
 var NewFactoryWithDB = newFactory
 
-// KVDB forwards the definition of kvDB to tests.
-type KVDB = kvDB
+// KVDB forwards the definition of Client to tests.
+type KVDB = Client
 
 // SetTargetScanBytes is exposed for testing.
 func (dbc *dbAdapter) SetTargetScanBytes(limit int64) {

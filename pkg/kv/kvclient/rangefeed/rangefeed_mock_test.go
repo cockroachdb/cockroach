@@ -69,7 +69,7 @@ func (m *mockClient) Scan(
 
 var _ rangefeed.KVDB = (*mockClient)(nil)
 
-// TestRangefeedMock utilizes the kvDB interface to test the behavior of the
+// TestRangefeedMock utilizes the Client interface to test the behavior of the
 // RangeFeed.
 func TestRangeFeedMock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
