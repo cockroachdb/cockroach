@@ -1184,7 +1184,7 @@ func (m *pgDumpReader) readFile(
 				row, err := ps.Next()
 				// We expect an explicit copyDone here. io.EOF is unexpected.
 				if err == io.EOF {
-					return makeRowErr("", count, pgcode.ProtocolViolation,
+					return makeRowErr(count, pgcode.ProtocolViolation,
 						"unexpected EOF")
 				}
 				if row == errCopyDone {
@@ -1193,7 +1193,7 @@ func (m *pgDumpReader) readFile(
 				count++
 				tableNameToRowsProcessed[name.String()]++
 				if err != nil {
-					return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
+					return wrapRowErr(err, count, pgcode.Uncategorized, "")
 				}
 				if !importing {
 					continue
@@ -1204,7 +1204,7 @@ func (m *pgDumpReader) readFile(
 				switch row := row.(type) {
 				case copyData:
 					if expected, got := conv.TargetColOrds.Len(), len(row); expected != got {
-						return makeRowErr("", count, pgcode.Syntax,
+						return makeRowErr(count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}
 					if rowLimit != 0 && tableNameToRowsProcessed[name.String()] > rowLimit {
@@ -1221,7 +1221,7 @@ func (m *pgDumpReader) readFile(
 							conv.Datums[idx], _, err = tree.ParseAndRequireString(conv.VisibleColTypes[idx], *s, conv.EvalCtx)
 							if err != nil {
 								col := conv.VisibleCols[idx]
-								return wrapRowErr(err, "", count, pgcode.Syntax,
+								return wrapRowErr(err, count, pgcode.Syntax,
 									"parse %q as %s", col.GetName(), col.GetType().SQLString())
 							}
 						}
@@ -1230,7 +1230,7 @@ func (m *pgDumpReader) readFile(
 						return err
 					}
 				default:
-					return makeRowErr("", count, pgcode.Uncategorized,
+					return makeRowErr(count, pgcode.Uncategorized,
 						"unexpected: %v", row)
 				}
 			}
@@ -1357,7 +1357,7 @@ func (m *pgDumpReader) readFile(
 				}
 				key, val, err := sql.MakeSequenceKeyVal(m.evalCtx.Codec, seq, val, isCalled)
 				if err != nil {
-					return wrapRowErr(err, "", count, pgcode.Uncategorized, "")
+					return wrapRowErr(err, count, pgcode.Uncategorized, "")
 				}
 				kv := roachpb.KeyValue{Key: key}
 				kv.Value.SetInt(val)
