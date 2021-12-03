@@ -16,13 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
@@ -135,10 +136,11 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(),
-		scs, scop.StatementPhase,
+		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.stmts,
 	)
-	after, err := scrun.RunSchemaChangesInTxn(params.ctx, runDeps, s.plannedState)
+	after, err := scrun.RunStatementPhase(
+		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
+	)
 	if err != nil {
 		return err
 	}
@@ -147,16 +149,17 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 }
 
 func newSchemaChangerTxnRunDependencies(
+	user security.SQLUsername,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
 	descriptors *descs.Collection,
 	evalContext *tree.EvalContext,
-	scs *SchemaChangerState,
-	phase scop.Phase,
-) scrun.TxnRunDependencies {
-	execDeps := scdeps.NewExecutorDependencies(
+	stmts []string,
+) scexec.Dependencies {
+	return scdeps.NewExecutorDependencies(
 		execCfg.Codec,
 		txn,
+		user,
 		descriptors,
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
@@ -165,12 +168,8 @@ func newSchemaChangerTxnRunDependencies(
 		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
 			return LogEventForSchemaChanger(ctx, execCfg, txn, depth+1, descID, metadata, event)
 		},
-		scs.stmts,
+		stmts,
 	)
-	runDeps := scdeps.NewTxnRunDependencies(
-		execDeps, phase, execCfg.DeclarativeSchemaChangerTestingKnobs,
-	)
-	return runDeps
 }
 
 func (s schemaChangePlanNode) Next(params runParams) (bool, error) { return false, nil }

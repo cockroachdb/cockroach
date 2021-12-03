@@ -55,6 +55,10 @@ type MutationVisitor interface {
 	LogEvent(context.Context, LogEvent) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
+	RemoveJobReference(context.Context, RemoveJobReference) error
+	AddJobReference(context.Context, AddJobReference) error
+	CreateDeclarativeSchemaChangerJob(context.Context, CreateDeclarativeSchemaChangerJob) error
+	UpdateSchemaChangeJobProgress(context.Context, UpdateSchemaChangeJobProgress) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -220,4 +224,24 @@ func (op SetColumnName) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op SetIndexName) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.SetIndexName(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveJobReference) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveJobReference(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddJobReference) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddJobReference(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateDeclarativeSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateDeclarativeSchemaChangerJob(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpdateSchemaChangeJobProgress) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateSchemaChangeJobProgress(ctx, op)
 }

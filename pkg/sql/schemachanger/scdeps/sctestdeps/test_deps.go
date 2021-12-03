@@ -742,7 +742,10 @@ func (s *TestState) TransactionalJobCreator() scexec.TransactionalJobCreator {
 var _ scexec.TransactionalJobCreator = (*TestState)(nil)
 
 // CreateJob implements the scexec.TransactionalJobCreator interface.
-func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) (jobspb.JobID, error) {
+func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
+	if record.JobID == 0 {
+		return errors.New("invalid 0 job ID")
+	}
 	record.JobID = jobspb.JobID(1 + len(s.jobs))
 	s.jobs = append(s.jobs, record)
 	s.LogSideEffectf("create job #%d: %q\n  descriptor IDs: %v",
@@ -750,10 +753,64 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) (jobspb.J
 		record.Description,
 		record.DescriptorIDs,
 	)
-	return record.JobID, nil
+	return nil
 }
 
-// TestingKnobs implements the scexec.Dependencies interface.
+// CreateJob implements the scexec.TransactionalJobCreator interface.
+func (s *TestState) UpdateSchemaChangeJob(
+	ctx context.Context, id jobspb.JobID, fn scexec.JobProgressUpdateFunc,
+) error {
+	var scJob *jobs.Record
+	for i, job := range s.jobs {
+		if job.JobID == id {
+			scJob = &s.jobs[i]
+		}
+	}
+	if scJob == nil {
+		return errors.AssertionFailedf("schema change job not found")
+	}
+	progress := jobspb.Progress{
+		Progress:       nil,
+		ModifiedMicros: 0,
+		RunningStatus:  "",
+		Details:        jobspb.WrapProgressDetails(scJob.Progress),
+		TraceID:        0,
+	}
+	payload := jobspb.Payload{
+		Description:                  scJob.Description,
+		Statement:                    scJob.Statements,
+		UsernameProto:                scJob.Username.EncodeProto(),
+		StartedMicros:                0,
+		FinishedMicros:               0,
+		DescriptorIDs:                scJob.DescriptorIDs,
+		Error:                        "",
+		ResumeErrors:                 nil,
+		CleanupErrors:                nil,
+		FinalResumeError:             nil,
+		Noncancelable:                false,
+		Details:                      jobspb.WrapPayloadDetails(scJob.Details),
+		PauseReason:                  "",
+		RetriableExecutionFailureLog: nil,
+	}
+	return fn(jobs.JobMetadata{
+		ID:       scJob.JobID,
+		Status:   jobs.StatusRunning,
+		Payload:  &payload,
+		Progress: &progress,
+		RunStats: nil,
+	}, func(progress *jobspb.Progress) {
+		scJob.Progress = *progress.GetNewSchemaChange()
+		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
+	})
+}
+
+// CreateJob implements the scexec.TransactionalJobCreator interface.
+func (s *TestState) MakeJobID() jobspb.JobID {
+	s.jobCounter++
+	return jobspb.JobID(s.jobCounter)
+}
+
+// TestingKnobs exposes the testing knobs.
 func (s *TestState) TestingKnobs() *scrun.TestingKnobs {
 	return s.testingKnobs
 }
@@ -762,8 +819,6 @@ func (s *TestState) TestingKnobs() *scrun.TestingKnobs {
 func (s *TestState) Phase() scop.Phase {
 	return s.phase
 }
-
-var _ scrun.SchemaChangeJobCreationDependencies = (*TestState)(nil)
 
 // User implements the scrun.SchemaChangeJobCreationDependencies interface.
 func (s *TestState) User() security.SQLUsername {
@@ -774,41 +829,10 @@ var _ scrun.JobRunDependencies = (*TestState)(nil)
 
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (s *TestState) WithTxnInJob(
-	ctx context.Context, fn func(ctx context.Context, txndeps scrun.JobTxnRunDependencies) error,
+	ctx context.Context, fn func(ctx context.Context, txndeps scexec.Dependencies) error,
 ) (err error) {
-	s.WithTxn(func(s *TestState) {
-		err = fn(ctx, s)
-	})
+	s.WithTxn(func(s *TestState) { err = fn(ctx, s) })
 	return err
-}
-
-var _ scrun.JobTxnRunDependencies = (*TestState)(nil)
-
-// UpdateState implements the scrun.JobTxnRunDependencies interface.
-func (s *TestState) UpdateState(ctx context.Context, state scpb.State) error {
-	var scJob *jobs.Record
-	for i, job := range s.jobs {
-		if job.Username == s.User() {
-			scJob = &s.jobs[i]
-			break
-		}
-	}
-	if scJob == nil {
-		return errors.AssertionFailedf("schema change job not found")
-	}
-	// This fun little dance is the way to get a pointer handle to the job
-	// progress details.
-	scProgress := (&jobspb.Progress{
-		Details: jobspb.WrapProgressDetails(scJob.Progress),
-	}).GetNewSchemaChange()
-	scProgress.States = state.Statuses()
-	s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
-	return nil
-}
-
-// ExecutorDependencies implements the scrun.JobTxnRunDependencies interface.
-func (s *TestState) ExecutorDependencies() scexec.Dependencies {
-	return s
 }
 
 // ValidateForwardIndexes implements the index validator interface.

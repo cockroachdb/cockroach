@@ -14,6 +14,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -76,6 +78,13 @@ type MutationVisitorStateUpdater interface {
 
 	// AddNewGCJobForIndex enqueues a GC job for the given table index.
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
+
+	// AddNewSchemaChangerJob adds a schema changer job.
+	AddNewSchemaChangerJob(record jobs.Record) error
+
+	// UpdateSchemaChangerJobProgress will write the status of the job to the
+	// specified job progress.
+	UpdateSchemaChangerJobProgress(jobID jobspb.JobID, statuses []scpb.Status) error
 }
 
 // EventLogWriter encapsulates operations for generating
@@ -104,6 +113,59 @@ type visitor struct {
 	cr CatalogReader
 	s  MutationVisitorStateUpdater
 	ev EventLogWriter
+}
+
+func (m *visitor) RemoveJobReference(ctx context.Context, reference scop.RemoveJobReference) error {
+	return m.swapSchemaChangeJobID(ctx, reference.DescriptorID, reference.JobID, 0)
+}
+
+func (m *visitor) AddJobReference(ctx context.Context, reference scop.AddJobReference) error {
+	return m.swapSchemaChangeJobID(ctx, reference.DescriptorID, 0, reference.JobID)
+}
+
+func (m *visitor) swapSchemaChangeJobID(
+	ctx context.Context, descID descpb.ID, exp, to jobspb.JobID,
+) error {
+	// TODO(ajwerner): Support all of the descriptor types. We need to write this
+	// to avoid concurrency.
+	d, err := m.cr.MustReadImmutableDescriptor(ctx, descID)
+	if err != nil {
+		return err
+	}
+	// Short-circuit writing an update if this isn't a table because we'd have
+	// no field to touch.
+	if _, isTable := d.(catalog.TableDescriptor); !isTable {
+		return nil
+	}
+
+	tbl, err := m.s.CheckOutDescriptor(ctx, descID)
+	if err != nil {
+		return err
+	}
+	mut, ok := tbl.(*tabledesc.Mutable)
+	if !ok {
+		return nil
+	}
+	if jobspb.JobID(mut.NewSchemaChangeJobID) != exp {
+		return errors.AssertionFailedf(
+			"unexpected schema change job ID %d on table %d, expected %d",
+			mut.NewSchemaChangeJobID, descID, exp,
+		)
+	}
+	mut.NewSchemaChangeJobID = int64(to)
+	return nil
+}
+
+func (m *visitor) CreateDeclarativeSchemaChangerJob(
+	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
+) error {
+	return m.s.AddNewSchemaChangerJob(job.Record)
+}
+
+func (m *visitor) UpdateSchemaChangeJobProgress(
+	ctx context.Context, progress scop.UpdateSchemaChangeJobProgress,
+) error {
+	return m.s.UpdateSchemaChangerJobProgress(progress.JobID, progress.Statuses)
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {

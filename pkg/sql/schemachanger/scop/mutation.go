@@ -11,6 +11,8 @@
 package scop
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -311,4 +313,33 @@ type SetIndexName struct {
 	TableID descpb.ID
 	IndexID descpb.IndexID
 	Name    string
+}
+
+// RemoveJobReference removes the reference to a job from the descriptor.
+type RemoveJobReference struct {
+	mutationOp
+	DescriptorID descpb.ID
+	JobID        jobspb.JobID
+}
+
+// AddJobReference adds the reference to a job to the descriptor.
+type AddJobReference struct {
+	mutationOp
+	DescriptorID descpb.ID
+	JobID        jobspb.JobID
+}
+
+// CreateDeclarativeSchemaChangerJob constructs the job for the
+// declarative schema changer post-commit phases.
+type CreateDeclarativeSchemaChangerJob struct {
+	mutationOp
+	Record jobs.Record
+}
+
+// UpdateSchemaChangeJobProgress is used to update the progress of the schema
+// change job.
+type UpdateSchemaChangeJobProgress struct {
+	mutationOp
+	JobID    jobspb.JobID
+	Statuses []scpb.Status
 }
