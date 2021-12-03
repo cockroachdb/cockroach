@@ -306,7 +306,7 @@ func initTestProber(
 		Knobs:    knobs,
 	})
 	p := kvprober.NewProber(kvprober.Opts{
-		Tracer:                  tracing.NewTracer(),
+		Tracer:                  s.TracerI().(*tracing.Tracer),
 		DB:                      kvDB,
 		HistogramWindowInterval: time.Minute, // actual value not important to test
 		Settings:                s.ClusterSettings(),

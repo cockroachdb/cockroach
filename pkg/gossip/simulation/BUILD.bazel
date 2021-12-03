@@ -19,7 +19,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/netutil",
         "//pkg/util/stop",
-        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@org_golang_google_grpc//:go_default_library",
     ],
