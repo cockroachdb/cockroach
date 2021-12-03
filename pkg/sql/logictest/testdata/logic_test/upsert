@@ -1327,3 +1327,28 @@ SELECT * FROM generated_as_id_t ORDER BY a
 1  5  1
 2  2  2
 3  3  3
+
+subtest explicit_arbiter_indexes
+
+# Test explicitly specified arbiter indexes. Note that these are mostly tested
+# by optbuilder test cases, since they compile to the same outputs that inferred
+# arbiter indexes are.
+statement ok
+CREATE TABLE arbiter_index (a INT, b INT, c INT, PRIMARY KEY (a, b), UNIQUE (c))
+
+statement ok
+INSERT INTO arbiter_index VALUES (1,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_pkey DO NOTHING
+
+statement ok
+INSERT INTO arbiter_index VALUES(1,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_pkey DO NOTHING
+
+statement ok
+INSERT INTO arbiter_index VALUES(2,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_c_key DO UPDATE SET c=10
+
+query III
+SELECT * FROM arbiter_index
+----
+1  2  10

@@ -3467,3 +3467,159 @@ upsert generated_as_identity
       └── projections
            ├── CASE WHEN rowid:14 IS NULL THEN b_default:9 ELSE b:12 END [as=upsert_b:17]
            └── CASE WHEN rowid:14 IS NULL THEN rowid_default:10 ELSE rowid:14 END [as=upsert_rowid:18]
+
+# ------------------------------------------------------------------------------
+# Test ON CONSTRAINT arbiter index selection.
+# ------------------------------------------------------------------------------
+build
+INSERT INTO xyz (x, y)
+VALUES (1, 2)
+ON CONFLICT ON CONSTRAINT xyz_pkey DO
+UPDATE SET x=5
+----
+upsert xyz
+ ├── columns: <none>
+ ├── arbiter indexes: xyz_pkey
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── z_default:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_x:15 => x:1
+ └── project
+      ├── columns: upsert_x:15!null upsert_y:16 upsert_z:17 column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13 x_new:14!null
+      ├── project
+      │    ├── columns: x_new:14!null column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null z_default:8
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: z_default:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=z_default:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=z_default:8]
+      │    │    │              └── z_default:8
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── filters
+      │    │         └── column1:6 = x:9
+      │    └── projections
+      │         └── 5 [as=x_new:14]
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE x_new:14 END [as=upsert_x:15]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE y:10 END [as=upsert_y:16]
+           └── CASE WHEN x:9 IS NULL THEN z_default:8 ELSE z:11 END [as=upsert_z:17]
+
+build
+INSERT INTO xyz (x, y)
+VALUES (1, 2)
+ON CONFLICT ON CONSTRAINT xyz_y_z_key DO
+UPDATE SET x=5
+----
+upsert xyz
+ ├── columns: <none>
+ ├── arbiter indexes: xyz_y_z_key
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── z_default:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_x:15 => x:1
+ └── project
+      ├── columns: upsert_x:15!null upsert_y:16 upsert_z:17 column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13 x_new:14!null
+      ├── project
+      │    ├── columns: x_new:14!null column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null z_default:8
+      │    │    │    ├── grouping columns: column2:7!null z_default:8
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: z_default:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=z_default:8]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=column1:6]
+      │    │    │              └── column1:6
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── filters
+      │    │         ├── column2:7 = y:10
+      │    │         └── z_default:8 = z:11
+      │    └── projections
+      │         └── 5 [as=x_new:14]
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE x_new:14 END [as=upsert_x:15]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE y:10 END [as=upsert_y:16]
+           └── CASE WHEN x:9 IS NULL THEN z_default:8 ELSE z:11 END [as=upsert_z:17]
+
+build
+INSERT INTO xyz (x, y)
+VALUES (1, 2)
+ON CONFLICT ON CONSTRAINT xyz_z_y_key DO
+UPDATE SET x=5
+----
+upsert xyz
+ ├── columns: <none>
+ ├── arbiter indexes: xyz_z_y_key
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 z:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── z_default:8 => z:3
+ ├── update-mapping:
+ │    └── upsert_x:15 => x:1
+ └── project
+      ├── columns: upsert_x:15!null upsert_y:16 upsert_z:17 column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13 x_new:14!null
+      ├── project
+      │    ├── columns: x_new:14!null column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null z_default:8 x:9 y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null z_default:8
+      │    │    │    ├── grouping columns: column2:7!null z_default:8
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: z_default:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=z_default:8]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=column1:6]
+      │    │    │              └── column1:6
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:9!null y:10 z:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    └── filters
+      │    │         ├── column2:7 = y:10
+      │    │         └── z_default:8 = z:11
+      │    └── projections
+      │         └── 5 [as=x_new:14]
+      └── projections
+           ├── CASE WHEN x:9 IS NULL THEN column1:6 ELSE x_new:14 END [as=upsert_x:15]
+           ├── CASE WHEN x:9 IS NULL THEN column2:7 ELSE y:10 END [as=upsert_y:16]
+           └── CASE WHEN x:9 IS NULL THEN z_default:8 ELSE z:11 END [as=upsert_z:17]
+
+build
+INSERT INTO xyz (x, y)
+VALUES (1, 2)
+ON CONFLICT ON CONSTRAINT no_such_constraint DO
+UPDATE SET x=5
+----
+error (42704): constraint "no_such_constraint" for table "xyz" does not exist
