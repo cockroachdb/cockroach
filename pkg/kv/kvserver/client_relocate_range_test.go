@@ -508,9 +508,10 @@ func setupReplicaRemovalTest(
 			err  *roachpb.Error
 		}
 		resultC := make(chan result)
-		err := tc.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
+		srv := tc.Servers[0]
+		err := srv.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
 			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
-			resp, pErr := kv.SendWrapped(reqCtx, tc.Servers[0].DistSender(), req)
+			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSender(), req)
 			resultC <- result{resp, pErr}
 		})
 		require.NoError(t, err)
