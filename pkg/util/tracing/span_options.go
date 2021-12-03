@@ -158,7 +158,6 @@ type parentOption Span
 //   which makes this condition mostly encompass the previous one, however in
 //   theory there could be no-op spans other than the singleton one.
 //
-//
 // The child inherits the parent's log tags. The data collected in the
 // child trace will be retrieved automatically when the parent's data is
 // retrieved, meaning that the caller has no obligation (and in fact
@@ -175,7 +174,11 @@ type parentOption Span
 // wait for the child to Finish(). If this expectation does not hold,
 // WithFollowsFrom should be added to the StartSpan invocation.
 func WithParent(sp *Span) SpanOption {
-	if sp == nil || sp.IsNoop() || sp.IsSterile() {
+	// The sp.IsNoop() case is handled in StartSpan, not here, because we want to
+	// assert that the parent's Tracer is the same as the child's. In contrast, in
+	// the IsSterile() case, it is allowed for the "child" to be created with a
+	// different Tracer than the parent.
+	if sp == nil || sp.IsSterile() {
 		return (*parentOption)(nil)
 	}
 	return (*parentOption)(sp)
@@ -369,6 +372,10 @@ type withSterileOption struct{}
 
 // WithSterile configures the span to not permit any child spans. The would-be
 // children of a sterile span end up being root spans.
+//
+// Since WithParent(<sterile span>) is a noop, it is allowed to create children
+// of sterile span with any Tracer. This is unlike children of any other spans,
+// which must be created with the same Tracer as the parent.
 func WithSterile() SpanOption {
 	return withSterileOption{}
 }
