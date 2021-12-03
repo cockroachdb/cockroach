@@ -24,16 +24,30 @@ type Ops interface {
 	Slice() []Op
 }
 
+// ExtendOps takes an existing set of ops and additional ops of the same
+// kind and constructs a new ops with the added ops happening last.
+func ExtendOps(existing Ops, added ...Op) (_ Ops, err error) {
+	return makeOps(append(existing.Slice(), added...)...)
+}
+
 // MakeOps takes a slice of ops, ensures they are all of one kind, and then
 // returns an implementation of Ops corresponding to that type. The set of ops
 // must all be the same type, otherwise MakeOps will panic.
 func MakeOps(ops ...Op) Ops {
+	ret, err := makeOps(ops...)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+func makeOps(ops ...Op) (Ops, error) {
 	// The type of stage doesn't matter for nil ops.
 	// TODO: (fqazi) Inside planning we need to plan for *multiple* state
 	// transitions now that we can optimize out edges. Once that  is done this
 	// temporary workaround can be fully dropped.
 	if len(ops) == 0 {
-		return nil
+		return nil, nil
 	}
 	var typ Type
 	for i, op := range ops {
@@ -42,19 +56,19 @@ func MakeOps(ops ...Op) Ops {
 			continue
 		}
 		if op.Type() != typ {
-			panic(errors.Errorf(
-				"slice contains ops of type %s and %s", op.Type().String(), op))
+			return nil, errors.Errorf(
+				"slice contains ops of type %s and %s", op.Type().String(), op)
 		}
 	}
 	switch typ {
 	case MutationType:
-		return mutationOps(ops)
+		return mutationOps(ops), nil
 	case BackfillType:
-		return backfillOps(ops)
+		return backfillOps(ops), nil
 	case ValidationType:
-		return validationOps(ops)
+		return validationOps(ops), nil
 	default:
-		panic(errors.Errorf("unknown op type %s", typ.String()))
+		return nil, errors.Errorf("unknown op type %s", typ.String())
 	}
 }
 

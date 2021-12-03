@@ -28,27 +28,67 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// RunSchemaChangesInTxn executes in-transaction schema changes for the targeted
+// RunStatementPhase executes in-transaction schema changes for the targeted
 // state. These are the immediate changes which take place at DDL statement
 // execution time (scop.StatementPhase) or when executing COMMIT
 // (scop.PreCommitPhase), rather than the asynchronous changes which are done
 // by the schema changer job after the transaction commits.
-func RunSchemaChangesInTxn(
-	ctx context.Context, deps TxnRunDependencies, state scpb.State,
+func RunStatementPhase(
+	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.State,
+) (scpb.State, error) {
+	phase := scop.StatementPhase
+	return runTransactionPhase(ctx, knobs, deps, state, phase, nil)
+}
+
+func RunPreCommitPhase(
+	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.State,
+) (scpb.State, jobspb.JobID, error) {
+	var jobID jobspb.JobID
+	after, err := runTransactionPhase(ctx, knobs, deps, state, scop.PreCommitPhase, func(
+		stage *scplan.Stage,
+	) error {
+		var opsToAdd []scop.Op
+		jobID, opsToAdd = createSchemaChangeJobAndAddDescriptorJobReferenceOps(deps, stage.After, stage.Revertible)
+		newOps, err := scop.ExtendOps(stage.Ops, opsToAdd...)
+		if err != nil {
+			return err
+		}
+		stage.Ops = newOps
+		return nil
+	})
+	if err != nil {
+		return scpb.State{}, 0, err
+	}
+	return after, jobID, nil
+}
+
+func runTransactionPhase(
+	ctx context.Context,
+	knobs *TestingKnobs,
+	deps scexec.Dependencies,
+	state scpb.State,
+	phase scop.Phase,
+	augmentLastStage func(stage *scplan.Stage) error,
 ) (scpb.State, error) {
 	if len(state.Nodes) == 0 {
 		return scpb.State{}, nil
 	}
-	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: deps.Phase()})
+	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: phase})
 	if err != nil {
 		return scpb.State{}, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 	after := state
-	for i, s := range sc.StagesForCurrentPhase() {
-		if err := executeStage(ctx, deps, sc, i); err != nil {
+	stages := sc.StagesForCurrentPhase()
+	for i := range stages {
+		if i+1 == len(stages) && augmentLastStage != nil {
+			if err := augmentLastStage(&stages[i]); err != nil {
+				return scpb.State{}, errors.Wrap(err, "augmenting last stage")
+			}
+		}
+		if err := executeStage(ctx, knobs, deps, sc, i, stages[i]); err != nil {
 			return scpb.State{}, err
 		}
-		after = s.After
+		after = stages[i].After
 	}
 	if len(after.Nodes) == 0 {
 		return scpb.State{}, nil
@@ -56,17 +96,97 @@ func RunSchemaChangesInTxn(
 	return after, nil
 }
 
-// CreateSchemaChangeJob builds and enqueues a schema change job for the target
-// state at pre-COMMIT time. This also updates the affected descriptors with the
-// id of the created job, effectively locking them to prevent any other schema
-// changes concurrent to this job's execution.
-func CreateSchemaChangeJob(
-	ctx context.Context, deps SchemaChangeJobCreationDependencies, state scpb.State,
-) (jobspb.JobID, error) {
-	if len(state.Nodes) == 0 {
-		return jobspb.InvalidJobID, nil
+// RunSchemaChangesInJob contains the business logic for the Resume method of a
+// declarative schema change job, with the dependencies abstracted away.
+func RunSchemaChangesInJob(
+	ctx context.Context,
+	knobs *TestingKnobs,
+	settings *cluster.Settings,
+	deps JobRunDependencies,
+	jobID jobspb.JobID,
+	jobDescriptorIDs []descpb.ID,
+	jobDetails jobspb.NewSchemaChangeDetails,
+	jobProgress jobspb.NewSchemaChangeProgress,
+	rollback bool,
+) error {
+	state := makeState(ctx,
+		settings,
+		jobDetails.Targets,
+		jobProgress.States,
+		jobProgress.Statements,
+		jobProgress.Authorization,
+		rollback)
+	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
+	if err != nil {
+		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 
+	stages := sc.StagesForCurrentPhase()
+	if len(stages) == 0 {
+		// In the case where no stage exists, and therefore there's nothing to
+		// execute, we still need to open a transaction to remove all references to
+		// this schema change job from the descriptors.
+		return deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
+			return scexec.ExecuteStage(ctx, td,
+				scop.MakeOps(generateOpsToRemoveJobIDs(jobDescriptorIDs, jobID)...))
+		})
+	}
+
+	for i := range stages {
+		var opsToAdd []scop.Op
+		if isLastStage := i+1 == len(stages); isLastStage {
+			opsToAdd = generateOpsToRemoveJobIDs(jobDescriptorIDs, jobID)
+		}
+		opsToAdd = append(opsToAdd, generateUpdateJobProgressOp(jobID, stages[i].After))
+
+		isMutationStage := stages[i].Ops.Type() == scop.MutationType
+		if isMutationStage {
+			if err := extendStageOps(&stages[i], opsToAdd); err != nil {
+				return err
+			}
+		}
+		// Execute each stage in its own transaction.
+		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
+			return executeStage(ctx, knobs, td, sc, i, stages[i])
+		}); err != nil {
+			return err
+		}
+		if !isMutationStage {
+			if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
+				return scexec.ExecuteStage(ctx, td, scop.MakeOps(opsToAdd...))
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func executeStage(
+	ctx context.Context,
+	knobs *TestingKnobs,
+	deps scexec.Dependencies,
+	p scplan.Plan,
+	stageIdx int,
+	stage scplan.Stage,
+) error {
+	if knobs != nil && knobs.BeforeStage != nil {
+		if err := knobs.BeforeStage(p, stageIdx); err != nil {
+			return err
+		}
+	}
+	err := scexec.ExecuteStage(ctx, deps, stage.Ops)
+	if err != nil {
+		err = errors.Wrapf(err, "error executing %s", stage.String())
+		return scgraphviz.DecorateErrorWithPlanDetails(err, p)
+	}
+	return nil
+}
+
+func createSchemaChangeJobAndAddDescriptorJobReferenceOps(
+	deps scexec.Dependencies, state scpb.State, revertible bool,
+) (_ jobspb.JobID, opsToAdd []scop.Op) {
 	targets := make([]*scpb.Target, len(state.Nodes))
 	states := make([]scpb.Status, len(state.Nodes))
 	// TODO(ajwerner): It may be better in the future to have the builder be
@@ -86,7 +206,9 @@ func CreateSchemaChangeJob(
 		}
 	}
 	descIDs := descIDSet.Ordered()
-	jobID, err := deps.TransactionalJobCreator().CreateJob(ctx, jobs.Record{
+	jobID := deps.TransactionalJobCreator().MakeJobID()
+	record := jobs.Record{
+		JobID:         jobID,
 		Description:   "Schema change job", // TODO(ajwerner): use const
 		Statements:    deps.Statements(),
 		Username:      deps.User(),
@@ -98,82 +220,51 @@ func CreateSchemaChangeJob(
 			Statements:    state.Statements,
 		},
 		RunningStatus: "",
-		NonCancelable: false,
+		NonCancelable: !revertible,
+	}
+	opsToAdd = append(opsToAdd, scop.CreateDeclarativeSchemaChangerJob{
+		Record: record,
 	})
-	if err != nil {
-		return jobspb.InvalidJobID, err
-	}
-	// Write the job ID to the affected descriptors.
-	if err := scexec.UpdateDescriptorJobIDs(
-		ctx,
-		deps.Catalog(),
-		descIDs,
-		jobspb.InvalidJobID,
-		jobID,
-	); err != nil {
-		return jobID, err
-	}
-	return jobID, nil
+	opsToAdd = append(opsToAdd, generateOpsToAddJobIDs(descIDs, jobID)...)
+	return jobID, opsToAdd
 }
 
-// RunSchemaChangesInJob contains the business logic for the Resume method of a
-// declarative schema change job, with the dependencies abstracted away.
-func RunSchemaChangesInJob(
-	ctx context.Context,
-	deps JobRunDependencies,
-	jobID jobspb.JobID,
-	jobDescriptorIDs []descpb.ID,
-	jobDetails jobspb.NewSchemaChangeDetails,
-	jobProgress jobspb.NewSchemaChangeProgress,
-	rollback bool,
-) error {
-	state := makeState(ctx,
-		deps.ClusterSettings(),
-		jobDetails.Targets,
-		jobProgress.States,
-		jobProgress.Statements,
-		jobProgress.Authorization,
-		rollback)
-	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
+func extendStageOps(stage *scplan.Stage, opsToAdd []scop.Op) error {
+	newOps, err := scop.ExtendOps(stage.Ops, opsToAdd...)
 	if err != nil {
-		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
+		return err
 	}
-
-	stages := sc.StagesForCurrentPhase()
-	if len(stages) == 0 {
-		// In the case where no stage exists, and therefore there's nothing to
-		// execute, we still need to open a transaction to remove all references to
-		// this schema change job from the descriptors.
-		return deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
-			c := td.ExecutorDependencies().Catalog()
-			return scexec.UpdateDescriptorJobIDs(ctx, c, jobDescriptorIDs, jobID, jobspb.InvalidJobID)
-		})
-	}
-
-	for i, stage := range stages {
-		isLastStage := i == len(stages)-1
-		// Execute each stage in its own transaction.
-		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
-			if err := executeStage(ctx, td, sc, i); err != nil {
-				return err
-			}
-			if err := td.UpdateState(ctx, stage.After); err != nil {
-				return err
-			}
-			if isLastStage {
-				// Remove the reference to this schema change job from all affected
-				// descriptors in the transaction executing the last stage.
-				return scexec.UpdateDescriptorJobIDs(
-					ctx, td.ExecutorDependencies().Catalog(), jobDescriptorIDs, jobID, jobspb.InvalidJobID,
-				)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-
+	stage.Ops = newOps
 	return nil
+}
+
+func generateUpdateJobProgressOp(id jobspb.JobID, after scpb.State) scop.Op {
+	return scop.UpdateJobProgress{
+		JobID:    id,
+		Statuses: after.Statuses(),
+	}
+}
+
+func generateOpsToRemoveJobIDs(descIDs []descpb.ID, jobID jobspb.JobID) []scop.Op {
+	return generateOpsForJobIDs(descIDs, jobID, func(descID descpb.ID, id jobspb.JobID) scop.Op {
+		return scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
+	})
+}
+
+func generateOpsToAddJobIDs(descIDs []descpb.ID, jobID jobspb.JobID) []scop.Op {
+	return generateOpsForJobIDs(descIDs, jobID, func(descID descpb.ID, id jobspb.JobID) scop.Op {
+		return scop.AddJobReference{DescriptorID: descID, JobID: jobID}
+	})
+}
+
+func generateOpsForJobIDs(
+	descIDs []descpb.ID, jobID jobspb.JobID, f func(descID descpb.ID, id jobspb.JobID) scop.Op,
+) []scop.Op {
+	ops := make([]scop.Op, len(descIDs))
+	for i, descID := range descIDs {
+		ops[i] = f(descID, jobID)
+	}
+	return ops
 }
 
 func makeState(
@@ -209,19 +300,4 @@ func makeState(
 		}
 	}
 	return ts
-}
-
-func executeStage(ctx context.Context, deps TxnRunDependencies, p scplan.Plan, stageIdx int) error {
-	if knobs := deps.TestingKnobs(); knobs != nil && knobs.BeforeStage != nil {
-		if err := knobs.BeforeStage(p, stageIdx); err != nil {
-			return err
-		}
-	}
-	stage := p.StagesForCurrentPhase()[stageIdx]
-	err := scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), stage.Ops)
-	if err != nil {
-		err = errors.Wrapf(err, "Error executing %s", stage.String())
-		return scgraphviz.DecorateErrorWithPlanDetails(err, p)
-	}
-	return nil
 }

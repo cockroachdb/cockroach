@@ -126,16 +126,14 @@ func execStatementWithTestDeps(
 		// Run statement phase.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		state, err = scrun.RunSchemaChangesInTxn(ctx, s, state)
+		state, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
 		require.NoError(t, err, "error in %s", s.Phase())
 		deps.LogSideEffectf("# end %s", deps.Phase())
 		// Run pre-commit phase.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		state, err = scrun.RunSchemaChangesInTxn(ctx, s, state)
+		state, jobID, err = scrun.RunPreCommitPhase(ctx, s.TestingKnobs(), s, state)
 		require.NoError(t, err, "error in %s", s.Phase())
-		jobID, err = scrun.CreateSchemaChangeJob(ctx, s, state)
-		require.NoError(t, err, "error in mock schema change job creation")
 		deps.LogSideEffectf("# end %s", deps.Phase())
 	})
 
@@ -147,7 +145,7 @@ func execStatementWithTestDeps(
 		progress := job.Progress.(jobspb.NewSchemaChangeProgress)
 		const rollback = false
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps, jobID, job.DescriptorIDs, details, progress, rollback,
+			ctx, deps.TestingKnobs(), deps.ClusterSettings(), deps, jobID, job.DescriptorIDs, details, progress, rollback,
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())
