@@ -673,3 +673,21 @@ span: test
 	rec2 := getRecAndFinish()
 	require.Equal(t, rec1, rec2)
 }
+
+func TestChildNeedsSameTracerAsParent(t *testing.T) {
+	// Check that it is illegal to create a child with a different Tracer than the
+	// parent.
+	tr1 := NewTracer()
+	tr2 := NewTracer()
+	parent := tr1.StartSpan("parent")
+	require.Panics(t, func() {
+		tr2.StartSpan("child", WithParent(parent))
+	})
+
+	// Sterile spans can have children created with a different Tracer (because
+	// they are not really children).
+	parent = tr1.StartSpan("parent", WithSterile())
+	require.NotPanics(t, func() {
+		tr2.StartSpan("child", WithParent(parent))
+	})
+}
