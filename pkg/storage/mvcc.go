@@ -1352,8 +1352,20 @@ func replayTransactionalWrite(
 		writtenValue, found = meta.GetIntentValue(txn.Sequence)
 	}
 	if !found {
-		return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
+		// NB: This error may be due to a batched `DelRange` operation that, upon being replayed, finds a new key to delete.
+		// See issue #71236 for more explanation.
+		err := errors.AssertionFailedf("transaction %s with sequence %d missing an intent with lower sequence %d",
 			txn.ID, meta.Txn.Sequence, txn.Sequence)
+		errWithIssue := errors.WithIssueLink(err,
+			errors.IssueLink{
+				IssueURL: "https://github.com/cockroachdb/cockroach/issues/71236",
+				Detail: "This error may be caused by `DelRange` operation in a batch that also contains a " +
+					"write on an intersecting key, as in the case the other write hits a `WriteTooOld` " +
+					"error, it is possible for the `DelRange` operation to pick up a new key to delete on " +
+					"replay, which will cause sanity checks of intent history to fail as the first iteration " +
+					"of the operation would not have placed an intent on this new key.",
+			})
+		return errWithIssue
 	}
 
 	// If the valueFn is specified, we must apply it to the would-be value at the key.
@@ -1391,7 +1403,7 @@ func replayTransactionalWrite(
 	// calculated value on this replay is the same as the one we've previously
 	// written.
 	if !bytes.Equal(value, writtenValue) {
-		return errors.Errorf("transaction %s with sequence %d has a different value %+v after recomputing from what was written: %+v",
+		return errors.AssertionFailedf("transaction %s with sequence %d has a different value %+v after recomputing from what was written: %+v",
 			txn.ID, txn.Sequence, value, writtenValue)
 	}
 	return nil
