@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build/util",
+        "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
     ],
