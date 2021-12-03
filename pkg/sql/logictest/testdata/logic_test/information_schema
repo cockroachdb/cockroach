@@ -4794,3 +4794,20 @@ SELECT distinct is_identity FROM information_schema.columns
 is_identity
 NO
 YES
+
+statement ok
+SET DATABASE = test
+
+# Regression test for #70505. Inaccessible columns should not be included in
+# information_schema.columns.
+subtest regression_70505
+
+statement ok
+CREATE TABLE t70505 (k INT PRIMARY KEY, a INT, b INT, INDEX ((a + b), (a + 10)))
+
+query T rowsort
+SELECT column_name FROM information_schema.columns WHERE table_name = 't70505'
+----
+k
+a
+b

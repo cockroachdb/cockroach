@@ -27,6 +27,17 @@ CREATE TABLE public.t (
    FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
 
+query TTBTTTB colnames
+SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices                                         is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}                                        false
+b            INT8       true         NULL            ·                      {t_pkey}                                        false
+c            STRING     true         NULL            ·                      {t_pkey}                                        false
+comp         INT8       true         NULL            a + 10                 {}                                              false
+j            JSONB      true         NULL            ·                      {t_pkey}                                        false
+k            INT8       false        NULL            ·                      {t_a_plus_b_idx,t_lower_c_a_plus_b_idx,t_pkey}  false
+
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr\" is inaccessible and cannot be referenced
 CREATE TABLE err (a INT, INDEX ((a + 10)), CHECK (crdb_internal_idx_expr > 0))
