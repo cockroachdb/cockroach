@@ -37,6 +37,9 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
+// providerInstance is the instance to be registered into vm.Providers by Init.
+var providerInstance = &Provider{}
+
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
 // If the aws tool is not available on the local path, the provider is a stub.
@@ -50,7 +53,9 @@ func Init() {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	var p vm.Provider = &Provider{opts: DefaultProviderOpts()}
+	configVal := awsConfigValue{awsConfig: *defaultConfig}
+	providerInstance.Config = &configVal.awsConfig
+	providerInstance.IAMProfile = "roachprod-testing"
 
 	haveRequiredVersion := func() bool {
 		cmd := exec.Command("aws", "--version")
@@ -64,8 +69,7 @@ func Init() {
 		return true
 	}
 	if !haveRequiredVersion() {
-		p = flagstub.New(p, unimplemented)
-		vm.Providers[ProviderName] = p
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
 		return
 	}
 
@@ -82,12 +86,10 @@ func Init() {
 		return false
 	}
 	if !haveCredentials() {
-		p = flagstub.New(p, noCredentials)
-		vm.Providers[ProviderName] = p
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, noCredentials)
 		return
 	}
-
-	vm.Providers[ProviderName] = p
+	vm.Providers[ProviderName] = providerInstance
 }
 
 // ebsDisk represent EBS disk device.
@@ -189,28 +191,26 @@ func (vl *ebsVolumeList) String() string {
 }
 
 // DefaultProviderOpts returns a new aws.ProviderOpts with default values set.
-func DefaultProviderOpts() ProviderOpts {
-	configVal := awsConfigValue{awsConfig: *defaultConfig}
+func DefaultProviderOpts() *ProviderOpts {
 	defaultEBSVolumeValue := ebsVolume{}
 	defaultEBSVolumeValue.Disk.VolumeSize = ebsDefaultVolumeSizeGB
 	defaultEBSVolumeValue.Disk.VolumeType = defaultEBSVolumeType
-	return ProviderOpts{
-		Profile:          os.Getenv("AWS_DEFAULT_PROFILE"), // "" if unset
-		Config:           &configVal.awsConfig,
+	return &ProviderOpts{
 		MachineType:      "m5.xlarge",
 		SSDMachineType:   "m5d.xlarge",
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
-		IAMProfile:       "roachprod-testing",
 		CreateRateLimit:  2,
 	}
 }
 
+// CreateProviderOpts returns a new aws.ProviderOpts with default values set.
+func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
+	return DefaultProviderOpts()
+}
+
 // ProviderOpts provides user-configurable, aws-specific create options.
 type ProviderOpts struct {
-	Profile string
-	Config  *awsConfig
-
 	MachineType      string
 	SSDMachineType   string
 	CPUOptions       string
@@ -223,10 +223,6 @@ type ProviderOpts struct {
 	// Overrides config.json AMI.
 	ImageAMI string
 
-	// IAMProfile designates the name of the instance profile to use for created
-	// EC2 instances if non-empty.
-	IAMProfile string
-
 	// CreateZones stores the list of zones for used cluster creation.
 	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
@@ -236,6 +232,19 @@ type ProviderOpts struct {
 	// The request limit from aws' side can vary across regions, as well as the
 	// size of cluster being created.
 	CreateRateLimit float64
+}
+
+// Provider implements the vm.Provider interface for AWS.
+type Provider struct {
+	// Profile to manage cluster in
+	Profile string
+
+	// Path to json for aws configuration, defaults to predefined configuration
+	Config *awsConfig
+
+	// IAMProfile designates the name of the instance profile to use for created
+	// EC2 instances if non-empty.
+	IAMProfile string
 }
 
 const (
@@ -260,7 +269,7 @@ var defaultCreateZones = []string{
 	"eu-west-2b",
 }
 
-// ConfigureCreateFlags is part of the vm.ProviderFlags interface.
+// ConfigureCreateFlags is part of the vm.ProviderOpts interface.
 // This method sets up a lot of maps between the various EC2
 // regions and the ids of the things we want to use there.  This is
 // somewhat complicated because different EC2 regions may as well
@@ -309,32 +318,19 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
 		" limits from aws, which can vary based on the region, and the size of the cluster being"+
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
-	flags.StringVar(&o.IAMProfile, ProviderName+"-	iam-profile", o.IAMProfile,
+	flags.StringVar(&providerInstance.IAMProfile, ProviderName+"-	iam-profile", providerInstance.IAMProfile,
 		"the IAM instance profile to associate with created VMs if non-empty")
 
 }
 
-// ConfigureClusterFlags implements vm.ProviderFlags.
+// ConfigureClusterFlags implements vm.ProviderOpts.
 func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
-	flags.StringVar(&o.Profile, ProviderName+"-profile", o.Profile,
+	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", providerInstance.Profile,
 		"Profile to manage cluster in")
 	configFlagVal := awsConfigValue{awsConfig: *defaultConfig}
-	o.Config = &configFlagVal.awsConfig
+	providerInstance.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
 		"Path to json for aws configuration, defaults to predefined configuration")
-}
-
-// ConfigureProviderOpts implements vm.ProviderFlags.
-// Usage: create a new struct with default values using DefaultProviderOpts()
-// and update its values then pass it to ConfigureProviderOpts().
-func (o *ProviderOpts) ConfigureProviderOpts(updatedOpts interface{}) {
-	// cast interface to ProviderOpts before assisgning
-	*o = updatedOpts.(ProviderOpts)
-}
-
-// Provider implements the vm.Provider interface for AWS.
-type Provider struct {
-	opts ProviderOpts
 }
 
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,
@@ -355,7 +351,7 @@ func (p *Provider) ConfigSSH() error {
 		return err
 	}
 
-	regions, err := p.allRegions(p.opts.Config.availabilityZoneNames())
+	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return err
 	}
@@ -385,13 +381,16 @@ func (p *Provider) ConfigSSH() error {
 }
 
 // Create is part of the vm.Provider interface.
-func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
+func (p *Provider) Create(
+	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+) error {
+	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// We need to make sure that the SSH keys have been distributed to all regions
 	if err := p.ConfigSSH(); err != nil {
 		return err
 	}
 
-	expandedZones, err := vm.ExpandZonesFlag(p.opts.CreateZones)
+	expandedZones, err := vm.ExpandZonesFlag(providerOpts.CreateZones)
 	if err != nil {
 		return err
 	}
@@ -431,20 +430,20 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	var g errgroup.Group
-	limiter := rate.NewLimiter(rate.Limit(p.opts.CreateRateLimit), 2 /* buckets */)
+	limiter := rate.NewLimiter(rate.Limit(providerOpts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
 		capName := names[i]
 		placement := zones[i]
 		res := limiter.Reserve()
 		g.Go(func() error {
 			time.Sleep(res.Delay())
-			return p.runInstance(capName, placement, opts)
+			return p.runInstance(capName, placement, opts, providerOpts)
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	return p.waitForIPs(names, regions)
+	return p.waitForIPs(names, regions, providerOpts)
 }
 
 // waitForIPs waits until AWS reports both internal and external IP addresses
@@ -452,7 +451,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 // list the new VMs after the creation might find VMs without an external IP.
 // We do a bad job at higher layers detecting this lack of IP which can lead to
 // commands hanging indefinitely.
-func (p *Provider) waitForIPs(names []string, regions []string) error {
+func (p *Provider) waitForIPs(names []string, regions []string, opts *ProviderOpts) error {
 	waitForIPRetry := retry.Start(retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
@@ -466,7 +465,7 @@ func (p *Provider) waitForIPs(names []string, regions []string) error {
 		return m
 	}
 	for waitForIPRetry.Next() {
-		vms, err := p.listRegions(regions)
+		vms, err := p.listRegions(regions, *opts)
 		if err != nil {
 			return err
 		}
@@ -556,7 +555,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 	}
 	var account string
 	var err error
-	if p.opts.Profile == "" {
+	if p.Profile == "" {
 		account, err = p.iamGetUser()
 		if err != nil {
 			return "", err
@@ -607,21 +606,17 @@ func (p *Provider) stsGetCallerIdentity() (string, error) {
 	return s[1], nil
 }
 
-// Flags is part of the vm.Provider interface.
-func (p *Provider) Flags() vm.ProviderFlags {
-	return &p.opts
-}
-
 // List is part of the vm.Provider interface.
 func (p *Provider) List() (vm.List, error) {
-	regions, err := p.allRegions(p.opts.Config.availabilityZoneNames())
+	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
-	return p.listRegions(regions)
+	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
+	return p.listRegions(regions, *defaultOpts)
 }
 
-func (p *Provider) listRegions(regions []string) (vm.List, error) {
+func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
 	var g errgroup.Group
@@ -630,7 +625,7 @@ func (p *Provider) listRegions(regions []string) (vm.List, error) {
 		// capture loop variable
 		region := r
 		g.Go(func() error {
-			vms, err := p.listRegion(region)
+			vms, err := p.listRegion(region, opts)
 			if err != nil {
 				return err
 			}
@@ -658,7 +653,7 @@ func (p *Provider) Name() string {
 func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 	byName := make(map[string]struct{})
 	for _, z := range zones {
-		az := p.opts.Config.getAvailabilityZone(z)
+		az := p.Config.getAvailabilityZone(z)
 		if az == nil {
 			return nil, fmt.Errorf("unknown availability zone %v, please provide a "+
 				"correct value or update your config accordingly", z)
@@ -674,7 +669,7 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 // regionZones returns all AWS availability zones which have been correctly
 // configured within the given region.
 func (p *Provider) regionZones(region string, allZones []string) (zones []string, _ error) {
-	r := p.opts.Config.getRegion(region)
+	r := p.Config.getRegion(region)
 	if r == nil {
 		return nil, fmt.Errorf("region %s not found", region)
 	}
@@ -691,7 +686,7 @@ func (p *Provider) regionZones(region string, allZones []string) (zones []string
 
 // listRegion extracts the roachprod-managed instances in the
 // given region.
-func (p *Provider) listRegion(region string) (vm.List, error) {
+func (p *Provider) listRegion(region string, opts ProviderOpts) (vm.List, error) {
 	var data struct {
 		Reservations []struct {
 			Instances []struct {
@@ -774,7 +769,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				Provider:    ProviderName,
 				ProviderID:  in.InstanceID,
 				PublicIP:    in.PublicIPAddress,
-				RemoteUser:  p.opts.RemoteUserName,
+				RemoteUser:  opts.RemoteUserName,
 				VPC:         in.VpcID,
 				MachineType: in.InstanceType,
 				Zone:        in.Placement.AvailabilityZone,
@@ -792,28 +787,30 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 // Given that every AWS region may as well be a parallel dimension,
 // we need to do a bit of work to look up all of the various ids that
 // we need in order to actually allocate an instance.
-func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) error {
+func (p *Provider) runInstance(
+	name string, zone string, opts vm.CreateOpts, providerOpts *ProviderOpts,
+) error {
 	// There exist different flags to control the machine type when ssd is true.
 	// This enables sane defaults for either setting but the behavior can be
 	// confusing when a user attempts to use `--aws-machine-type` and the command
 	// succeeds but the flag is ignored. Rather than permit this behavior we
 	// return an error instructing the user to use the other flag.
 	if opts.SSDOpts.UseLocalSSD &&
-		p.opts.MachineType != defaultMachineType &&
-		p.opts.SSDMachineType == defaultSSDMachineType {
+		providerOpts.MachineType != defaultMachineType &&
+		providerOpts.SSDMachineType == defaultSSDMachineType {
 		return errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
 			"machine type when --local-ssd=true")
 	} else if !opts.SSDOpts.UseLocalSSD &&
-		p.opts.MachineType == defaultMachineType &&
-		p.opts.SSDMachineType != defaultSSDMachineType {
+		providerOpts.MachineType == defaultMachineType &&
+		providerOpts.SSDMachineType != defaultSSDMachineType {
 		return errors.Errorf("use the --aws-machine-type flag to set the " +
 			"machine type when --local-ssd=false")
 	}
 
-	az, ok := p.opts.Config.azByName[zone]
+	az, ok := p.Config.azByName[zone]
 	if !ok {
 		return fmt.Errorf("no region in %v corresponds to availability zone %v",
-			p.opts.Config.regionNames(), zone)
+			p.Config.regionNames(), zone)
 	}
 
 	keyName, err := p.sshKeyName()
@@ -823,12 +820,12 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 
 	var machineType string
 	if opts.SSDOpts.UseLocalSSD {
-		machineType = p.opts.SSDMachineType
+		machineType = providerOpts.SSDMachineType
 	} else {
-		machineType = p.opts.MachineType
+		machineType = providerOpts.MachineType
 	}
 
-	cpuOptions := p.opts.CPUOptions
+	cpuOptions := providerOpts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
 	// all of our metadata into the tagSpec.
@@ -878,7 +875,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(extraMountOpts, p.opts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleDisks)
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -898,7 +895,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--associate-public-ip-address",
 		"--count", "1",
 		"--instance-type", machineType,
-		"--image-id", withFlagOverride(az.region.AMI, &p.opts.ImageAMI),
+		"--image-id", withFlagOverride(az.region.AMI, &providerOpts.ImageAMI),
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
@@ -911,23 +908,23 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		args = append(args, "--cpu-options", cpuOptions)
 	}
 
-	if p.opts.IAMProfile != "" {
-		args = append(args, "--iam-instance-profile", "Name="+p.opts.IAMProfile)
+	if p.IAMProfile != "" {
+		args = append(args, "--iam-instance-profile", "Name="+p.IAMProfile)
 	}
 
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
-		if len(p.opts.EBSVolumes) == 0 && p.opts.DefaultEBSVolume.Disk.VolumeType == "" {
-			p.opts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
-			p.opts.DefaultEBSVolume.Disk.DeleteOnTermination = true
+		if len(providerOpts.EBSVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
+			providerOpts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
+			providerOpts.DefaultEBSVolume.Disk.DeleteOnTermination = true
 		}
 
-		if p.opts.DefaultEBSVolume.Disk.VolumeType != "" {
+		if providerOpts.DefaultEBSVolume.Disk.VolumeType != "" {
 			// Add default volume to the list of volumes we'll setup.
-			v := p.opts.EBSVolumes.newVolume()
-			v.Disk = p.opts.DefaultEBSVolume.Disk
+			v := providerOpts.EBSVolumes.newVolume()
+			v.Disk = providerOpts.DefaultEBSVolume.Disk
 			v.Disk.DeleteOnTermination = true
-			p.opts.EBSVolumes = append(p.opts.EBSVolumes, v)
+			providerOpts.EBSVolumes = append(providerOpts.EBSVolumes, v)
 		}
 	}
 
@@ -939,9 +936,9 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			DeleteOnTermination: true,
 		},
 	}
-	p.opts.EBSVolumes = append(p.opts.EBSVolumes, osDiskVolume)
+	providerOpts.EBSVolumes = append(providerOpts.EBSVolumes, osDiskVolume)
 
-	mapping, err := json.Marshal(p.opts.EBSVolumes)
+	mapping, err := json.Marshal(providerOpts.EBSVolumes)
 	if err != nil {
 		return err
 	}
@@ -958,7 +955,6 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--block-device-mapping",
 		"file://"+deviceMapping.Name(),
 	)
-
 	return p.runJSONCommand(args, &data)
 }
 

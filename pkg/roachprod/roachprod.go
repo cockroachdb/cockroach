@@ -1062,7 +1062,12 @@ func cleanupFailedCreate(clusterName string) error {
 }
 
 // Create TODO
-func Create(username string, numNodes int, createVMOpts vm.CreateOpts) (retErr error) {
+func Create(
+	username string,
+	numNodes int,
+	createVMOpts vm.CreateOpts,
+	providerOptsContainer vm.ProviderOptionsContainer,
+) (retErr error) {
 	if err := LoadClusters(); err != nil {
 		return errors.Wrap(err, "problem loading clusters")
 	}
@@ -1118,7 +1123,7 @@ func Create(username string, numNodes int, createVMOpts vm.CreateOpts) (retErr e
 	}
 
 	fmt.Printf("Creating cluster %s with %d nodes\n", clusterName, numNodes)
-	if createErr := cloud.CreateCluster(numNodes, createVMOpts); createErr != nil {
+	if createErr := cloud.CreateCluster(numNodes, createVMOpts, providerOptsContainer); createErr != nil {
 		return createErr
 	}
 
