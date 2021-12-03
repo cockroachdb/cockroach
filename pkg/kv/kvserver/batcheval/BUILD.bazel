@@ -126,6 +126,7 @@ go_test(
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/gc",
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/readsummary",
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/kv/kvserver/spanset",

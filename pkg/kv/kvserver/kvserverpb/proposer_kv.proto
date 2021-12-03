@@ -164,10 +164,22 @@ message ReplicatedEvalResult {
   // since these Ranges are not user-visible, but it is a general concern assuming
   // other such side effects are added.
   message AddSSTable {
-    option (gogoproto.equal) = true;
-
     bytes data = 1;
     uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
+    roachpb.Span span = 3 [(gogoproto.nullable) = false];
+    // If true, all SST MVCC timestamps equal the WriteTimestamp. This is given
+    // by the WriteAtRequestTimestamp request parameter, which was introduced in
+    // 22.1 and only used with the MVCCAddSSTable cluster version.
+    //
+    // TODO(erikgrinaker): This field currently controls whether to emit an
+    // AddSSTable event across the rangefeed. We could equivalently check
+    // MVCCHistoryMutation == nil, but that field was introduced in 22.1,
+    // and so for log entries written by 21.2 or older it will always be nil.
+    // It may be possible to remove this field and check MVCCHistoryMutation
+    // instead in 22.2, but _ONLY_ if a below-Raft cluster migration has also
+    // taken place since 22.1, to make sure all Raft log entries from 21.2 or
+    // older have been applied on all replicas.
+    bool at_write_timestamp = 4;
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
