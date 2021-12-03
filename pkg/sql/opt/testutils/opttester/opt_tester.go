@@ -301,6 +301,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the lowest cost tree.
 //
+//  - assign-placeholders-build query-args=(...)
+//
+//    Builds a query that has placeholders (with normalization disabled), then
+//    assigns placeholders to the given query arguments. Normalization rules are
+//    disabled when assigning placeholders.
+//
 //  - assign-placeholders-norm query-args=(...)
 //
 //    Builds a query that has placeholders (with normalization enabled), then
@@ -571,9 +577,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)
 
-	case "assign-placeholders-norm", "assign-placeholders-opt":
+	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
 		explore := d.Cmd == "assign-placeholders-opt"
-		e, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, explore)
+		normalize := explore || d.Cmd == "assign-placeholders-norm"
+		e, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, normalize, explore)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -1096,8 +1103,21 @@ func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.
 // placeholders to the given argument values, and optionally runs exploration.
 //
 // The arguments are parsed as SQL expressions.
-func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.Expr, error) {
+func (ot *OptTester) AssignPlaceholders(
+	queryArgs []string, normalize, explore bool,
+) (opt.Expr, error) {
+	maybeDisableRule := func(ruleName opt.RuleName) bool {
+		if !normalize && ruleName.IsNormalize() {
+			return false
+		}
+		if !explore && ruleName.IsExplore() {
+			return false
+		}
+		return true
+	}
+
 	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	// Build the prepared memo. Note that placeholders don't have values yet, so
 	// they won't be replaced.
@@ -1142,15 +1162,7 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 	ot.appliedRules = RuleSet{}
 	// Now assign placeholders.
 	o = ot.makeOptimizer()
-	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
-		if !explore && !ruleName.IsNormalize() {
-			return false
-		}
-		if ot.Flags.DisableRules.Contains(int(ruleName)) {
-			return false
-		}
-		return true
-	})
+	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	o.Factory().FoldingControl().AllowStableFolds()
 	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
