@@ -5,11 +5,15 @@ go_library(
     srcs = [
         "atomic.go",
         "int_map.go",
+        "mutex_deadlock.go",  # keep
         "mutex_sync.go",
         "mutex_sync_race.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil",
     visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_sasha_s_go_deadlock//:go-deadlock",  # keep
+    ],
 )
 
 go_test(
