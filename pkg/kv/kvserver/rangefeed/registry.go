@@ -159,6 +159,16 @@ func (r *registration) validateEvent(event *roachpb.RangeFeedEvent) {
 		if t.Span.Key == nil {
 			panic(fmt.Sprintf("unexpected empty RangeFeedCheckpoint.Span.Key: %v", t))
 		}
+	case *roachpb.RangeFeedSSTable:
+		if len(t.Data) == 0 {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Data: %v", t))
+		}
+		if len(t.Span.Key) == 0 {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Span: %v", t))
+		}
+		if t.WriteTS.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Timestamp: %v", t))
+		}
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
@@ -205,6 +215,9 @@ func (r *registration) maybeStripEvent(event *roachpb.RangeFeedEvent) *roachpb.R
 			t = copyOnWrite().(*roachpb.RangeFeedCheckpoint)
 			t.Span = r.span
 		}
+	case *roachpb.RangeFeedSSTable:
+		// SSTs are always sent in their entirety, it is up to the caller to
+		// filter out irrelevant entries.
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
@@ -373,9 +386,9 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 	var minTS hlc.Timestamp
 	switch t := event.GetValue().(type) {
 	case *roachpb.RangeFeedValue:
-		// Only publish values to registrations with starting
-		// timestamps equal to or greater than the value's timestamp.
 		minTS = t.Value.Timestamp
+	case *roachpb.RangeFeedSSTable:
+		minTS = t.WriteTS
 	case *roachpb.RangeFeedCheckpoint:
 		// Always publish checkpoint notifications, regardless of a registration's
 		// starting timestamp.

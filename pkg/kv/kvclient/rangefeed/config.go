@@ -34,6 +34,7 @@ type config struct {
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
+	onSSTable            OnSSTable
 	extraPProfLabels     []string
 }
 
@@ -131,6 +132,31 @@ type OnCheckpoint func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpo
 func WithOnCheckpoint(f OnCheckpoint) Option {
 	return optionFunc(func(c *config) {
 		c.onCheckpoint = f
+	})
+}
+
+// OnSSTable is called when an SSTable is ingested. If this callback is not
+// provided, a catchup scan will be run instead that will include the contents
+// of these SSTs.
+//
+// Note that the SST is emitted as it was ingested, so it may contain keys
+// outside of the rangefeed span, and the caller should prune the SST contents
+// as appropriate. Futhermore, these events do not contain previous values as
+// requested by WithDiff, and callers must obtain these themselves if needed.
+//
+// Also note that AddSSTable requests that do not set the
+// WriteAtRequestTimestamp flag, possibly writing below the closed timestamp,
+// will cause affected rangefeeds to be disconnected with a terminal
+// MVCCHistoryMutationError and thus will not be emitted here -- there should be
+// no such requests into spans with rangefeeds across them, but it is up to
+// callers to ensure this.
+type OnSSTable func(ctx context.Context, sst *roachpb.RangeFeedSSTable)
+
+// WithOnSSTable sets up a callback that's invoked whenever an SSTable is
+// ingested.
+func WithOnSSTable(f OnSSTable) Option {
+	return optionFunc(func(c *config) {
+		c.onSSTable = f
 	})
 }
 

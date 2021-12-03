@@ -93,6 +93,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/sstutil",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",

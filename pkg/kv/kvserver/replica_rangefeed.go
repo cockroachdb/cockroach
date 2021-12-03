@@ -627,6 +627,28 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 }
 
+// handleSSTableRaftMuLocked emits an ingested SSTable from AddSSTable via the
+// rangefeed. These can be expected to have timestamps at the write timestamp
+// (i.e. submitted with WriteAtRequestTimestamp) since we assert elsewhere that
+// MVCCHistoryMutation commands disconnect rangefeeds.
+//
+// NB: We currently don't have memory budgeting for rangefeeds, instead using a
+// large buffered channel, so this can easily OOM the node. This is "fine" for
+// now, since we do not currently expect AddSSTable across spans with
+// rangefeeds, but must be added before we start publishing SSTables in earnest.
+// See: https://github.com/cockroachdb/cockroach/issues/73616
+func (r *Replica) handleSSTableRaftMuLocked(
+	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
+) {
+	p, _ := r.getRangefeedProcessorAndFilter()
+	if p == nil {
+		return
+	}
+	if !p.ConsumeSSTable(sst, sstSpan, writeTS) {
+		r.unsetRangefeedProcessor(p)
+	}
+}
+
 // handleClosedTimestampUpdate takes the a closed timestamp for the replica
 // and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.
