@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/abourget/teamcity"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
 	"github.com/kisielk/gotool"
 )
@@ -56,6 +57,10 @@ const baseImportPath = "github.com/cockroachdb/cockroach/pkg/"
 var importPaths = gotool.ImportPaths([]string{baseImportPath + "..."})
 
 func runTC(queueBuild func(string, map[string]string)) {
+	buildID := "Cockroach_Nightlies_Stress"
+	if bazel.BuiltWithBazel() {
+		buildID = "Cockroach_Nightlies_StressBazel"
+	}
 	// Queue stress builds. One per configuration per package.
 	for _, importPath := range importPaths {
 		// By default, run each package for up to 100 iterations.
@@ -90,7 +95,11 @@ func runTC(queueBuild func(string, map[string]string)) {
 		case baseImportPath + "kv/kvnemesis":
 			// Disable -maxruns for kvnemesis. Run for the full 1h.
 			maxRuns = 0
-			opts["env.COCKROACH_KVNEMESIS_STEPS"] = "10000"
+			if bazel.BuiltWithBazel() {
+				opts["env.EXTRA_BAZEL_FLAGS"] = "--test_env COCKROACH_KVNEMESIS_STEPS=10000"
+			} else {
+				opts["env.COCKROACH_KVNEMESIS_STEPS"] = "10000"
+			}
 		case baseImportPath + "sql/logictest":
 			// Stress logic tests with reduced parallelism (to avoid overloading the
 			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
@@ -100,24 +109,44 @@ func runTC(queueBuild func(string, map[string]string)) {
 			maxTime = 3 * time.Hour
 		}
 
-		opts["env.TESTTIMEOUT"] = testTimeout.String()
+		if bazel.BuiltWithBazel() {
+			opts["env.TESTTIMEOUTSECS"] = testTimeout.String()
+		} else {
+			opts["env.TESTTIMEOUT"] = testTimeout.String()
+		}
 
 		// Run non-race build.
-		opts["env.GOFLAGS"] = fmt.Sprintf("-parallel=%d", parallelism)
+		if bazel.BuiltWithBazel() {
+			bazelFlags, ok := opts["env.EXTRA_BAZEL_FLAGS"]
+			if ok {
+				opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --test_sharding_strategy=disabled --jobs %d", bazelFlags, parallelism)
+			} else {
+				opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("--test_sharding_strategy=disabled --jobs %d", parallelism)
+			}
+		} else {
+			opts["env.GOFLAGS"] = fmt.Sprintf("-parallel=%d", parallelism)
+		}
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, parallelism)
-		queueBuild("Cockroach_Nightlies_Stress", opts)
+		queueBuild(buildID, opts)
 
 		// Run non-race build with deadlock detection.
 		opts["env.TAGS"] = "deadlock"
-		queueBuild("Cockroach_Nightlies_Stress", opts)
+		queueBuild(buildID, opts)
 		delete(opts, "env.TAGS")
 
 		// Run race build. With run with -p 1 to avoid overloading the machine.
 		noParallelism := 1
-		opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)
+		if bazel.BuiltWithBazel() {
+			extraBazelFlags := opts["env.EXTRA_BAZEL_FLAGS"]
+			// NB: Normally we'd just use `--config race`, but that implies a
+			// `--test_timeout` that overrides the one we manually specify.
+			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1", extraBazelFlags)
+		} else {
+			opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)
+		}
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, noParallelism)
-		queueBuild("Cockroach_Nightlies_Stress", opts)
+		queueBuild(buildID, opts)
 	}
 }
