@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -71,7 +72,7 @@ func TestStorage(t *testing.T) {
 			return timeSource.Now().UnixNano()
 		}, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
-		stopper := stop.NewStopper()
+		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
 		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 			tableID, timeSource.NewTimer)
@@ -328,7 +329,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		return timeSource.Now().UnixNano()
 	}, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
-	stopper := stop.NewStopper()
+	stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
