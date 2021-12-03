@@ -20,7 +20,7 @@ with t=a k=a
 >> at end:
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
-error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 0 has a different value [0 0 0 0 3 115 101 99 111 110 100] after recomputing from what was written: [0 0 0 0 3 102 105 114 115 116]
+error: (*assert.withAssertionFailure:) transaction 00000000-0000-0000-0000-000000000001 with sequence 0 has a different value [0 0 0 0 3 115 101 99 111 110 100] after recomputing from what was written: [0 0 0 0 3 102 105 114 115 116]
 
 run ok
 with t=a k=a
@@ -50,7 +50,7 @@ with t=a k=a
 txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=-1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 1 missing an intent with lower sequence -1
+error: (*issuelink.withIssueLink:) transaction 00000000-0000-0000-0000-000000000001 with sequence 1 missing an intent with lower sequence -1
 
 run ok
 with t=a k=i
