@@ -206,7 +206,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.(*server.TestServer).PGServer()
+		pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
 
@@ -577,7 +577,7 @@ func TestClientAddrOverride(t *testing.T) {
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
 	testServer := s.(*server.TestServer)
-	pgServer := testServer.PGServer()
+	pgServer := testServer.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
 
 	testCases := []struct {
