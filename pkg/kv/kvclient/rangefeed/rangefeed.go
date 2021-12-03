@@ -281,17 +281,21 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		start := timeutil.Now()
 
 		// Note that the below channel send will not block forever because
-		// processEvents will wait for the worker to send. RunWorker is safe here
+		// processEvents will wait for the worker to send. RunAsyncTask is safe here
 		// because processEvents is guaranteed to consume the error before
-		// returning.
-		if err := f.stopper.RunAsyncTask(ctx, "rangefeed", func(ctx context.Context) {
+		// returning. Because of this, only processEvents may use the cancel
+		// function generated below, since the caller must also consume the errCh
+		// error.
+		rfCtx, rfCancel := context.WithCancel(ctx)
+		if err := f.stopper.RunAsyncTask(rfCtx, "rangefeed", func(ctx context.Context) {
 			errCh <- f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh)
 		}); err != nil {
+			rfCancel()
 			log.VEventf(ctx, 1, "exiting rangefeed due to stopper")
 			return
 		}
 
-		err := f.processEvents(ctx, frontier, eventCh, errCh)
+		err := f.processEvents(ctx, frontier, eventCh, errCh, rfCancel)
 		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) ||
 			errors.HasType(err, &roachpb.MVCCHistoryMutationError{}) {
 			if errCallback := f.onUnrecoverableError; errCallback != nil {
@@ -327,12 +331,15 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 }
 
 // processEvents processes events sent by the rangefeed on the eventCh. It waits
-// for the rangefeed to signal that it has exited by sending on errCh.
+// for the rangefeed to signal that it has exited by sending on errCh. The
+// provided rfCancel function can be used to cancel the rangefeed. If used, the
+// error from errCh (possibly nil) must be consumed before returning.
 func (f *RangeFeed) processEvents(
 	ctx context.Context,
 	frontier *span.Frontier,
 	eventCh <-chan *roachpb.RangeFeedEvent,
 	errCh <-chan error,
+	rfCancel func(),
 ) error {
 	for {
 		select {
@@ -351,6 +358,13 @@ func (f *RangeFeed) processEvents(
 				if advanced && f.onFrontierAdvance != nil {
 					f.onFrontierAdvance(ctx, frontier.Frontier())
 				}
+			case ev.SST != nil:
+				if f.onSSTable == nil {
+					rfCancel()
+					<-errCh
+					return errors.New("received unexpected rangefeed SST event with no OnSSTable handler")
+				}
+				f.onSSTable(ctx, ev.SST)
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.
