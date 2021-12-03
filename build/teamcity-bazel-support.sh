@@ -85,9 +85,7 @@ process_test_json() {
       echo "GITHUB_API_TOKEN must be set"
       exit 1
     else
-      tc_start_block "post issues"
       $github_post < "$test_json"
-      tc_end_block "post issues"
     fi
   fi
 
