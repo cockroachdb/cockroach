@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -452,6 +453,165 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		require.False(t, v.PrevValue.IsPresent())
 		require.True(t, v.PrevValue.Timestamp.IsEmpty())
 	}
+}
+
+// TestWithOnSSTable tests that the rangefeed emits SST ingestions correctly.
+func TestWithOnSSTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	db := srv.DB()
+
+	_, _, err := tc.SplitRange(roachpb.Key("a"))
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	require.NoError(t, err)
+
+	// We start the rangefeed over a narrower span than the AddSSTable (c-e vs
+	// a-f), to ensure the entire SST is emitted even if the registration is
+	// narrower.
+	var once sync.Once
+	checkpointC := make(chan struct{})
+	sstC := make(chan *roachpb.RangeFeedSSTable)
+	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
+	r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+			once.Do(func() {
+				close(checkpointC)
+			})
+		}),
+		rangefeed.WithOnSSTable(func(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+			select {
+			case sstC <- sst:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Wait for initial checkpoint.
+	select {
+	case <-checkpointC:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for checkpoint")
+	}
+
+	// Ingest an SST.
+	now := db.Clock().Now()
+	sstKVs := []sstutil.KV{{"a", 1, "1"}, {"b", 1, "2"}, {"c", 1, "3"}, {"d", 1, "4"}, {"e", 1, "5"}}
+	sst, sstStart, sstEnd := sstutil.MakeSST(t, sstKVs)
+	pErr := db.AddSSTable(ctx, sstStart, sstEnd, sst,
+		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* ingestAsWrites */, now, true /* writeAtBatchTs */)
+	require.Nil(t, pErr)
+
+	// Wait for the SST event and check its contents.
+	var sstEvent *roachpb.RangeFeedSSTable
+	select {
+	case sstEvent = <-sstC:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for SST event")
+	}
+
+	require.Equal(t, roachpb.Span{Key: sstStart, EndKey: sstEnd}, sstEvent.Span)
+	require.Equal(t, now, sstEvent.WriteTS)
+
+	var expectKVs []sstutil.KV
+	for _, kv := range sstKVs {
+		kv.WallTimestamp = now.WallTime
+		expectKVs = append(expectKVs, kv)
+	}
+	require.Equal(t, expectKVs, sstutil.ScanSST(t, sstEvent.Data))
+}
+
+// TestWithOnSSTableCatchesUpIfNotSet tests that the rangefeed runs a catchup
+// scan if an OnSSTable event is emitted and no OnSSTable event handler is set.
+func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	db := srv.DB()
+
+	_, _, err := tc.SplitRange(roachpb.Key("a"))
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	require.NoError(t, err)
+
+	// We start the rangefeed over a narrower span than the AddSSTable (c-e vs
+	// a-f), to ensure only the restricted span is emitted by the catchup scan.
+	var once sync.Once
+	checkpointC := make(chan struct{})
+	rowC := make(chan *roachpb.RangeFeedValue)
+	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
+	r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+			select {
+			case rowC <- value:
+			case <-ctx.Done():
+			}
+		},
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+			once.Do(func() {
+				close(checkpointC)
+			})
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Wait for initial checkpoint.
+	select {
+	case <-checkpointC:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for checkpoint")
+	}
+
+	// Ingest an SST.
+	now := db.Clock().Now()
+	sstKVs := []sstutil.KV{{"a", 1, "1"}, {"b", 1, "2"}, {"c", 1, "3"}, {"d", 1, "4"}, {"e", 1, "5"}}
+	expectKVs := []sstutil.KV{{"c", now.WallTime, "3"}, {"d", now.WallTime, "4"}}
+	sst, sstStart, sstEnd := sstutil.MakeSST(t, sstKVs)
+	pErr := db.AddSSTable(ctx, sstStart, sstEnd, sst,
+		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* ingestAsWrites */, now, true /* writeAtBatchTs */)
+	require.Nil(t, pErr)
+
+	// Assert that we receive the KV pairs within the rangefeed span.
+	timer := time.NewTimer(3 * time.Second)
+	var seenKVs []sstutil.KV
+	for len(seenKVs) < len(expectKVs) {
+		select {
+		case row := <-rowC:
+			value, err := row.Value.GetBytes()
+			require.NoError(t, err)
+			seenKVs = append(seenKVs, sstutil.KV{
+				KeyString:     string(row.Key),
+				WallTimestamp: row.Value.Timestamp.WallTime,
+				ValueString:   string(value),
+			})
+		case <-timer.C:
+			require.Fail(t, "timed out waiting for catchup scan", "saw entries: %v", seenKVs)
+		}
+	}
+	require.Equal(t, expectKVs, seenKVs)
 }
 
 // TestUnrecoverableErrors verifies that unrecoverable internal errors are surfaced

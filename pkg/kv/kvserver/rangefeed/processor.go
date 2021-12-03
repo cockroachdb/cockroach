@@ -147,6 +147,9 @@ func putPooledEvent(ev *event) {
 type event struct {
 	ops     []enginepb.MVCCLogicalOp
 	ct      hlc.Timestamp
+	sst     []byte
+	sstSpan roachpb.Span
+	sstWTS  hlc.Timestamp
 	initRTS bool
 	syncC   chan struct{}
 	// This setting is used in conjunction with syncC in tests in order to ensure
@@ -504,6 +507,18 @@ func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) bool {
 	return p.sendEvent(event{ops: ops}, p.EventChanTimeout)
 }
 
+// ConsumeSSTable informs the rangefeed processor of an SSTable that was added
+// via AddSSTable. It returns false if consuming the SSTable hit a timeout, as
+// specified by the EventChanTimeout configuration. If the method returns false,
+// the processor will have been stopped, so calling Stop is not necessary. Safe
+// to call on nil Processor.
+func (p *Processor) ConsumeSSTable(sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp) bool {
+	if p == nil {
+		return true
+	}
+	return p.sendEvent(event{sst: sst, sstSpan: sstSpan, sstWTS: writeTS}, p.EventChanTimeout)
+}
+
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
 // for the rangefeed processor's resolved timestamp has advanced. It returns
 // false if forwarding the closed timestamp hit a timeout, as specified by the
@@ -581,6 +596,8 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case len(e.ops) > 0:
 		p.consumeLogicalOps(ctx, e.ops)
+	case len(e.sst) > 0:
+		p.consumeSSTable(ctx, e.sst, e.sstSpan, e.sstWTS)
 	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
 	case e.initRTS:
@@ -637,6 +654,12 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 	}
 }
 
+func (p *Processor) consumeSSTable(
+	ctx context.Context, sst []byte, sstSpan roachpb.Span, sstWTS hlc.Timestamp,
+) {
+	p.publishSSTable(ctx, sst, sstSpan, sstWTS)
+}
+
 func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
 	if p.rts.ForwardClosedTS(newClosedTS) {
 		p.publishCheckpoint(ctx)
@@ -670,6 +693,24 @@ func (p *Processor) publishValue(
 		PrevValue: prevVal,
 	})
 	p.reg.PublishToOverlapping(roachpb.Span{Key: key}, &event)
+}
+
+func (p *Processor) publishSSTable(
+	ctx context.Context, sst []byte, sstSpan roachpb.Span, sstWTS hlc.Timestamp,
+) {
+	if sstSpan.Equal(roachpb.Span{}) {
+		panic(errors.AssertionFailedf("received SSTable without span"))
+	}
+	if sstWTS.IsEmpty() {
+		panic(errors.AssertionFailedf("received SSTable without write timestamp"))
+	}
+	p.reg.PublishToOverlapping(sstSpan, &roachpb.RangeFeedEvent{
+		SST: &roachpb.RangeFeedSSTable{
+			Data:    sst,
+			Span:    sstSpan,
+			WriteTS: sstWTS,
+		},
+	})
 }
 
 func (p *Processor) publishCheckpoint(ctx context.Context) {
