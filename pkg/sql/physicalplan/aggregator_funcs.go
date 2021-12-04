@@ -328,4 +328,14 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 			},
 		},
 	},
+
+	execinfrapb.CovarPop: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalCovarPop,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
 }
