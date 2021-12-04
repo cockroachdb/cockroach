@@ -835,6 +835,8 @@ message AggregatorSpec {
     REGR_AVGY = 45;
     FINAL_STDDEV_POP = 46;
     FINAL_VAR_POP = 47;
+    TRANSITION_REGRESSION_AGGREGATE = 48;
+    FINAL_COVAR_POP = 49;
   }
 
   enum Type {
