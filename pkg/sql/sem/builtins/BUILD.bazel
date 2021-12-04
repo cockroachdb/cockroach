@@ -107,7 +107,7 @@ go_library(
 
 go_test(
     name = "builtins_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "aggregate_builtins_test.go",
         "all_builtins_test.go",
