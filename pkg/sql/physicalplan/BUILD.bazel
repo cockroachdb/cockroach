@@ -60,6 +60,7 @@ go_test(
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
