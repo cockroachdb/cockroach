@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 54
+const Version execinfrapb.DistSQLVersion = 55
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,13 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 52
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 55 (MinAcceptedVersion: 52)
+  - FINAL_COVAR_POP aggregate function was introduced to support local and final
+    aggregation of the builtin function COVAR_POP. It would be unrecognized
+    by a server running older versions, hence the version bump. However, a
+    server running v53 can still process all plans from servers running v52,
+    thus the MinAcceptedVersion is kept at 52.
 
 - Version: 54 (MinAcceptedVersion: 52)
   - Field NeededColumns has been removed from the TableReaderSpec. It was being

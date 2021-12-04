@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -62,7 +64,7 @@ func runTestFlow(
 	srv serverutils.TestServerInterface,
 	txn *kv.Txn,
 	procs ...execinfrapb.ProcessorSpec,
-) rowenc.EncDatumRows {
+) (rowenc.EncDatumRows, error) {
 	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
 
 	leafInputState := txn.GetLeafTxnInputState(context.Background())
@@ -92,6 +94,9 @@ func runTestFlow(
 	for {
 		row, meta := rowBuf.Next()
 		if meta != nil {
+			if meta.Err != nil {
+				return nil, meta.Err
+			}
 			if meta.LeafTxnFinalState != nil || meta.Metrics != nil || meta.TraceData != nil {
 				continue
 			}
@@ -103,7 +108,7 @@ func runTestFlow(
 		res = append(res, row)
 	}
 
-	return res
+	return res, nil
 }
 
 // checkDistAggregationInfo tests that a flow with multiple local stages and a
@@ -118,12 +123,18 @@ func checkDistAggregationInfo(
 	t *testing.T,
 	srv serverutils.TestServerInterface,
 	tableDesc catalog.TableDescriptor,
-	colIdx int,
+	colIndexes []int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,
 	info physicalplan.DistAggregationInfo,
+	inputSyncSpecType execinfrapb.InputSyncSpec_Type,
 ) {
-	colType := tableDesc.PublicColumns()[colIdx].GetType()
+	colTypes := make([]*types.T, len(colIndexes))
+	columns := make([]uint32, len(colIndexes))
+	for i, colIdx := range colIndexes {
+		colTypes[i] = tableDesc.PublicColumns()[colIdx].GetType()
+		columns[i] = uint32(colIdx)
+	}
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
@@ -141,11 +152,14 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 
+		// Copy the original columns because output columns will be modified by
+		// pkg/sql/colfetcher/cfetcher_setup.go#remapPostProcessSpec.
+		outputColumns := append([]uint32{}, columns...)
 		return execinfrapb.ProcessorSpec{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &tr},
 			Post: execinfrapb.PostProcessSpec{
 				Projection:    true,
-				OutputColumns: []uint32{uint32(colIdx)},
+				OutputColumns: outputColumns,
 			},
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
@@ -153,7 +167,7 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(streamID)},
 				},
 			}},
-			ResultTypes: []*types.T{colType},
+			ResultTypes: colTypes,
 		}
 	}
 
@@ -175,7 +189,7 @@ func checkDistAggregationInfo(
 	intermediaryTypes := make([]*types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
-		_, returnTyp, err := execinfrapb.GetAggregateInfo(fn, colType)
+		_, returnTyp, err := execinfrapb.GetAggregateInfo(fn, colTypes...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -218,19 +232,24 @@ func checkDistAggregationInfo(
 		}
 		nonDistFinalOutputTypes = []*types.T{expr.LocalExpr.ResolvedType()}
 	}
-	rowsNonDist := runTestFlow(
+
+	colIdx := make([]uint32, len(colIndexes))
+	for i := range colIdx {
+		colIdx[i] = uint32(i)
+	}
+	rowsNonDist, nonDistErr := runTestFlow(
 		t, srv, txn,
 		makeTableReader(1, numRows+1, 0),
 		execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
-				ColumnTypes: []*types.T{colType},
+				Type:        inputSyncSpecType,
+				ColumnTypes: colTypes,
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
 			}},
 			Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
-				Aggregations: []execinfrapb.AggregatorSpec_Aggregation{{Func: fn, ColIdx: []uint32{0}}},
+				Aggregations: []execinfrapb.AggregatorSpec_Aggregation{{Func: fn, ColIdx: colIdx}},
 			}},
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
@@ -249,7 +268,7 @@ func checkDistAggregationInfo(
 	localAggregations := make([]execinfrapb.AggregatorSpec_Aggregation, numIntermediary)
 	for i, fn := range info.LocalStage {
 		// Local aggregations have the same input.
-		localAggregations[i] = execinfrapb.AggregatorSpec_Aggregation{Func: fn, ColIdx: []uint32{0}}
+		localAggregations[i] = execinfrapb.AggregatorSpec_Aggregation{Func: fn, ColIdx: colIdx}
 	}
 	finalAggregations := make([]execinfrapb.AggregatorSpec_Aggregation, numFinal)
 	for i, finalInfo := range info.FinalStage {
@@ -264,7 +283,7 @@ func checkDistAggregationInfo(
 	}
 	finalProc := execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
+			Type:        inputSyncSpecType,
 			ColumnTypes: intermediaryTypes,
 		}},
 		Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
@@ -284,8 +303,8 @@ func checkDistAggregationInfo(
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
 		agg := execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
-				ColumnTypes: []*types.T{colType},
+				Type:        inputSyncSpecType,
+				ColumnTypes: colTypes,
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2 * i)},
 				},
@@ -324,9 +343,23 @@ func checkDistAggregationInfo(
 	}
 
 	procs = append(procs, finalProc)
-	rowsDist := runTestFlow(t, srv, txn, procs...)
+	rowsDist, distErr := runTestFlow(t, srv, txn, procs...)
 
-	if len(rowsDist[0]) != len(rowsNonDist[0]) {
+	if distErr != nil || nonDistErr != nil {
+		pgCodeDistErr := pgerror.GetPGCode(distErr)
+		pgCodeNonDistErr := pgerror.GetPGCode(nonDistErr)
+		if pgCodeDistErr != pgCodeNonDistErr {
+			// If one of the errors is "22003" - "out of range" and another error is
+			// nil and the result of the other calculation is NaN, then the result was
+			// determined by the split or values order.
+			if outOfRangeAndNaN(pgCodeDistErr, nonDistErr, rowsNonDist) ||
+				outOfRangeAndNaN(pgCodeNonDistErr, distErr, rowsDist) {
+				// Treat this situation as normal.
+			} else {
+				t.Errorf("different errors (dist: %s, non-dist: %s)", distErr, nonDistErr)
+			}
+		}
+	} else if len(rowsDist[0]) != len(rowsNonDist[0]) {
 		t.Errorf("different row lengths (dist: %d non-dist: %d)", len(rowsDist[0]), len(rowsNonDist[0]))
 	} else {
 		for i := range rowsDist[0] {
@@ -415,11 +448,21 @@ func almostEqualRelative(a, b float64) bool {
 	return diff <= largest*maxRelDiff
 }
 
-// Test that distributing agg functions according to DistAggregationTable
-// yields correct results. We're going to run each aggregation as either the
-// two-stage process described by the DistAggregationTable or as a single global
-// process, and verify that the results are the same.
-func TestDistAggregationTable(t *testing.T) {
+// outOfRangeAndNaN checks that the given pg code is "22003" - out of range and
+// other calculation was successful (error is nil) and the result of the
+// calculation is NaN.
+func outOfRangeAndNaN(pgCode pgcode.Code, err error, rows rowenc.EncDatumRows) bool {
+	return pgCode == pgcode.NumericValueOutOfRange &&
+		err == nil && len(rows) > 0 &&
+		rows[0][0].Datum.String() == "NaN"
+}
+
+// Test that single argument distributed aggregate functions according to
+// DistAggregationTable yield correct results. We're going to run each
+// aggregation as either the two-stage process described by the
+// DistAggregationTable or as a single global process, and verify that the
+// results are the same.
+func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const numRows = 100
@@ -428,6 +471,7 @@ func TestDistAggregationTable(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	// Create a table with a few columns:
+	//  - k - primary key with values from 0 to number of rows
 	//  - random integer values from 0 to numRows
 	//  - random integer values (with some NULLs)
 	//  - random integer values (with some NULLs) within int32 range
@@ -435,6 +479,9 @@ func TestDistAggregationTable(t *testing.T) {
 	//  - random bool value (mostly true)
 	//  - random decimals
 	//  - random decimals (with some NULLs)
+	//  - random floats
+	//  - random floats (with some NULLs)
+	//  - random ten bytes
 	rng, _ := randutil.NewTestRand()
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
@@ -473,6 +520,9 @@ func TestDistAggregationTable(t *testing.T) {
 			// COUNT_ROWS takes no arguments; skip it in this test.
 			continue
 		}
+		if isTwoArgumentFunction(fn) {
+			continue
+		}
 		// We're going to test each aggregation function on every column that can be
 		// used as input for it.
 		foundCol := false
@@ -496,7 +546,9 @@ func TestDistAggregationTable(t *testing.T) {
 				name := fmt.Sprintf("%s/%s/%d", fn, col.GetName(), numRows)
 				t.Run(name, func(t *testing.T) {
 					checkDistAggregationInfo(
-						context.Background(), t, tc.Server(0), desc, col.Ordinal(), numRows, fn, info)
+						context.Background(), t, tc.Server(0), desc, []int{col.Ordinal()},
+						numRows, fn, info, execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
+					)
 				})
 			}
 		}
@@ -504,4 +556,84 @@ func TestDistAggregationTable(t *testing.T) {
 			t.Errorf("aggregation function %s was not tested (no suitable column)", fn)
 		}
 	}
+}
+
+// Test that two-argument distributed regression aggregate functions according
+// to DistAggregationTable yield correct results. We're going to run each
+// aggregation as either the two-stage process described by the
+// DistAggregationTable or as a single global process, and verify that the
+// results are the same.
+func TestTwoArgumentRegressionAggregateFunctions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numRows = 100
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+
+	// Create a table with a few columns:
+	//  - k - primary key with values from 0 to number of rows
+	//  - random integer values from 0 to numRows
+	//  - random decimals
+	//  - random floats
+	//  - random integer values (with some NULLs)
+	//  - random floats (with some NULLs)
+	//  - random decimals (with some NULLs)
+	rng, _ := randutil.NewTestRand()
+	sqlutils.CreateTable(
+		t, tc.ServerConn(0), "t",
+		"k INT PRIMARY KEY, int1 INT, dec1 DECIMAL, float1 FLOAT, int2 INT, dec2 DECIMAL, float2 FLOAT",
+		numRows,
+		func(row int) []tree.Datum {
+			return []tree.Datum{
+				tree.NewDInt(tree.DInt(row)),
+				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
+				randgen.RandDatum(rng, types.Decimal, false),
+				randgen.RandDatum(rng, types.Float, false),
+				randgen.RandDatum(rng, types.Int, true),
+				randgen.RandDatum(rng, types.Decimal, true),
+				randgen.RandDatum(rng, types.Float, true),
+			}
+		},
+	)
+
+	kvDB := tc.Server(0).DB()
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+
+	for fn, info := range physicalplan.DistAggregationTable {
+		if !isTwoArgumentFunction(fn) {
+			continue
+		}
+
+		// skip column 0 - primary key
+		// for each column in 1 - int, 2 - decimal, 3 - float
+		// get another column 4 - int, 5 - decimal, 6 - float: all possible
+		// combinations as described in aggregate_builtins#makeRgressionAggregate
+		for i := 1; i <= 3; i++ {
+			for j := 4; j <= 6; j++ {
+				cols := desc.PublicColumns()
+				for _, numRows := range []int{5, numRows / 10, numRows / 2, numRows} {
+					name := fmt.Sprintf("%s/%s-%s/%d", fn, cols[i].GetName(), cols[j].GetName(), numRows)
+					t.Run(name, func(t *testing.T) {
+						checkDistAggregationInfo(
+							context.Background(), t, tc.Server(0), desc, []int{i, j}, numRows,
+							fn, info, execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
+						)
+					})
+				}
+			}
+		}
+	}
+}
+
+func isTwoArgumentFunction(fn execinfrapb.AggregatorSpec_Func) bool {
+	switch fn {
+	case execinfrapb.Corr, execinfrapb.CovarPop, execinfrapb.CovarSamp,
+		execinfrapb.RegrAvgx, execinfrapb.RegrAvgy, execinfrapb.RegrIntercept,
+		execinfrapb.RegrR2, execinfrapb.RegrSlope, execinfrapb.RegrSxx,
+		execinfrapb.RegrSxy, execinfrapb.RegrSyy, execinfrapb.RegrCount:
+		return true
+	}
+
+	return false
 }

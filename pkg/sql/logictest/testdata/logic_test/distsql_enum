@@ -30,4 +30,3 @@ WITH w (col)
 			w, seed
 ----
 hello     ("(hello,0)",0)
-
