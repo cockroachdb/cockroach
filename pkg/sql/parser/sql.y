@@ -11493,7 +11493,11 @@ d_expr:
 | '(' a_expr ')' '.' '@' ICONST
   {
     idx, err := $6.numVal().AsInt32()
-    if err != nil || idx <= 0 { return setErr(sqllex, err) }
+    if err != nil { return setErr(sqllex, err) }
+    if idx <= 0 {
+      err := errors.New("invalid numeric tuple index: indexes must be > 0")
+      return setErr(sqllex, err)
+    }
     $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), ByIndex: true, ColIndex: int(idx-1)}
   }
 | '(' a_expr ')'
