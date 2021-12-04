@@ -10,6 +10,14 @@ tc_prepare
 export ARTIFACTSDIR=$PWD/artifacts/acceptance
 mkdir -p "$ARTIFACTSDIR"
 
+remove_files_on_exit() {
+  # Some unit tests test automatic ballast creation. These ballasts can be
+  # larger than the maximum artifact size. Remove any artifacts with the
+  # EMERGENCY_BALLAST filename.
+  find "$ARTIFACTSDIR" -name "EMERGENCY_BALLAST" -delete
+}
+trap remove_files_on_exit EXIT
+
 tc_start_block "Run acceptance tests"
 bazel run \
   //pkg/acceptance:acceptance_test \
