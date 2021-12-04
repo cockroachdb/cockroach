@@ -51,13 +51,14 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &changePrivilegesNode{
 		isGrant:      true,
 		targets:      n.Targets,
 		grantees:     grantees,
 		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
-			privDesc.Grant(grantee, privileges)
+			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
 		grantOn:          grantOn,
 		granteesNameList: n.Grantees,
@@ -87,7 +88,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		grantees:     grantees,
 		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
-			privDesc.Revoke(grantee, privileges, grantOn)
+			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
 		grantOn:          grantOn,
 		granteesNameList: n.Grantees,
@@ -178,8 +179,15 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 					return err
 				}
 			}
-
 			privileges := descriptor.GetPrivileges()
+
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+				err := p.CheckGrantOption(ctx, descriptor, n.desiredprivs, n.isGrant)
+				if err != nil {
+					return err
+				}
+			}
+
 			for _, grantee := range n.grantees {
 				n.changePrivilege(privileges, n.desiredprivs, grantee)
 			}

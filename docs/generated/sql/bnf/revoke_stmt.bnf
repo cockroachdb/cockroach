@@ -2,14 +2,26 @@ revoke_stmt ::=
 	'REVOKE' 'ALL' 'PRIVILEGES' 'ON' targets 'FROM' role_spec_list
 	| 'REVOKE' 'ALL'  'ON' targets 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL' 'PRIVILEGES' 'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL'  'ON' targets 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privilege_list 'ON' targets 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' role_spec_list
 	| 'REVOKE' 'ALL' 'PRIVILEGES' 'ON' 'TYPE' target_types 'FROM' role_spec_list
 	| 'REVOKE' 'ALL'  'ON' 'TYPE' target_types 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL' 'PRIVILEGES' 'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL'  'ON' 'TYPE' target_types 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privilege_list 'ON' 'TYPE' target_types 'FROM' role_spec_list
 	| 'REVOKE' 'ALL' 'PRIVILEGES' 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'ALL'  'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL' 'PRIVILEGES' 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL'  'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privilege_list 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'ALL'  'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' privilege_list 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'ALL'  'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privilege_list 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
