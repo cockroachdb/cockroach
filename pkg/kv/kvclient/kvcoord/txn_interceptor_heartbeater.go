@@ -197,15 +197,6 @@ func (h *txnHeartbeater) SendLocked(
 	if hasET {
 		et := etArg.(*roachpb.EndTxnRequest)
 
-		// Set the EndTxn request's TxnHeartbeating flag. Set to true if
-		// a hearbeat loop was started which indicates that transaction has
-		// a transaction record.
-		//
-		// TODO(erikgrinaker): In v21.2 we always heartbeat the txn record, so
-		// this field is never used. However, we still need to set it when
-		// interacting with v21.1 nodes. We can remove this field in v22.1.
-		et.TxnHeartbeating = h.mu.loopStarted
-
 		// Preemptively stop the heartbeat loop in case of transaction abort.
 		// In case of transaction commit we don't want to do this because commit
 		// could fail with retryable error and transaction would be restarted
@@ -494,8 +485,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
-		Poison:          true,
-		TxnHeartbeating: true,
+		Poison: true,
 	})
 
 	const taskName = "txnHeartbeater: aborting txn"
