@@ -14,11 +14,9 @@ package lease
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -355,14 +353,6 @@ func (m *Manager) readOlderVersionForTimestamp(
 		})
 	}
 
-	// Instrument amount of memory read from store.
-	// TODO(james): Confirm instrumentation
-	for _, desc := range descs {
-		if err := m.boundAccount.Grow(ctx, int64(unsafe.Sizeof(desc))); err != nil {
-			log.Warningf(ctx, "Error instrumenting desc (%s) memory read from store", desc.desc.GetName())
-		}
-	}
-
 	return descs, nil
 }
 
@@ -381,7 +371,10 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 			t.mu.active.insert(
 				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, false),
 			)
-			//TODO(james): Instrument amount of memory added to our active descriptors. Get confirmation of whether this should be counted or not.
+			// Grow leaseMgr monitor for new leased descriptor.
+			if err := m.boundAccount.Grow(context.Background(), versions[i].desc.ByteSize()); err != nil {
+				log.Warningf(context.Background(), "Unable to grow leaseMgr bound account for id %d", id)
+			}
 		}
 	}
 }
@@ -459,7 +452,6 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		if err != nil {
 			return nil, err
 		}
-		//TODO(james): grow memory monitor by size of desc. Indicates how much we acquired a lease on.
 		t := m.findDescriptorState(id, false /* create */)
 		t.mu.Lock()
 		t.mu.takenOffline = false
@@ -469,8 +461,6 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		if err != nil {
 			return nil, err
 		}
-		//TODO(james): grow by size of descVersionState. Indicates how much we leased for the new descriptor version. Confirm this growth.
-		// ADd underneath upsertLeaseLocked "plumb" it through
 		if newDescVersionState != nil {
 			m.names.insert(newDescVersionState)
 		}
@@ -548,8 +538,6 @@ func purgeOldVersions(
 		t.mu.Unlock()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
-			//TODO(james): shrink memory monitored for leases. Confirm.
-			//int64(unsafe.Sizeof(l))
 		}
 	}
 
@@ -684,20 +672,6 @@ func NewLeaseManager(
 
 	lm.draining.Store(false)
 
-	// move it into the tests
-	if monitor == nil {
-		monitor = mon.NewMonitor(
-			"LeaseMgr monitor",
-			mon.MemoryResource,
-			nil,
-			nil,
-			0,
-			math.MaxInt64,
-			settings,
-		)
-		// Start the monitor
-		monitor.Start(context.Background(), nil, mon.BoundAccount{})
-	}
 	lm.mon = monitor
 	lm.boundAccount = lm.mon.MakeBoundAccount()
 
@@ -784,8 +758,6 @@ func (m *Manager) AcquireByName(
 		// m.names.get() incremented the refcount, we decrement it to get a new
 		// version.
 		descVersion.Release(ctx)
-		//TODO(james): Release prompts a shrink in the memory monitor for this given descriptorVersionState (lease)
-		// Confirm if we want to actually instrument this.
 
 		// Return a valid descriptor for the timestamp.
 		leasedDesc, err := m.Acquire(ctx, timestamp, descVersion.GetID())
@@ -843,7 +815,6 @@ func (m *Manager) AcquireByName(
 		// TODO(vivek): check if the entire above comment is indeed true. Review the
 		// use of NameMatchesDescriptor() throughout this function.
 		desc.Release(ctx)
-		//TODO(james): release on LeaseDescriptor -- confirm we want to shrink
 		if err := m.AcquireFreshestFromStore(ctx, id); err != nil {
 			return nil, err
 		}
@@ -936,10 +907,6 @@ type LeasedDescriptor interface {
 func (m *Manager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (LeasedDescriptor, error) {
-	if err := m.boundAccount.Grow(ctx, 10); err != nil {
-		//return nil, err
-		log.Warningf(ctx, "Unable to grow leaseMgr bound account for id %d", id)
-	}
 	for {
 		t := m.findDescriptorState(id, true /*create*/)
 		desc, latest, err := t.findForTimestamp(ctx, timestamp)
@@ -1020,7 +987,6 @@ func (m *Manager) SetDraining(
 		t.mu.Unlock()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
-			//TODO(james): Shrink memory as descriptor leased from store is released. Confirm.
 		}
 		if reporter != nil {
 			// Report progress through the Drain RPC.
@@ -1037,7 +1003,6 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 	if t == nil && create {
 		t = &descriptorState{m: m, id: id, stopper: m.stopper}
 		m.mu.descriptors[id] = t
-		//TODO(james): grow monitor by size of descriptorState. Confirm we want to do this,
 	}
 	return t
 }

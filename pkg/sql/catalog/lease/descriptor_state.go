@@ -141,6 +141,11 @@ func (t *descriptorState) upsertLeaseLocked(
 		}
 		descState := newDescriptorVersionState(t, desc, expiration, true /* isLease */)
 		t.mu.active.insert(descState)
+		// Grow memory monitor by byte size of inserted leased descriptor
+		if err := t.m.boundAccount.Grow(ctx, descState.ByteSize()); err != nil {
+			log.Warningf(ctx, "Unable to grow leaseMgr bound account for id %d", descState.GetID())
+			return nil, nil, err
+		}
 		return descState, nil, nil
 	}
 
@@ -203,6 +208,7 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 			desc.mu.Lock()
 			defer desc.mu.Unlock()
 			if desc.mu.refcount == 0 {
+				t.m.boundAccount.Shrink(context.Background(), desc.ByteSize())
 				t.mu.active.remove(desc)
 				if l := desc.mu.lease; l != nil {
 					desc.mu.lease = nil
@@ -254,6 +260,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		if l := decRefcount(s); l != nil {
+			t.m.boundAccount.Shrink(ctx, s.ByteSize())
 			t.mu.active.remove(s)
 			return l
 		}
