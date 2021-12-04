@@ -176,6 +176,15 @@ var aggregates = map[string]builtinDefinition{
 		"Calculates the population covariance of the selected values.",
 	),
 
+	"final_covar_pop": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.FloatArray}, types.Float, newFinalCovarPopAggregate,
+			"Calculates the population covariance of the selected values in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
+
 	"covar_samp": makeRegressionAggregateBuiltin(
 		newCovarSampAggregate,
 		"Calculates the sample covariance of the selected values.",
@@ -725,24 +734,40 @@ func makeSTUnionBuiltin() builtinDefinition {
 func makeRegressionAggregateBuiltin(
 	aggregateFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc, info string,
 ) builtinDefinition {
+	return makeRegressionAggregate(aggregateFunc, info, types.Float)
+}
+
+func makeTransitionRegressionAggregateBuiltin() builtinDefinition {
+	return makeRegressionAggregate(
+		makeTransitionRegressionAccumulatorDecimalBase,
+		"Calculates transition values for regression functions in local stage.",
+		types.FloatArray,
+	)
+}
+
+func makeRegressionAggregate(
+	aggregateFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	info string,
+	ret *types.T,
+) builtinDefinition {
 	return makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Float, types.Float}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Float, types.Float}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Int, types.Int}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Int, types.Int}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Decimal}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Decimal, types.Decimal}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Float, types.Int}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Float, types.Int}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Float, types.Decimal}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Float, types.Decimal}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Int, types.Float}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Int, types.Float}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Int, types.Decimal}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Int, types.Decimal}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Float}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Decimal, types.Float}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Int}, types.Float, aggregateFunc,
+		makeAggOverload([]*types.T{types.Decimal, types.Int}, ret, aggregateFunc,
 			info, tree.VolatilityImmutable),
 	)
 }
@@ -1118,7 +1143,9 @@ var _ tree.AggregateFunc = &percentileContAggregate{}
 var _ tree.AggregateFunc = &stMakeLineAgg{}
 var _ tree.AggregateFunc = &stUnionAgg{}
 var _ tree.AggregateFunc = &stExtentAgg{}
+var _ tree.AggregateFunc = &regressionAccumulatorDecimalBase{}
 var _ tree.AggregateFunc = &covarPopAggregate{}
+var _ tree.AggregateFunc = &finalCovarPopAggregate{}
 var _ tree.AggregateFunc = &covarSampAggregate{}
 var _ tree.AggregateFunc = &regressionInterceptAggregate{}
 var _ tree.AggregateFunc = &regressionR2Aggregate{}
@@ -1883,11 +1910,43 @@ type regressionAccumulatorDecimalBase struct {
 func makeRegressionAccumulatorDecimalBase(
 	evalCtx *tree.EvalContext,
 ) regressionAccumulatorDecimalBase {
-	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
+	ed := apd.MakeErrDecimal(tree.ExactCtx)
 	return regressionAccumulatorDecimalBase{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
 		ed:                       &ed,
 	}
+}
+
+// regrFieldsTotal is the total number of fields in regressionAccumulatorBase.
+const regrFieldsTotal = 6
+
+func makeTransitionRegressionAccumulatorDecimalBase(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	ed := apd.MakeErrDecimal(tree.ExactCtx)
+	return &regressionAccumulatorDecimalBase{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		ed:                       &ed,
+	}
+}
+
+// Result returns an array datum that contains calculated transition values in
+// the following order: DArray[n, sx, sxx, sy, syy, sxy].
+// It is only used for the local stage when computing regression functions in a
+// distributed fashion. Both the final stage of the distributed execution, and
+// the only stage of the local execution override this.
+func (a *regressionAccumulatorDecimalBase) Result() (tree.Datum, error) {
+	res := tree.NewDArray(types.Decimal)
+	vals := []*apd.Decimal{&a.n, &a.sx, &a.sxx, &a.sy, &a.syy, &a.sxy}
+	for _, v := range vals {
+		dd := &tree.DDecimal{}
+		dd.Set(v)
+		err := res.Append(dd)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 // Add implements tree.AggregateFunc interface.
@@ -1958,7 +2017,7 @@ func (a *regressionAccumulatorDecimalBase) add(
 		a.ed.Add(&a.tmpSxy, &a.tmpSxy, a.ed.Mul(&a.tmp, &a.tmpX, a.ed.Mul(&a.tmp, &a.tmpY, &a.scale)))
 
 		// Overflow check. We only report an overflow error when finite
-		// inputs lead to infinite results. Note also that sxx, syy and Sxy
+		// inputs lead to infinite results. Note also that sxx, syy and sxy
 		// should be NaN if any of the relevant inputs are infinite, so we
 		// intentionally prevent them from becoming infinite.
 		if isInf(&a.tmpSx) || isInf(&a.tmpSxx) || isInf(&a.tmpSy) || isInf(&a.tmpSyy) || isInf(&a.tmpSxy) {
@@ -1983,7 +2042,7 @@ func (a *regressionAccumulatorDecimalBase) add(
 			}
 		}
 	} else {
-		// At the first input, we normally can leave Sxx et al as 0.  However,
+		// At the first input, we normally can leave Sxx et al as 0. However,
 		// if the first input is Inf or NaN, we'd better force the dependent
 		// sums to NaN; otherwise we will falsely report variance zero when
 		// there are no more inputs.
@@ -1998,6 +2057,158 @@ func (a *regressionAccumulatorDecimalBase) add(
 	}
 
 	a.n.Set(&a.tmpN)
+	a.sx.Set(&a.tmpSx)
+	a.sy.Set(&a.tmpSy)
+	a.sxx.Set(&a.tmpSxx)
+	a.syy.Set(&a.tmpSyy)
+	a.sxy.Set(&a.tmpSxy)
+
+	size := int64(a.n.Size() +
+		a.sx.Size() +
+		a.sxx.Size() +
+		a.sy.Size() +
+		a.syy.Size() +
+		a.sxy.Size() +
+		a.tmpX.Size() +
+		a.tmpY.Size() +
+		a.scale.Size() +
+		a.tmpN.Size() +
+		a.tmpSx.Size() +
+		a.tmpSxx.Size() +
+		a.tmpSy.Size() +
+		a.tmpSyy.Size() +
+		a.tmpSxy.Size())
+	if err := a.updateMemoryUsage(ctx, size); err != nil {
+		return err
+	}
+
+	return a.ed.Err()
+}
+
+// covarPopLastStage computes the population covariance from the precalculated
+// transition values.
+func (a *regressionAccumulatorDecimalBase) covarPopLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sxy / a.n
+	a.ed.Quo(&a.tmp, &a.sxy, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+type finalRegressionAccumulatorDecimalBase struct {
+	regressionAccumulatorDecimalBase
+	otherTransitionValues [regrFieldsTotal]*apd.Decimal
+}
+
+// Add combines two regression aggregate base values. It should only be used
+// in final stage of distributed aggregations.
+func (a *finalRegressionAccumulatorDecimalBase) Add(
+	ctx context.Context, arrayDatum tree.Datum, _ ...tree.Datum,
+) error {
+	if arrayDatum == tree.DNull {
+		return nil
+	}
+
+	arr := tree.MustBeDArray(arrayDatum)
+	if arr.Len() != regrFieldsTotal {
+		return errors.Newf(
+			"regression combine should have %d elements, was %d",
+			regrFieldsTotal, arr.Len(),
+		)
+	}
+
+	for i, d := range arr.Array {
+		if d == tree.DNull {
+			return nil
+		}
+		v := tree.MustBeDDecimal(d)
+		a.otherTransitionValues[i] = &v.Decimal
+	}
+
+	return a.combine(ctx)
+}
+
+// combine is used in a final stage of distributed calculation, it combines two
+// arrays of transition values, calculated in a local stage.
+// See https://github.com/postgres/postgres/blob/49407dc32a2931550e4ff1dea314b6a25afdfc35/src/backend/utils/adt/float.c#L3401.
+func (a *finalRegressionAccumulatorDecimalBase) combine(ctx context.Context) error {
+	if a.n.Cmp(decimalZero) == 0 {
+		a.n = *a.otherTransitionValues[0]
+		a.sx = *a.otherTransitionValues[1]
+		a.sxx = *a.otherTransitionValues[2]
+		a.sy = *a.otherTransitionValues[3]
+		a.syy = *a.otherTransitionValues[4]
+		a.sxy = *a.otherTransitionValues[5]
+		return nil
+	} else if a.otherTransitionValues[0].Cmp(decimalZero) == 0 {
+		return nil
+	}
+
+	n2 := a.otherTransitionValues[0]
+	sx2 := a.otherTransitionValues[1]
+	sxx2 := a.otherTransitionValues[2]
+	sy2 := a.otherTransitionValues[3]
+	syy2 := a.otherTransitionValues[4]
+	sxy2 := a.otherTransitionValues[5]
+
+	/*
+	 * The transition values combine using a generalization of the
+	 * Youngs-Cramer algorithm as follows:
+	 *
+	 * N = N1 + N2
+	 * Sx = Sx1 + Sx2
+	 * Sxx = Sxx1 + Sxx2 + N1 * N2 * (Sx1/N1 - Sx2/N2)^2 / N
+	 * Sy = Sy1 + Sy2
+	 * Syy = Syy1 + Syy2 + N1 * N2 * (Sy1/N1 - Sy2/N2)^2 / N
+	 * Sxy = Sxy1 + Sxy2 + N1 * N2 * (Sx1/N1 - Sx2/N2) * (Sy1/N1 - Sy2/N2) / N
+	 */
+
+	// tmpN = N1 * N2 / (N1 + N2)
+	a.ed.Mul(&a.tmpN, &a.n, a.ed.Quo(&a.tmp, n2, a.ed.Add(&a.tmp, &a.n, n2)))
+
+	// sx = sx1 + sx2
+	a.ed.Add(&a.tmpSx, &a.sx, sx2)
+	if isInf(&a.tmpSx) && !isInf(&a.sx) && !isInf(sx2) {
+		return tree.ErrFloatOutOfRange
+	}
+
+	// tmpX := sx1/n1 - sx2/n2
+	a.ed.Sub(&a.tmpX, a.ed.Quo(&a.tmpX, &a.sx, &a.n), a.ed.Quo(&a.tmp, sx2, n2))
+	// sxx = sxx1 + sxx2 + tmpX*tmpX*tmpN
+	a.ed.Add(&a.tmpSxx, &a.sxx, a.ed.Add(&a.tmp, sxx2, a.ed.Mul(
+		&a.tmp, &a.tmpX, a.ed.Mul(&a.tmp, &a.tmpX, &a.tmpN)),
+	))
+	if isInf(&a.tmpSxx) && !isInf(&a.sxx) && !isInf(sxx2) {
+		return tree.ErrFloatOutOfRange
+	}
+
+	// sy = sy1 + sy2
+	a.ed.Add(&a.tmpSy, &a.sy, sy2)
+	if isInf(&a.tmpSy) && !isInf(&a.sy) && !isInf(sy2) {
+		return tree.ErrFloatOutOfRange
+	}
+
+	// tmpY := sy1/n1 - sy2/n2
+	a.ed.Sub(&a.tmpY, a.ed.Quo(&a.tmpY, &a.sy, &a.n), a.ed.Quo(&a.tmp, sy2, n2))
+	// syy = syy1 + syy2 + tmpY*tmpY*tmpN
+	a.ed.Add(&a.tmpSyy, &a.syy, a.ed.Add(&a.tmp, syy2, a.ed.Mul(
+		&a.tmp, &a.tmpY, a.ed.Mul(&a.tmp, &a.tmpY, &a.tmpN)),
+	))
+	if isInf(&a.tmpSyy) && !isInf(&a.syy) && !isInf(syy2) {
+		return tree.ErrFloatOutOfRange
+	}
+
+	// sxy = sxy1 + sxy2 + tmpX*tmpY*tmpN
+	a.ed.Add(&a.tmpSxy, &a.sxy, a.ed.Add(&a.tmp, sxy2, a.ed.Mul(
+		&a.tmp, &a.tmpX, a.ed.Mul(&a.tmp, &a.tmpY, &a.tmpN)),
+	))
+	if isInf(&a.tmpSxy) && !isInf(&a.sxy) && !isInf(sxy2) {
+		return tree.ErrFloatOutOfRange
+	}
+
+	a.ed.Add(&a.n, &a.n, n2)
 	a.sx.Set(&a.tmpSx)
 	a.sy.Set(&a.tmpSy)
 	a.sxx.Set(&a.tmpSxx)
@@ -2048,11 +2259,11 @@ func mapToDFloat(d *apd.Decimal, err error) (tree.Datum, error) {
 	res, err := d.Float64()
 
 	if err != nil && errors.Is(err, strconv.ErrRange) {
-		return nil, tree.ErrFloatOutOfRange
+		return tree.DNull, tree.ErrFloatOutOfRange
 	}
 
 	if math.IsInf(res, 0) {
-		return nil, tree.ErrFloatOutOfRange
+		return tree.DNull, tree.ErrFloatOutOfRange
 	}
 
 	return tree.NewDFloat(tree.DFloat(res)), err
@@ -2105,13 +2316,27 @@ func newCovarPopAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) tr
 
 // Result implements tree.AggregateFunc interface.
 func (a *covarPopAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
+	return a.covarPopLastStage()
+}
 
-	// a.sxy / a.n
-	a.ed.Quo(&a.tmp, &a.sxy, &a.n)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalCovarPopAggregate represents population covariance.
+type finalCovarPopAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalCovarPopAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalCovarPopAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalCovarPopAggregate) Result() (tree.Datum, error) {
+	return a.covarPopLastStage()
 }
 
 // covarSampAggregate represents sample covariance.
