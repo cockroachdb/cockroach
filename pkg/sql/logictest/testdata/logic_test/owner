@@ -26,7 +26,7 @@ REVOKE ALL ON t FROM testuser
 # Owner should able to grant all privileges to other roles.
 
 statement ok
-GRANT ALL ON t TO new_role
+GRANT ALL ON t TO new_role WITH GRANT OPTION
 
 # Test ownership of views.
 
@@ -46,7 +46,7 @@ statement ok
 ALTER TABLE v2 RENAME to v
 
 statement ok
-GRANT ALL ON v TO new_role
+GRANT ALL ON v TO new_role WITH GRANT OPTION
 
 statement ok
 DROP VIEW v
@@ -71,7 +71,7 @@ statement ok
 ALTER SEQUENCE s2 RENAME to s
 
 statement ok
-GRANT ALL ON s TO new_role
+GRANT ALL ON s TO new_role WITH GRANT OPTION
 
 statement ok
 DROP SEQUENCE s
@@ -103,7 +103,7 @@ statement ok
 ALTER TABLE d.t2 RENAME TO d.t
 
 statement ok
-GRANT ALL ON DATABASE d TO new_role
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
 
 statement ok
 DROP TABLE d.t
@@ -154,7 +154,7 @@ statement ok
 ALTER TABLE d.t2 RENAME TO d.t
 
 statement ok
-GRANT ALL ON DATABASE d TO new_role
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
 
 statement ok
 DROP TABLE d.t

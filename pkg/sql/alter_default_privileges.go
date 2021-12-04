@@ -93,10 +93,12 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	privileges := n.n.Grant.Privileges
 	grantees := n.n.Grant.Grantees
 	objectType := n.n.Grant.Target
+	grantOption := n.n.Grant.WithGrantOption
 	if !n.n.IsGrant {
 		privileges = n.n.Revoke.Privileges
 		grantees = n.n.Revoke.Grantees
 		objectType = n.n.Revoke.Target
+		grantOption = n.n.Revoke.GrantOptionFor
 	}
 
 	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.p.SessionData(), security.UsernameValidation)
@@ -165,11 +167,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType,
+				role, privileges, granteeSQLUsernames, objectType, grantOption,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType,
+				role, privileges, granteeSQLUsernames, objectType, grantOption,
 			)
 		}
 
