@@ -51,6 +51,8 @@ message SetupFlowRequest {
   // observed, since the resulting stats are added as structured data to a
   // trace.
   optional bool CollectStats = 9 [(gogoproto.nullable) = false];
+
+  optional string AnonymizedStmt = 10 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

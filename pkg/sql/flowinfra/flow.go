@@ -104,6 +104,8 @@ type Flow interface {
 	// IsVectorized returns whether this flow will run with vectorized execution.
 	IsVectorized() bool
 
+	AnonymizedStmt() string
+
 	// GetFlowCtx returns the flow context of this flow.
 	GetFlowCtx() *execinfra.FlowCtx
 
@@ -163,6 +165,8 @@ type FlowBase struct {
 
 	onFlowCleanup func()
 
+	anonymizedStmt string
+
 	doneFn func()
 
 	status flowStatus
@@ -215,6 +219,7 @@ func NewFlowBase(
 	syncFlowConsumer execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	onFlowCleanup func(),
+	anonymizedStmt string,
 ) *FlowBase {
 	base := &FlowBase{
 		FlowCtx:          flowCtx,
@@ -222,9 +227,14 @@ func NewFlowBase(
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
 		onFlowCleanup:    onFlowCleanup,
+		anonymizedStmt:   anonymizedStmt,
 	}
 	base.status = FlowNotStarted
 	return base
+}
+
+func (f *FlowBase) AnonymizedStmt() string {
+	return f.anonymizedStmt
 }
 
 // GetFlowCtx is part of the Flow interface.

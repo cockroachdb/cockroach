@@ -353,9 +353,15 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 
 	nodeIDOrZero, _ := b.sqlServer.sqlIDContainer.OptionalNodeID()
 
-	running, runningSince, queued, queuedSince := b.flowScheduler.Serialize()
+	running, runningStmt, runningSince, queued, queuedStmt, queuedSince := b.flowScheduler.Serialize()
+	if len(running) != len(runningStmt) {
+		return nil, errors.Errorf("mismatched lengths of running and runningStmt")
+	}
 	if len(running) != len(runningSince) {
 		return nil, errors.Errorf("mismatched lengths of running and runningSince")
+	}
+	if len(queued) != len(queuedStmt) {
+		return nil, errors.Errorf("mismatched lengths of queued and queuedStmt")
 	}
 	if len(queued) != len(queuedSince) {
 		return nil, errors.Errorf("mismatched lengths of queued and queuedSince")
@@ -367,9 +373,10 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
 			FlowID: f,
 			Infos: []serverpb.DistSQLRemoteFlows_Info{{
-				NodeID:    nodeIDOrZero,
-				Timestamp: runningSince[i],
-				Status:    serverpb.DistSQLRemoteFlows_RUNNING,
+				NodeID:         nodeIDOrZero,
+				Timestamp:      runningSince[i],
+				Status:         serverpb.DistSQLRemoteFlows_RUNNING,
+				AnonymizedStmt: runningStmt[i],
 			}},
 		})
 	}
@@ -377,9 +384,10 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
 			FlowID: f,
 			Infos: []serverpb.DistSQLRemoteFlows_Info{{
-				NodeID:    nodeIDOrZero,
-				Timestamp: queuedSince[i],
-				Status:    serverpb.DistSQLRemoteFlows_QUEUED,
+				NodeID:         nodeIDOrZero,
+				Timestamp:      queuedSince[i],
+				Status:         serverpb.DistSQLRemoteFlows_QUEUED,
+				AnonymizedStmt: queuedStmt[i],
 			}},
 		})
 	}

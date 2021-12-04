@@ -270,6 +270,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localState distsql.LocalState,
 	vectorizeThresholdMet bool,
 	collectStats bool,
+	anonymizedStmt string,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
@@ -287,6 +288,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		EvalContext:       evalCtxProto,
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      collectStats,
+		AnonymizedStmt:    anonymizedStmt,
 	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
@@ -498,8 +500,13 @@ func (dsp *DistSQLPlanner) Run(
 		}()
 	}
 
+	var anonymizedStmt string
+	if planCtx.planner != nil {
+		anonymizedStmt = planCtx.planner.stmt.AnonymizedStr
+	}
 	ctx, flow, err := dsp.setupFlows(
-		ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet, planCtx.collectExecStats,
+		ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet,
+		planCtx.collectExecStats, anonymizedStmt,
 	)
 	if err != nil {
 		recv.SetError(err)

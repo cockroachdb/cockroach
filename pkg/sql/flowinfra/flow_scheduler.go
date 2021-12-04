@@ -57,7 +57,7 @@ type FlowScheduler struct {
 		//
 		// The memory usage of this map is not accounted for because it is
 		// limited by maxRunningFlows in size.
-		runningFlows map[execinfrapb.FlowID]time.Time
+		runningFlows map[execinfrapb.FlowID]runningFlowInfo
 	}
 
 	atomics struct {
@@ -72,6 +72,11 @@ type FlowScheduler struct {
 		// The callback must be concurrency-safe.
 		CancelDeadFlowsCallback func(numCanceled int)
 	}
+}
+
+type runningFlowInfo struct {
+	anonymizedStmt string
+	ts             time.Time
 }
 
 // flowWithCtx stores a flow to run and a context to run it with.
@@ -95,7 +100,7 @@ func NewFlowScheduler(
 	}
 	fs.mu.queue = list.New()
 	maxRunningFlows := settingMaxRunningFlows.Get(&settings.SV)
-	fs.mu.runningFlows = make(map[execinfrapb.FlowID]time.Time, maxRunningFlows)
+	fs.mu.runningFlows = make(map[execinfrapb.FlowID]runningFlowInfo, maxRunningFlows)
 	fs.atomics.maxRunningFlows = int32(maxRunningFlows)
 	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
@@ -135,7 +140,10 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 	if !locked {
 		fs.mu.Lock()
 	}
-	fs.mu.runningFlows[f.GetID()] = timeutil.Now()
+	fs.mu.runningFlows[f.GetID()] = runningFlowInfo{
+		anonymizedStmt: f.AnonymizedStmt(),
+		ts:             timeutil.Now(),
+	}
 	if !locked {
 		fs.mu.Unlock()
 	}
@@ -310,26 +318,32 @@ func (fs *FlowScheduler) Start() {
 // such flows don't go through the flow scheduler.
 func (fs *FlowScheduler) Serialize() (
 	running []execinfrapb.FlowID,
+	runningStmt []string,
 	runningSince []time.Time,
 	queued []execinfrapb.FlowID,
+	queuedStmt []string,
 	queuedSince []time.Time,
 ) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	running = make([]execinfrapb.FlowID, 0, len(fs.mu.runningFlows))
+	runningStmt = make([]string, 0, len(fs.mu.runningFlows))
 	runningSince = make([]time.Time, 0, len(fs.mu.runningFlows))
-	for f, ts := range fs.mu.runningFlows {
+	for f, info := range fs.mu.runningFlows {
 		running = append(running, f)
-		runningSince = append(runningSince, ts)
+		runningStmt = append(runningStmt, info.anonymizedStmt)
+		runningSince = append(runningSince, info.ts)
 	}
 	if fs.mu.queue.Len() > 0 {
 		queued = make([]execinfrapb.FlowID, 0, fs.mu.queue.Len())
+		queuedStmt = make([]string, 0, fs.mu.queue.Len())
 		queuedSince = make([]time.Time, 0, fs.mu.queue.Len())
 		for e := fs.mu.queue.Front(); e != nil; e = e.Next() {
 			f := e.Value.(*flowWithCtx)
 			queued = append(queued, f.flow.GetID())
+			queuedStmt = append(queuedStmt, f.flow.AnonymizedStmt())
 			queuedSince = append(queuedSince, f.enqueueTime)
 		}
 	}
-	return running, runningSince, queued, queuedSince
+	return running, runningStmt, runningSince, queued, queuedStmt, queuedSince
 }
