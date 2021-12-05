@@ -20,3 +20,8 @@ query T
 SELECT ('gone'::void)::text
 ----
 ·
+
+query T
+SELECT crdb_internal.void_func()
+----
+·
