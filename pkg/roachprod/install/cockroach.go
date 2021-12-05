@@ -25,7 +25,6 @@ import (
 	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
@@ -34,41 +33,41 @@ import (
 var startScript string
 
 func cockroachNodeBinary(c *SyncedCluster, node Node) string {
-	if filepath.IsAbs(config.Binary) {
-		return config.Binary
+	if filepath.IsAbs(c.Binary) {
+		return c.Binary
 	}
 	if !c.IsLocal() {
-		return "./" + config.Binary
+		return "./" + c.Binary
 	}
 
-	path := filepath.Join(c.localVMDir(node), config.Binary)
+	path := filepath.Join(c.localVMDir(node), c.Binary)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
 	// For "local" clusters we have to find the binary to run and translate it to
 	// an absolute path. First, look for the binary in PATH.
-	path, err := exec.LookPath(config.Binary)
+	path, err := exec.LookPath(c.Binary)
 	if err != nil {
-		if strings.HasPrefix(config.Binary, "/") {
-			return config.Binary
+		if strings.HasPrefix(c.Binary, "/") {
+			return c.Binary
 		}
 		// We're unable to find the binary in PATH and "binary" is a relative path:
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
-			return config.Binary
+			return c.Binary
 		}
-		path = gopath + "/src/github.com/cockroachdb/cockroach/" + config.Binary
+		path = gopath + "/src/github.com/cockroachdb/cockroach/" + c.Binary
 		var err2 error
 		path, err2 = exec.LookPath(path)
 		if err2 != nil {
-			return config.Binary
+			return c.Binary
 		}
 	}
 	path, err = filepath.Abs(path)
 	if err != nil {
-		return config.Binary
+		return c.Binary
 	}
 	return path
 }
@@ -645,8 +644,7 @@ func (c *SyncedCluster) setClusterSettings(ctx context.Context, node Node) (stri
 }
 
 func (c *SyncedCluster) generateClusterSettingCmd(node Node) string {
-	license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
-	if license == "" {
+	if config.CockroachDevLicense == "" {
 		fmt.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
 			c.Name)
 	}
@@ -669,7 +667,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(node Node) string {
 				SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
 				SET CLUSTER SETTING enterprise.license = '%s';" \
 			&& touch %s
-		fi`, path, binary, url, binary, url, license, path)
+		fi`, path, binary, url, binary, url, config.CockroachDevLicense, path)
 	return clusterSettingCmd
 }
 

@@ -351,6 +351,25 @@ fi
 	return nil
 }
 
+// func getLines(dataString, trailingLine string) ([]string, string) {
+// 	lines := strings.SplitAfter(dataString, "\n")
+// 	if len(lines) == 0 {
+// 		return lines, trailingLine
+// 	}
+// 	if !strings.HasSuffix(lines[0], "\n") {
+// 		trailingLine+=lines[0]
+// 		return lines, trailingLine
+// 	}
+// 	lines[0] = trailingLine+lines[0]
+// 	if !strings.HasSuffix(lines[len(lines)-1], "\n") {
+// 		trailingLine = lines[len(lines)-1]
+// 		lines = lines[:len(lines)-1]
+// 		return lines, trailingLine
+// 	} else {
+// 		return lines, ""
+// 	}
+// }
+
 // NodeMonitorInfo is a message describing a cockroach process' status.
 type NodeMonitorInfo struct {
 	// The index of the node (in a SyncedCluster) at which the message originated.
@@ -429,7 +448,6 @@ if [ ! -f "{{.Store}}/CURRENT" ]; then
   exit 0
 fi
 {{- end}}
-
 # Init with -1 so that when cockroach is initially dead, we print
 # a dead event for it.
 lastpid=-1
@@ -443,7 +461,6 @@ while :; do
 	pid=$(systemctl show cockroach --property MainPID --value)
 	status=$(systemctl show cockroach --property ExecMainStatus --value)
 {{- end }}
-
   if [[ "${lastpid}" == -1 && "${pid}" != 0 ]]; then
     # On the first iteration through the loop, if the process is running,
     # don't register a PID change (which would trigger an erroneous dead
@@ -468,11 +485,9 @@ while :; do
     fi
     lastpid=${pid}
   fi
-
 {{ if .OneShot }}
   exit 0
 {{- end }}
-
   sleep 1
   if [ "${pid}" != 0 ]; then
     while kill -0 "${pid}"; do
@@ -579,8 +594,7 @@ func processStdout(stdout string) (string, string) {
 func runCmdOnSingleNode(
 	ctx context.Context, c *SyncedCluster, node Node, cmd string,
 ) (RunResultDetails, error) {
-	var result RunResultDetails
-	result.Node = node
+	result := RunResultDetails{Node: node}
 	sess, err := c.newSession(ctx, node)
 	if err != nil {
 		return result, err
@@ -614,7 +628,7 @@ func runCmdOnSingleNode(
 	}
 
 	err = sess.Run(nodeCmd)
-	result.Stderr = strings.TrimSpace(stderrBuffer.String())
+	result.Stderr = stderrBuffer.String()
 	result.Stdout, result.RemoteExitStatus = processStdout(stdoutBuffer.String())
 
 	if err != nil {
@@ -731,8 +745,8 @@ func (c *SyncedCluster) Run(
 	return rperrors.SelectPriorityError(errs)
 }
 
-// RunNew will replace Run but we are still migrating so both exist now.
-func (c *SyncedCluster) RunNew(
+// RunWithDetails runs a command on the specified nodes and returns results details and an error.
+func (c *SyncedCluster) RunWithDetails(
 	ctx context.Context, nodes Nodes, title, cmd string,
 ) ([]RunResultDetails, error) {
 	display := fmt.Sprintf("%s: %s", c.Name, title)
@@ -749,7 +763,6 @@ func (c *SyncedCluster) RunNew(
 	if err != nil {
 		for _, node := range failed {
 			results[node.Index].Err = node.Err
-			results[node.Index].Stdout = string(node.Out)
 		}
 	}
 	return results, nil

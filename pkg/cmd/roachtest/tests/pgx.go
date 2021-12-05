@@ -16,8 +16,11 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -37,7 +40,7 @@ func registerPgx(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -110,13 +113,28 @@ func registerPgx(r registry.Registry) {
 
 		t.Status("running pgx test suite")
 		// Running the test suite is expected to error out, so swallow the error.
-		xmlResults, _ := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx, c, t, node,
 			"run pgx test suite",
 			"cd /mnt/data1/pgx && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		// Result error contains stdout, stderr, and any error content returned by exec package.
+		xmlResults := []byte(result.Stdout + result.Stderr)
 
 		results := newORMTestsResults()
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)

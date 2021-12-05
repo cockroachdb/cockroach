@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 // runManySplits attempts to create 2000 tiny ranges on a 4-node cluster using
@@ -24,9 +25,10 @@ import (
 func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
-	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, args)
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Start(ctx, option.DefaultStartOpts(), settings)
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -34,8 +36,10 @@ func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Wait for upreplication then create many ranges.
 	WaitFor3XReplication(t, db)
 
-	m := c.NewMonitor(ctx, c.All())
+	monitorCtx, monitorCtxCancel := context.WithCancel(ctx)
+	m := c.NewMonitor(monitorCtx, c.All())
 	m.Go(func(ctx context.Context) error {
+		defer monitorCtxCancel()
 		const numRanges = 2000
 		t.L().Printf("creating %d ranges...", numRanges)
 		if _, err := db.ExecContext(ctx, fmt.Sprintf(`
