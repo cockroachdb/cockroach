@@ -29,6 +29,9 @@ func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, er
 	if !ok {
 		return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
 	}
+	if outerRing.Empty() {
+		return geo.Geometry{}, errors.Newf("polygon shell must not be empty")
+	}
 	srid := outerRing.SRID()
 	coords := make([][]geom.Coord, len(interior)+1)
 	coords[0] = outerRing.Coords()
