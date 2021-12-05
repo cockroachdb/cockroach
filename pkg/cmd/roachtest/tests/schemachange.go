@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +38,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
-			c.Start(ctx, c.All())
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
@@ -358,7 +359,8 @@ func makeSchemaChangeBulkIngestTest(
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
-			c.Start(ctx, crdbNodes, option.StartArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
+			settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_IMPORT_WORKLOAD_FASTER=true"}))
+			c.Start(ctx, option.DefaultStartOpts(), settings, crdbNodes)
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(

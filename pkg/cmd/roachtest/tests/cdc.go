@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -108,7 +109,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
@@ -308,7 +309,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -476,7 +477,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -543,20 +544,20 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	pageSize := 14
 
 	for len(updatedMap) < 10 && pagesFetched < 5 {
-		output, err := c.RunWithBuffer(ctx, t.L(), kafkaNode,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), kafkaNode,
 			kafka.makeCommand("kafka-avro-console-consumer",
 				fmt.Sprintf("--offset=%d", pagesFetched*pageSize),
 				"--partition=0",
 				"--topic=foo",
 				fmt.Sprintf("--max-messages=%d", pageSize),
 				"--bootstrap-server=localhost:9092"))
-		t.L().Printf("\n%s\n", output)
+		t.L().Printf("\n%s\n", result.Stdout+result.Stderr)
 		if err != nil {
 			t.Fatal(err)
 		}
 		pagesFetched++
 
-		for _, line := range strings.Split(string(output), "\n") {
+		for _, line := range strings.Split(result.Stdout, "\n") {
 			if strings.Contains(line, `"updated"`) {
 				line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
 				updatedMap[line] = struct{}{}
@@ -615,7 +616,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{
 		t:     t,

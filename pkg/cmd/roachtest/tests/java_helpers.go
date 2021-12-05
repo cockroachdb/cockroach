@@ -202,7 +202,7 @@ func parseAndSummarizeJavaORMTestsResults(
 	}
 	for i, file := range files {
 		t.L().Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
-		fileOutput, err := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
 			t,
@@ -214,7 +214,7 @@ func parseAndSummarizeJavaORMTestsResults(
 			t.Fatal(err)
 		}
 
-		results.parseJUnitXML(t, expectedFailures, ignorelist, fileOutput)
+		results.parseJUnitXML(t, expectedFailures, ignorelist, []byte(result.Stdout))
 	}
 
 	results.summarizeAll(

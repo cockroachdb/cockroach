@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -138,7 +140,7 @@ func jobSurvivesNodeShutdown(
 		}
 
 		t.L().Printf(`stopping node %s`, target)
-		if err := c.StopE(ctx, target); err != nil {
+		if err := c.StopE(ctx, option.DefaultStopOpts(), target); err != nil {
 			return errors.Wrapf(err, "could not stop node %s", target)
 		}
 		t.L().Printf("stopped node %s", target)
@@ -152,7 +154,7 @@ func jobSurvivesNodeShutdown(
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.
 	t.Status(fmt.Sprintf("restarting %s (node restart test is done)\n", target))
-	if err := c.StartE(ctx, target); err != nil {
+	if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), target); err != nil {
 		t.Fatal(errors.Wrapf(err, "could not restart node %s", target))
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -31,9 +32,13 @@ func registerEngineSwitch(r registry.Registry) {
 		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		pebbleArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
-		rocksdbArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
-		c.Start(ctx, roachNodes, rocksdbArgs)
+
+		rockdbStartOpts := option.DefaultStartOpts()
+		rockdbStartOpts.RoachprodOpts.ExtraArgs = append(rockdbStartOpts.RoachprodOpts.ExtraArgs, "--storage-engine=rocksdb")
+
+		pebbleStartOpts := option.DefaultStartOpts()
+		pebbleStartOpts.RoachprodOpts.ExtraArgs = append(pebbleStartOpts.RoachprodOpts.ExtraArgs, "--storage-engine=pebble")
+		c.Start(ctx, rockdbStartOpts, install.MakeClusterSettings(), roachNodes)
 		stageDuration := 1 * time.Minute
 		if c.IsLocal() {
 			t.L().Printf("local mode: speeding up test\n")
@@ -111,24 +116,24 @@ func registerEngineSwitch(r registry.Registry) {
 						return c.StopCockroachGracefullyOnNode(ctx, node)
 					}
 					l.Printf("stopping node %d\n", node)
-					c.Stop(ctx, c.Node(node))
+					c.Stop(ctx, option.DefaultStopOpts(), c.Node(node))
 					return nil
 				}
 
 				i := rng.Intn(len(roachNodes))
-				var args option.Option
+				var opts option.StartOpts
 				usingPebble[i] = !usingPebble[i]
 				if usingPebble[i] {
-					args = pebbleArgs
+					opts = pebbleStartOpts
 				} else {
-					args = rocksdbArgs
+					opts = rockdbStartOpts
 				}
 				t.WorkerStatus("switching ", i+1)
 				l.Printf("switching %d\n", i+1)
 				if err := stop(i + 1); err != nil {
 					return err
 				}
-				c.Start(ctx, c.Node(i+1), args)
+				c.Start(ctx, opts, install.MakeClusterSettings(), c.Node(i+1))
 			}
 			return sleepAndCheck()
 		})

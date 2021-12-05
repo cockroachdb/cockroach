@@ -76,7 +76,6 @@ go_test(
         "//pkg/cmd/roachtest/test",
         "//pkg/testutils",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",

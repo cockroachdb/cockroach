@@ -16,8 +16,10 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -81,7 +83,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		if opt.dbSetupFunc != nil {
 			opt.dbSetupFunc(ctx, t, c)
@@ -212,7 +214,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test
-		output, err := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
 			t,
@@ -223,6 +225,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		output := []byte(result.Stdout + result.Stderr)
 		if len(output) == 0 {
 			t.Fatal("could not find any test result files")
 		}

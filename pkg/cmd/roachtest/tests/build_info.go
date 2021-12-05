@@ -13,9 +13,12 @@ package tests
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
@@ -23,7 +26,7 @@ import (
 // RunBuildInfo is a test that sanity checks the build info.
 func RunBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	var details serverpb.DetailsResponse
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
@@ -86,11 +89,12 @@ func RunBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), "sudo apt-get update")
 	c.Run(ctx, c.Node(1), "sudo apt-get -qqy install pax-utils")
 
-	output, err := c.RunWithBuffer(ctx, t.L(), c.Node(1), "scanelf -qe cockroach")
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "scanelf -qe cockroach")
 	if err != nil {
 		t.Fatalf("scanelf failed: %s", err)
 	}
+	output := strings.TrimSpace(result.Stdout)
 	if len(output) > 0 {
-		t.Fatalf("scanelf returned non-empty output (executable stack): %s", string(output))
+		t.Fatalf("scanelf returned non-empty output (executable stack): %s", output)
 	}
 }

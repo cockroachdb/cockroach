@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 func registerInconsistency(r registry.Registry) {
@@ -36,7 +37,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	nodes := c.Range(1, 3)
 	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
-	c.Start(ctx, nodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
 
 	{
 		db := c.Conn(ctx, 1)
@@ -59,8 +60,12 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	//
 	// First SIGINT initiates graceful shutdown, second one initiates a
 	// "hard" (i.e. don't shed leases, etc) shutdown.
-	c.Stop(ctx, nodes, option.StopArgs("--sig=2", "--wait=false"))
-	c.Stop(ctx, nodes, option.StopArgs("--sig=2", "--wait=true"))
+	stopOpts := option.DefaultStopOpts()
+	stopOpts.RoachprodOpts.Wait = false
+	stopOpts.RoachprodOpts.Sig = 2
+	c.Stop(ctx, stopOpts, nodes)
+	stopOpts.RoachprodOpts.Wait = true
+	c.Stop(ctx, stopOpts, nodes)
 
 	// Write an extraneous transaction record to n1's engine. This means n1 should
 	// ultimately be terminated by the consistency checker (as the other two nodes
@@ -91,7 +96,9 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	m := c.NewMonitor(ctx)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
-	c.Start(ctx, nodes, option.StartArgs("--args", "--vmodule=consistency_queue=5,replica_consistency=5,queue=5"))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=consistency_queue=5,replica_consistency=5,queue=5")
+	c.Start(ctx, startOpts, install.MakeClusterSettings(), nodes)
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):
@@ -144,7 +151,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), "grep "+
 		expr+" "+"{log-dir}/cockroach.log")
 
-	if err := c.StartE(ctx, c.Node(1)); err == nil {
+	if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1)); err == nil {
 		// NB: we can't easily verify the error because there's a lot of output
 		// which isn't fully included in the error returned from StartE.
 		t.Fatalf("node restart should have failed")

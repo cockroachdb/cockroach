@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
@@ -27,7 +29,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 	setupCluster := func(ctx context.Context, t test.Test, c cluster.Cluster, disableTxnStatsSampling bool) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
-		c.Start(ctx, c.Range(1, numNodes-1))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
 		// In order to keep more things constant throughout the different test
 		// runs, we disable range merges and range movements.
@@ -50,8 +52,8 @@ func registerTPCHConcurrency(r registry.Registry) {
 	}
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster) {
-		c.Stop(ctx, c.Range(1, numNodes-1))
-		c.Start(ctx, c.Range(1, numNodes-1))
+		c.Stop(ctx, option.DefaultStopOpts(), c.Range(1, numNodes-1))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster

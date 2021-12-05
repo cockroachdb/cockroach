@@ -15,6 +15,7 @@ import (
 	"os/user"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -30,6 +31,8 @@ var (
 	// MaxConcurrency specifies the maximum number of operations
 	// to execute on nodes concurrently, set to zero for infinite.
 	MaxConcurrency = 32
+	// CockroachDevLicense is used by both roachprod and tools that import it.
+	CockroachDevLicense = envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 )
 
 func init() {

@@ -17,8 +17,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -37,7 +39,7 @@ func registerTypeORM(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		cockroachVersion, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -158,14 +160,14 @@ func registerTypeORM(r registry.Registry) {
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
-		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
-		rawResultsStr := string(rawResults)
-		t.L().Printf("Test Results: %s", rawResultsStr)
+		rawResults := result.Stdout + result.Stderr
+		t.L().Printf("Test Results: %s", rawResults)
 		if err != nil {
-			if strings.Contains(rawResultsStr, "1 failing") &&
-				strings.Contains(rawResultsStr, "Error: Cannot find connection better-sqlite3 because its not defined in any orm configuration files.") {
+			if strings.Contains(rawResults, "1 failing") &&
+				strings.Contains(rawResults, "Error: Cannot find connection better-sqlite3 because its not defined in any orm configuration files.") {
 				err = nil
 			}
 			if err != nil {

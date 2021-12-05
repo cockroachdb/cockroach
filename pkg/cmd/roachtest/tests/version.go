@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
@@ -38,7 +39,9 @@ func registerVersion(r registry.Registry) {
 
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		c.Start(ctx, c.Range(1, nodes), option.StartArgsDontEncrypt)
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachtestOpts.DontEncrypt = true
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -139,7 +142,8 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+
+				c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -163,7 +167,7 @@ func registerVersion(r registry.Registry) {
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
-			c.Start(ctx, c.Node(nodes), option.StartArgsDontEncrypt)
+			c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(nodes))
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -178,7 +182,7 @@ func registerVersion(r registry.Registry) {
 				if err := c.Stage(ctx, t.L(), "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
-				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+				c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -192,7 +196,7 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+				c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}

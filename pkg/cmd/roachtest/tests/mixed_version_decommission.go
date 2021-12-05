@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -262,7 +263,9 @@ func uploadVersionStep(nodes option.NodeListOption, version string) versionStep 
 // nodes.
 func startVersion(nodes option.NodeListOption, version string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		args := option.StartArgs("--binary=" + cockroachBinaryPath(version))
-		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt)
+		settings := install.MakeClusterSettings(install.BinaryOption(cockroachBinaryPath(version)))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachtestOpts.DontEncrypt = true
+		u.c.Start(ctx, startOpts, settings, nodes)
 	}
 }

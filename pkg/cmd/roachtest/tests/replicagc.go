@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -59,10 +60,10 @@ func runReplicaGCChangedPeers(
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 
-	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	c.Start(ctx, args, c.Range(1, 3))
+	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
+	c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(1, 3))
 
 	h := &replicagcTestHelper{c: c, t: t}
 
@@ -75,10 +76,10 @@ func runReplicaGCChangedPeers(
 	// Kill the third node so it won't know that all of its replicas are moved
 	// elsewhere (we don't use the first because that's what roachprod will
 	// join new nodes to).
-	c.Stop(ctx, c.Node(3))
+	c.Stop(ctx, option.DefaultStopOpts(), c.Node(3))
 
 	// Start three new nodes that will take over all data.
-	c.Start(ctx, args, c.Range(4, 6))
+	c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(4, 6))
 
 	// Decommission n1-3, with n3 in absentia, moving the replicas to n4-6.
 	if err := h.decommission(ctx, c.Range(1, 3), 2, "--wait=none"); err != nil {
@@ -102,7 +103,7 @@ func runReplicaGCChangedPeers(
 	waitForZeroReplicasOnN3(ctx, t, c.Conn(ctx, 1))
 
 	// Stop the remaining two old nodes, no replicas remaining there.
-	c.Stop(ctx, c.Range(1, 2))
+	c.Stop(ctx, option.DefaultStopOpts(), c.Range(1, 2))
 
 	// Set up zone configs to isolate out nodes with the `deadNodeAttr`
 	// attribute. We'll later start n3 using this attribute to test GC replica
@@ -127,8 +128,8 @@ func runReplicaGCChangedPeers(
 		// rebalancing and repair attempts. Lacking this information it does not
 		// do that within the store dead interval (5m, i.e. too long for this
 		// test).
-		c.Stop(ctx, c.Range(4, 6))
-		c.Start(ctx, args, c.Range(4, 6))
+		c.Stop(ctx, option.DefaultStopOpts(), c.Range(4, 6))
+		c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(4, 6))
 	}
 
 	// Restart n3. We have to manually tell it where to find a new node or it
@@ -139,19 +140,16 @@ func runReplicaGCChangedPeers(
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Start(ctx, c.Node(3), option.StartArgs(
-		"--args=--join="+internalAddrs[0],
-		"--args=--attrs="+deadNodeAttr,
-		"--args=--vmodule=raft=5,replicate_queue=5,allocator=5",
-		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
-	))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+internalAddrs[0], "--attrs="+deadNodeAttr, "--vmodule=raft=5,replicate_queue=5,allocator=5")
+	c.Start(ctx, startOpts, settings, c.Node(3))
 
 	// Loop for two metric sample intervals (10s) to make sure n3 doesn't see any
 	// underreplicated ranges.
 	h.waitForZeroReplicas(ctx, 3)
 
 	// Restart the remaining nodes to satisfy the dead node detector.
-	c.Start(ctx, c.Range(1, 2))
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
 }
 
 type replicagcTestHelper struct {

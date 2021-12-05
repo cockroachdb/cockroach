@@ -15,7 +15,9 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +25,7 @@ import (
 func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
-	c.Start(ctx, c.All())
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	const tenantID = 123
 	{
