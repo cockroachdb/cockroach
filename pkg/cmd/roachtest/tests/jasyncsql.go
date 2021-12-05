@@ -15,8 +15,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 var supportedJasyncCommit = "6301aa1b9ef8a0d4c5cf6f3c095b30a388c62dc0"
@@ -29,7 +31,7 @@ func registerJasyncSQL(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -124,7 +126,7 @@ func registerJasyncSQL(r registry.Registry) {
 		}
 
 		// Load all test results
-		output, err := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
 			t,
@@ -135,12 +137,12 @@ func registerJasyncSQL(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(output) == 0 {
+		if len(result.Stdout) == 0 {
 			t.Fatal("could not find any test result files")
 		}
 
 		parseAndSummarizeJavaORMTestsResults(
-			ctx, t, c, node, "jasyncsql", output,
+			ctx, t, c, node, "jasyncsql", []byte(result.Stdout),
 			blocklistName, expectedFailures, ignorelist, version, supportedJasyncCommit)
 	}
 

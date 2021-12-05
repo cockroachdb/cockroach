@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -135,37 +136,37 @@ func repeatRunE(
 	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
-// repeatRunWithBuffer is the same function as c.RunWithBuffer but with an
+// repeatRunWithDetailsSingleNode is the same function as c.RunWithDetailsSingleNode but with an
 // automatic retry loop.
-func repeatRunWithBuffer(
+func repeatRunWithDetailsSingleNode(
 	ctx context.Context,
 	c cluster.Cluster,
 	t test.Test,
 	node option.NodeListOption,
 	operation string,
 	args ...string,
-) ([]byte, error) {
+) (install.RunResultDetails, error) {
 	var (
-		lastResult []byte
+		lastResult install.RunResultDetails
 		lastError  error
 	)
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return lastResult, ctx.Err()
 		}
 		if t.Failed() {
-			return nil, fmt.Errorf("test has failed")
+			return lastResult, fmt.Errorf("test has failed")
 		}
 		attempt++
 		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithBuffer(ctx, t.L(), node, args...)
+		lastResult, lastError = c.RunWithDetailsSingleNode(ctx, t.L(), node, args...)
 		if lastError != nil {
-			t.L().Printf("error - retrying: %s\n%s", lastError, string(lastResult))
+			t.L().Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return lastResult, nil
 	}
-	return nil, errors.Wrapf(lastError, "all attempts failed for %s\n%s", operation, lastResult)
+	return lastResult, errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic
@@ -304,16 +305,15 @@ func gitCloneWithRecurseSubmodules(
 	src, dest, branch string,
 	node option.NodeListOption,
 ) error {
-	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
-if ! test -d %[1]s; then
-  git clone --recurse-submodules -b %[2]s --depth 1 %[3]s %[1]s
-else
-  cd %[1]s
-  git fetch origin
-  git checkout origin/%[2]s
-fi
-'`, dest,
-		branch,
-		src,
-	))
+	cmd := []string{"bash", "-e", "-c", fmt.Sprintf(`'
+		if ! test -d %[1]s; then
+	  		git clone --recurse-submodules -b %[2]s --depth 1 %[3]s %[1]s
+		else
+	  		cd %[1]s
+	  		git fetch origin
+	  		git checkout origin/%[2]s
+		fi
+	'`, dest, branch, src),
+	}
+	return errors.Wrap(c.RunE(ctx, node, cmd...), "gitCloneWithRecurseSubmodules")
 }

@@ -16,8 +16,10 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -37,7 +39,7 @@ func registerPgjdbc(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -167,7 +169,7 @@ func registerPgjdbc(r registry.Registry) {
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/pgjdbc/pgjdbc-core/target/test-results/test
-		output, err := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
 			t,
@@ -178,12 +180,13 @@ func registerPgjdbc(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(output) == 0 {
+
+		if len(result.Stdout) == 0 {
 			t.Fatal("could not find any test result files")
 		}
 
 		parseAndSummarizeJavaORMTestsResults(
-			ctx, t, c, node, "pgjdbc" /* ormName */, output,
+			ctx, t, c, node, "pgjdbc" /* ormName */, []byte(result.Stdout),
 			blocklistName, expectedFailures, ignorelist, version, supportedPGJDBCTag,
 		)
 	}

@@ -171,6 +171,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
+        "//pkg/roachprod/install",
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql/pgwire/pgcode",
