@@ -212,6 +212,9 @@ func writeTextDatumNotNull(
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
+	case *tree.DVoid:
+		b.putInt32(0)
+
 	case *tree.DBox2D:
 		s := v.Repr()
 		b.putInt32(int32(len(s)))
@@ -684,6 +687,9 @@ func writeBinaryDatumNotNull(
 
 		lengthToWrite := b.Len() - (initialLen + 4)
 		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
+
+	case *tree.DVoid:
+		b.putInt32(0)
 
 	case *tree.DBox2D:
 		b.putInt32(32)

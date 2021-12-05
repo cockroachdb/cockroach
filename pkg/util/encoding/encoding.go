@@ -101,6 +101,7 @@ const (
 	geoInvertedIndexMarker = box2DMarker + 1
 
 	emptyArray = geoInvertedIndexMarker + 1
+	voidMarker = emptyArray + 1
 
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
@@ -1069,6 +1070,19 @@ func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
 	return b, sec, nsec, nil
 }
 
+// EncodeVoidAscendingOrDescending encodes a void (valid for both ascending and descending order).
+func EncodeVoidAscendingOrDescending(b []byte) []byte {
+	return append(b, voidMarker)
+}
+
+// DecodeVoidAscendingOrDescending decodes a void  (valid for both ascending and descending order).
+func DecodeVoidAscendingOrDescending(b []byte) ([]byte, error) {
+	if PeekType(b) != Void {
+		return nil, errors.Errorf("did not find Void marker")
+	}
+	return b[1:], nil
+}
+
 // EncodeBox2DAscending encodes a bounding box in ascending order.
 func EncodeBox2DAscending(b []byte, box geopb.BoundingBox) ([]byte, error) {
 	b = append(b, box2DMarker)
@@ -1559,6 +1573,7 @@ const (
 	ArrayKeyAsc  Type = 22 // Array key encoding
 	ArrayKeyDesc Type = 23 // Array key encoded descendingly
 	Box2D        Type = 24
+	Void         Type = 25
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1627,6 +1642,8 @@ func slowPeekType(b []byte) Type {
 			return Float
 		case m >= decimalNaN && m <= decimalNaNDesc:
 			return Decimal
+		case m == voidMarker:
+			return Void
 		}
 	}
 	return Unknown
@@ -1716,7 +1733,7 @@ func PeekLength(b []byte) (int, error) {
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
 		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False),
-		emptyArray:
+		emptyArray, voidMarker:
 		// ascendingNullWithinArrayKey and descendingNullWithinArrayKey also
 		// contain the same byte values as encodedNotNull and encodedNotNullDesc
 		// respectively, but they cannot be included explicitly in the case
@@ -2315,6 +2332,12 @@ func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
 }
 
+// EncodeVoidValue encodes a void with its value tag, appends it to
+// the supplied buffer and returns the final buffer.
+func EncodeVoidValue(appendTo []byte, colID uint32) []byte {
+	return EncodeValueTag(appendTo, colID, Void)
+}
+
 // EncodeBox2DValue encodes a geopb.BoundingBox with its value tag, appends it to
 // the supplied buffer and returns the final buffer.
 func EncodeBox2DValue(appendTo []byte, colID uint32, b geopb.BoundingBox) ([]byte, error) {
@@ -2816,6 +2839,8 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 	b = b[dataOffset:]
 	switch typ {
 	case Null:
+		return dataOffset, nil
+	case Void:
 		return dataOffset, nil
 	case True, False:
 		return dataOffset, nil

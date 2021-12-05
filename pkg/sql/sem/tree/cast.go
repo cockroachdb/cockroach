@@ -192,6 +192,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_bytea: {
 		oidext.T_geography: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -239,6 +240,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_date: {
 		oid.T_timestamp:   {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -432,6 +434,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_numeric: {
 		oid.T_float4:  {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -578,6 +581,7 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 	},
 	oid.T_time: {
 		oid.T_interval: {maxContext: CastContextImplicit, origin: contextOriginPgCast},
@@ -679,6 +683,14 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
 		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion},
+	},
+	oid.T_void: {
+		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
+		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion},
 	},
 }
 
@@ -1005,6 +1017,7 @@ var validCasts = []castInfo{
 	{from: types.INetFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.JsonFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.EnumFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.VoidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 
 	// Casts to CollatedStringFamily.
 	{from: types.UnknownFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
@@ -1168,6 +1181,10 @@ var validCasts = []castInfo{
 	{from: types.UnknownFamily, to: types.TupleFamily, volatility: VolatilityImmutable},
 	{from: types.TupleFamily, to: types.TupleFamily, volatility: VolatilityStable},
 	{from: types.StringFamily, to: types.TupleFamily, volatility: VolatilityStable},
+
+	// Casts to VoidFamily.
+	{from: types.UnknownFamily, to: types.VoidFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.VoidFamily, volatility: VolatilityImmutable},
 }
 
 type castsMapKey struct {
@@ -1903,6 +1920,8 @@ func performCastWithoutPrecisionTruncation(
 			s = t.JSON.String()
 		case *DEnum:
 			s = t.LogicalRep
+		case *DVoid:
+			s = ""
 		}
 		switch t.Family() {
 		case types.StringFamily:
@@ -2332,6 +2351,11 @@ func performCastWithoutPrecisionTruncation(
 		case *DString:
 			res, _, err := ParseDTupleFromString(ctx, string(*v), t)
 			return res, err
+		}
+	case types.VoidFamily:
+		switch d.(type) {
+		case *DString:
+			return NewDVoid(), nil
 		}
 	}
 

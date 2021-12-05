@@ -96,6 +96,8 @@ func ParseAndRequireString(
 		d, err = MakeDEnumFromLogicalRepresentation(t, s)
 	case types.TupleFamily:
 		d, dependsOnContext, err = ParseDTupleFromString(ctx, s, t)
+	case types.VoidFamily:
+		d = NewDVoid()
 	default:
 		return nil, false, errors.AssertionFailedf("unknown type %s (%T)", t, t)
 	}

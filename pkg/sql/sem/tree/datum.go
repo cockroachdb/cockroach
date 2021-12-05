@@ -4355,6 +4355,77 @@ func (d *DArray) Append(v Datum) error {
 // DVoid represents a void type.
 type DVoid struct{}
 
+// NewDVoid returns a new Void Datum.
+func NewDVoid() *DVoid {
+	return &DVoid{}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DVoid) ResolvedType() *types.T {
+	return types.Void
+}
+
+// Compare implements the Datum interface.
+func (d *DVoid) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	return 0
+}
+
+// CompareError implements the Datum interface.
+func (d *DVoid) CompareError(ctx *EvalContext, other Datum) (int, error) {
+	return d.Compare(ctx, other), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DVoid) Prev(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DVoid) Next(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DVoid) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DVoid) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DVoid) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DVoid) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DVoid) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DVoid) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	if !f.HasFlags(fmtRawStrings) {
+		// void is an empty string.
+		lexbase.EncodeSQLStringWithFlags(buf, "", f.EncodeFlags())
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DVoid) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DEnum represents an ENUM value.
 type DEnum struct {
 	// EnumType is the hydrated type of this enum.
