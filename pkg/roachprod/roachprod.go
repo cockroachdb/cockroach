@@ -346,7 +346,11 @@ func List(listMine bool, clusterNamePattern string) (cloud.Cloud, error) {
 
 // Run runs a command on the nodes in a cluster.
 func Run(
-	ctx context.Context, clusterName, SSHOptions, processTag string, secure bool, cmdArray []string,
+	ctx context.Context,
+	clusterName, SSHOptions, processTag string,
+	secure bool,
+	stdout, stderr io.Writer,
+	cmdArray []string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -367,7 +371,33 @@ func Run(
 	if len(title) > 30 {
 		title = title[:27] + "..."
 	}
-	return c.Run(ctx, os.Stdout, os.Stderr, c.Nodes, title, cmd)
+	return c.Run(ctx, stdout, stderr, c.Nodes, title, cmd)
+}
+
+// RunWithDetails runs a command on the nodes in a cluster.
+func RunWithDetails(
+	ctx context.Context, clusterName, SSHOptions, processTag string, secure bool, cmdArray []string,
+) ([]install.RunResultDetails, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(clusterName, install.SecureOption(secure), install.TagOption(processTag))
+	if err != nil {
+		return nil, err
+	}
+
+	// Use "ssh" if an interactive session was requested (i.e. there is no
+	// remote command to run).
+	if len(cmdArray) == 0 {
+		return nil, c.SSH(ctx, strings.Split(SSHOptions, " "), cmdArray)
+	}
+
+	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
+	title := cmd
+	if len(title) > 30 {
+		title = title[:27] + "..."
+	}
+	return c.RunWithDetails(ctx, c.Nodes, title, cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster.
@@ -561,6 +591,17 @@ func Extend(clusterName string, lifetime time.Duration) error {
 	return nil
 }
 
+// DefaultStartOpts returns a StartOpts populated with default values.
+func DefaultStartOpts() install.StartOpts {
+	return install.StartOpts{
+		Sequential:      true,
+		EncryptedStores: false,
+		SkipInit:        false,
+		StoreCount:      1,
+		TenantID:        2,
+	}
+}
+
 // Start starts nodes on a cluster.
 func Start(
 	ctx context.Context,
@@ -579,35 +620,42 @@ func Start(
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
-func Monitor(ctx context.Context, clusterName string, opts install.MonitorOpts) error {
+func Monitor(
+	ctx context.Context, clusterName string, opts install.MonitorOpts,
+) (chan install.NodeMonitorInfo, error) {
 	c, err := newCluster(clusterName)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	messages := c.Monitor(ctx, opts)
-	for msg := range messages {
-		if msg.Err != nil {
-			msg.Msg += "error: " + msg.Err.Error()
-		}
-		thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
-		if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-			err = errors.CombineErrors(err, thisError)
-		}
-		fmt.Println(thisError.Error())
+	return c.Monitor(ctx, opts), nil
+}
+
+// StopOpts is used to pass options to Stop.
+type StopOpts struct {
+	ProcessTag string
+	Sig        int
+	Wait       bool
+}
+
+// DefaultStopOpts returns StopOpts populated with the default values used by Stop.
+func DefaultStopOpts() StopOpts {
+	return StopOpts{
+		ProcessTag: "",
+		Sig:        9,
+		Wait:       false,
 	}
-	return err
 }
 
 // Stop stops nodes on a cluster.
-func Stop(ctx context.Context, clusterName, processTag string, sig int, wait bool) error {
+func Stop(ctx context.Context, clusterName string, opts StopOpts) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	c, err := newCluster(clusterName, install.TagOption(processTag))
+	c, err := newCluster(clusterName, install.TagOption(opts.ProcessTag))
 	if err != nil {
 		return err
 	}
-	return c.Stop(ctx, sig, wait)
+	return c.Stop(ctx, opts.Sig, opts.Wait)
 }
 
 // Init initializes the cluster.

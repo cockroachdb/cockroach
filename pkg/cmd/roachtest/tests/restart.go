@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -29,7 +30,9 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes, option.StartArgs(`--args=--vmodule=raft_log_queue=3`))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=raft_log_queue=3")
+	c.Start(ctx, startOpts, install.MakeClusterSettings(), crdbNodes)
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
@@ -53,7 +56,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	time.Sleep(11 * time.Minute)
 
 	// Stop a node.
-	c.Stop(ctx, c.Node(restartNode))
+	c.Stop(ctx, option.DefaultStopOpts(), c.Node(restartNode))
 
 	// Wait for between 10s and `server.time_until_store_dead` while sending
 	// traffic to one of the nodes that are not down. This used to cause lots of
@@ -64,7 +67,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.
-	c.Start(ctx, c.Node(restartNode))
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(restartNode))
 
 	// Dialing the formerly down node may still be prevented by the circuit breaker
 	// for a short moment (seconds) after n3 restarts. If it happens, the COUNT(*)

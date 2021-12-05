@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -48,10 +49,10 @@ type Cluster interface {
 
 	// Starting and stopping CockroachDB.
 
-	StartE(ctx context.Context, opts ...option.Option) error
-	Start(ctx context.Context, opts ...option.Option)
-	StopE(ctx context.Context, opts ...option.Option) error
-	Stop(ctx context.Context, opts ...option.Option)
+	StartE(ctx context.Context, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
+	Start(ctx context.Context, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
+	StopE(ctx context.Context, stopOpts option.StopOpts, opts ...option.Option) error
+	Stop(ctx context.Context, stopOpts option.StopOpts, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
 
@@ -79,12 +80,25 @@ type Cluster interface {
 
 	// Running commands on nodes.
 
+	// RunWithDetails runs a command on the specified nodes and returns results details and an error.
+	// The returned error is only for a major failure in roachprod run command so the caller needs
+	// to check for individual node errors in `[]install.RunResultDetails`.
+	// Use it when you need output details such as stdout or stderr, or remote exit status.
+	RunWithDetails(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) ([]install.RunResultDetails, error)
+
+	// Run is fatal on errors.
+	// Use it when an error means the test should fail.
 	Run(ctx context.Context, node option.NodeListOption, args ...string)
+
+	// RunE runs a command on the specified nodes and returns the first error it encounters.
+	// Use it when you need to run a command and only care if it ran successfully or not.
 	RunE(ctx context.Context, node option.NodeListOption, args ...string) error
-	RunL(ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string) error
-	RunWithBuffer(
-		ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
-	) ([]byte, error)
+
+	// RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
+	// on a single node AND 2) an error from roachprod itself would be treated the same way
+	// you treat an error from the command. This makes error checking easier / friendlier
+	// and helps us avoid code replication.
+	RunWithDetailsSingleNode(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) (install.RunResultDetails, error)
 
 	// Metadata about the provisioned nodes.
 
@@ -107,7 +121,7 @@ type Cluster interface {
 	Reset(ctx context.Context) error
 	Reformat(ctx context.Context, node option.NodeListOption, filesystem string) error
 	Install(
-		ctx context.Context, node option.NodeListOption, args ...string,
+		ctx context.Context, nodes option.NodeListOption, software ...string,
 	) error
 
 	// Methods whose inclusion on this interface is purely historical.

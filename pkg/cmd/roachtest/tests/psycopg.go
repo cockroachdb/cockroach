@@ -15,8 +15,11 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
@@ -35,7 +38,7 @@ func registerPsycopg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -107,9 +110,8 @@ func registerPsycopg(r registry.Registry) {
 			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
-		// Note that this is expected to return an error, since the test suite
-		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
 			export PSYCOPG2_TESTDB_USER=root &&
@@ -117,6 +119,21 @@ func registerPsycopg(r registry.Registry) {
 			export PSYCOPG2_TESTDB_HOST=localhost &&
 			make check`,
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		// Result error contains stdout, stderr, and any error content returned by exec package.
+		rawResults := []byte(result.Stdout + result.Stderr)
 
 		t.Status("collating the test results")
 		t.L().Printf("Test Results: %s", rawResults)

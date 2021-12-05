@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -295,8 +296,8 @@ func binaryPathFromVersion(v string) string {
 
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t test.Test, nodes option.NodeListOption, newVersion string,
-) option.Option {
-	return option.StartArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
+) string {
+	return uploadVersion(ctx, t, u.c, nodes, newVersion)
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
@@ -366,9 +367,13 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
 
 		// Put and start the binary.
-		args := u.uploadVersion(ctx, t, nodes, v)
+		binary := u.uploadVersion(ctx, t, nodes, v)
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
+		startOpts.RoachprodOpts.Sequential = false
+		startOpts.RoachtestOpts.DontEncrypt = true
+		u.c.Start(ctx, startOpts, settings, nodes)
 	}
 }
 
@@ -411,9 +416,13 @@ func upgradeNodes(
 			newVersionMsg = "<current>"
 		}
 		t.L().Printf("restarting node %d into version %s", node, newVersionMsg)
-		c.Stop(ctx, c.Node(node))
-		args := option.StartArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
-		c.Start(ctx, c.Node(node), args, option.StartArgsDontEncrypt)
+		c.Stop(ctx, option.DefaultStopOpts(), c.Node(node))
+
+		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachtestOpts.DontEncrypt = true
+		c.Start(ctx, startOpts, settings, c.Node(node))
 	}
 }
 
@@ -553,7 +562,7 @@ func makeVersionFixtureAndFatal(
 ) {
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {
-		c.Start(ctx, c.Node(1))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 		require.NoError(t, c.Conn(ctx, 1).QueryRowContext(
 			ctx,
 			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
@@ -612,7 +621,7 @@ func makeVersionFixtureAndFatal(
 			// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
 			// compatible).
 			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
-			u.c.Stop(ctx, c.All())
+			u.c.Stop(ctx, option.DefaultStopOpts(), c.All())
 
 			c.Run(ctx, c.All(), binaryPathFromVersion(makeFixtureVersion), "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
