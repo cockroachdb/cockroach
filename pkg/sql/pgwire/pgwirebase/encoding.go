@@ -360,6 +360,8 @@ func DecodeDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geometry", b)
 			}
 			return d, nil
+		case oid.T_void:
+			return tree.DVoidDatum, nil
 		case oid.T_numeric:
 			d, err := tree.ParseDDecimal(string(b))
 			if err != nil {
