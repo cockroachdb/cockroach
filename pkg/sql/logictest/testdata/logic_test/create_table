@@ -634,6 +634,3 @@ CREATE TABLE serial_test3 (id SERIAL, temp string, PRIMARY KEY (id))
 
 statement notice NOTICE: upgrading the column id to INT8 to utilize the session serial_normalization setting\nHINT: change the serial_normalization to sql_sequence or sql_sequence_cached if you wish to use a smaller sized serial column at the cost of performance. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
 CREATE TABLE serial_test4 (id SERIAL4, temp string)
-
-statement ok
-CREATE TABLE regression_73498 AS select * from [SHOW CLUSTER QUERIES]

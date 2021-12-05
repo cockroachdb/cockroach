@@ -454,6 +454,15 @@ var (
 		},
 	}
 
+	// Void is the type representing void.
+	Void = &T{
+		InternalType: InternalType{
+			Family: VoidFamily,
+			Oid:    oid.T_void,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -1311,6 +1320,7 @@ var familyNames = map[Family]string{
 	TupleFamily:          "tuple",
 	UnknownFamily:        "unknown",
 	UuidFamily:           "uuid",
+	VoidFamily:           "void",
 }
 
 // Name returns a user-friendly word indicating the family type.
