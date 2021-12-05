@@ -338,6 +338,7 @@ func (s *Store) processRaftSnapshotRequest(
 		var expl string
 		var err error
 		stats, expl, err = r.handleRaftReadyRaftMuLocked(ctx, inSnap)
+		maybeFatalOnRaftReadyErr(ctx, expl, err)
 		if !stats.snap.applied {
 			// This line would be hit if a snapshot was sent when it isn't necessary
 			// (i.e. follower was able to catch up via the log in the interim) or when
@@ -345,7 +346,6 @@ func (s *Store) processRaftSnapshotRequest(
 			// and both the old and new leaders send snapshots).
 			log.Infof(ctx, "ignored stale snapshot at index %d", snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Index)
 		}
-		maybeFatalOnRaftReadyErr(ctx, expl, err)
 		return nil
 	})
 }
