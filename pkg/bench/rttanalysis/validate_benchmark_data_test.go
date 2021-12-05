@@ -10,22 +10,6 @@
 
 package rttanalysis
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-)
-
-// TestBenchmarkExpectation runs all of the benchmarks and
-// one iteration and validates that the number of RPCs meets
-// the expectation.
-//
-// It takes a long time and thus is skipped under stress, race
-// and short.
-func TestBenchmarkExpectation(t *testing.T) {
-	skip.UnderStress(t)
-	skip.UnderRace(t)
-	skip.UnderShort(t)
-
-	RunBenchmarkExpectationTests(t)
-}
+func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }

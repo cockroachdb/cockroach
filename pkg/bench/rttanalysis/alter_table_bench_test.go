@@ -12,8 +12,9 @@ package rttanalysis
 
 import "testing"
 
-func BenchmarkAlterTableAddColumn(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableAddColumn(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableAddColumn", []RoundTripBenchTestCase{
 		{
 			Name:  "alter table add 1 column",
 			Setup: "CREATE TABLE alter_table()",
@@ -31,13 +32,12 @@ func BenchmarkAlterTableAddColumn(b *testing.B) {
 			Stmt: "ALTER TABLE alter_table ADD COLUMN a INT, " +
 				"ADD COLUMN b INT, ADD COLUMN c INT",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableAddCheckConstraint(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableAddCheckConstraint(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableAddCheckConstraint", []RoundTripBenchTestCase{
 		{
 			Name:  "alter table add 1 check constraint",
 			Setup: "CREATE TABLE alter_table(x INT, y INT, z INT)",
@@ -55,13 +55,12 @@ func BenchmarkAlterTableAddCheckConstraint(b *testing.B) {
 			Stmt: "ALTER TABLE alter_table ADD CONSTRAINT ck1 CHECK(x > 0), " +
 				"ADD CONSTRAINT ck2 CHECK(y > 0), ADD CONSTRAINT ck3 CHECK(z > 0)",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableAddForeignKey(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableAddForeignKey(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableAddForeignKey", []RoundTripBenchTestCase{
 		{
 			Name: "alter table add 1 foreign key",
 			Setup: `CREATE TABLE alter_table(x INT, y INT, z INT); 
@@ -96,13 +95,12 @@ CREATE TABLE referenced(x INT, y INT, z INT, PRIMARY KEY(x,y,z));`,
 			Stmt: "ALTER TABLE referencer " +
 				"ADD CONSTRAINT fk FOREIGN KEY (x,y,z) REFERENCES referenced(x,y,z)",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableDropColumn(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableDropColumn(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableDropColumn", []RoundTripBenchTestCase{
 		{
 			Name:  "alter table drop 1 column",
 			Setup: `CREATE TABLE alter_table(a INT)`,
@@ -119,13 +117,12 @@ func BenchmarkAlterTableDropColumn(b *testing.B) {
 			Stmt: "ALTER TABLE alter_table DROP COLUMN a, DROP COLUMN b, " +
 				"DROP COLUMN c",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableDropConstraint(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableDropConstraint(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableDropConstraint", []RoundTripBenchTestCase{
 		{
 			Name:  "alter table drop 1 check constraint",
 			Setup: `CREATE TABLE alter_table(a INT, CONSTRAINT ck CHECK (a > 0))`,
@@ -145,13 +142,12 @@ c INT, CONSTRAINT ck3 CHECK (c > 0))`,
 			Stmt: "ALTER TABLE alter_table DROP CONSTRAINT ck1, DROP CONSTRAINT ck2, " +
 				"DROP CONSTRAINT ck3",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableSplit(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableSplit(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableSplit", []RoundTripBenchTestCase{
 		{
 			Name:  "alter table split at 1 value",
 			Setup: `CREATE TABLE alter_table(a INT)`,
@@ -167,13 +163,12 @@ func BenchmarkAlterTableSplit(b *testing.B) {
 			Setup: `CREATE TABLE alter_table(a INT, b INT, c INT)`,
 			Stmt:  "ALTER TABLE alter_table SPLIT AT VALUES (1), (2), (3)",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableUnsplit(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableUnsplit(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableUnsplit", []RoundTripBenchTestCase{
 		{
 			Name: "alter table unsplit at 1 value",
 			Setup: `CREATE TABLE alter_table(a INT);
@@ -192,13 +187,12 @@ ALTER TABLE alter_table SPLIT AT VALUES (1), (2);`,
 ALTER TABLE alter_table SPLIT AT VALUES (1), (2), (3)`,
 			Stmt: "ALTER TABLE alter_table UNSPLIT AT VALUES (1), (2), (3)",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkAlterTableConfigureZone(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkAlterTableConfigureZone(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("AlterTableConfigureZone", []RoundTripBenchTestCase{
 		{
 			Name:  "alter table configure zone 5 replicas",
 			Setup: `CREATE TABLE alter_table(a INT);`,
@@ -215,7 +209,5 @@ func BenchmarkAlterTableConfigureZone(b *testing.B) {
 			Stmt: "ALTER TABLE alter_table CONFIGURE ZONE USING " +
 				"range_min_bytes = 0, range_max_bytes = 90000",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
