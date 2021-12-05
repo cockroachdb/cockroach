@@ -57,11 +57,8 @@ enum ScanVisibility {
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
-// columns of the table. If is_check is set, the TableReader will run additional
-// data checking procedures and the "internal columns" are:
-//  - Error type (string).
-//  - Primary key as a string, if it was obtainable.
-//  - JSON of all decoded column values.
+// columns of the table. Internally, only the values for the columns specified
+// by needed_columns are to be populated.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -80,8 +77,8 @@ message TableReaderSpec {
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
 
   // Indicates whether the TableReader is being run as an exhaustive
-  // check. This is only true during SCRUB commands.
-  optional bool is_check = 6 [(gogoproto.nullable) = false];
+  // check. This is only true during SCRUB commands. No longer supported.
+  optional bool deprecated_is_check = 6 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
   // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if

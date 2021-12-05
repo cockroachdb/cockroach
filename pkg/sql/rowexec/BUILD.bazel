@@ -27,7 +27,6 @@ go_library(
         "rowfetcher.go",
         "sample_aggregator.go",
         "sampler.go",
-        "scrub_tablereader.go",
         "sorter.go",
         "stats.go",
         "stream_group_accumulator.go",
