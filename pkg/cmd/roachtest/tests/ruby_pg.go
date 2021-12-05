@@ -19,9 +19,12 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +49,7 @@ func registerRubyPG(r registry.Registry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -149,9 +152,23 @@ func registerRubyPG(r registry.Registry) {
 		t.Status("running ruby-pg test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			`cd /mnt/data1/ruby-pg/ && sudo rake`,
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		rawResults := []byte(result.Stdout + result.Stderr)
 
 		t.L().Printf("Test Results:\n%s", rawResults)
 

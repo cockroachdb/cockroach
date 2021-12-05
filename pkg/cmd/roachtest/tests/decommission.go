@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -104,7 +106,7 @@ func runDrainAndDecommission(
 	pinnedNode := 1
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, c.Node(i))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000`)
 
@@ -168,7 +170,7 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				return c.RunL(ctx, t.L(), c.Node(id), "./cockroach node drain --insecure")
+				return c.RunE(ctx, c.Node(id), "./cockroach node drain --insecure")
 			}
 			return drain(id)
 		})
@@ -182,7 +184,7 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunL(ctx, t.L(), c.Node(id), "./cockroach node decommission --self --insecure")
+			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --insecure")
 		}
 		return decom(id)
 	})
@@ -222,7 +224,9 @@ func runDecommission(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, c.Node(i), option.StartArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=node%d", i))
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
@@ -395,8 +399,9 @@ func runDecommission(
 			if err != nil {
 				return err
 			}
-			sArgs := option.StartArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
-			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s --attrs=node%d", internalAddrs[0], node))
+			if err := c.StartE(ctx, startOpts, install.MakeClusterSettings(), c.Node(node)); err != nil {
 				return err
 			}
 		}
@@ -417,9 +422,10 @@ func runDecommission(
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
-	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, args)
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Start(ctx, option.DefaultStartOpts(), settings)
 
 	h := newDecommTestHelper(t, c)
 
@@ -753,14 +759,14 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			runNode = h.getRandNode()
 			t.L().Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
-			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
-			c.Start(ctx, c.Nodes(targetNodeA, targetNodeB), args)
+			c.Stop(ctx, roachprod.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
+			c.Start(ctx, option.DefaultStartOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
 			}
 			// Now stop+wipe them for good to keep the logs simple and the dead node detector happy.
-			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
+			c.Stop(ctx, roachprod.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
 			c.Wipe(ctx, c.Nodes(targetNodeA, targetNodeB))
 		}
 	}
@@ -800,7 +806,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		targetNode := h.getRandNodeOtherThan(firstNodeID)
 		h.blockFromRandNode(targetNode)
 		t.L().Printf("intentionally killing n%d to later decommission it when down\n", targetNode)
-		c.Stop(ctx, c.Node(targetNode))
+		c.Stop(ctx, roachprod.DefaultStopOpts(), c.Node(targetNode))
 
 		// Pick a runNode that is still in commission and will
 		// remain so (or it won't be able to contact cluster).
@@ -816,7 +822,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 			// Bring targetNode it back up to verify that its replicas still get
 			// removed.
-			c.Start(ctx, c.Node(targetNode), args)
+			c.Start(ctx, option.DefaultStartOpts(), settings, c.Node(targetNode))
 		}
 
 		// Run decommission a second time to wait until the replicas have
@@ -883,7 +889,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		{
 			t.L().Printf("wiping n%d and adding it back to the cluster as a new node\n", targetNode)
 
-			c.Stop(ctx, c.Node(targetNode))
+			c.Stop(ctx, roachprod.DefaultStopOpts(), c.Node(targetNode))
 			c.Wipe(ctx, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
@@ -892,9 +898,9 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			c.Start(ctx, c.Node(targetNode), option.StartArgs(
-				fmt.Sprintf("-a=--join %s", joinAddr),
-			))
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s", joinAddr))
+			c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(targetNode))
 		}
 
 		if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
@@ -1180,7 +1186,7 @@ func execCLI(
 	args = append(args, extraArgs...)
 	args = append(args, "--insecure")
 	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-	buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(runNode), args...)
-	t.L().Printf("%s\n", buf)
-	return string(buf), err
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
+	t.L().Printf("%s\n", result.Stdout)
+	return result.Stdout, err
 }

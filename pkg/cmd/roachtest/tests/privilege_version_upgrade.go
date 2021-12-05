@@ -252,7 +252,7 @@ func resetStep() versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		err := u.c.WipeE(ctx, t.L())
 		require.NoError(t, err)
-		err = u.c.RunL(ctx, t.L(), u.c.All(), "rm -rf "+t.PerfArtifactsDir())
+		err = u.c.RunE(ctx, u.c.All(), "rm -rf "+t.PerfArtifactsDir())
 		require.NoError(t, err)
 		err = u.c.RunE(ctx, u.c.All(), "rm -rf {store-dir}")
 		require.NoError(t, err)

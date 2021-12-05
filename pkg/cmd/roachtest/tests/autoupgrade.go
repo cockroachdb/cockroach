@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +42,7 @@ func registerAutoUpgrade(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		c.Start(ctx, c.Range(1, nodes))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -77,7 +79,7 @@ func registerAutoUpgrade(r registry.Registry) {
 				return err
 			}
 			t.WorkerStatus("stop")
-			c.Stop(ctx, c.Node(node))
+			c.Stop(ctx, roachprod.DefaultStopOpts(), c.Node(node))
 			return nil
 		}
 
@@ -124,7 +126,9 @@ func registerAutoUpgrade(r registry.Registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-			c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachtestOpts.DontEncrypt = true
+			c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -146,7 +150,9 @@ func registerAutoUpgrade(r registry.Registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
-		c.Start(ctx, c.Node(nodes), option.StartArgsDontEncrypt)
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachtestOpts.DontEncrypt = true
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(nodes))
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -189,7 +195,9 @@ func registerAutoUpgrade(r registry.Registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, c.Node(nodes-1), option.StartArgsDontEncrypt)
+		startOpts = option.DefaultStartOpts()
+		startOpts.RoachtestOpts.DontEncrypt = true
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(nodes-1))
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}

@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -31,9 +33,9 @@ func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 
-		// Start the first `start` nodes and restore a tpch fixture.
-		args := option.StartArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-		c.Start(ctx, c.Range(1, start), args)
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5"}
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, start))
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
@@ -50,7 +52,7 @@ func registerAllocator(r registry.Registry) {
 		m.Wait()
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
-		c.Start(ctx, c.Range(start+1, c.Spec().NodeCount), args)
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(start+1, c.Spec().NodeCount))
 
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
 		for node := 1; node <= c.Spec().NodeCount; node++ {
@@ -263,12 +265,12 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	args := option.StartArgs(
-		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
-		"--args=--vmodule=replicate_queue=6",
-	)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, c.All(), args)
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=replicate_queue=6"}
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Start(ctx, startOpts, settings, c.All())
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -335,9 +337,9 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}()
 
 	// Stop the cluster and restart 2/3 of the nodes.
-	c.Stop(ctx)
+	c.Stop(ctx, roachprod.DefaultStopOpts())
 	tBeginDown := timeutil.Now()
-	c.Start(ctx, c.Range(1, 6), args)
+	c.Start(ctx, startOpts, settings, c.Range(1, 6))
 
 	waitForUnderReplicated := func(count int) {
 		for start := timeutil.Now(); ; time.Sleep(time.Second) {
@@ -393,5 +395,5 @@ FROM crdb_internal.kv_store_status
 	waitForReplication(5)
 
 	// Restart the down nodes to prevent the dead node detector from complaining.
-	c.Start(ctx, c.Range(7, 9))
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(7, 9))
 }

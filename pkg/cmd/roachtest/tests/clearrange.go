@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -63,28 +65,26 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.Status("restoring fixture")
-	c.Start(ctx)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
 	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
-	c.Stop(ctx)
+	c.Stop(ctx, roachprod.DefaultStopOpts())
 	t.Status()
 
-	var opts []option.Option
+	settings := install.MakeClusterSettings()
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		opts = append(opts, option.StartArgs(
-			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true",
-			"--env", "COCKROACH_ENFORCE_CONSISTENT_STATS=true",
-		))
+		settings.Env = append(settings.Env, []string{"COCKROACH_CONSISTENCY_AGGRESSIVE=true", "COCKROACH_ENFORCE_CONSISTENT_STATS=true"}...)
 	}
-	c.Start(ctx, opts...)
+
+	c.Start(ctx, option.DefaultStartOpts(), settings)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that

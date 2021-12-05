@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -66,6 +67,10 @@ func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 }
 
 func main() {
+	defer func() {
+		fmt.Println("PRINTING STACK")
+		debug.PrintStack()
+	}()
 	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
 	parallelism := 10
@@ -277,7 +282,8 @@ runner itself.
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
-			&roachprodBinary, "roachprod", "", "path to roachprod binary to use")
+			&deprecatedRoachprodBinary, "roachprod", "", "DEPRECATED")
+		_ = cmd.Flags().MarkDeprecated("roachprod", "roachtest now uses roachprod as a library")
 		cmd.Flags().BoolVar(
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
@@ -322,6 +328,7 @@ runner itself.
 		os.Exit(1)
 	}
 
+	disableIssue = true
 	if err := rootCmd.Execute(); err != nil {
 		code := 1
 		if errors.Is(err, errTestsFailed) {
@@ -367,6 +374,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 			cfg.parallelism = 1
 		}
 	}
+
 	opt := clustersOpt{
 		typ:                       clusterType,
 		clusterName:               clusterName,
