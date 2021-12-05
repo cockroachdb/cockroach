@@ -10,8 +10,11 @@
 
 package install
 
+import "github.com/cockroachdb/cockroach/pkg/roachprod/config"
+
 // ClusterSettings contains various knobs that affect operations on a cluster.
 type ClusterSettings struct {
+	Binary        string
 	Secure        bool
 	PGUrlCertsDir string
 	Env           []string
@@ -32,6 +35,13 @@ type TagOption string
 
 func (o TagOption) apply(settings *ClusterSettings) {
 	settings.Tag = string(o)
+}
+
+// BinaryOption is used to pass a process tag.
+type BinaryOption string
+
+func (o BinaryOption) apply(settings *ClusterSettings) {
+	settings.Binary = string(o)
 }
 
 // PGUrlCertsDirOption is used to pass certs dir for secure connections.
@@ -85,6 +95,7 @@ func (o DebugDirOption) apply(settings *ClusterSettings) {
 // MakeClusterSettings makes a ClusterSettings.
 func MakeClusterSettings(opts ...ClusterSettingOption) ClusterSettings {
 	clusterSettings := ClusterSettings{
+		Binary:        config.Binary,
 		Tag:           "",
 		PGUrlCertsDir: "./certs",
 		Secure:        false,

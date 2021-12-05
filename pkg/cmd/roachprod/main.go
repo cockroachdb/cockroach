@@ -425,7 +425,8 @@ signals.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		return roachprod.Stop(context.Background(), args[0], tag, sig, wait)
+		stopOpts := roachprod.StopOpts{Wait: wait, ProcessTag: tag, Sig: sig}
+		return roachprod.Stop(context.Background(), args[0], stopOpts)
 	}),
 }
 
@@ -551,7 +552,21 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Monitor(context.Background(), args[0], monitorOpts)
+		messages, err := roachprod.Monitor(context.Background(), args[0], monitorOpts)
+		if err != nil {
+			return err
+		}
+		for msg := range messages {
+			if msg.Err != nil {
+				msg.Msg += "error: " + msg.Err.Error()
+			}
+			thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
+			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
+				err = errors.CombineErrors(err, thisError)
+			}
+			fmt.Println(thisError.Error())
+		}
+		return err
 	}),
 }
 

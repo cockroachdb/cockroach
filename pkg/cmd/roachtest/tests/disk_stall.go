@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -70,15 +71,8 @@ func runDiskStalledDetection(
 	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")
 	c.Run(ctx, n, "sudo mkdir -p {store-dir}/real/logs")
 	c.Run(ctx, n, "sudo chmod -R 777 {store-dir}/{real,faulty}")
-	l, err := t.L().ChildLogger("cockroach")
-	if err != nil {
-		t.Fatal(err)
-	}
-	type result struct {
-		err error
-		out string
-	}
-	errCh := make(chan result)
+
+	errCh := make(chan install.RunResultDetails)
 
 	// NB: charybdefs' delay nemesis introduces 50ms per syscall. It would
 	// be nicer to introduce a longer delay, but this works.
@@ -105,7 +99,7 @@ func runDiskStalledDetection(
 
 	go func() {
 		t.WorkerStatus("running server")
-		out, err := c.RunWithBuffer(ctx, l, n,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), n,
 			fmt.Sprintf("timeout --signal 9 %ds env "+
 				"COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s "+
 				"COCKROACH_LOG_MAX_SYNC_DURATION=%s "+
@@ -114,7 +108,10 @@ func runDiskStalledDetection(
 				int(dur.Seconds()), maxDataSync, maxLogSync, dataDir, logDir,
 			),
 		)
-		errCh <- result{err, string(out)}
+		if err != nil {
+			result.Err = err
+		}
+		errCh <- result
 	}()
 
 	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
@@ -122,17 +119,17 @@ func runDiskStalledDetection(
 	t.Status("blocking storage")
 	c.Run(ctx, n, "charybdefs-nemesis --delay")
 
-	res := <-errCh
-	if res.err == nil {
-		t.Fatalf("expected an error: %s", res.out)
+	result := <-errCh
+	if result.Err == nil {
+		t.Fatalf("expected an error: %s", result.Stdout)
 	}
 
 	// This test can also run in sanity check mode to make sure it doesn't fail
 	// due to the aggressive env vars above.
 	expectMsg := affectsDataDir || affectsLogDir
 
-	if expectMsg != strings.Contains(res.out, "disk stall detected") {
-		t.Fatalf("unexpected output: %v %s", res.err, res.out)
+	if expectMsg != strings.Contains(result.Stderr, "disk stall detected") {
+		t.Fatalf("unexpected output: %v", result.Err)
 	} else if elapsed := timeutil.Since(tStarted); !expectMsg && elapsed < dur {
 		t.Fatalf("no disk stall injected, but process terminated too early after %s (expected >= %s)", elapsed, dur)
 	}
