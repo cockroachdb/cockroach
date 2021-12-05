@@ -4734,6 +4734,21 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.void_func": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDVoid(), nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.force_panic": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
