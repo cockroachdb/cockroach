@@ -225,6 +225,10 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 					return false
 				}
 			}
+
+		case types.VoidFamily:
+			return false
+
 		}
 		return true
 	}
