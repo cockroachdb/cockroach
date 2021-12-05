@@ -1,2 +1,22 @@
 statement error value type void cannot be used for table columns
 CREATE TABLE invalid_void_table(col void)
+
+query T
+SELECT 'this will be ignored'::void
+----
+·
+
+query T
+select row (''::void, 2::int)
+----
+("",2)
+
+query T
+SELECT ('this will disappear too'::text)::void
+----
+·
+
+query T
+SELECT ('gone'::void)::text
+----
+·
