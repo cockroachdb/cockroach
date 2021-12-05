@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -132,7 +134,7 @@ func setupTPCC(
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-			c.Start(ctx, crdbNodes)
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 		}
 	}
 
@@ -840,12 +842,14 @@ func (s tpccBenchSpec) partitions() int {
 }
 
 // startOpts returns any extra start options that the spec requires.
-func (s tpccBenchSpec) startOpts() []option.Option {
-	opts := []option.Option{option.StartArgsDontEncrypt}
+func (s tpccBenchSpec) startOpts() (option.StartOpts, install.ClusterSettings) {
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachtestOpts.DontEncrypt = true
+	settings := install.MakeClusterSettings()
 	if s.LoadConfig == singlePartitionedLoadgen {
-		opts = append(opts, option.Racks(s.partitions()))
+		settings.NumRacks = s.partitions()
 	}
-	return opts
+	return startOpts, settings
 }
 
 func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
@@ -939,7 +943,8 @@ func loadTPCCBench(
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		startOpts, settings := b.startOpts()
+		c.Start(ctx, startOpts, settings, roachNodes)
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
 		return err
@@ -991,8 +996,8 @@ func loadTPCCBench(
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s}",
 		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes)
-	if out, err := c.RunWithBuffer(ctx, t.L(), loadNode, cmd); err != nil {
-		return errors.Wrapf(err, "failed with output %q", string(out))
+	if _, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd); err != nil {
+		return errors.Wrapf(err, "failed with error: %s", err.Error())
 	}
 
 	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2MiB'`)
@@ -1033,7 +1038,8 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// Don't encrypt in tpccbench tests.
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)
-	c.Start(ctx, append(b.startOpts(), roachNodes)...)
+	startOpts, settings := b.startOpts()
+	c.Start(ctx, startOpts, settings, roachNodes)
 	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
@@ -1101,7 +1107,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal(err)
 			}
 			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			if err := c.StopE(shortCtx, roachNodes); err != nil {
+			if err := c.StopE(shortCtx, roachprod.DefaultStopOpts(), roachNodes); err != nil {
 				cancel()
 				t.L().Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
 				// We usually spend a long time blocking in StopE anyway, but just in case
@@ -1122,7 +1128,8 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			t.Fatalf("VM is hosed; giving up")
 		}
 
-		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		startOpts, settings := b.startOpts()
+		c.Start(ctx, startOpts, settings, roachNodes)
 		SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	}
 

@@ -19,22 +19,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
 func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	skip.WithIssue(t, 58165)
-	args := func(attr string) option.Option {
-		return option.StartArgs(
-			"-a=--attrs="+attr,
-			"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", // speed up replication
-		)
-	}
+
 	// n1-n5 will be in locality A, n6-n8 in B. We'll pin a single table to B and
 	// let the the nodes in B fail permanently.
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, c.Range(1, 5), args("A"))
+
+	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--attrs=A")
+	c.Start(ctx, startOpts, settings, c.Range(1, 5))
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
@@ -48,7 +49,9 @@ func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	require.NoError(t, rows.Err())
 
-	c.Start(ctx, c.Range(6, 8), args("B"))
+	startOpts = option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--attrs=B")
+	c.Start(ctx, startOpts, settings, c.Range(6, 8))
 	_, err = db.Exec(`CREATE TABLE lostrange (id INT PRIMARY KEY, v STRING)`)
 	require.NoError(t, err)
 
@@ -102,7 +105,7 @@ OR
 	// Now 'lostrange' is on n6-n8 and nothing else is. The nodes go down
 	// permanently (the wiping prevents the test runner from failing the
 	// test after it has passed - we cannot restart those nodes).
-	c.Stop(ctx, c.Range(6, 8))
+	c.Stop(ctx, roachprod.DefaultStopOpts(), c.Range(6, 8))
 	c.Wipe(ctx, c.Range(6, 8))
 
 	// Should not be able to read from it even (generously) after a lease timeout.

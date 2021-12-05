@@ -424,7 +424,8 @@ signals.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		return roachprod.Stop(args[0], tag, sig, wait)
+		stopOpts := roachprod.StopOpts{Wait: wait, ProcessTag: tag, Sig: sig}
+		return roachprod.Stop(args[0], stopOpts)
 	}),
 }
 

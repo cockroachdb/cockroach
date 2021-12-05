@@ -538,20 +538,6 @@ func execCmdEx(ctx context.Context, l *logger.Logger, args ...string) cmdRes {
 	}
 }
 
-// execCmdWithBuffer executes the given command and returns its stdout/stderr
-// output. If the return code is not 0, an error is also returned.
-// l is used to log the command before running it. No output is logged.
-func execCmdWithBuffer(ctx context.Context, l *logger.Logger, args ...string) ([]byte, error) {
-	l.Printf("> %s\n", strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, errors.Wrapf(err, `%s`, strings.Join(args, ` `))
-	}
-	return out, nil
-}
-
 func makeGCEClusterName(name string) string {
 	name = strings.ToLower(name)
 	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
@@ -1013,7 +999,7 @@ func attachToExistingCluster(
 
 	if !opt.skipStop {
 		c.status("stopping cluster")
-		if err := c.StopE(ctx, c.All()); err != nil {
+		if err := c.StopE(ctx, roachprod.DefaultStopOpts(), c.All()); err != nil {
 			return nil, err
 		}
 		if !opt.skipWipe {
@@ -1056,7 +1042,7 @@ func (c *clusterImpl) StopCockroachGracefullyOnNode(ctx context.Context, node in
 	// However, it serves as a reminder that `./cockroach quit` doesn't yet
 	// work well enough -- ideally all listeners and engines are closed by
 	// the time it returns to the client.
-	c.Stop(ctx, c.Node(node))
+	c.Stop(ctx, roachprod.DefaultStopOpts(), c.Node(node))
 	// TODO(tschottdorf): should return an error. I doubt that we want to
 	//  call these *testing.T-style methods on goroutines.
 	return nil
@@ -1302,10 +1288,9 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			si := strconv.Itoa(i)
-			output, err := execCmdWithBuffer(ctx, c.l, roachprodBinary, "ssh", c.name+":"+si, "--",
-				"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:"+si+"}", zipName)
-			if err != nil {
-				t.L().Printf("./cockroach debug zip failed: %s", output)
+			cmd := []string{"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:" + si + "}", zipName}
+			if err := c.RunE(ctx, c.All(), cmd...); err != nil {
+				t.L().Printf("./cockroach debug zip failed: %v", err)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1455,15 +1440,35 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
-		if err := execCmd(
-			ctx, c.l, roachprodBinary, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'sudo dmesg > "+name+"'", /* src */
-		); err != nil {
-			// Don't error out because it might've worked on some nodes. Fetching will
-			// error out below but will get everything it can first.
-			t.L().Printf("during dmesg fetching: %s", err)
+
+		// Run dmesg on all nodes to redirect the kernel ring buffer content to a file.
+		cmd := []string{"/bin/bash", "-c", "'sudo dmesg > " + name + "'"}
+		var results []install.RunResultDetails
+		var combinedDmesgError error
+		if results, combinedDmesgError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedDmesgError != nil {
+			return errors.Wrap(combinedDmesgError, "cluster.FetchDmesg")
 		}
-		return errors.Wrap(c.Get(ctx, c.l, name /* src */, path /* dest */), "cluster.FetchDmesg")
+
+		var successfulNodes option.NodeListOption
+		for _, result := range results {
+			if result.Err != nil {
+				// Store `Run` errors to return later (after copying files from successful nodes).
+				combinedDmesgError = errors.CombineErrors(combinedDmesgError, result.Err)
+				t.L().Printf("running dmesg failed on node %d: %v", result.Node, result.Err)
+			} else {
+				// Only run `Get` on successful nodes to avoid pseudo-failure on `Get` caused by an earlier failure on `Run`.
+				successfulNodes = append(successfulNodes, int(result.Node))
+			}
+		}
+
+		// Get dmesg files from successful nodes only.
+		if err := c.Get(ctx, c.l, name /* src */, path /* dest */, successfulNodes); err != nil {
+			t.L().Printf("getting dmesg files failed: %v", err)
+			return errors.Wrap(err, "cluster.FetchDmesg")
+		}
+
+		// Return an error if running dmesg failed on any node.
+		return combinedDmesgError
 	})
 }
 
@@ -1486,15 +1491,35 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
-		if err := execCmd(
-			ctx, c.l, roachprodBinary, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'sudo journalctl > "+name+"'", /* src */
-		); err != nil {
-			// Don't error out because it might've worked on some nodes. Fetching will
-			// error out below but will get everything it can first.
-			t.L().Printf("during journalctl fetching: %s", err)
+
+		// Run journalctl on all nodes to redirect journal logs to a file.
+		cmd := []string{"/bin/bash", "-c", "'sudo journalctl > " + name + "'"}
+		var results []install.RunResultDetails
+		var combinedJournalctlError error
+		if results, combinedJournalctlError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedJournalctlError != nil {
+			return errors.Wrap(combinedJournalctlError, "cluster.FetchJournalctl")
 		}
-		return errors.Wrap(c.Get(ctx, c.l, name /* src */, path /* dest */), "cluster.FetchJournalctl")
+
+		var successfulNodes option.NodeListOption
+		for _, result := range results {
+			if result.Err != nil {
+				// Store `Run` errors to return later (after copying files from successful nodes).
+				combinedJournalctlError = errors.CombineErrors(combinedJournalctlError, result.Err)
+				t.L().Printf("running journalctl failed on node %d: %v", result.Node, result.Err)
+			} else {
+				// Only run `Get` on successful nodes to avoid pseudo-failure on `Get` caused by an earlier failure on `Run`.
+				successfulNodes = append(successfulNodes, int(result.Node))
+			}
+		}
+
+		// Get files from successful nodes only.
+		if err := c.Get(ctx, c.l, name /* src */, path /* dest */, successfulNodes); err != nil {
+			t.L().Printf("getting files failed: %v", err)
+			return errors.Wrap(err, "cluster.FetchJournalctl")
+		}
+
+		// Return an error if running journalctl failed on any node.
+		return combinedJournalctlError
 	})
 }
 
@@ -1739,42 +1764,31 @@ func (c *clusterImpl) PutString(
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters.
 func (c *clusterImpl) GitClone(
-	ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, src, dest, branch string, nodes option.NodeListOption,
 ) error {
-	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
-if ! test -d %[1]s; then
-  git clone -b %[2]s --depth 1 %[3]s %[1]s
-else
-  cd %[1]s
-  git fetch origin
-  git checkout origin/%[2]s
-fi
-'`, dest,
-		branch,
-		src,
-	))
-}
-
-func roachprodArgs(opts []option.Option) []string {
-	var args []string
-	for _, opt := range opts {
-		a, ok := opt.(option.RoachprodArgOption)
-		if !ok {
-			continue
-		}
-		args = append(args, ([]string)(a)...)
+	cmd := []string{"bash", "-e", "-c", fmt.Sprintf(`'
+		if ! test -d %[1]s; then
+			git clone -b %[2]s --depth 1 %[3]s %[1]s
+  		else
+			cd %[1]s
+		git fetch origin
+		git checkout origin/%[2]s
+  		fi
+  		'`, dest, branch, src),
 	}
-	return args
+	return errors.Wrap(c.RunE(ctx, nodes, cmd...), "cluster.GitClone")
 }
 
-func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Option) {
+// worker is only passed by start (not passed with wipe/stop)
+func (c *clusterImpl) setStatusForClusterOpt(operation string, worker bool, opts ...option.Option) {
 	var nodes option.NodeListOption
-	worker := false
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
 			nodes = s.Merge(nodes)
 		}
 		if _, ok := o.(option.WorkerAction); ok {
+			// only used with stop/wipe
+			// TODO(ahmad/healthy_pod): follow a similar pattern to "start" and avoid using this option.
 			worker = true
 		}
 	}
@@ -1790,8 +1804,8 @@ func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Op
 	}
 }
 
-func (c *clusterImpl) clearStatusForClusterOpt(opts ...option.Option) {
-	worker := false
+// worker is only passed by start (not passed (passed as false) with wipe/stop)
+func (c *clusterImpl) clearStatusForClusterOpt(worker bool, opts ...option.Option) {
 	for _, o := range opts {
 		if _, ok := o.(option.WorkerAction); ok {
 			worker = true
@@ -1807,7 +1821,12 @@ func (c *clusterImpl) clearStatusForClusterOpt(opts ...option.Option) {
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
-func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
+func (c *clusterImpl) StartE(
+	ctx context.Context,
+	startOpts option.StartOpts,
+	settings install.ClusterSettings,
+	opts ...option.Option,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StartE")
 	}
@@ -1815,30 +1834,36 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	c.setStatusForClusterOpt("starting", opts...)
-	defer c.clearStatusForClusterOpt(opts...)
-	args := []string{
-		roachprodBinary,
-		"start",
-	}
-	args = append(args, roachprodArgs(opts)...)
-	args = append(args, c.MakeNodes(opts...))
-	if !argExists(args, "--encrypt") {
-		if c.encryptDefault {
-			args = append(args, "--encrypt")
-		} else if c.encryptAtRandom {
-			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-			if rng.Intn(2) == 1 {
-				args = append(args, "--encrypt")
-				// Force encryption in future calls of Start with the same cluster.
-				c.encryptDefault = true
-			}
+	c.setStatusForClusterOpt("starting", startOpts.RoachtestOpts.Worker, opts...)
+	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker, opts...)
+
+	if startOpts.RoachtestOpts.DontEncrypt {
+		startOpts.RoachprodOpts.EncryptedStores = false
+	} else if c.encryptDefault {
+		startOpts.RoachprodOpts.EncryptedStores = true
+	} else if c.encryptAtRandom {
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		if rng.Intn(2) == 1 {
+			// Force encryption in future calls of Start with the same cluster.
+			c.encryptDefault = true
+			startOpts.RoachprodOpts.EncryptedStores = true
 		}
 	}
-	if err := execCmd(ctx, c.l, args...); err != nil {
+
+	clusterSettingsOpts := []install.ClusterSettingOption{
+		install.TagOption(settings.Tag),
+		install.PGUrlCertsDirOption(settings.PGUrlCertsDir),
+		install.SecureOption(settings.Secure),
+		install.UseTreeDistOption(settings.UseTreeDist),
+		install.EnvOption(settings.Env),
+		install.NumRacksOption(settings.NumRacks),
+	}
+
+	if err := roachprod.Start(c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
 	}
-	if argExists(args, "--secure") {
+
+	if settings.Secure {
 		var err error
 		c.localCertsDir, err = ioutil.TempDir("", "roachtest-certs")
 		if err != nil {
@@ -1868,46 +1893,40 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 }
 
 // Start is like StartE() except that it will fatal the test on error.
-func (c *clusterImpl) Start(ctx context.Context, opts ...option.Option) {
-	if err := c.StartE(ctx, opts...); err != nil {
+func (c *clusterImpl) Start(
+	ctx context.Context,
+	startOpts option.StartOpts,
+	settings install.ClusterSettings,
+	opts ...option.Option,
+) {
+	if err := c.StartE(ctx, startOpts, settings, opts...); err != nil {
 		c.t.Fatal(err)
 	}
 }
 
-func argExists(args []string, target string) bool {
-	for _, arg := range args {
-		if arg == target || strings.HasPrefix(arg, target+"=") {
-			return true
-		}
-	}
-	return false
-}
-
 // StopE cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
-func (c *clusterImpl) StopE(ctx context.Context, opts ...option.Option) error {
+func (c *clusterImpl) StopE(
+	ctx context.Context, stopOpts roachprod.StopOpts, opts ...option.Option,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StopE")
 	}
-	args := []string{
-		roachprodBinary,
-		"stop",
-	}
-	args = append(args, roachprodArgs(opts)...)
-	args = append(args, c.MakeNodes(opts...))
-	c.setStatusForClusterOpt("stopping", opts...)
-	defer c.clearStatusForClusterOpt(opts...)
-	return execCmd(ctx, c.l, args...)
+	c.setStatusForClusterOpt("stopping", false, opts...)
+	defer c.clearStatusForClusterOpt(false, opts...)
+	return errors.Wrap(roachprod.Stop(c.MakeNodes(opts...), stopOpts), "cluster.StopE")
 }
 
 // Stop is like StopE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *clusterImpl) Stop(ctx context.Context, opts ...option.Option) {
+func (c *clusterImpl) Stop(
+	ctx context.Context, stopOpts roachprod.StopOpts, opts ...option.Option,
+) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if err := c.StopE(ctx, opts...); err != nil {
+	if err := c.StopE(ctx, stopOpts, opts...); err != nil {
 		c.t.Fatal(err)
 	}
 }
@@ -1919,19 +1938,14 @@ func (c *clusterImpl) Reset(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Reset")
 	}
-	args := []string{
-		roachprodBinary,
-		"reset",
-		c.name,
-	}
 	c.status("resetting cluster")
 	defer c.status()
-	return execCmd(ctx, c.l, args...)
+	return errors.Wrap(roachprod.Reset(c.name), "cluster.Reset")
 }
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...option.Option) error {
+func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -1939,9 +1953,9 @@ func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...opti
 		// For tests.
 		return nil
 	}
-	c.setStatusForClusterOpt("wiping", nodes...)
-	defer c.clearStatusForClusterOpt(nodes...)
-	return roachprod.Wipe(c.MakeNodes(nodes...), false /* preserveCerts */)
+	c.setStatusForClusterOpt("wiping", false, opts...)
+	defer c.clearStatusForClusterOpt(false, opts...)
+	return roachprod.Wipe(c.MakeNodes(opts...), false /* preserveCerts */)
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
@@ -1955,11 +1969,94 @@ func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
 	}
 }
 
-// Run a command on the specified node.
+// Run a command on the specified nodes and call test.Fatal if there is an error.
 func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args ...string) {
-	err := c.RunE(ctx, node, args...)
+	results, err := c.RunWithDetails(ctx, nil, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
+	}
+	for _, result := range results {
+		if result.Err != nil {
+			c.t.Fatal(result.Err)
+		}
+	}
+}
+
+// RunE runs a command on the specified nodes and returns the first error it encounters on any node.
+func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, args ...string) error {
+	results, err := c.RunWithDetails(ctx, nil, nodes, args...)
+	if err != nil {
+		return err
+	}
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
+	return nil
+}
+
+// RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
+// on a single node AND 2) an error from roachprod itself would be treated the same way
+// you treat an error from the command. This makes error checking easier / friendlier
+// and helps us avoid code replication.
+func (c *clusterImpl) RunWithDetailsSingleNode(
+	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+) (install.RunResultDetails, error) {
+	results, err := c.RunWithDetails(ctx, testLogger, nodes, args...)
+	if err != nil {
+		return install.RunResultDetails{}, err
+	}
+	return results[0], results[0].Err
+}
+
+// RunWithDetails runs a command on the specified nodes, returning the results
+// details and a `roachprod` error. The output will be redirected to a file which is logged
+// via the cluster-wide logger in case of an error. Failing invocations will have
+// an additional marker file with a `.failed` extension instead of `.log`.
+func (c *clusterImpl) RunWithDetails(
+	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+) ([]install.RunResultDetails, error) {
+	l, _, err := c.loggerForCmd(nodes, args...)
+	if err != nil {
+		return nil, err
+	}
+	physicalFileName := l.File.Name()
+
+	if err := ctx.Err(); err != nil {
+		l.Printf("(note: incoming context was canceled: %s", err)
+		return nil, err
+	}
+
+	l.Printf("running %s on nodes: %v", strings.Join(args, " "), nodes)
+	if testLogger != nil {
+		testLogger.Printf("> %s\n", strings.Join(args, " "))
+	}
+
+	results, err := roachprod.RunWithDetails(c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, false /* secure */, args)
+	if err != nil {
+		l.Printf("> result: %+v", err)
+		createFailedFile(physicalFileName)
+		return results, err
+	}
+
+	for _, result := range results {
+		if result.Err != nil {
+			err = result.Err
+			l.Printf("> Error for Node %d: %+v", int(result.Node), result.Err)
+		}
+	}
+	if err != nil {
+		createFailedFile(physicalFileName)
+	}
+	l.Close()
+	return results, nil
+}
+
+func createFailedFile(logFileName string) {
+	failedPhysicalFileName := strings.TrimSuffix(logFileName, ".log") + ".failed"
+	if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
+		failedFile.Close()
 	}
 }
 
@@ -1975,13 +2072,15 @@ var _ = (&clusterImpl{}).Reformat
 
 // Install a package in a node
 func (c *clusterImpl) Install(
-	ctx context.Context, node option.NodeListOption, args ...string,
+	ctx context.Context, nodes option.NodeListOption, software ...string,
 ) error {
-	l, _, err := c.loggerForCmd(node, append([]string{"install"}, args...)...)
-	if err != nil {
-		return err
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Install")
 	}
-	return c.execRoachprodL(ctx, l, "install", node, args...)
+	if len(software) == 0 {
+		return errors.New("Error running cluster.Install: no software passed")
+	}
+	return errors.Wrap(roachprod.Install(c.MakeNodes(nodes), software), "cluster.Install")
 }
 
 var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
@@ -2022,62 +2121,6 @@ func (c *clusterImpl) loggerForCmd(
 		return nil, "", err
 	}
 	return l, logFile, nil
-}
-
-// RunE runs a command on the specified node, returning an error. The output
-// will be redirected to a file which is logged via the cluster-wide logger in
-// case of an error. Logs will sort chronologically. Failing invocations will
-// have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
-	l, logFile, err := c.loggerForCmd(node, args...)
-	if err != nil {
-		return err
-	}
-
-	err = c.RunL(ctx, l, node, args...)
-	l.Printf("> result: %+v", err)
-	if err := ctx.Err(); err != nil {
-		l.Printf("(note: incoming context was canceled: %s", err)
-	}
-	physicalFileName := l.File.Name()
-	l.Close()
-	if err != nil {
-		failedPhysicalFileName := strings.TrimSuffix(physicalFileName, ".log") + ".failed"
-		if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
-			failedFile.Close()
-		}
-	}
-	err = errors.Wrapf(err, "output in %s", logFile)
-	return err
-}
-
-// RunL runs a command on the specified node, returning an error.
-func (c *clusterImpl) RunL(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
-) error {
-	if err := errors.Wrap(ctx.Err(), "cluster.RunL"); err != nil {
-		return err
-	}
-	return c.execRoachprodL(ctx, l, "run", node, args...)
-}
-
-func (c *clusterImpl) execRoachprodL(
-	ctx context.Context, l *logger.Logger, verb string, node option.NodeListOption, args ...string,
-) error {
-	return execCmd(ctx, l,
-		append([]string{roachprodBinary, verb, c.MakeNodes(node), "--"}, args...)...)
-}
-
-// RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
-// and stdout or an error.
-func (c *clusterImpl) RunWithBuffer(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
-) ([]byte, error) {
-	if err := errors.Wrap(ctx.Err(), "cluster.RunWithBuffer"); err != nil {
-		return nil, err
-	}
-	return execCmdWithBuffer(ctx, l,
-		append([]string{roachprodBinary, "run", c.MakeNodes(node), "--"}, args...)...)
 }
 
 // pgURLErr returns the Postgres endpoint for the specified node. It accepts a
