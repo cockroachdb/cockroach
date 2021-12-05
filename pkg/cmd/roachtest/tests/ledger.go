@@ -15,9 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 func registerLedger(r registry.Registry) {
@@ -36,7 +38,7 @@ func registerLedger(r registry.Registry) {
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
-			c.Start(ctx, roachNodes)
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, roachNodes)
