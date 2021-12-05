@@ -3514,6 +3514,13 @@ SELECT ST_MakePolygon('LINESTRING EMPTY'::geometry)
 statement error Polygon LinearRing must have at least 4 points, found 0 at position 2
 SELECT ST_MakePolygon('LINESTRING (0 0, 1 0, 1 1, 0 0)'::geometry, ARRAY['LINESTRING EMPTY'::geometry])
 
+statement error mixed dimension rings
+SELECT ST_AsEWKT(ST_MakePolygon(
+      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
+      ARRAY[
+        ST_GeomFromText('LINESTRING(50 70 40, 70 70 40, 70 50 40, 50 50 40, 50 70 40)', 4326)
+      ]))
+
 statement error argument must be LINESTRING geometries
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),

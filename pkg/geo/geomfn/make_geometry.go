@@ -47,6 +47,9 @@ func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, er
 		if interiorRing.SRID() != srid {
 			return geo.Geometry{}, errors.Newf("mixed SRIDs are not allowed")
 		}
+		if outerRing.Layout() != interiorRing.Layout() {
+			return geo.Geometry{}, errors.Newf("mixed dimension rings")
+		}
 		coords[i+1] = interiorRing.Coords()
 	}
 
