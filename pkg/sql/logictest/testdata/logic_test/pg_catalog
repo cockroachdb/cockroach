@@ -1588,6 +1588,7 @@ oid         typname                                typnamespace  typowner    typ
 2211        _regtype                               3954795563    NULL        -1      false     b
 2249        record                                 3954795563    NULL        0       true      p
 2277        anyarray                               3954795563    NULL        -1      false     p
+2278        void                                   3954795563    NULL        0       true      p
 2283        anyelement                             3954795563    NULL        -1      false     p
 2287        _record                                3954795563    NULL        -1      false     b
 2950        uuid                                   3954795563    NULL        16      true      b
@@ -1972,6 +1973,7 @@ oid         typname                                typcategory  typispreferred  
 2211        _regtype                               A            false           true          ,         0           2206     0
 2249        record                                 P            false           true          ,         0           0        2287
 2277        anyarray                               P            false           true          ,         0           0        0
+2278        void                                   P            false           true          ,         0           0        0
 2283        anyelement                             P            false           true          ,         0           0        2277
 2287        _record                                A            false           true          ,         0           2249     0
 2950        uuid                                   U            false           true          ,         0           0        2951
@@ -2356,6 +2358,7 @@ oid         typname                                typinput        typoutput    
 2211        _regtype                               array_in        array_out        array_recv        array_send        0         0          0
 2249        record                                 record_in       record_out       record_recv       record_send       0         0          0
 2277        anyarray                               anyarray_in     anyarray_out     anyarray_recv     anyarray_send     0         0          0
+2278        void                                   voidin          voidout          voidrecv          voidsend          0         0          0
 2283        anyelement                             anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 2287        _record                                array_in        array_out        array_recv        array_send        0         0          0
 2950        uuid                                   uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
@@ -2740,6 +2743,7 @@ oid         typname                                typalign  typstorage  typnotn
 2211        _regtype                               NULL      NULL        false       0            -1
 2249        record                                 NULL      NULL        false       0            -1
 2277        anyarray                               NULL      NULL        false       0            -1
+2278        void                                   NULL      NULL        false       0            -1
 2283        anyelement                             NULL      NULL        false       0            -1
 2287        _record                                NULL      NULL        false       0            -1
 2950        uuid                                   NULL      NULL        false       0            -1
@@ -3124,6 +3128,7 @@ oid         typname                                typndims  typcollation  typde
 2211        _regtype                               0         0             NULL           NULL        NULL
 2249        record                                 0         0             NULL           NULL        NULL
 2277        anyarray                               0         3403232968    NULL           NULL        NULL
+2278        void                                   0         0             NULL           NULL        NULL
 2283        anyelement                             0         0             NULL           NULL        NULL
 2287        _record                                0         0             NULL           NULL        NULL
 2950        uuid                                   0         0             NULL           NULL        NULL
