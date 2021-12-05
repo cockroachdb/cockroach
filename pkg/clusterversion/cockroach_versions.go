@@ -299,6 +299,11 @@ const (
 	// ValidateGrantOption checks whether the current user granting privileges to
 	// another user holds the grant option for those privileges
 	ValidateGrantOption
+	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
+	// Pebble version that provides block property collectors that can be used
+	// for fine-grained time bound iteration. See
+	// https://github.com/cockroachdb/pebble/issues/1190 for details.
+	PebbleFormatBlockPropertyCollector
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -523,6 +528,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ValidateGrantOption,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 22},
+	},
+	{
+		Key:     PebbleFormatBlockPropertyCollector,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
 	},
 
 	// *************************************************
