@@ -78,14 +78,10 @@ func (b *Builder) buildValuesClause(
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
 					colTypes[colIdx] = typ
-				} else if colTypes[colIdx].Family() == types.ArrayFamily &&
-					colTypes[colIdx].ArrayContents() == types.AnyTuple &&
-					typ.Family() == types.ArrayFamily &&
-					typ.ArrayContents().Family() == types.TupleFamily &&
-					typ.ArrayContents() != types.AnyTuple {
-					// This more complicated condition handles the case when an earlier
-					// expression in the VALUES clause is an array of AnyTuple, but a
-					// later expression is an array of a more specific tuple type.
+				} else if rightHasMoreSpecificTuple(colTypes[colIdx], typ) {
+					// This condition handles the case when an earlier expression in the
+					// VALUES clause is an array of AnyTuple, but a later expression is an
+					// array of a more specific tuple type.
 					colTypes[colIdx] = typ
 				} else if !typ.Equivalent(colTypes[colIdx]) {
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,
@@ -140,4 +136,37 @@ func reportValuesLenError(expected, actual int) {
 		pgcode.Syntax,
 		"VALUES lists must all be the same length, expected %d columns, found %d",
 		expected, actual))
+}
+
+// rightHasMoreSpecificTuple returns true if the left and right types are
+// equivalent, but the right type is constrained by a more specific nested
+// tuple than the left type.
+func rightHasMoreSpecificTuple(left, right *types.T) bool {
+	if left.Family() != right.Family() {
+		return false
+	}
+	if left.Family() == types.ArrayFamily && right.Family() == types.ArrayFamily {
+		return rightHasMoreSpecificTuple(left.ArrayContents(), right.ArrayContents())
+	}
+	if left.Family() == types.TupleFamily && right.Family() == types.TupleFamily {
+		if right == types.AnyTuple {
+			return false
+		} else if left == types.AnyTuple {
+			return true
+		} else if len(left.TupleContents()) != len(right.TupleContents()) {
+			return false
+		}
+		ret := true
+		for i, leftElem := range left.TupleContents() {
+			rightElem := right.TupleContents()[i]
+			// Only recurse if we are dealing with a container type.
+			if leftElem.Family() == types.ArrayFamily || leftElem.Family() == types.TupleFamily {
+				ret = ret && rightHasMoreSpecificTuple(leftElem, rightElem)
+			}
+		}
+		return ret
+	}
+	// For non-tuples and non-arrays, we don't want the right type to get
+	// preference over the left type.
+	return false
 }
