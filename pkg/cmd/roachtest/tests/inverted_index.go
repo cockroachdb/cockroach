@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -40,7 +42,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	cmdInit := "./workload init json {pgurl:1}"
 	c.Run(ctx, workloadNode, cmdInit)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -33,7 +34,7 @@ func registerAlterPK(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 		t.Status("starting cockroach nodes")
-		c.Start(ctx, roachNodes)
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 		return roachNodes, loadNode
 	}
 

@@ -17,8 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	"github.com/cockroachdb/errors"
@@ -56,7 +58,7 @@ func registerTPCDSVec(r registry.Registry) {
 
 	runTPCDSVec := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx)
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		clusterConn := c.Conn(ctx, 1)
 		disableAutoStats(t, clusterConn)

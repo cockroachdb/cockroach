@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -61,7 +63,7 @@ func registerFollowerReads(r registry.Registry) {
 			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx)
+				c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
@@ -311,7 +313,9 @@ func runFollowerReadsTest(
 	liveNodes, deadNodes := make(map[int]struct{}), make(map[int]struct{})
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		if topology.deadPrimaryRegion && i <= 3 {
-			c.Stop(ctx, c.Node(i), option.StopArgs("--sig=9"))
+			stopOpts := roachprod.DefaultStopOpts()
+			stopOpts.Sig = 9
+			c.Stop(ctx, stopOpts, c.Node(i))
 			deadNodes[i] = struct{}{}
 		} else {
 			liveNodes[i] = struct{}{}
@@ -382,7 +386,7 @@ func runFollowerReadsTest(
 
 	// Restart dead nodes, if necessary.
 	for i := range deadNodes {
-		c.Start(ctx, c.Node(i))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
 }
 
@@ -868,8 +872,9 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	const curVersion = ""
 
 	// Start the cluster at the old version.
-	args := option.StartArgs("--binary=" + uploadVersion(ctx, t, c, c.All(), predecessorVersion))
-	c.Start(ctx, c.All(), args)
+	settings := install.MakeClusterSettings()
+	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
+	c.Start(ctx, option.DefaultStartOpts(), settings, c.All())
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)
 

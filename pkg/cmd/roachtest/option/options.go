@@ -10,7 +10,26 @@
 
 package option
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+)
+
+// StartOpts is a type that combines the start options needed by roachprod and roachtest.
+type StartOpts struct {
+	RoachprodOpts install.StartOpts
+	RoachtestOpts struct {
+		Worker      bool
+		DontEncrypt bool
+	}
+}
+
+// DefaultStartOpts returns a StartOpts populated with default values.
+func DefaultStartOpts() StartOpts {
+	return StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
+}
 
 // StopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
 func StopArgs(extraArgs ...string) Option {
