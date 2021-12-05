@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -43,7 +45,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Distribute programs to the correct nodes and start CockroachDB.
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, dbNodeCount))
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
-	c.Start(ctx, c.Range(1, dbNodeCount))
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, dbNodeCount))
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
 		m := c.NewMonitor(ctx, c.Range(1, dbNodeCount))

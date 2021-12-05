@@ -48,23 +48,17 @@ var (
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
-	tag           string
-	external      = false
-	pgurlCertsDir string
-	adminurlOpen  = false
-	adminurlPath  = ""
-	adminurlIPs   = false
-	useTreeDist   = true
-	sig           = 9
-	waitFlag      = false
-	createVMOpts  = vm.DefaultCreateOpts()
-	startOpts     = install.StartOpts{
-		Sequential:      true,
-		EncryptedStores: false,
-		SkipInit:        false,
-		StoreCount:      1,
-		TenantID:        2,
-	}
+	tag               string
+	external          = false
+	pgurlCertsDir     string
+	adminurlOpen      = false
+	adminurlPath      = ""
+	adminurlIPs       = false
+	useTreeDist       = true
+	sig               = 9
+	waitFlag          = false
+	createVMOpts      = vm.DefaultCreateOpts()
+	startOpts         = roachprod.DefaultStartOpts()
 	stageOS           string
 	stageDir          string
 	logsDir           string

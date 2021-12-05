@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -52,16 +53,17 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	for _, initNode := range []int{2, 1} {
 		c.Wipe(ctx)
 		t.L().Printf("starting test with init node %d", initNode)
-		c.Start(ctx, option.StartArgs(
-			// We don't want roachprod to auto-init this cluster.
-			"--skip-init",
-			// We need to point all nodes at all other nodes. By default
-			// roachprod will point all nodes at the first node, but this
-			// won't allow init'ing any but the first node - we require
-			// that all nodes can discover the init'ed node (transitively)
-			// via their join flags.
-			"--args", "--join="+strings.Join(addrs, ","),
-		))
+		startOpts := option.DefaultStartOpts()
+
+		// We don't want roachprod to auto-init this cluster.
+		startOpts.RoachprodOpts.SkipInit = true
+		// We need to point all nodes at all other nodes. By default
+		// roachprod will point all nodes at the first node, but this
+		// won't allow init'ing any but the first node - we require
+		// that all nodes can discover the init'ed node (transitively)
+		// via their join flags.
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+strings.Join(addrs, ","))
+		c.Start(ctx, startOpts, install.MakeClusterSettings())
 
 		urlMap := make(map[int]string)
 		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
@@ -171,9 +173,10 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			args = append(args, extraArgs...)
 			args = append(args, "--insecure")
 			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-			buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(runNode), args...)
-			t.L().Printf("%s\n", buf)
-			return string(buf), err
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
+			combinedOutput := result.Stdout + result.Stderr
+			t.L().Printf("%s\n", combinedOutput)
+			return combinedOutput, err
 		}
 
 		{

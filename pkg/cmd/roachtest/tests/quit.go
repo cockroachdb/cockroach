@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -31,7 +32,8 @@ import (
 type quitTest struct {
 	t    test.Test
 	c    cluster.Cluster
-	args option.Option
+	args []string
+	env  []string
 }
 
 // runQuitTransfersLeases performs rolling restarts on a
@@ -51,12 +53,13 @@ func runQuitTransfersLeases(
 }
 
 func (q *quitTest) init(ctx context.Context) {
-	q.args = option.StartArgs(
-		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",               // iterate fast for rebalancing
-		"-a", "--vmodule=store=1,replica=1,replica_proposal=1", // verbosity to troubleshoot drains
-	)
+	q.args = []string{"--vmodule=store=1,replica=1,replica_proposal=1"}
+	q.env = []string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}
 	q.c.Put(ctx, q.t.Cockroach(), "./cockroach")
-	q.c.Start(ctx, q.args)
+	settings := install.MakeClusterSettings(install.EnvOption(q.env))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
+	q.c.Start(ctx, startOpts, settings)
 }
 
 func (q *quitTest) Fatal(args ...interface{}) {
@@ -97,7 +100,10 @@ func (q *quitTest) runTest(
 // restartNode restarts one node and waits until it's up and ready to
 // accept clients.
 func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
-	q.c.Start(ctx, q.args, q.c.Node(nodeID))
+	settings := install.MakeClusterSettings(install.EnvOption(q.env))
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
+	q.c.Start(ctx, startOpts, settings, q.c.Node(nodeID))
 
 	q.t.L().Printf("waiting for readiness of node %d\n", nodeID)
 	// Now perform a SQL query. This achieves two goals:
@@ -244,7 +250,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			if err != nil {
 				q.Fatal(err)
 			}
-			buf, err := q.c.RunWithBuffer(ctx, q.t.L(), q.c.Node(otherNodeID),
+			result, err := q.c.RunWithDetailsSingleNode(ctx, q.t.L(), q.c.Node(otherNodeID),
 				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/%d",
 					adminAddrs[0], i))
 			if err != nil {
@@ -269,7 +275,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 				} `json:"ranges"`
 			}
 			var details jsonOutput
-			if err := json.Unmarshal(buf, &details); err != nil {
+			if err := json.Unmarshal([]byte(result.Stdout), &details); err != nil {
 				q.Fatal(err)
 			}
 			// Some sanity check.
@@ -352,9 +358,11 @@ func registerQuitTransfersLeases(r registry.Registry) {
 	// Uses 'roachprod stop --sig 15 --wait', ie send SIGTERM and wait
 	// until the process exits.
 	registerTest("signal", "v19.2.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
-		c.Stop(ctx, c.Node(nodeID),
-			option.RoachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
-		)
+		stopOpts := option.DefaultStopOpts()
+		stopOpts.RoachprodOpts.Sig = 15
+		stopOpts.RoachprodOpts.Wait = true
+		c.Stop(ctx, stopOpts, c.Node(nodeID)) // graceful shutdown
+
 	})
 
 	// Uses 'cockroach quit' which should drain and then request a
@@ -367,20 +375,20 @@ func registerQuitTransfersLeases(r registry.Registry) {
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
-		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(nodeID),
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
 		)
-		t.L().Printf("cockroach node drain:\n%s\n", buf)
+		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stdout)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// Send first SIGHUP to the process to force it to flush its logs
 		// before terminating. Otherwise the SIGKILL below will truncate
 		// the log.
-		c.Stop(ctx, c.Node(nodeID),
-			option.RoachprodArgOption{"--sig", "1"},
-		)
+		stopOpts := option.DefaultStopOpts()
+		stopOpts.RoachprodOpts.Sig = 1
+		c.Stop(ctx, stopOpts, c.Node(nodeID))
 		// We use SIGKILL to terminate nodes here. Of course, an operator
 		// should not do this and instead terminate with SIGTERM even
 		// after a complete graceful drain. However, what this test is
@@ -393,8 +401,10 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// drain' with the graceful drain by the signal handler. If either
 		// becomes broken, the test wouldn't help identify which one needs
 		// attention.)
-		c.Stop(ctx, c.Node(nodeID),
-			option.RoachprodArgOption{"--sig", "9", "--wait"})
+		stopOpts = option.DefaultStopOpts()
+		stopOpts.RoachprodOpts.Sig = 9
+		stopOpts.RoachprodOpts.Wait = true
+		c.Stop(ctx, stopOpts, c.Node(nodeID))
 	})
 }
 
@@ -405,15 +415,18 @@ func runQuit(
 		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
 		fmt.Sprintf("--port={pgport:%d}", nodeID)},
 		extraArgs...)
-	buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(nodeID), args...)
-	t.L().Printf("cockroach quit:\n%s\n", buf)
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), args...)
+	output := result.Stdout + result.Stderr
+	t.L().Printf("cockroach quit:\n%s\n", output)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Stop(ctx, c.Node(nodeID),
-		option.RoachprodArgOption{"--sig", "0", "--wait"}, // no shutdown, just wait for exit
-	)
-	return buf
+	stopOpts := option.DefaultStopOpts()
+	stopOpts.RoachprodOpts.Sig = 0
+	stopOpts.RoachprodOpts.Wait = true
+	c.Stop(ctx, stopOpts, c.Node(nodeID)) // no shutdown, just wait for exit
+
+	return []byte(output)
 }
 
 func registerQuitAllNodes(r registry.Registry) {
@@ -458,7 +471,10 @@ func registerQuitAllNodes(r registry.Registry) {
 			// At the end, restart all nodes. We do this to check that
 			// the cluster can indeed restart, and also to please
 			// the dead node detection check at the end of each test.
-			q.c.Start(ctx, q.args)
+			settings := install.MakeClusterSettings(install.EnvOption(q.env))
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
+			q.c.Start(ctx, startOpts, settings)
 		},
 	})
 }

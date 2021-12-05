@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJumpTestCase) {
@@ -38,7 +40,7 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
@@ -69,7 +71,7 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
 		if !isAlive(db, t.L()) {
-			c.Start(ctx, c.Node(1))
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 		}
 	}()
 	defer offsetInjector.recover(ctx, c.Spec().NodeCount)
