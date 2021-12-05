@@ -4352,6 +4352,9 @@ func (d *DArray) Append(v Datum) error {
 	return d.Validate()
 }
 
+// DVoid represents a void type.
+type DVoid struct{}
+
 // DEnum represents an ENUM value.
 type DEnum struct {
 	// EnumType is the hydrated type of this enum.
@@ -5431,6 +5434,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.OidFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
 
+	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
 	types.ArrayFamily: {unsafe.Sizeof(DString("")), variableSize},
 
