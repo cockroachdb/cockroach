@@ -57,7 +57,6 @@ type rowFetcher interface {
 	PartialKey(int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
-	NextRowWithErrors(context.Context) (rowenc.EncDatumRow, error)
 	// Close releases any resources held by this fetcher.
 	Close(ctx context.Context)
 }
@@ -71,7 +70,6 @@ func initRowFetcher(
 	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
-	isCheck bool,
 	mon *mon.BytesMonitor,
 	alloc *tree.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
@@ -102,7 +100,6 @@ func initRowFetcher(
 		lockStrength,
 		lockWaitPolicy,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
-		isCheck,
 		alloc,
 		mon,
 		tableArgs,
