@@ -30,7 +30,14 @@ func LoadLocation(name string) (*time.Location, error) {
 	switch loweredName {
 	case "local", "default":
 		loweredName = "utc"
-		name = "UTC"
+	case "EST5EDT":
+		loweredName = "america/new_york"
+	case "CST6CDT":
+		loweredName = "america/chicago"
+	case "MST7MDT":
+		loweredName = "america/denver"
+	case "PST8PDT":
+		loweredName = "america/los_angeles"
 	}
 	// If we know this is a lowercase name in tzdata, use the uppercase form.
 	if v, ok := lowercaseTimezones[loweredName]; ok {
