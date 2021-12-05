@@ -19,9 +19,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -85,7 +87,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
 			nodeToShutdown := 3
 			startImport := getImportRunner(ctx, gatewayNode)
@@ -99,7 +101,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
 			nodeToShutdown := 2
 			startImport := getImportRunner(ctx, gatewayNode)
@@ -117,7 +119,7 @@ func registerImportTPCC(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx)
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
@@ -212,7 +214,7 @@ func registerImportTPCH(r registry.Registry) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx)
+				c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 					t.Fatal(err)
@@ -374,7 +376,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx)
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		// Decommission a node.

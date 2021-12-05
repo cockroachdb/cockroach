@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +33,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	{
 		m := c.NewMonitor(ctx, crdbNodes)
@@ -47,21 +49,21 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m.Wait()
 	}
 
-	c.Stop(ctx, crdbNodes)
+	c.Stop(ctx, option.DefaultStopOpts(), crdbNodes)
 
 	for _, node := range corruptNodes {
-		tableSSTs, err := c.RunWithBuffer(ctx, t.L(), c.Node(node),
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node),
 			"./cockroach debug pebble manifest dump {store-dir}/MANIFEST-* | grep -v added | grep -v deleted | grep \"\\[/Table\"")
 		if err != nil {
 			t.Fatal(err)
 		}
-		strTableSSTs := strings.Split(string(tableSSTs), "\n")
-		if len(strTableSSTs) == 0 {
+		tableSSTs := strings.Split(result.Stdout, "\n")
+		if len(tableSSTs) == 0 {
 			t.Fatal("expected at least one sst containing table keys only, got none")
 		}
 		// Corrupt up to 6 SSTs containing table keys.
 		corruptedFiles := 0
-		for _, sstLine := range strTableSSTs {
+		for _, sstLine := range tableSSTs {
 			sstLine = strings.TrimSpace(sstLine)
 			firstFileIdx := strings.Index(sstLine, ":")
 			_, err = strconv.Atoi(sstLine[:firstFileIdx])
@@ -78,7 +80,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	if err := c.StartE(ctx, crdbNodes); err != nil {
+	if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes); err != nil {
 		// Node detected corruption on start and crashed. This is good. No need
 		// to run workload; the test is complete.
 		_ = c.WipeE(ctx, t.L(), corruptNodes)

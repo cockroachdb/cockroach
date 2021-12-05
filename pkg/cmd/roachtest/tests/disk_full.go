@@ -11,15 +11,16 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -36,7 +37,7 @@ func registerDiskFull(r registry.Registry) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -89,7 +90,8 @@ func registerDiskFull(r registry.Registry) {
 					// exit code 10 (Disk Full). Just in case the
 					// monitor detects the death, expect it.
 					m.ExpectDeath()
-					err := c.StartE(ctx, c.Node(n))
+
+					err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n))
 					t.L().Printf("starting n%d: error %v", n, err)
 					if err == nil {
 						t.Fatal("node successfully started unexpectedly")
@@ -101,16 +103,16 @@ func registerDiskFull(r registry.Registry) {
 					// propagated from roachprod, obscures the Cockroach
 					// exit code. There should still be a record of it
 					// in the systemd logs.
-					exitLogs, err := c.RunWithBuffer(ctx, t.L(), c.Node(n),
+					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n),
 						`systemctl status cockroach.service | grep 'Main PID' | grep -oE '\((.+)\)'`,
 					)
 					if err != nil {
 						t.Fatal(err)
 					}
-					exitLogsStr := string(bytes.TrimSpace(exitLogs))
+					exitLogs := strings.TrimSpace(result.Stdout)
 					const want = `(code=exited, status=10)`
-					if exitLogsStr != want {
-						t.Fatalf("cockroach systemd status: got %q, want %q", exitLogsStr, want)
+					if exitLogs != want {
+						t.Fatalf("cockroach systemd status: got %q, want %q", exitLogs, want)
 					}
 				}
 
@@ -120,7 +122,7 @@ func registerDiskFull(r registry.Registry) {
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
 				m.ResetDeaths()
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
-				if err := c.StartE(ctx, c.Node(n)); err != nil {
+				if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
 

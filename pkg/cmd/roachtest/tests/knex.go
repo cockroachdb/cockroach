@@ -14,8 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +41,7 @@ func registerKnex(r registry.Registry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		require.NoError(t, err)
@@ -104,13 +106,13 @@ func registerKnex(r registry.Registry) {
 		require.NoError(t, err)
 
 		t.Status("running knex tests")
-		rawResults, err := c.RunWithBuffer(
+		result, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
 			node,
 			`cd /mnt/data1/knex/ && DB='cockroachdb' npm test`,
 		)
-		rawResultsStr := string(rawResults)
+		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			t.Fatal(err)
