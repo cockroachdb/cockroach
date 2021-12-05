@@ -235,7 +235,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	*trSpec = execinfrapb.TableReaderSpec{
 		Table:            *tabDesc.TableDesc(),
 		Reverse:          params.Reverse,
-		IsCheck:          false,
 		Visibility:       colCfg.visibility,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 	}

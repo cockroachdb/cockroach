@@ -322,7 +322,7 @@ func newInvertedJoiner(
 	// and so do not need to see in-progress schema changes.
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
-		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
+		allIndexCols, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		false /* withSystemColumns */, nil, /* virtualColumn */
 	)

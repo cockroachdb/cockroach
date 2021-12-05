@@ -194,7 +194,7 @@ func NewColBatchScan(
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
-	if spec.IsCheck {
+	if spec.DeprecatedIsCheck {
 		// cFetchers don't support these checks.
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}

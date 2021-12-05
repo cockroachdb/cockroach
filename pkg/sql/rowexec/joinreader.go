@@ -383,7 +383,7 @@ func newJoinReader(
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		rightCols, false /* isCheck */, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength,
+		rightCols, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength,
 		spec.LockingWaitPolicy, spec.HasSystemColumns, nil, /* virtualColumn */
 	)
 

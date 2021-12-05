@@ -224,6 +224,7 @@ func (n *scrubNode) startScrubTable(
 				return err
 			}
 			n.run.checkQueue = append(n.run.checkQueue, checks...)
+
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.Newf(pgcode.Syntax,
@@ -234,8 +235,8 @@ func (n *scrubNode) startScrubTable(
 					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
 			physicalCheckSet = true
-			physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
-			n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
+			return pgerror.Newf(pgcode.FeatureNotSupported, "PHYSICAL scrub not implemented")
+
 		case *tree.ScrubOptionConstraint:
 			if constraintsSet {
 				return pgerror.Newf(pgcode.Syntax,
@@ -248,6 +249,7 @@ func (n *scrubNode) startScrubTable(
 				return err
 			}
 			n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
+
 		default:
 			panic(errors.AssertionFailedf("unhandled SCRUB option received: %+v", v))
 		}
@@ -269,8 +271,7 @@ func (n *scrubNode) startScrubTable(
 		}
 		n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 
-		physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
-		n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
+		// Physical checks are no longer implemented.
 	}
 	return nil
 }
@@ -333,17 +334,6 @@ func pairwiseOp(left []string, right []string, op string) []string {
 		res[i] = fmt.Sprintf("%s %s %s", left[i], op, right[i])
 	}
 	return res
-}
-
-// createPhysicalCheckOperations will return the physicalCheckOperation
-// for all indexes on a table.
-func createPhysicalCheckOperations(
-	tableDesc catalog.TableDescriptor, tableName *tree.TableName,
-) (checks []checkOperation) {
-	for _, idx := range tableDesc.ActiveIndexes() {
-		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, idx))
-	}
-	return checks
 }
 
 // createIndexCheckOperations will return the checkOperations for the
