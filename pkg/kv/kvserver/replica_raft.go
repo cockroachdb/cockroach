@@ -510,8 +510,8 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
-// handleRaftReadyLocked is the same as handleRaftReady but requires that the
-// replica's raftMu be held.
+// handleRaftReadyRaftMuLocked is the same as handleRaftReady but requires that
+// the replica's raftMu be held.
 //
 // The returned string is nonzero whenever an error is returned to give a
 // non-sensitive cue as to what happened.

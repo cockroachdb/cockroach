@@ -307,6 +307,15 @@ type Replica struct {
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
+		//
+		// Replica objects always begin life in a quiescent state, as the field is
+		// set to true in the Replica constructor newUnloadedReplica. They unquiesce
+		// and set the field to false in either unquiesceAndWakeLeaderLocked or
+		// unquiesceWithOptionsLocked, which are called in response to Raft traffic.
+		//
+		// Only initialized replicas that have a non-nil internalRaftGroup are
+		// allowed to unquiesce and be Tick()'d. See canUnquiesceRLocked for an
+		// explanation of these conditions.
 		quiescent bool
 		// laggingFollowersOnQuiesce is the set of dead replicas that are not
 		// up-to-date with the rest of the quiescent Raft group. Nil if !quiescent.
