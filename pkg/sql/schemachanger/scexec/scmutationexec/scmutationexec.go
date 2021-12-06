@@ -308,6 +308,24 @@ func (m *visitor) RemoveSequenceOwnedBy(ctx context.Context, op scop.RemoveSeque
 	if err != nil {
 		return err
 	}
+	// Clean up the ownership inside the owning table first.
+	ownedByTbl, err := m.checkOutTable(ctx, tbl.GetSequenceOpts().SequenceOwner.OwnerTableID)
+	if err != nil {
+		return err
+	}
+	ownedByColumn, err := ownedByTbl.FindColumnWithID(tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID)
+	if err != nil {
+		return err
+	}
+	for idx := range ownedByColumn.ColumnDesc().OwnsSequenceIds {
+		if ownedByColumn.ColumnDesc().OwnsSequenceIds[idx] == op.TableID {
+			ownedByColumn.ColumnDesc().OwnsSequenceIds = append(
+				ownedByColumn.ColumnDesc().OwnsSequenceIds[:idx],
+				ownedByColumn.ColumnDesc().OwnsSequenceIds[idx+1:]...)
+			break
+		}
+	}
+	// Next, clean the ownership on the sequence.
 	tbl.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
 	tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
 	return nil
