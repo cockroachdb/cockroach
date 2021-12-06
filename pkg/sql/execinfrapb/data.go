@@ -13,6 +13,7 @@ package execinfrapb
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -351,4 +352,14 @@ func (s MetadataSources) DrainMeta(ctx context.Context) []ProducerMetadata {
 		result = append(result, *meta)
 	}
 	return result
+}
+
+// DistSQLRemoteFlowInfo contains some information about a single DistSQL remote
+// flow.
+type DistSQLRemoteFlowInfo struct {
+	FlowID FlowID
+	// Timestamp must be in the UTC timezone.
+	Timestamp time.Time
+	// StatementSQL is the SQL statement for which this flow is executing.
+	StatementSQL string
 }
