@@ -71,6 +71,7 @@ go_test(
         "alter_statement_diagnostics_requests_test.go",
         "alter_table_statistics_avg_size_test.go",
         "alter_web_sessions_create_indexes_test.go",
+        "builtins_test.go",
         "delete_deprecated_namespace_tabledesc_external_test.go",
         "ensure_no_draining_names_external_test.go",
         "fix_descriptor_migration_external_test.go",

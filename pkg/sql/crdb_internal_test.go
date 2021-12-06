@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -921,4 +922,34 @@ SELECT last_run IS NULL,
   FROM crdb_internal.jobs WHERE job_id = 1`,
 			[][]string{{"true", "true", "true", "true"}})
 	})
+}
+
+func TestIsAtLeastVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettings(),
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	for _, tc := range []struct {
+		version  string
+		expected string
+		errorRE  string
+	}{
+		{version: "21.2", expected: "true"},
+		{version: "99.2", expected: "false"},
+		{version: "foo", errorRE: ".*invalid version.*"},
+	} {
+		query := fmt.Sprintf("SELECT crdb_internal.is_at_least_version('%s')", tc.version)
+		if tc.errorRE != "" {
+			db.ExpectErr(t, tc.errorRE, query)
+		} else {
+			db.CheckQueryResults(t, query, [][]string{{tc.expected}})
+		}
+	}
 }
