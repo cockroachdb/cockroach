@@ -263,7 +263,7 @@ INSERT INTO t VALUES (1)
 -- Open        -> Open        ##  (none)
 
 sql
-SET lock_timeout = '1ms'
+SET lock_timeout = '100ms'
 BEGIN
 SAVEPOINT foo
 SELECT * FROM t WHERE x = 1 FOR UPDATE
@@ -272,7 +272,7 @@ SELECT * FROM t WHERE x = 2 FOR UPDATE
 COMMIT
 SET lock_timeout = 0
 ----
-1: SET lock_timeout = '1ms' -- 0 rows
+1: SET lock_timeout = '100ms' -- 0 rows
 -- NoTxn       -> NoTxn       #.......  (none)
 2: BEGIN -- 0 rows
 -- NoTxn       -> Open        ##......  (none)
