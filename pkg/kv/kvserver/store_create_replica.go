@@ -342,6 +342,14 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 			it.item.key(), it)
 	}
 
+	// Unquiesce the replica. We don't allow uninitialized replicas to unquiesce,
+	// but now that the replica has been initialized, we unquiesce it as soon as
+	// possible. This replica was initialized in response to the reception of a
+	// snapshot from another replica. This means that the other replica is not
+	// quiesced, so we don't need to campaign or wake the leader. We just want
+	// to start ticking.
+	lockedRepl.unquiesceWithOptionsLocked(false /* campaignOnWake */)
+
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
