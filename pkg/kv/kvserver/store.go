@@ -1114,7 +1114,7 @@ func NewStore(
 	s.replRankings = newReplicaRankings()
 
 	s.draining.Store(false)
-	s.scheduler = newRaftScheduler(s.metrics, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())

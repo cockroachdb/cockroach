@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -160,9 +161,10 @@ type raftScheduleState struct {
 }
 
 type raftScheduler struct {
-	processor  raftProcessor
-	latency    *metric.Histogram
-	numWorkers int
+	ambientContext log.AmbientContext
+	processor      raftProcessor
+	latency        *metric.Histogram
+	numWorkers     int
 
 	mu struct {
 		syncutil.Mutex
@@ -176,19 +178,21 @@ type raftScheduler struct {
 }
 
 func newRaftScheduler(
-	metrics *StoreMetrics, processor raftProcessor, numWorkers int,
+	ambient log.AmbientContext, metrics *StoreMetrics, processor raftProcessor, numWorkers int,
 ) *raftScheduler {
 	s := &raftScheduler{
-		processor:  processor,
-		latency:    metrics.RaftSchedulerLatency,
-		numWorkers: numWorkers,
+		ambientContext: ambient,
+		processor:      processor,
+		latency:        metrics.RaftSchedulerLatency,
+		numWorkers:     numWorkers,
 	}
 	s.mu.cond = sync.NewCond(&s.mu.Mutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
 	return s
 }
 
-func (s *raftScheduler) Start(ctx context.Context, stopper *stop.Stopper) {
+func (s *raftScheduler) Start(stopper *stop.Stopper) {
+	ctx := s.ambientContext.AnnotateCtx(context.Background())
 	waitQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		s.mu.Lock()
