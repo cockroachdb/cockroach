@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -81,7 +82,8 @@ var (
 )
 
 func initFlags() {
-	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q", false, "disable fancy progress output")
+	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q",
+		false || !term.IsTerminal(int(os.Stdout.Fd())), "disable fancy progress output")
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
