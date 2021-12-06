@@ -9,6 +9,7 @@
 package streamingccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -43,4 +44,20 @@ func (r replicationStreamManagerImpl) StartReplicationStream(
 		return streaming.InvalidStreamID, errors.New("StartReplicationStreamHook is not registered")
 	}
 	return StartReplicationStreamHook(evalCtx, txn, tenantID)
+}
+
+// UpdateReplicationStreamProgressHook hooks an UpdateReplicationStreamProgress implementation
+// inside streamingccl package.
+var UpdateReplicationStreamProgressHook func(evalCtx *tree.EvalContext, streamID streaming.StreamID,
+	frontier hlc.Timestamp, txn *kv.Txn) (jobspb.StreamReplicationStatus, error)
+
+// UpdateReplicationStreamProgress implements ReplicationStreamManager interface.
+func (r replicationStreamManagerImpl) UpdateReplicationStreamProgress(
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
+) (jobspb.StreamReplicationStatus, error) {
+	if UpdateReplicationStreamProgressHook == nil {
+		return jobspb.StreamReplicationStatus{},
+			errors.New("UpdateReplicationStreamProgress is not registered")
+	}
+	return UpdateReplicationStreamProgressHook(evalCtx, streamID, frontier, txn)
 }

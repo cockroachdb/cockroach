@@ -204,9 +204,9 @@ type TypeList interface {
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
-	// matchLen checks that the TypeList can support l parameters.
+	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
-	// getAt returns the type at the given index in the TypeList, or nil if the TypeList
+	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
 	// cannot have a parameter at index i.
 	GetAt(i int) *types.T
 	// Length returns the number of types in the list

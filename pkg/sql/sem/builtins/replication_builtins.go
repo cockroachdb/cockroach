@@ -99,4 +99,38 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.replication_stream_progress": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"stream_id", types.Int},
+				{"frontier_ts", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				mgr, err := streaming.GetReplicationStreamManager()
+				if err != nil {
+					return nil, err
+				}
+				frontier, err := hlc.ParseTimestamp(string(tree.MustBeDString(args[1])))
+				if err != nil {
+					return nil, err
+				}
+				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
+				pts, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalCtx.Txn)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(pts.String()), nil
+			},
+			Info: "This function can be used on the consumer side to heartbeat its replication progress to " +
+				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
+				"that indicates stream status (RUNNING, PAUSED, or STOPPED).",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
