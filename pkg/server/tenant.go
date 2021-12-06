@@ -48,10 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -303,12 +301,7 @@ func StartTenant(
 		}
 	}
 
-	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(
-		ctx,
-		args.stopper,
-		s.sqlInstanceProvider,
-		s.SQLInstanceID(),
-	)
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlInstanceProvider, s.SQLInstanceID())
 
 	if err := args.costController.Start(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
@@ -567,16 +560,12 @@ func makeTenantSQLServerArgs(
 }
 
 func makeNextLiveInstanceIDFn(
-	serverCtx context.Context,
-	stopper *stop.Stopper,
-	sqlInstanceProvider sqlinstance.Provider,
-	instanceID base.SQLInstanceID,
+	sqlInstanceProvider sqlinstance.Provider, instanceID base.SQLInstanceID,
 ) multitenant.NextLiveInstanceIDFn {
-	retrieveNextLiveInstanceID := func(ctx context.Context) base.SQLInstanceID {
+	return func(ctx context.Context) base.SQLInstanceID {
 		instances, err := sqlInstanceProvider.GetAllInstances(ctx)
 		if err != nil {
 			log.Infof(ctx, "GetAllInstances failed: %v", err)
-			// We will try again.
 			return 0
 		}
 		if len(instances) == 0 {
@@ -597,49 +586,6 @@ func makeNextLiveInstanceIDFn(
 			return minID
 		}
 		return nextID
-	}
-
-	// We retrieve the value from the provider every minute.
-	//
-	// We report each retrieved value only once; for all other calls we return 0.
-	// We prefer to not provide a value rather than providing a stale value which
-	// might cause a bit of unnecessary work on the server side.
-	//
-	// TODO(radu): once the provider caches the information (see #69976), we can
-	// use it directly each time.
-	const interval = 1 * time.Minute
-	var mu syncutil.Mutex
-	var lastRefresh time.Time
-	var lastValue base.SQLInstanceID
-	var refreshInProgress bool
-
-	serverCtx = logtags.AddTag(serverCtx, "get-next-live-instance-id", nil)
-
-	return func(ctx context.Context) base.SQLInstanceID {
-		mu.Lock()
-		defer mu.Unlock()
-		if lastValue != 0 {
-			v := lastValue
-			lastValue = 0
-			return v
-		}
-
-		if now := timeutil.Now(); lastRefresh.Before(now.Add(-interval)) && !refreshInProgress {
-			lastRefresh = now
-			refreshInProgress = true
-
-			// An error here indicates that the server is shutting down, so we can
-			// ignore it.
-			_ = stopper.RunAsyncTask(serverCtx, "get-next-live-instance-id", func(ctx context.Context) {
-				newValue := retrieveNextLiveInstanceID(ctx)
-
-				mu.Lock()
-				defer mu.Unlock()
-				lastValue = newValue
-				refreshInProgress = false
-			})
-		}
-		return 0
 	}
 }
 
