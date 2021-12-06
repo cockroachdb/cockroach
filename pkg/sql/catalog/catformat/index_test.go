@@ -80,11 +80,11 @@ func TestIndexForDisplay(t *testing.T) {
 	uniqueIndex := baseIndex
 	uniqueIndex.Unique = true
 
-	// INVERTED INDEX baz (a)
-	invertedIndex := baseIndex
-	invertedIndex.Type = descpb.IndexDescriptor_INVERTED
-	invertedIndex.KeyColumnNames = []string{"a"}
-	invertedIndex.KeyColumnIDs = descpb.ColumnIDs{1}
+	// JSONB INVERTED INDEX baz (a)
+	jsonbInvertedIndex := baseIndex
+	jsonbInvertedIndex.Type = descpb.IndexDescriptor_INVERTED
+	jsonbInvertedIndex.KeyColumnNames = []string{"a"}
+	jsonbInvertedIndex.KeyColumnIDs = descpb.ColumnIDs{1}
 
 	// INDEX baz (a ASC, b DESC) STORING (c)
 	storingIndex := baseIndex
@@ -102,24 +102,169 @@ func TestIndexForDisplay(t *testing.T) {
 		descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC, descpb.IndexDescriptor_ASC,
 	}
 
+	// Hash Sharded INDEX baz (a)
+	shardedIndex := baseIndex
+	shardedIndex.KeyColumnNames = []string{"bucket_col", "a"}
+	shardedIndex.KeyColumnIDs = descpb.ColumnIDs{0, 1}
+	shardedIndex.Sharded = descpb.ShardedDescriptor{
+		IsSharded:    true,
+		ShardBuckets: 8,
+		ColumnNames:  []string{"a"},
+	}
+
 	testData := []struct {
-		index     descpb.IndexDescriptor
-		tableName tree.TableName
-		partition string
-		expected  string
+		index       descpb.IndexDescriptor
+		tableName   tree.TableName
+		partition   string
+		displayMode IndexDisplayMode
+		// if set to empty string, an error is expected to returned by
+		// indexForDisplay
+		expected   string
+		pgExpected string
 	}{
-		{baseIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, b DESC)"},
-		{baseIndex, tableName, "", "INDEX baz ON foo.public.bar (a ASC, b DESC)"},
-		{uniqueIndex, descpb.AnonymousTable, "", "UNIQUE INDEX baz (a ASC, b DESC)"},
-		{invertedIndex, descpb.AnonymousTable, "", "INVERTED INDEX baz (a)"},
-		{storingIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, b DESC) STORING (c)"},
-		{partialIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8"},
-		{expressionIndex, descpb.AnonymousTable, "", "INDEX baz (a ASC, (a + b) DESC, b ASC)"},
 		{
-			partialIndex,
-			descpb.AnonymousTable,
-			" PARTITION BY LIST (a) (PARTITION p VALUES IN (2))",
-			"INDEX baz (a ASC, b DESC) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE a > 1:::INT8",
+			index:       baseIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz (a ASC, b DESC)",
+			pgExpected:  "INDEX baz USING btree (a ASC, b DESC)",
+		},
+		{
+			index:       baseIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "",
+			pgExpected:  "",
+		},
+		{
+			index:       baseIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz ON foo.public.bar (a ASC, b DESC)",
+			pgExpected:  "INDEX baz ON foo.public.bar USING btree (a ASC, b DESC)",
+		},
+		{
+			index:       baseIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INDEX baz ON foo.public.bar (a ASC, b DESC)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC)",
+		},
+		{
+			index:       uniqueIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "UNIQUE INDEX baz (a ASC, b DESC)",
+			pgExpected:  "UNIQUE INDEX baz USING btree (a ASC, b DESC)",
+		},
+		{
+			index:       uniqueIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE UNIQUE INDEX baz ON foo.public.bar (a ASC, b DESC)",
+			pgExpected:  "CREATE UNIQUE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC)",
+		},
+		{
+			index:       jsonbInvertedIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INVERTED INDEX baz (a)",
+			pgExpected:  "INDEX baz USING gin (a)",
+		},
+		{
+			index:       jsonbInvertedIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INVERTED INDEX baz ON foo.public.bar (a)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING gin (a)",
+		},
+		{
+			index:       storingIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz (a ASC, b DESC) STORING (c)",
+			pgExpected:  "INDEX baz USING btree (a ASC, b DESC) STORING (c)",
+		},
+		{
+			index:       storingIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INDEX baz ON foo.public.bar (a ASC, b DESC) STORING (c)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC) STORING (c)",
+		},
+		{
+			index:       partialIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8",
+			pgExpected:  "INDEX baz USING btree (a ASC, b DESC) WHERE (a > 1)",
+		},
+		{
+			index:       partialIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INDEX baz ON foo.public.bar (a ASC, b DESC) WHERE a > 1:::INT8",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC) WHERE (a > 1)",
+		},
+		{
+			index:       expressionIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz (a ASC, (a + b) DESC, b ASC)",
+			pgExpected:  "INDEX baz USING btree (a ASC, (a + b) DESC, b ASC)",
+		},
+		{
+			index:       expressionIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INDEX baz ON foo.public.bar (a ASC, (a + b) DESC, b ASC)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, (a + b) DESC, b ASC)",
+		},
+		{
+			index:       partialIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   " PARTITION BY LIST (a) (PARTITION p VALUES IN (2))",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz (a ASC, b DESC) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE a > 1:::INT8",
+			pgExpected:  "INDEX baz USING btree (a ASC, b DESC) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE (a > 1)",
+		},
+		{
+			index:       partialIndex,
+			tableName:   tableName,
+			partition:   " PARTITION BY LIST (a) (PARTITION p VALUES IN (2))",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INDEX baz ON foo.public.bar (a ASC, b DESC) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE a > 1:::INT8",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC) PARTITION BY LIST (a) (PARTITION p VALUES IN (2)) WHERE (a > 1)",
+		},
+		{
+			index:       shardedIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "INDEX baz (a DESC) USING HASH WITH BUCKET_COUNT = 8",
+			pgExpected:  "INDEX baz USING btree (a DESC) USING HASH WITH BUCKET_COUNT = 8",
+		},
+		{
+			index:       shardedIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE INDEX baz ON foo.public.bar (a DESC) USING HASH WITH BUCKET_COUNT = 8",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a DESC) USING HASH WITH BUCKET_COUNT = 8",
 		},
 	}
 
@@ -127,14 +272,49 @@ func TestIndexForDisplay(t *testing.T) {
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			got, err := indexForDisplay(
-				ctx, tableDesc, &tc.tableName, &tc.index, false /* isPrimary */, tc.partition, &semaCtx, sd,
+				ctx,
+				tableDesc,
+				&tc.tableName,
+				&tc.index,
+				false, /* isPrimary */
+				tc.partition,
+				tree.FmtSimple,
+				&semaCtx,
+				sd,
+				tc.displayMode,
 			)
-			if err != nil {
+
+			if tc.expected == "" && err == nil {
+				t.Fatalf("expected error but not failed")
+			} else if tc.expected != "" && err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
 
 			if got != tc.expected {
 				t.Errorf("expected '%s', got '%s'", tc.expected, got)
+			}
+
+			got, err = indexForDisplay(
+				ctx,
+				tableDesc,
+				&tc.tableName,
+				&tc.index,
+				false, /* isPrimary */
+				tc.partition,
+				tree.FmtPGCatalog,
+				&semaCtx,
+				sd,
+				tc.displayMode,
+			)
+
+			if tc.pgExpected == "" && err == nil {
+				t.Fatalf("expected error but not failed")
+			} else if tc.expected != "" && err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			if got != tc.pgExpected {
+				t.Errorf("expected '%s', got '%s'", tc.pgExpected, got)
 			}
 		})
 	}
