@@ -153,8 +153,10 @@ func ShowCreateTable(
 			&descpb.AnonymousTable,
 			idx,
 			partitionBuf.String(),
+			tree.FmtSimple,
 			p.RunParams(ctx).p.SemaCtx(),
 			p.RunParams(ctx).p.SessionData(),
+			catformat.IndexDisplayDefOnly,
 		)
 		if err != nil {
 			return "", err

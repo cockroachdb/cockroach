@@ -61,7 +61,7 @@ WHERE tablename = 'sharded_primary'
 ORDER BY 1, 2, 3
 ----
 tablename        indexname  indexdef
-sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC)
+sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH BUCKET_COUNT = 10
 
 query TTB
 SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM sharded_primary]
