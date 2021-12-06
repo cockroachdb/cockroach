@@ -143,8 +143,13 @@ func registerKV(r registry.Registry) {
 		// CPU overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192, duration: 20 * time.Minute},
 		// IO write overload test, to stress admission control.
-		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16, /* 64 KB */
-			duration: 20 * time.Minute},
+		//
+		// TODO(sumeerbhola): re-enable when admission control is enabled by default. This
+		// test crashes the cluster every now and then. See:
+		// https://github.com/cockroachdb/cockroach/issues/70247
+		//
+		// {nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16, /* 64 KB */
+		//	duration: 20 * time.Minute},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 32, readPercent: 0},
 		{nodes: 1, cpus: 32, readPercent: 95},
