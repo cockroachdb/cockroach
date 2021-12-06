@@ -92,6 +92,11 @@ type PostDeserializationTableDescriptorChanges struct {
 
 	// UpgradedPrivileges indicates that the PrivilegeDescriptor version was upgraded.
 	UpgradedPrivileges bool
+
+	// RemovedDefaultExprFromComputedColumn indicates that the table had at least
+	// one computed column which also had a DEFAULT expression, which therefore
+	// had to be removed. See issue #72881 for details.
+	RemovedDefaultExprFromComputedColumn bool
 }
 
 // DescriptorType returns the type of this descriptor.
