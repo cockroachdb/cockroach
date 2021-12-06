@@ -13,12 +13,12 @@ package scrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
 
 // SchemaChangeJobCreationDependencies contains the dependencies required for
@@ -70,9 +70,8 @@ type JobRunDependencies interface {
 type JobTxnRunDependencies interface {
 	TxnRunDependencies
 
-	// UpdateSchemaChangeJob triggers the update of the current schema change job
-	// via the supplied callback.
-	UpdateSchemaChangeJob(ctx context.Context, fn func(md jobs.JobMetadata, ju JobProgressUpdater) error) error
+	// UpdateState triggers the update of the current schema change job state.
+	UpdateState(ctx context.Context, state scpb.State) error
 }
 
 // JobProgressUpdater is for updating the progress of the schema change job.

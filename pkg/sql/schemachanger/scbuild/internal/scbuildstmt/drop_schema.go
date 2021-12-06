@@ -48,7 +48,10 @@ func dropSchema(
 	}
 	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
 	for _, id := range objectIDs {
-		dropIDs.Add(id)
+		// If the object is already dropped, nothing to do here.
+		if !checkIfDescOrElementAreDropped(b, id) {
+			dropIDs.Add(id)
+		}
 	}
 	if behavior != tree.DropCascade && !dropIDs.Empty() {
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,

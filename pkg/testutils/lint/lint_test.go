@@ -40,26 +40,6 @@ import (
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
 
-func init() {
-	if bazel.BuiltWithBazel() {
-		// We need to explicitly include all the libraries in LDFLAGS.
-		runfiles, err := bazel.RunfilesPath()
-		if err != nil {
-			panic(err)
-		}
-		ldflags := ""
-		for _, dir := range []string{
-			"c-deps/libgeos/lib",
-			"c-deps/libproj/lib",
-			"external/com_github_knz_go_libedit/unix",
-		} {
-			ldflags = ldflags + " -L" + filepath.Join(runfiles, dir)
-		}
-		os.Setenv("CGO_LDFLAGS", ldflags)
-		os.Setenv("LDFLAGS", ldflags)
-	}
-}
-
 func dirCmd(
 	dir string, name string, args ...string,
 ) (*exec.Cmd, *bytes.Buffer, stream.Filter, error) {
@@ -1593,7 +1573,9 @@ func TestLint(t *testing.T) {
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 68498, "Generated files not placed in the workspace via Bazel build")
+		if bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "the errcheck tests are run during the bazel build")
+		}
 		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
 		if err != nil {
 			t.Fatal(err)
@@ -1629,6 +1611,7 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
 		skip.UnderShort(t)
+		skip.UnderBazelWithIssue(t, 73391, "Going to migrate to nogo")
 		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
 		if err != nil {

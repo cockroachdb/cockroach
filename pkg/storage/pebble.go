@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
@@ -223,6 +225,14 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
+// TODO(sumeer): consider removing pebbleTimeBoundPropCollector for the 22.2
+// release, since 22.1 nodes will be using BlockPropertyCollectors and there
+// shouldn't be significant sstables that do not get rewritten for 6 months
+// (we would have no time bound optimization for such sstables). Since it is
+// possible for users to upgrade to 22.1 and then to 22.2 in quick succession
+// this duration argument is not really valid. To be safe we could wait until
+// 23.1.
+
 // pebbleTimeBoundPropCollector implements a property collector for MVCC
 // Timestamps. Its behavior matches TimeBoundTblPropCollector in
 // table_props.cc.
@@ -239,6 +249,12 @@ var MVCCMerger = &pebble.Merger{
 // the timestamp both in the intent and in the timestamped record that
 // immediately follows it, we only need to unmarshal the MVCCMetadata if it is
 // the last key in the sstable.
+// The metadata unmarshaling logic discussed in the previous paragraph is
+// flawed (see the comment
+// https://github.com/cockroachdb/cockroach/issues/43799#issuecomment-576830234
+// and its preceding comment), and we've worked around it as indicated in that
+// issue. Due to that workaround, we need not unmarshal the metadata record at
+// all.
 type pebbleTimeBoundPropCollector struct {
 	min, max  []byte
 	lastValue []byte
@@ -321,6 +337,99 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
 }
 
+// pebbleDataBlockMVCCTimeIntervalCollector provides an implementation of
+// pebble.DataBlockIntervalCollector that is used to construct a
+// pebble.BlockPropertyCollector. This provides per-block filtering, which
+// also gets aggregated to the sstable-level and filters out sstables. It must
+// only be used for MVCCKeyIterKind iterators, since it will ignore
+// blocks/sstables that contain intents (and any other key that is not a real
+// MVCC key).
+type pebbleDataBlockMVCCTimeIntervalCollector struct {
+	// min, max are the encoded timestamps.
+	min, max []byte
+}
+
+var _ sstable.DataBlockIntervalCollector = &pebbleDataBlockMVCCTimeIntervalCollector{}
+
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) Add(
+	key pebble.InternalKey, value []byte,
+) error {
+	k := key.UserKey
+	if len(k) == 0 {
+		return nil
+	}
+	// Last byte is the version length + 1 when there is a version,
+	// else it is 0.
+	versionLen := int(k[len(k)-1])
+	// keyPartEnd points to the sentinel byte.
+	keyPartEnd := len(k) - 1 - versionLen
+	if keyPartEnd < 0 {
+		return errors.Errorf("invalid key %s", roachpb.Key(k).String())
+	}
+	if versionLen == 0 {
+		return nil
+	}
+	versionLen--
+	if versionLen == engineKeyVersionWallTimeLen ||
+		versionLen == engineKeyVersionWallAndLogicalTimeLen ||
+		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
+		// INVARIANT: keyPartEnd < len(k) - 1.
+		// Version consists of the bytes after the sentinel and before the length.
+		k = k[keyPartEnd+1 : len(k)-1]
+		// Lexicographic comparison on the encoded timestamps is equivalent to the
+		// comparison on decoded timestamps, so delay decoding.
+		if len(tc.min) == 0 || bytes.Compare(k, tc.min) < 0 {
+			tc.min = append(tc.min[:0], k...)
+		}
+		if len(tc.max) == 0 || bytes.Compare(k, tc.max) > 0 {
+			tc.max = append(tc.max[:0], k...)
+		}
+	}
+	return nil
+}
+
+func decodeWallTime(ts []byte) uint64 {
+	return binary.BigEndian.Uint64(ts[0:engineKeyVersionWallTimeLen])
+}
+
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
+	lower uint64,
+	upper uint64,
+	err error,
+) {
+	if len(tc.min) == 0 {
+		// No calls to Add that contained a timestamped key.
+		return 0, 0, nil
+	}
+	// Construct a [lower, upper) walltime that will contain all the
+	// hlc.Timestamps in this block.
+	lower = decodeWallTime(tc.min)
+	// Remember that we have to reset tc.min and tc.max to get ready for the
+	// next data block, as specified in the DataBlockIntervalCollector interface
+	// help and help too.
+	tc.min = tc.min[:0]
+	// The actual value encoded into walltime is an int64, so +1 will not
+	// overflow.
+	upper = decodeWallTime(tc.max) + 1
+	tc.max = tc.max[:0]
+	if lower >= upper {
+		return 0, 0,
+			errors.Errorf("corrupt timestamps lower %d >= upper %d", lower, upper)
+	}
+	return lower, upper, nil
+}
+
+const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
+
+// PebbleBlockPropertyCollectors is the list of functions to construct
+// BlockPropertyCollectors.
+var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
+	func() pebble.BlockPropertyCollector {
+		return sstable.NewBlockIntervalCollector(mvccWallTimeIntervalCollector,
+			&pebbleDataBlockMVCCTimeIntervalCollector{})
+	},
+}
+
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	// In RocksDB, the concurrency setting corresponds to both flushes and
@@ -342,6 +451,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
+		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 	}
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
@@ -1456,6 +1566,10 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	formatVers := pebble.FormatMostCompatible
 	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector)):
+		if formatVers < pebble.FormatBlockPropertyCollector {
+			formatVers = pebble.FormatBlockPropertyCollector
+		}
 	case !version.Less(clusterversion.ByKey(clusterversion.PebbleSetWithDelete)):
 		if formatVers < pebble.FormatSetWithDelete {
 			formatVers = pebble.FormatSetWithDelete

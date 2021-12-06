@@ -28,9 +28,10 @@ import (
 
 // Grant represents a GRANT statement.
 type Grant struct {
-	Privileges privilege.List
-	Targets    TargetList
-	Grantees   RoleSpecList
+	Privileges      privilege.List
+	Targets         TargetList
+	Grantees        RoleSpecList
+	WithGrantOption bool
 }
 
 // TargetList represents a list of targets.

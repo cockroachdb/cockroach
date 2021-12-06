@@ -165,7 +165,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 
 	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0)
 	require.NoError(t, err)
-	err = msstw.Finish(ctx)
+	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte

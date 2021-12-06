@@ -28,12 +28,9 @@ rlocation_ck () {
 test_bin="$(rlocation_ck cockroach/$PACKAGE/${NAME}_/$NAME)"
 go_bin="$(rlocation_ck go_sdk/bin/go)"
 crlfmt_bin="$(rlocation_ck com_github_cockroachdb_crlfmt/crlfmt_/crlfmt)"
-errcheck_bin="$(rlocation_ck com_github_kisielk_errcheck/errcheck_/errcheck)"
 golint_bin="$(rlocation_ck org_golang_x_lint/golint/golint_/golint)"
 misspell_bin="$(rlocation_ck com_github_client9_misspell/cmd/misspell/misspell_/misspell)"
 optfmt_bin="$(rlocation_ck cockroach/pkg/sql/opt/optgen/cmd/optfmt/optfmt_/optfmt)"
-returncheck_bin="$(rlocation_ck cockroach/pkg/cmd/returncheck/returncheck_/returncheck)"
-staticcheck_bin="$(rlocation_ck co_honnef_go_tools/cmd/staticcheck/staticcheck_/staticcheck)"
 
 # Need to run this so that Go can find the runfiles.
 runfiles_export_envvars
@@ -46,6 +43,6 @@ fi
 cd "$BUILD_WORKSPACE_DIRECTORY/$PACKAGE"
 
 TEST_WORKSPACE=cockroach \
-    PATH="$(dirname $go_bin):$(dirname $errcheck_bin):$(dirname $returncheck_bin):$(dirname $staticcheck_bin):$(dirname $crlfmt_bin):$(dirname $misspell_bin):$(dirname $golint_bin):$(dirname $optfmt_bin):$PATH" \
+    PATH="$(dirname $go_bin):$(dirname $crlfmt_bin):$(dirname $misspell_bin):$(dirname $golint_bin):$(dirname $optfmt_bin):$PATH" \
     GOROOT="$(dirname $(dirname $go_bin))" \
     "$test_bin" "$@"

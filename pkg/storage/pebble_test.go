@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -1053,4 +1055,78 @@ func assertDataEqual(
 		}
 	}
 	require.Equal(t, dataIndex, len(data), "Not all expected data was consumed")
+}
+
+func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	aKey := roachpb.Key("a")
+	collector := &pebbleDataBlockMVCCTimeIntervalCollector{}
+	finishAndCheck := func(lower, upper uint64) {
+		l, u, err := collector.FinishDataBlock()
+		require.NoError(t, err)
+		require.Equal(t, lower, l)
+		require.Equal(t, upper, u)
+	}
+	// Nothing added.
+	finishAndCheck(0, 0)
+	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+	ek, _ := LockTableKey{aKey, lock.Exclusive, uuid[:]}.ToEngineKey(nil)
+	require.NoError(t, collector.Add(pebble.InternalKey{UserKey: ek.Encode()}, []byte("foo")))
+	// The added key was not an MVCCKey.
+	finishAndCheck(0, 0)
+	require.NoError(t, collector.Add(pebble.InternalKey{
+		UserKey: EncodeKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})},
+		[]byte("foo")))
+	// Added 1 MVCCKey which sets both the upper and lower bound.
+	finishAndCheck(2, 3)
+	require.NoError(t, collector.Add(pebble.InternalKey{
+		UserKey: EncodeKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}})},
+		[]byte("foo")))
+	require.NoError(t, collector.Add(pebble.InternalKey{
+		UserKey: EncodeKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25, Logical: 1}})},
+		[]byte("foo")))
+	// Added 2 MVCCKeys.
+	finishAndCheck(22, 26)
+}
+
+func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	overrideOptions := func(cfg *engineConfig) error {
+		cfg.Opts.FormatMajorVersion = pebble.FormatNewest
+		for i := range cfg.Opts.Levels {
+			cfg.Opts.Levels[i].BlockSize = 1
+			cfg.Opts.Levels[i].IndexBlockSize = 1
+		}
+		return nil
+	}
+	eng := NewDefaultInMemForTesting(overrideOptions)
+	defer eng.Close()
+	// We are simply testing that the integration is working.
+	aKey := roachpb.Key("a")
+	for i := 0; i < 10; i++ {
+		require.NoError(t, eng.PutMVCC(
+			MVCCKey{aKey, hlc.Timestamp{WallTime: int64(i), Logical: 1}},
+			[]byte(fmt.Sprintf("val%d", i))))
+	}
+	require.NoError(t, eng.Flush())
+	iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		LowerBound:       aKey,
+		MinTimestampHint: hlc.Timestamp{WallTime: 5},
+		MaxTimestampHint: hlc.Timestamp{WallTime: 7},
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: aKey})
+	var err error
+	var valid bool
+	var found []int64
+	for valid, err = iter.Valid(); valid; {
+		found = append(found, iter.Key().Timestamp.WallTime)
+		iter.Next()
+		valid, err = iter.Valid()
+	}
+	require.NoError(t, err)
+	expected := []int64{7, 6, 5}
+	require.Equal(t, expected, found)
 }

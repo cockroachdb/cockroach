@@ -24,16 +24,13 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-func (r *Replica) quiesceLocked(
-	ctx context.Context, lagging laggingReplicaSet, laggingAccurate bool,
-) {
+func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
 		if log.V(3) {
 			log.Infof(ctx, "quiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
-		r.mu.laggingFollowersOnQuiesceAccurate = laggingAccurate
 		r.store.unquiescedReplicas.Lock()
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
 		r.store.unquiescedReplicas.Unlock()
@@ -60,7 +57,6 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 		}
 		r.mu.quiescent = false
 		r.mu.laggingFollowersOnQuiesce = nil
-		r.mu.laggingFollowersOnQuiesceAccurate = false
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
@@ -82,7 +78,6 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 		}
 		r.mu.quiescent = false
 		r.mu.laggingFollowersOnQuiesce = nil
-		r.mu.laggingFollowersOnQuiesceAccurate = false
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
@@ -379,7 +374,7 @@ func (r *Replica) quiesceAndNotifyLocked(
 		return false
 	}
 
-	r.quiesceLocked(ctx, lagging, true /* laggingAccurate */)
+	r.quiesceLocked(ctx, lagging)
 
 	for id, prog := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
@@ -507,7 +502,7 @@ func shouldFollowerQuiesceOnNotify(
 }
 
 func (r *Replica) maybeQuiesceOnNotify(
-	ctx context.Context, msg raftpb.Message, lagging laggingReplicaSet, laggingAccurate bool,
+	ctx context.Context, msg raftpb.Message, lagging laggingReplicaSet,
 ) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -520,6 +515,6 @@ func (r *Replica) maybeQuiesceOnNotify(
 		return false
 	}
 
-	r.quiesceLocked(ctx, lagging, laggingAccurate)
+	r.quiesceLocked(ctx, lagging)
 	return true
 }

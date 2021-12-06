@@ -233,7 +233,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					}
 
 					// Block job 1 during the backfill.
-					s := p.Stages[idx]
+					s := p.StagesForCurrentPhase()[idx]
 					if stmt != stmt1 || s.Ops.Type() != scop.BackfillType {
 						return nil
 					}
@@ -345,7 +345,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-				s := p.Stages[idx]
+				s := p.StagesForCurrentPhase()[idx]
 				if s.Ops.Type() != scop.BackfillType {
 					return nil
 				}
@@ -451,7 +451,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-				s := p.Stages[stageIdx]
+				s := p.StagesForCurrentPhase()[stageIdx]
 				if s.Ops.Type() != scop.BackfillType {
 					return nil
 				}

@@ -14,6 +14,7 @@ go_library(
         "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/util/interval",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",

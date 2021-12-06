@@ -1011,7 +1011,7 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 					statistic.AvgSize = avgRowSize
 				}
 				// TODO(michae2): parallelize insertion of statistics.
-				err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, nil /* txn */, statistics)
+				err = stats.InsertNewStats(ctx, execCfg.Settings, execCfg.InternalExecutor, nil /* txn */, statistics)
 			}
 			if err != nil {
 				// Failure to create statistics should not fail the entire import.

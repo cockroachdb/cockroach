@@ -4712,10 +4712,14 @@ def go_deps():
         name = "com_github_kisielk_errcheck",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/kisielk/errcheck",
-        sha256 = "e15bd181a3f384da89fed079dc4ec4d1f431fc20db758fdbe4abb38d7ddee06b",
-        strip_prefix = "github.com/kisielk/errcheck@v1.5.0",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_kisielk_errcheck.patch",
+        ],
+        sha256 = "99d3220891162cb684f8e05d54f3d0dc58abdd496a2f0cfda7fd4a28917a719e",
+        strip_prefix = "github.com/kisielk/errcheck@v1.6.1-0.20210625163953-8ddee489636a",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kisielk/errcheck/com_github_kisielk_errcheck-v1.5.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kisielk/errcheck/com_github_kisielk_errcheck-v1.6.1-0.20210625163953-8ddee489636a.zip",
         ],
     )
     go_repository(

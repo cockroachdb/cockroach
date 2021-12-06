@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -523,7 +524,6 @@ func TestFlowRegistryDrain(t *testing.T) {
 // TODO(asubiotto): This error should also be considered retryable by clients.
 func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	fr := NewFlowRegistry()
 	wg := sync.WaitGroup{}
@@ -553,6 +553,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 // error, we are still able to register flows while Pushing the error (#34041).
 func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 73419, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()

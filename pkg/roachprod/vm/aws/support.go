@@ -180,8 +180,8 @@ func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error)
 // runCommand is used to invoke an AWS command.
 func (p *Provider) runCommand(args []string) ([]byte, error) {
 
-	if p.opts.Profile != "" {
-		args = append(args[:len(args):len(args)], "--profile", p.opts.Profile)
+	if p.Profile != "" {
+		args = append(args[:len(args):len(args)], "--profile", p.Profile)
 	}
 	var stderrBuf bytes.Buffer
 	cmd := exec.Command("aws", args...)

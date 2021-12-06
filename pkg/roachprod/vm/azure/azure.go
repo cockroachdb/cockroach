@@ -45,6 +45,9 @@ const (
 	tagSubnet    = "subnetPrefix"
 )
 
+// providerInstance is the instance to be registered into vm.Providers by Init.
+var providerInstance = &Provider{}
+
 // Init registers the Azure provider with vm.Providers.
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
@@ -52,20 +55,25 @@ func Init() {
 	const unimplemented = "please install the Azure CLI utilities +" +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 
-	p := New()
-
-	if _, err := p.getAuthToken(); err == nil {
-		vm.Providers[ProviderName] = p
-	} else {
-		vm.Providers[ProviderName] = flagstub.New(p, unimplemented)
+	providerInstance = New()
+	providerInstance.OperationTimeout = 10 * time.Minute
+	providerInstance.SyncDelete = false
+	if _, err := providerInstance.getAuthToken(); err != nil {
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
+		return
 	}
+	vm.Providers[ProviderName] = providerInstance
 }
 
 // Provider implements the vm.Provider interface for the Microsoft Azure
 // cloud.
 type Provider struct {
-	opts ProviderOpts
-	mu   struct {
+	// The maximum amount of time for an Azure API operation to take.
+	OperationTimeout time.Duration
+	// Wait for deletions to finish before returning.
+	SyncDelete bool
+
+	mu struct {
 		syncutil.Mutex
 
 		authorizer     autorest.Authorizer
@@ -78,7 +86,7 @@ type Provider struct {
 
 // New constructs a new Provider instance.
 func New() *Provider {
-	p := &Provider{opts: DefaultProviderOpts()}
+	p := &Provider{}
 	p.mu.resourceGroups = make(map[string]resources.Group)
 	p.mu.securityGroups = make(map[string]network.SecurityGroup)
 	p.mu.subnets = make(map[string]network.Subnet)
@@ -113,7 +121,10 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 }
 
 // Create implements vm.Provider.
-func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
+func (p *Provider) Create(
+	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+) error {
+	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// Load the user's SSH public key to configure the resulting VMs.
 	var sshKey string
 	sshFile := os.ExpandEnv("${HOME}/.ssh/id_rsa.pub")
@@ -145,29 +156,29 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return fmt.Sprintf("%s-%s", opts.ClusterName, location)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), p.opts.OperationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
-	if len(p.opts.Locations) == 0 {
+	if len(providerOpts.Locations) == 0 {
 		if opts.GeoDistributed {
-			p.opts.Locations = defaultLocations
+			providerOpts.Locations = defaultLocations
 		} else {
-			p.opts.Locations = []string{defaultLocations[0]}
+			providerOpts.Locations = []string{defaultLocations[0]}
 		}
 	}
 
-	if len(p.opts.Zone) == 0 {
-		p.opts.Zone = defaultZone
+	if len(providerOpts.Zone) == 0 {
+		providerOpts.Zone = defaultZone
 	}
 
-	if _, err := p.createVNets(ctx, p.opts.Locations); err != nil {
+	if _, err := p.createVNets(ctx, providerOpts.Locations, *providerOpts); err != nil {
 		return err
 	}
 
 	// Effectively a map of node number to location.
-	nodeLocations := vm.ZonePlacement(len(p.opts.Locations), len(names))
+	nodeLocations := vm.ZonePlacement(len(providerOpts.Locations), len(names))
 	// Invert it.
-	nodesByLocIdx := make(map[int][]int, len(p.opts.Locations))
+	nodesByLocIdx := make(map[int][]int, len(providerOpts.Locations))
 	for nodeIdx, locIdx := range nodeLocations {
 		nodesByLocIdx[locIdx] = append(nodesByLocIdx[locIdx], nodeIdx)
 	}
@@ -178,7 +189,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		locIdx := locIdx
 		nodes := nodes
 		errs.Go(func() error {
-			location := p.opts.Locations[locIdx]
+			location := providerOpts.Locations[locIdx]
 
 			// Create a resource group within the location.
 			group, err := p.getOrCreateResourceGroup(
@@ -197,7 +208,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			for _, nodeIdx := range nodes {
 				name := names[nodeIdx]
 				errs.Go(func() error {
-					_, err := p.createVM(ctx, group, subnet, name, sshKey, opts)
+					_, err := p.createVM(ctx, group, subnet, name, sshKey, opts, *providerOpts)
 					err = errors.Wrapf(err, "creating VM %s", name)
 					if err == nil {
 						log.Infof(context.Background(), "created VM %s", name)
@@ -213,7 +224,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 // Delete implements the vm.Provider interface.
 func (p *Provider) Delete(vms vm.List) error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.opts.OperationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
@@ -238,7 +249,7 @@ func (p *Provider) Delete(vms vm.List) error {
 		futures = append(futures, future)
 	}
 
-	if !p.opts.SyncDelete {
+	if !p.SyncDelete {
 		return nil
 	}
 
@@ -261,7 +272,7 @@ func (p *Provider) Reset(vms vm.List) error {
 // DeleteCluster implements the vm.DeleteCluster interface, providing
 // a fast-path to tear down all resources associated with a cluster.
 func (p *Provider) DeleteCluster(name string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.opts.OperationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
@@ -295,7 +306,7 @@ func (p *Provider) DeleteCluster(name string) error {
 		}
 	}
 
-	if !p.opts.SyncDelete {
+	if !p.SyncDelete {
 		return nil
 	}
 
@@ -312,7 +323,7 @@ func (p *Provider) DeleteCluster(name string) error {
 
 // Extend implements the vm.Provider interface.
 func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.opts.OperationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
@@ -380,15 +391,10 @@ func (p *Provider) FindActiveAccount() (string, error) {
 	return data.Username[:strings.Index(data.Username, "@")], nil
 }
 
-// Flags implements the vm.Provider interface.
-func (p *Provider) Flags() vm.ProviderFlags {
-	return &p.opts
-}
-
 // List implements the vm.Provider interface. This will query all
 // Azure VMs in the subscription and select those with a roachprod tag.
 func (p *Provider) List() (vm.List, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.opts.OperationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
@@ -486,6 +492,7 @@ func (p *Provider) createVM(
 	subnet network.Subnet,
 	name, sshKey string,
 	opts vm.CreateOpts,
+	providerOpts ProviderOpts,
 ) (vm compute.VirtualMachine, err error) {
 	startupArgs := azureStartupArgs{RemoteUser: remoteUser}
 	if !opts.SSDOpts.UseLocalSSD {
@@ -508,7 +515,7 @@ func (p *Provider) createVM(
 	}
 
 	// We first need to allocate a NIC to give the VM network access
-	ip, err := p.createIP(ctx, group, name)
+	ip, err := p.createIP(ctx, group, name, providerOpts)
 	if err != nil {
 		return
 	}
@@ -535,11 +542,11 @@ func (p *Provider) createVM(
 	// https://github.com/Azure-Samples/azure-sdk-for-go-samples/blob/79e3f3af791c3873d810efe094f9d61e93a6ccaa/compute/vm.go#L41
 	vm = compute.VirtualMachine{
 		Location: group.Location,
-		Zones:    to.StringSlicePtr([]string{p.opts.Zone}),
+		Zones:    to.StringSlicePtr([]string{providerOpts.Zone}),
 		Tags:     tags,
 		VirtualMachineProperties: &compute.VirtualMachineProperties{
 			HardwareProfile: &compute.HardwareProfile{
-				VMSize: compute.VirtualMachineSizeTypes(p.opts.MachineType),
+				VMSize: compute.VirtualMachineSizeTypes(providerOpts.MachineType),
 			},
 			StorageProfile: &compute.StorageProfile{
 				// From https://discourse.ubuntu.com/t/find-ubuntu-images-on-microsoft-azure/18918
@@ -594,7 +601,7 @@ func (p *Provider) createVM(
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
 
-		switch p.opts.DiskCaching {
+		switch providerOpts.DiskCaching {
 		case "read-only":
 			caching = compute.CachingTypesReadOnly
 		case "read-write":
@@ -602,21 +609,21 @@ func (p *Provider) createVM(
 		case "none":
 			caching = compute.CachingTypesNone
 		default:
-			err = errors.Newf("unsupported caching behavior: %s", p.opts.DiskCaching)
+			err = errors.Newf("unsupported caching behavior: %s", providerOpts.DiskCaching)
 			return
 		}
 		dataDisks := []compute.DataDisk{
 			{
-				DiskSizeGB: to.Int32Ptr(p.opts.NetworkDiskSize),
+				DiskSizeGB: to.Int32Ptr(providerOpts.NetworkDiskSize),
 				Caching:    caching,
 				Lun:        to.Int32Ptr(42),
 			},
 		}
 
-		switch p.opts.NetworkDiskType {
+		switch providerOpts.NetworkDiskType {
 		case "ultra-disk":
 			var ultraDisk compute.Disk
-			ultraDisk, err = p.createUltraDisk(ctx, group, name+"-ultra-disk")
+			ultraDisk, err = p.createUltraDisk(ctx, group, name+"-ultra-disk", providerOpts)
 			if err != nil {
 				return
 			}
@@ -639,7 +646,7 @@ func (p *Provider) createVM(
 				StorageAccountType: compute.StorageAccountTypesPremiumLRS,
 			}
 		default:
-			err = errors.Newf("unsupported network disk type: %s", p.opts.NetworkDiskType)
+			err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
 			return
 		}
 
@@ -867,7 +874,7 @@ func (p *Provider) getVnetNetworkSecurityGroupName(location string) string {
 // be able to communicate with one another, although this is scoped by
 // the value of the vnet-name flag.
 func (p *Provider) createVNets(
-	ctx context.Context, locations []string,
+	ctx context.Context, locations []string, providerOpts ProviderOpts,
 ) (map[string]network.VirtualNetwork, error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -924,7 +931,7 @@ func (p *Provider) createVNets(
 	}
 	newSubnetsCreated := false
 
-	for _, location := range p.opts.Locations {
+	for _, location := range providerOpts.Locations {
 		p.mu.Lock()
 		group := p.mu.resourceGroups[vnetResourceGroupName(location)]
 		p.mu.Unlock()
@@ -968,7 +975,7 @@ func (p *Provider) createVNets(
 		resourceGroup := p.mu.resourceGroups[vnetResourceGroupName(location)]
 		networkSecurityGroup := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(location)]
 		p.mu.Unlock()
-		if vnet, _, err := p.createVNet(ctx, resourceGroup, networkSecurityGroup, prefix); err == nil {
+		if vnet, _, err := p.createVNet(ctx, resourceGroup, networkSecurityGroup, prefix, providerOpts); err == nil {
 			ret[location] = vnet
 			vnets = append(vnets, vnet)
 		} else {
@@ -991,8 +998,9 @@ func (p *Provider) createVNet(
 	resourceGroup resources.Group,
 	securityGroup network.SecurityGroup,
 	prefix int,
+	providerOpts ProviderOpts,
 ) (vnet network.VirtualNetwork, subnet network.Subnet, err error) {
-	vnetName := p.opts.VnetName
+	vnetName := providerOpts.VnetName
 
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -1104,7 +1112,7 @@ func (p *Provider) createVNetPeerings(ctx context.Context, vnets []network.Virtu
 
 // createIP allocates an IP address that will later be bound to a NIC.
 func (p *Provider) createIP(
-	ctx context.Context, group resources.Group, name string,
+	ctx context.Context, group resources.Group, name string, providerOpts ProviderOpts,
 ) (ip network.PublicIPAddress, err error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -1121,7 +1129,7 @@ func (p *Provider) createIP(
 				Name: network.PublicIPAddressSkuNameStandard,
 			},
 			Location: group.Location,
-			Zones:    to.StringSlicePtr([]string{p.opts.Zone}),
+			Zones:    to.StringSlicePtr([]string{providerOpts.Zone}),
 			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 				PublicIPAddressVersion:   network.IPVersionIPv4,
 				PublicIPAllocationMethod: network.IPAllocationMethodStatic,
@@ -1252,7 +1260,7 @@ func (p *Provider) getOrCreateResourceGroup(
 }
 
 func (p *Provider) createUltraDisk(
-	ctx context.Context, group resources.Group, name string,
+	ctx context.Context, group resources.Group, name string, providerOpts ProviderOpts,
 ) (compute.Disk, error) {
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
@@ -1266,7 +1274,7 @@ func (p *Provider) createUltraDisk(
 
 	future, err := client.CreateOrUpdate(ctx, *group.Name, name,
 		compute.Disk{
-			Zones:    to.StringSlicePtr([]string{p.opts.Zone}),
+			Zones:    to.StringSlicePtr([]string{providerOpts.Zone}),
 			Location: group.Location,
 			Sku: &compute.DiskSku{
 				Name: compute.DiskStorageAccountTypesUltraSSDLRS,
@@ -1275,8 +1283,8 @@ func (p *Provider) createUltraDisk(
 				CreationData: &compute.CreationData{
 					CreateOption: compute.DiskCreateOptionEmpty,
 				},
-				DiskSizeGB:        to.Int32Ptr(p.opts.NetworkDiskSize),
-				DiskIOPSReadWrite: to.Int64Ptr(p.opts.UltraDiskIOPS),
+				DiskSizeGB:        to.Int32Ptr(providerOpts.NetworkDiskSize),
+				DiskIOPSReadWrite: to.Int64Ptr(providerOpts.UltraDiskIOPS),
 			},
 		})
 	if err != nil {

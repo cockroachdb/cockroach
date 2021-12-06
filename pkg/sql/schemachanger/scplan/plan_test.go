@@ -99,7 +99,7 @@ func TestPlanDataDriven(t *testing.T) {
 						require.NoError(t, err)
 					}
 
-					plan = sctestutils.MakePlan(t, outputNodes, scop.PostCommitPhase)
+					plan = sctestutils.MakePlan(t, outputNodes, scop.StatementPhase)
 				})
 
 				if d.Cmd == "ops" {
@@ -174,13 +174,9 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 // marshalOps marshals operations in scplan.Plan to a string.
 func marshalOps(t *testing.T, plan *scplan.Plan) string {
 	var stages strings.Builder
-	for stageIdx, stage := range plan.Stages {
-		_, _ = fmt.Fprintf(&stages, "Stage %d of %d", stageIdx+1, len(plan.Stages))
-		if !stage.Revertible {
-			stages.WriteString(" (non-revertible)")
-		}
-		stages.WriteString("\n")
-		stages.WriteString("  transitions:\n")
+	for _, stage := range plan.StagesForAllPhases() {
+		stages.WriteString(stage.String())
+		stages.WriteString("\n  transitions:\n")
 		var transitionsBuf strings.Builder
 		for i := range stage.Before.Nodes {
 			before, after := stage.Before.Nodes[i], stage.After.Nodes[i]
@@ -191,18 +187,21 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 				screl.NodeString(before), after.Status)
 		}
 		stages.WriteString(indentText(transitionsBuf.String(), "    "))
+		if stage.Ops == nil {
+			// Although unlikely, it's possible for a stage to have no operations. This
+			// requires them to have been optimized out, and also requires that the
+			// resulting empty stage could not be collapsed into another.
+			stages.WriteString("  no ops\n")
+			continue
+		}
 		stages.WriteString("  ops:\n")
 		stageOps := ""
-		// A stage could have no operations if we optimized them
-		// out.
-		if stage.Ops != nil {
-			for _, op := range stage.Ops.Slice() {
-				opMap, err := scgraphviz.ToMap(op)
-				require.NoError(t, err)
-				data, err := yaml.Marshal(opMap)
-				require.NoError(t, err)
-				stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
-			}
+		for _, op := range stage.Ops.Slice() {
+			opMap, err := scgraphviz.ToMap(op)
+			require.NoError(t, err)
+			data, err := yaml.Marshal(opMap)
+			require.NoError(t, err)
+			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
 		stages.WriteString(indentText(stageOps, "    "))
 	}

@@ -1662,7 +1662,7 @@ SELECT a IS NAN
 ----
 SELECT a = 'NaN' -- normalized!
 SELECT ((a) = ('NaN')) -- fully parenthesized
-SELECT a = '_' -- literals removed
+SELECT a = _ -- literals removed
 SELECT _ = 'NaN' -- identifiers removed
 
 parse
@@ -1670,7 +1670,7 @@ SELECT a IS NOT NAN
 ----
 SELECT a != 'NaN' -- normalized!
 SELECT ((a) != ('NaN')) -- fully parenthesized
-SELECT a != '_' -- literals removed
+SELECT a != _ -- literals removed
 SELECT _ != 'NaN' -- identifiers removed
 
 parse

@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "errcheck",
+    srcs = ["errcheck.go"],
+    embedsrcs = ["errcheck_excludes.txt"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcheck",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_kisielk_errcheck//errcheck",
+    ],
+)
+
+# NB: We want errcheck_excludes.txt in the same logical directory so we can
+# go:embed it, so we just copy it here unchanged.
+genrule(
+    name = "gen-errcheck-excludes",
+    srcs = ["//pkg/testutils/lint:testdata/errcheck_excludes.txt"],
+    outs = ["errcheck_excludes.txt"],
+    cmd = "cp $< $@",
+)

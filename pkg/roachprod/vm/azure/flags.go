@@ -13,7 +13,6 @@ package azure
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -22,16 +21,14 @@ import (
 
 // ProviderOpts provides user-configurable, azure-specific create options.
 type ProviderOpts struct {
-	Locations        []string
-	MachineType      string
-	OperationTimeout time.Duration
-	SyncDelete       bool
-	VnetName         string
-	Zone             string
-	NetworkDiskType  string
-	NetworkDiskSize  int32
-	UltraDiskIOPS    int64
-	DiskCaching      string
+	Locations       []string
+	MachineType     string
+	VnetName        string
+	Zone            string
+	NetworkDiskType string
+	NetworkDiskSize int32
+	UltraDiskIOPS   int64
+	DiskCaching     string
 }
 
 var defaultLocations = []string{
@@ -43,26 +40,29 @@ var defaultLocations = []string{
 var defaultZone = "1"
 
 // DefaultProviderOpts returns a new azure.ProviderOpts with default values set.
-func DefaultProviderOpts() ProviderOpts {
-	return ProviderOpts{
-		Locations:        nil,
-		MachineType:      string(compute.VirtualMachineSizeTypesStandardD4V3),
-		OperationTimeout: 10 * time.Minute,
-		SyncDelete:       false,
-		VnetName:         "common",
-		Zone:             "",
-		NetworkDiskType:  "premium-disk",
-		NetworkDiskSize:  500,
-		UltraDiskIOPS:    5000,
-		DiskCaching:      "none",
+func DefaultProviderOpts() *ProviderOpts {
+	return &ProviderOpts{
+		Locations:       nil,
+		MachineType:     string(compute.VirtualMachineSizeTypesStandardD4V3),
+		VnetName:        "common",
+		Zone:            "",
+		NetworkDiskType: "premium-disk",
+		NetworkDiskSize: 500,
+		UltraDiskIOPS:   5000,
+		DiskCaching:     "none",
 	}
+}
+
+// CreateProviderOpts returns a new azure.ProviderOpts with default values set.
+func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
+	return DefaultProviderOpts()
 }
 
 // ConfigureCreateFlags implements vm.ProviderFlags.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.DurationVar(&o.OperationTimeout, ProviderName+"-timeout", 10*time.Minute,
+	flags.DurationVar(&providerInstance.OperationTimeout, ProviderName+"-timeout", providerInstance.OperationTimeout,
 		"The maximum amount of time for an Azure API operation to take")
-	flags.BoolVar(&o.SyncDelete, ProviderName+"-sync-delete", false,
+	flags.BoolVar(&providerInstance.SyncDelete, ProviderName+"-sync-delete", providerInstance.SyncDelete,
 		"Wait for deletions to finish before returning")
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type",
 		string(compute.VirtualMachineSizeTypesStandardD4V3),
@@ -85,12 +85,4 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 // ConfigureClusterFlags implements vm.ProviderFlags and is a no-op.
 func (o *ProviderOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
-}
-
-// ConfigureProviderOpts implements vm.ProviderFlags.
-// Usage: create a new struct with default values using DefaultProviderOpts()
-// and update its values then pass it to ConfigureProviderOpts().
-func (o *ProviderOpts) ConfigureProviderOpts(updatedOpts interface{}) {
-	// cast interface to ProviderOpts before assisgning
-	*o = updatedOpts.(ProviderOpts)
 }

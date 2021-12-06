@@ -36,6 +36,9 @@ const (
 	ProviderName = "gce"
 )
 
+// providerInstance is the instance to be registered into vm.Providers by Init.
+var providerInstance = &Provider{}
+
 // DefaultProject returns the default GCE project.
 func DefaultProject() string {
 	return defaultProject
@@ -49,14 +52,18 @@ var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 // If the gcloud tool is not available on the local path, the provider is a
 // stub.
 func Init() {
-	var p vm.Provider
-	if _, err := exec.LookPath("gcloud"); err != nil {
-		p = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
-			"(https://cloud.google.com/sdk/downloads)")
-	} else {
-		p = newProvider()
+	providerInstance.Projects = []string{defaultProject}
+	projectFromEnv := os.Getenv("GCE_PROJECT")
+	if projectFromEnv != "" {
+		providerInstance.Projects = []string{projectFromEnv}
 	}
-	vm.Providers[ProviderName] = p
+	providerInstance.ServiceAccount = os.Getenv("GCE_SERVICE_ACCOUNT")
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
+			"(https://cloud.google.com/sdk/downloads)")
+		return
+	}
+	vm.Providers[ProviderName] = providerInstance
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
@@ -177,16 +184,10 @@ type jsonAuth struct {
 }
 
 // DefaultProviderOpts returns a new gce.ProviderOpts with default values set.
-func DefaultProviderOpts() ProviderOpts {
-	project := os.Getenv("GCE_PROJECT")
-	if project == "" {
-		project = defaultProject
-	}
-	return ProviderOpts{
+func DefaultProviderOpts() *ProviderOpts {
+	return &ProviderOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		projects:       []string{project},
-		ServiceAccount: os.Getenv("GCE_SERVICE_ACCOUNT"),
 		MachineType:    "n1-standard-4",
 		MinCPUPlatform: "",
 		Zones:          nil,
@@ -199,13 +200,16 @@ func DefaultProviderOpts() ProviderOpts {
 	}
 }
 
+// CreateProviderOpts returns a new gce.ProviderOpts with default values set.
+func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
+	return DefaultProviderOpts()
+}
+
 // ProviderOpts provides user-configurable, gce-specific create options.
 type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	projects         []string
-	ServiceAccount   string
 	MachineType      string
 	MinCPUPlatform   string
 	Zones            []string
@@ -222,11 +226,16 @@ type ProviderOpts struct {
 	preemptible bool
 }
 
+// Provider is the GCE implementation of the vm.Provider interface.
+type Provider struct {
+	Projects       []string
+	ServiceAccount string
+}
+
 // ProjectsVal is the implementation for the --gce-projects flag. It populates
-// opts.projects.
+// (Provider.Projects).
 type ProjectsVal struct {
 	AcceptMultipleProjects bool
-	Opts                   *ProviderOpts
 }
 
 // defaultZones is the list of  zones used by default for cluster creation.
@@ -246,7 +255,7 @@ func (v ProjectsVal) Set(projects string) error {
 	if !v.AcceptMultipleProjects && len(prj) > 1 {
 		return fmt.Errorf("multiple GCE projects not supported for command")
 	}
-	v.Opts.projects = prj
+	providerInstance.Projects = prj
 	return nil
 }
 
@@ -260,35 +269,34 @@ func (v ProjectsVal) Type() string {
 
 // String is part of the pflag.Value interface.
 func (v ProjectsVal) String() string {
-	return strings.Join(v.Opts.projects, ",")
+	return strings.Join(providerInstance.Projects, ",")
 }
 
 // GetProject returns the GCE project on which we're configured to operate.
 // If multiple projects were configured, this panics.
 func (p *Provider) GetProject() string {
-	o := p.opts
-	if len(o.projects) > 1 {
+	if len(p.Projects) > 1 {
 		panic(fmt.Sprintf(
-			"multiple projects not supported (%d specified)", len(o.projects)))
+			"multiple projects not supported (%d specified)", len(p.Projects)))
 	}
-	return o.projects[0]
+	return p.Projects[0]
 }
 
 // GetProjects returns the list of GCE projects on which we're configured to
 // operate.
 func (p *Provider) GetProjects() []string {
-	return p.opts.projects
+	return p.Projects
 }
 
-// ConfigureCreateFlags implements vm.ProviderFlags.
+// ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
 
-	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
-		os.Getenv("GCE_SERVICE_ACCOUNT"), "Service account to use")
+	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
+		providerInstance.ServiceAccount, "Service account to use")
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
@@ -328,7 +336,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 	flags.Var(
 		ProjectsVal{
 			AcceptMultipleProjects: opt == vm.AcceptMultipleProjects,
-			Opts:                   o,
 		},
 		ProviderName+"-project", /* name */
 		usage)
@@ -337,23 +344,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		ProviderName+"-use-shared-user", true,
 		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
 			config.SharedUser, config.OSUser.Username))
-}
-
-// ConfigureProviderOpts implements vm.ProviderFlags.
-// Usage: create a new struct with default values using DefaultProviderOpts()
-// and update its values then pass it to ConfigureProviderOpts().
-func (o *ProviderOpts) ConfigureProviderOpts(updatedOpts interface{}) {
-	// cast interface to ProviderOpts before assisgning
-	*o = updatedOpts.(ProviderOpts)
-}
-
-// Provider is the GCE implementation of the vm.Provider interface.
-type Provider struct {
-	opts ProviderOpts
-}
-
-func newProvider() *Provider {
-	return &Provider{opts: DefaultProviderOpts()}
 }
 
 // CleanSSH TODO(peter): document
@@ -385,7 +375,10 @@ func (p *Provider) ConfigSSH() error {
 }
 
 // Create TODO(peter): document
-func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
+func (p *Provider) Create(
+	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+) error {
+	providerOpts := vmProviderOpts.(*ProviderOpts)
 	project := p.GetProject()
 	var gcJob bool
 	for _, prj := range projectsWithGC {
@@ -399,7 +392,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			"`roachprod gc --gce-project=%s` cronjob\n", project)
 	}
 
-	zones, err := vm.ExpandZonesFlag(p.opts.Zones)
+	zones, err := vm.ExpandZonesFlag(providerOpts.Zones)
 	if err != nil {
 		return err
 	}
@@ -417,19 +410,20 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		"--subnet", "default",
 		"--maintenance-policy", "MIGRATE",
 		"--scopes", "default,storage-rw",
-		"--image", p.opts.Image,
+		"--image", providerOpts.Image,
 		"--image-project", "ubuntu-os-cloud",
 		"--boot-disk-type", "pd-ssd",
 	}
 
-	if project == defaultProject && p.opts.ServiceAccount == "" {
-		p.opts.ServiceAccount = "21965078311-compute@developer.gserviceaccount.com"
+	if project == defaultProject && p.ServiceAccount == "" {
+		p.ServiceAccount = "21965078311-compute@developer.gserviceaccount.com"
+
 	}
-	if p.opts.ServiceAccount != "" {
-		args = append(args, "--service-account", p.opts.ServiceAccount)
+	if p.ServiceAccount != "" {
+		args = append(args, "--service-account", p.ServiceAccount)
 	}
 
-	if p.opts.preemptible {
+	if providerOpts.preemptible {
 		// Make sure the lifetime is no longer than 24h
 		if opts.Lifetime > time.Hour*24 {
 			return errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
@@ -449,11 +443,11 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		// come in different sizes.
 		// See: https://cloud.google.com/compute/docs/disks/
 		n2MachineTypes := regexp.MustCompile("^[cn]2-.+-16")
-		if n2MachineTypes.MatchString(p.opts.MachineType) && p.opts.SSDCount == 1 {
+		if n2MachineTypes.MatchString(providerOpts.MachineType) && providerOpts.SSDCount == 1 {
 			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 and c2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
-			p.opts.SSDCount = 2
+			providerOpts.SSDCount = 2
 		}
-		for i := 0; i < p.opts.SSDCount; i++ {
+		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
 		}
 		if opts.SSDOpts.NoExt4Barrier {
@@ -461,8 +455,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		}
 	} else {
 		pdProps := []string{
-			fmt.Sprintf("type=%s", p.opts.PDVolumeType),
-			fmt.Sprintf("size=%dGB", p.opts.PDVolumeSize),
+			fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
+			fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 			"auto-delete=yes",
 		}
 		args = append(args, "--create-disk", strings.Join(pdProps, ","))
@@ -472,7 +466,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, p.opts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -480,9 +474,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		_ = os.Remove(filename)
 	}()
 
-	args = append(args, "--machine-type", p.opts.MachineType)
-	if p.opts.MinCPUPlatform != "" {
-		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
+	args = append(args, "--machine-type", providerOpts.MachineType)
+	if providerOpts.MinCPUPlatform != "" {
+		args = append(args, "--min-cpu-platform", providerOpts.MinCPUPlatform)
 	}
 
 	m := vm.GetDefaultLabelMap(opts)
@@ -530,7 +524,6 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		})
 
 	}
-
 	return g.Wait()
 }
 
@@ -666,11 +659,6 @@ func (p *Provider) FindActiveAccount() (string, error) {
 	return username, nil
 }
 
-// Flags TODO(peter): document
-func (p *Provider) Flags() vm.ProviderFlags {
-	return &p.opts
-}
-
 // List queries gcloud to produce a list of VM info objects.
 func (p *Provider) List() (vm.List, error) {
 	var vms vm.List
@@ -685,7 +673,8 @@ func (p *Provider) List() (vm.List, error) {
 
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
-			vms = append(vms, *jsonVM.toVM(prj, &p.opts))
+			defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
+			vms = append(vms, *jsonVM.toVM(prj, defaultOpts))
 		}
 	}
 

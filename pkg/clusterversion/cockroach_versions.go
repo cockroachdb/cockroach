@@ -293,10 +293,18 @@ const (
 	MVCCAddSSTable
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
-
 	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
 	// "drop table"/"truncate table" to async gc jobs
 	UnsplitRangesInAsyncGCJobs
+	// ValidateGrantOption checks whether the current user granting privileges to
+	// another user holds the grant option for those privileges
+	ValidateGrantOption
+	// PebbleFormatBlockPropertyCollector switches to a backwards incompatible
+	// Pebble version that provides block property collectors that can be used
+	// for fine-grained time bound iteration. See
+	// https://github.com/cockroachdb/pebble/issues/1190 for details.
+	PebbleFormatBlockPropertyCollector
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -517,6 +525,15 @@ var versionsSingleton = keyedVersions{
 		Key:     UnsplitRangesInAsyncGCJobs,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 20},
 	},
+	{
+		Key:     ValidateGrantOption,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 22},
+	},
+	{
+		Key:     PebbleFormatBlockPropertyCollector,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

@@ -1122,7 +1122,8 @@ CREATE TABLE crdb_internal.table_indexes (
    index_name STRING NOT NULL,
    index_type STRING NOT NULL,
    is_unique BOOL NOT NULL,
-   is_inverted BOOL NOT NULL
+   is_inverted BOOL NOT NULL,
+   is_sharded BOOL NOT NULL
 )  CREATE TABLE crdb_internal.table_indexes (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,
@@ -1130,7 +1131,8 @@ CREATE TABLE crdb_internal.table_indexes (
    index_name STRING NOT NULL,
    index_type STRING NOT NULL,
    is_unique BOOL NOT NULL,
-   is_inverted BOOL NOT NULL
+   is_inverted BOOL NOT NULL,
+   is_sharded BOOL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.table_row_statistics (
    table_id INT8 NOT NULL,

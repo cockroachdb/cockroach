@@ -246,7 +246,9 @@ func ListCloud() (*Cloud, error) {
 }
 
 // CreateCluster TODO(peter): document
-func CreateCluster(nodes int, opts vm.CreateOpts) error {
+func CreateCluster(
+	nodes int, opts vm.CreateOpts, providerOptsContainer vm.ProviderOptionsContainer,
+) error {
 	providerCount := len(opts.VMProviders)
 	if providerCount == 0 {
 		return errors.New("no VMProviders configured")
@@ -263,7 +265,7 @@ func CreateCluster(nodes int, opts vm.CreateOpts) error {
 	}
 
 	return vm.ProvidersParallel(opts.VMProviders, func(p vm.Provider) error {
-		return p.Create(vmLocations[p.Name()], opts)
+		return p.Create(vmLocations[p.Name()], opts, providerOptsContainer[p.Name()])
 	})
 }
 

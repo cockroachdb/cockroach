@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -69,6 +70,8 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 }
 
 func BenchmarkCatchUpScan(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	numKeys := 1_000_000
 	valueBytes := 64
 
@@ -185,6 +188,7 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 	opts.FS = vfs.Default
 	opts.LBaseMaxBytes = lBaseMaxBytes
 	opts.ReadOnly = readOnly
+	opts.FormatMajorVersion = pebble.FormatBlockPropertyCollector
 	peb, err := storage.NewPebble(
 		context.Background(),
 		storage.PebbleConfig{

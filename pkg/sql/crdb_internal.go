@@ -2555,7 +2555,8 @@ CREATE TABLE crdb_internal.table_indexes (
   index_name       STRING NOT NULL,
   index_type       STRING NOT NULL,
   is_unique        BOOL NOT NULL,
-  is_inverted      BOOL NOT NULL
+  is_inverted      BOOL NOT NULL,
+  is_sharded       BOOL NOT NULL
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2585,6 +2586,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							idxType,
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
+							tree.MakeDBool(tree.DBool(idx.IsSharded())),
 						)
 						return pusher.pushRow(row...)
 					})

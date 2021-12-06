@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
@@ -194,12 +195,13 @@ func (d *jobExecutionTxnDeps) TestingKnobs() *scrun.TestingKnobs {
 
 var _ scrun.JobTxnRunDependencies = (*jobExecutionTxnDeps)(nil)
 
-// UpdateSchemaChangeJob implements the scrun.JobTxnRunDependencies interface.
-func (d *jobExecutionTxnDeps) UpdateSchemaChangeJob(
-	ctx context.Context, fn func(md jobs.JobMetadata, ju scrun.JobProgressUpdater) error,
-) error {
+// UpdateState implements the scrun.JobTxnRunDependencies interface.
+func (d *jobExecutionTxnDeps) UpdateState(ctx context.Context, state scpb.State) error {
 	return d.job.Update(ctx, d.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		return fn(md, ju)
+		pg := md.Progress.GetNewSchemaChange()
+		pg.States = state.Statuses()
+		ju.UpdateProgress(md.Progress)
+		return nil
 	})
 }
 

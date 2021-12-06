@@ -129,7 +129,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if !s.(*server.TestServer).PGServer().IsDraining() {
+	if !s.(*server.TestServer).PGServer().(*pgwire.Server).IsDraining() {
 		t.Fatal("server should be draining, but is not")
 	}
 }
@@ -162,7 +162,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	}
 	defer db.Close()
 
-	pgServer := s.(*server.TestServer).PGServer()
+	pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
 
 	// Make sure that the server reports correctly the case in which a
 	// connection did not respond to cancellation in time.

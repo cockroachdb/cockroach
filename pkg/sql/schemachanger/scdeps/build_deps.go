@@ -68,7 +68,7 @@ var _ scbuild.CatalogReader = (*buildDeps)(nil)
 func (d *buildDeps) MayResolveDatabase(
 	ctx context.Context, name tree.Name,
 ) catalog.DatabaseDescriptor {
-	db, err := d.descsCollection.GetImmutableDatabaseByName(ctx, d.txn, name.String(), tree.DatabaseLookupFlags{
+	db, err := d.descsCollection.GetImmutableDatabaseByName(ctx, d.txn, string(name), tree.DatabaseLookupFlags{
 		AvoidCached: true,
 	})
 	if err != nil {

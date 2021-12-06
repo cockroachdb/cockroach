@@ -32,27 +32,21 @@ CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier
 ----
 
 create-view
-CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
+CREATE VIEW v1 AS (SELECT customer_id, carrier FROM defaultdb.shipments)
 ----
 
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-Stage 1 of 3
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [Table:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [ColumnName:{DescID: 57, ColumnID: 1, Name: tracking_number}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 57, ColumnID: 2, Name: carrier}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 57, ColumnID: 3, Name: status}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 57, ColumnID: 4, Name: customer_id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 4}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 57, ColumnID: 5, Name: randcol}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 5}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 57, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [IndexName:{DescID: 57, IndexID: 1, Name: shipments_pkey}, PUBLIC, DROP] -> ABSENT
     [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
@@ -61,7 +55,7 @@ Stage 1 of 3
       DescID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
-Stage 2 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 1 of 1 with 11 MutationType ops
   transitions:
     [Table:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 57, Name: shipments}, PUBLIC, DROP] -> ABSENT
@@ -69,16 +63,10 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [DefaultExpression:{DescID: 57, ColumnID: 1}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [SequenceOwnedBy:{DescID: 58, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 57, ColumnID: 4}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 57, ColumnID: 5}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [DefaultExpression:{DescID: 57, ColumnID: 5}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 57, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [ForeignKey:{DescID: 57, ReferencedDescID: 54, Name: fk_customers}, PUBLIC, DROP] -> ABSENT
     [ForeignKey:{DescID: 57, ReferencedDescID: 55, Name: fk_orders}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
@@ -115,15 +103,21 @@ Stage 2 of 3 (non-revertible)
       TableID: 57
     *scop.DrainDescriptorName
       TableID: 59
-Stage 3 of 3 (non-revertible)
+PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
   transitions:
     [Table:{DescID: 57}, DROPPED, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 1}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 2}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 3}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 4}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 57, ColumnID: 5}, DELETE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 57, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 57, ColumnID: 1, Name: tracking_number}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 57, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 57, ColumnID: 2, Name: carrier}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 57, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 57, ColumnID: 3, Name: status}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 57, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 57, ColumnID: 4, Name: customer_id}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 57, ColumnID: 4}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 57, ColumnID: 5, Name: randcol}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 57, ColumnID: 5}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 57, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [IndexName:{DescID: 57, IndexID: 1, Name: shipments_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.LogEvent
@@ -149,7 +143,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP TABLE defaultdb.shipments CASCADE
         TargetMetadata:
-          SourceElementID: 2
+          SourceElementID: 3
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor

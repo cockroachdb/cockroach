@@ -50,32 +50,24 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 ops
 DROP DATABASE db1 CASCADE
 ----
-Stage 1 of 3
+StatementPhase stage 1 of 1 with 14 MutationType ops
   transitions:
     [Sequence:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
-    [ColumnName:{DescID: 60, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 60, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 60, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 60, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 60, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 60, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [IndexName:{DescID: 60, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [Locality:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
-    [ColumnName:{DescID: 59, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 59, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 59, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 59, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [ColumnName:{DescID: 59, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 59, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [IndexName:{DescID: 59, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
     [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
@@ -120,7 +112,7 @@ Stage 1 of 3
       DescID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-Stage 2 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 1 of 2 with 37 MutationType ops
   transitions:
     [Sequence:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 57, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -135,11 +127,7 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 60, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 60, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 60, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 60, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [DefaultExpression:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 60, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [Schema:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Sequence:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 58, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -154,11 +142,7 @@ Stage 2 of 3 (non-revertible)
     [UserPrivileges:{DescID: 59, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 59, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 59, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [Column:{DescID: 59, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [DefaultExpression:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 59, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
     [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 61, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -288,30 +272,62 @@ Stage 2 of 3 (non-revertible)
       DescID: 56
     *scop.MarkDescriptorAsDropped
       DescID: 54
-Stage 3 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [Type:{DescID: 65}, DROPPED, DROP] -> ABSENT
+    [Type:{DescID: 66}, DROPPED, DROP] -> ABSENT
+    [Database:{DescID: 54}, DROPPED, DROP] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      TableID: 65
+    *scop.DrainDescriptorName
+      TableID: 66
+    *scop.DrainDescriptorName
+      TableID: 54
+    *scop.LogEvent
+      DescID: 54
+      Direction: 2
+      Element:
+        database:
+          databaseId: 54
+          dependentObjects:
+          - 55
+          - 56
+      Metadata:
+        Statement: DROP DATABASE db1 CASCADE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+        Username: root
+PostCommitPhase non-revertible stage 1 of 1 with 22 MutationType ops
   transitions:
     [Sequence:{DescID: 57}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 60}, DROPPED, DROP] -> ABSENT
-    [Column:{DescID: 60, ColumnID: 1}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 60, ColumnID: 2}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 60, ColumnID: 3}, DELETE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 60, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 60, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 60, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 60, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 60, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 60, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 60, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 60, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [IndexName:{DescID: 60, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Sequence:{DescID: 58}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 59}, DROPPED, DROP] -> ABSENT
-    [Column:{DescID: 59, ColumnID: 1}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 59, ColumnID: 2}, DELETE_ONLY, DROP] -> ABSENT
-    [Column:{DescID: 59, ColumnID: 3}, DELETE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 59, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 59, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 59, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 59, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 59, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [ColumnName:{DescID: 59, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 59, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 59, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [IndexName:{DescID: 59, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 62}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 63}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 64}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 67}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 65}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 66}, DROPPED, DROP] -> ABSENT
     [Schema:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [Database:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 57
@@ -367,7 +383,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 5
+          SourceElementID: 6
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -381,7 +397,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 5
+          SourceElementID: 6
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -395,7 +411,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 6
+          SourceElementID: 8
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -409,7 +425,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 6
+          SourceElementID: 9
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -423,7 +439,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 6
+          SourceElementID: 10
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -437,7 +453,7 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 6
+          SourceElementID: 10
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
@@ -451,15 +467,11 @@ Stage 3 of 3 (non-revertible)
       Metadata:
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
-          SourceElementID: 6
+          SourceElementID: 12
           SubWorkID: 1
         Username: root
     *scop.CreateGcJobForDescriptor
       DescID: 67
-    *scop.DrainDescriptorName
-      TableID: 65
-    *scop.DrainDescriptorName
-      TableID: 66
     *scop.DrainDescriptorName
       TableID: 56
     *scop.LogEvent
@@ -482,23 +494,6 @@ Stage 3 of 3 (non-revertible)
         Statement: DROP DATABASE db1 CASCADE
         TargetMetadata:
           SourceElementID: 2
-          SubWorkID: 1
-        Username: root
-    *scop.DrainDescriptorName
-      TableID: 54
-    *scop.LogEvent
-      DescID: 54
-      Direction: 2
-      Element:
-        database:
-          databaseId: 54
-          dependentObjects:
-          - 55
-          - 56
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
           SubWorkID: 1
         Username: root
 

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -519,6 +520,7 @@ type IncomingSnapshot struct {
 	FromReplica       roachpb.ReplicaDescriptor
 	// The descriptor in the snapshot, never nil.
 	Desc             *roachpb.RangeDescriptor
+	DataSize         int64
 	snapType         SnapshotRequest_Type
 	placeholder      *ReplicaPlaceholder
 	raftAppliedIndex uint64 // logging only
@@ -816,6 +818,7 @@ func (r *Replica) applySnapshot(
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)
+		logDetails.Printf(" data=%s", humanizeutil.IBytes(inSnap.DataSize))
 		if len(subsumedRepls) > 0 {
 			logDetails.Printf(" subsumedReplicas=%d@%0.0fms",
 				len(subsumedRepls), stats.subsumedReplicas.Sub(start).Seconds()*1000)

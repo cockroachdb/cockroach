@@ -21,6 +21,24 @@ type ColSet struct {
 	set util.FastIntSet
 }
 
+// We offset the ColumnIDs in the underlying FastIntSet by 1, so that the
+// internal set fast-path can be used for ColumnIDs in the range [1, 64] instead
+// of [0, 63]. ColumnID 0 is reserved as an unknown ColumnID, and a ColSet
+// should never contain it, so this shift allows us to make use of the set
+// fast-path in a few more cases.
+const offset = 1
+
+// setVal returns the value to store in the internal set for the given ColumnID.
+func setVal(col ColumnID) int {
+	return int(col - offset)
+}
+
+// retVal returns the ColumnID to return for the given value in the internal
+// set.
+func retVal(i int) ColumnID {
+	return ColumnID(i + offset)
+}
+
 // MakeColSet returns a set initialized with the given values.
 func MakeColSet(vals ...ColumnID) ColSet {
 	var res ColSet
@@ -31,13 +49,18 @@ func MakeColSet(vals ...ColumnID) ColSet {
 }
 
 // Add adds a column to the set. No-op if the column is already in the set.
-func (s *ColSet) Add(col ColumnID) { s.set.Add(int(col)) }
+func (s *ColSet) Add(col ColumnID) {
+	if col <= 0 {
+		panic(errors.AssertionFailedf("col must be greater than 0"))
+	}
+	s.set.Add(setVal(col))
+}
 
 // Remove removes a column from the set. No-op if the column is not in the set.
-func (s *ColSet) Remove(col ColumnID) { s.set.Remove(int(col)) }
+func (s *ColSet) Remove(col ColumnID) { s.set.Remove(setVal(col)) }
 
 // Contains returns true if the set contains the column.
-func (s ColSet) Contains(col ColumnID) bool { return s.set.Contains(int(col)) }
+func (s ColSet) Contains(col ColumnID) bool { return s.set.Contains(setVal(col)) }
 
 // Empty returns true if the set is empty.
 func (s ColSet) Empty() bool { return s.set.Empty() }
@@ -48,12 +71,12 @@ func (s ColSet) Len() int { return s.set.Len() }
 // Next returns the first value in the set which is >= startVal. If there is no
 // such column, the second return value is false.
 func (s ColSet) Next(startVal ColumnID) (ColumnID, bool) {
-	c, ok := s.set.Next(int(startVal))
-	return ColumnID(c), ok
+	c, ok := s.set.Next(setVal(startVal))
+	return retVal(c), ok
 }
 
 // ForEach calls a function for each column in the set (in increasing order).
-func (s ColSet) ForEach(f func(col ColumnID)) { s.set.ForEach(func(i int) { f(ColumnID(i)) }) }
+func (s ColSet) ForEach(f func(col ColumnID)) { s.set.ForEach(func(i int) { f(retVal(i)) }) }
 
 // Copy returns a copy of s which can be modified independently.
 func (s ColSet) Copy() ColSet { return ColSet{set: s.set.Copy()} }
@@ -88,7 +111,13 @@ func (s ColSet) SubsetOf(rhs ColSet) bool { return s.set.SubsetOf(rhs.set) }
 // String returns a list representation of elements. Sequential runs of positive
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
 // the output is "(1-3,5,6,10)".
-func (s ColSet) String() string { return s.set.String() }
+func (s ColSet) String() string {
+	var noOffset util.FastIntSet
+	s.ForEach(func(col ColumnID) {
+		noOffset.Add(int(col))
+	})
+	return noOffset.String()
+}
 
 // SingleColumn returns the single column in s. Panics if s does not contain
 // exactly one column.

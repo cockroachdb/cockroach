@@ -47,7 +47,8 @@ func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBeha
 		if dep.TableID != seq.GetID() {
 			return
 		}
-		if cascade != tree.DropCascade {
+		if cascade != tree.DropCascade &&
+			!checkIfDescOrElementAreDropped(b, dep.DependedOnBy) {
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"cannot drop sequence %s because other objects depend on it",

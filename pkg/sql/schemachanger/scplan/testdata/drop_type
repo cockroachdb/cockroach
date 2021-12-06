@@ -5,7 +5,7 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 ops
 DROP TYPE defaultdb.typ
 ----
-Stage 1 of 3
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [Type:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
@@ -14,7 +14,7 @@ Stage 1 of 3
       DescID: 54
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
-Stage 2 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 1 of 2 with 2 MutationType ops
   transitions:
     [Type:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Type:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
@@ -23,7 +23,7 @@ Stage 2 of 3 (non-revertible)
       DescID: 54
     *scop.MarkDescriptorAsDropped
       DescID: 55
-Stage 3 of 3 (non-revertible)
+PreCommitPhase non-revertible stage 2 of 2 with 2 MutationType ops
   transitions:
     [Type:{DescID: 54}, DROPPED, DROP] -> ABSENT
     [Type:{DescID: 55}, DROPPED, DROP] -> ABSENT
