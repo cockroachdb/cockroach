@@ -396,15 +396,3 @@ func (s *SQLTranslator) findDescendantLeafIDsForNamedZone(
 	}
 	return descendantIDs, nil
 }
-
-// FullTranslate translates the entire SQL zone configuration state to the
-// span configuration state. The timestamp at which such a translation is valid
-// is also returned.
-func FullTranslate(
-	ctx context.Context, s spanconfig.SQLTranslator,
-) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
-	// As RANGE DEFAULT is the root of all zone configurations (including
-	// other named zones for the system tenant), we can construct the entire
-	// span configuration state by starting from RANGE DEFAULT.
-	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
-}
