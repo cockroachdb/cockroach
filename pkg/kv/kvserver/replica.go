@@ -1475,6 +1475,8 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 				return nil
 			}
 		}
+		return errors.Errorf("merge transaction attempting to issue "+
+			"batch on right-hand side range after subsumption: %s", ba.Summary())
 	}
 
 	// Otherwise, the request must wait. We can't wait for the merge to complete
