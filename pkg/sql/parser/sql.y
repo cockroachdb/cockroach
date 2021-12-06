@@ -11291,11 +11291,19 @@ a_expr:
   }
 | a_expr IS NAN %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.EQ), Left: $1.expr(), Right: tree.NewStrVal("NaN")}
+    $$.val = &tree.ComparisonExpr{
+      Operator: tree.MakeComparisonOperator(tree.EQ),
+      Left: $1.expr(),
+      Right: tree.NewNumVal(constant.MakeFloat64(math.NaN()), "NaN", false /*negative*/),
+    }
   }
 | a_expr IS NOT NAN %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NE), Left: $1.expr(), Right: tree.NewStrVal("NaN")}
+    $$.val = &tree.ComparisonExpr{
+      Operator: tree.MakeComparisonOperator(tree.NE),
+      Left: $1.expr(),
+      Right: tree.NewNumVal(constant.MakeFloat64(math.NaN()), "NaN", false /*negative*/),
+    }
   }
 | a_expr IS NULL %prec IS
   {
