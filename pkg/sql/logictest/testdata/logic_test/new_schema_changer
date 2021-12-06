@@ -391,7 +391,7 @@ CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 statement ok
 explain (DDL, DEPS) DROP VIEW v1Dep CASCADE;
 
-statement error pq: cannot drop view "v1dep" because view "v2dep" depends on it
+statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
 DROP VIEW v1Dep RESTRICT;
 
 statement error pq: "v1dep" is not a materialized view
@@ -453,6 +453,15 @@ statement ok
 CREATE SEQUENCE defaultdb.sq1 OWNED BY defaultdb.shipments.carrier;
 
 statement ok
+CREATE TABLE defaultdb.sq1dep (
+	rand_col INT8 DEFAULT nextval('defaultdb.sq1')
+);
+
+statement error cannot drop table a because other objects depend on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+DROP TABLE defaultdb.sq1dep;
 DROP TABLE defaultdb.shipments;
 
 statement ok
@@ -466,11 +475,10 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-
 statement ok
 CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
 
-statement error pq: cannot drop table "defaultdb.public.shipments" because view "defaultdb.public.v1" depends on it
+statement error pq: cannot drop relation "shipments" because view "v1" depends on it
 DROP TABLE defaultdb.shipments;
 
 statement ok
@@ -642,7 +650,7 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
 
-statement error database "db1" has a non-empty schema "public" and CASCADE was not specified
+statement error database "db1" is not empty and RESTRICT was specified
 DROP DATABASE db1 RESTRICT
 
 statement ok
@@ -1241,3 +1249,8 @@ DROP TABLE ttc3;
 
 statement ok
 DROP TYPE d_tc;
+
+subtest empty-database
+
+statement error empty database name
+DROP DATABASE ""
