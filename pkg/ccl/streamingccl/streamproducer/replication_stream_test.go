@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -192,30 +193,50 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
-	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 
+	checkStreamStatus := func(t *testing.T, streamID string, expectedStreamStatus jobspb.StreamReplicationStatus_StreamStatus) {
+		hlcTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.replication_stream_progress($1, $2)", streamID, hlcTime.String())
+
+		expectedStatus := jobspb.StreamReplicationStatus{StreamStatus: expectedStreamStatus}
+		// A running stream is expected to report the current protected timestamp for the replicating spans.
+		if expectedStatus.StreamStatus == jobspb.StreamReplicationStatus_STREAM_ACTIVE {
+			expectedStatus.ProtectedTimestamp = &hlcTime
+		}
+		require.Equal(t, expectedStatus.String(), rows[0][0])
+	}
+
+	// Makes the stream time out really soon
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
-		jobID := rows[0][0]
+		streamID := rows[0][0]
 
-		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 			[][]string{{"failed"}})
+		checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 
-	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '30s'")
+	// Make sure the stream does not time out within the test timeout
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
 		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
-		jobID := rows[0][0]
+		streamID := rows[0][0]
 
-		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 			[][]string{{"running"}})
 
 		// Ensures the job is continuously running for 3 seconds.
 		testDuration, now := 3*time.Second, timeutil.Now()
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
-			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", jobID),
+			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 				[][]string{{"running"}})
+			checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
+	})
+
+	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
+		checkStreamStatus(t, "123", jobspb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 }
