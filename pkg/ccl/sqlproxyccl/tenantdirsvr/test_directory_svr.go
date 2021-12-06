@@ -9,13 +9,16 @@
 package tenantdirsvr
 
 import (
-	"bytes"
+	"bufio"
 	"container/list"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
@@ -23,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
 )
@@ -66,6 +69,7 @@ func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 // TestDirectoryServer is a directory server implementation that is used for
 // testing.
 type TestDirectoryServer struct {
+	args                []string
 	stopper             *stop.Stopper
 	grpcServer          *grpc.Server
 	cockroachExecutable string
@@ -85,13 +89,14 @@ type TestDirectoryServer struct {
 }
 
 // New will create a new server.
-func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
+func New(stopper *stop.Stopper, args ...string) (*TestDirectoryServer, error) {
 	// Determine the path to cockroach executable.
 	cockroachExecutable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	dir := &TestDirectoryServer{
+		args:                args,
 		grpcServer:          grpc.NewServer(),
 		stopper:             stopper,
 		cockroachExecutable: cockroachExecutable,
@@ -382,48 +387,55 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 	}
 }
 
+type writerFunc func(p []byte) (int, error)
+
+func (wf writerFunc) Write(p []byte) (int, error) { return wf(p) }
+
 // startTenantLocked is the default tenant process startup logic that runs the
 // cockroach db executable out of process.
 func (s *TestDirectoryServer) startTenantLocked(
 	ctx context.Context, tenantID uint64,
 ) (*Process, error) {
 	// A hackish way to have the sql tenant process listen on known ports.
-	sql, err := net.Listen("tcp", "")
+	sqlListener, err := net.Listen("tcp", "")
 	if err != nil {
 		return nil, err
 	}
-	http, err := net.Listen("tcp", "")
+	httpListener, err := net.Listen("tcp", "")
 	if err != nil {
 		return nil, err
 	}
-	process := &Process{SQL: sql.Addr(), FakeLoad: 0.01}
-	args := []string{
-		"mt", "start-sql", "--kv-addrs=127.0.0.1:26257", "--idle-exit-after=30s",
-		fmt.Sprintf("--sql-addr=%s", sql.Addr().String()),
-		fmt.Sprintf("--http-addr=%s", http.Addr().String()),
+	process := &Process{SQL: sqlListener.Addr(), FakeLoad: 0.01}
+	args := s.args
+	if len(args) == 0 {
+		args = append(args,
+			s.cockroachExecutable, "mt", "start-sql", "--kv-addrs=:26257", "--insecure",
+		)
+	}
+	args = append(args,
+		fmt.Sprintf("--sql-addr=%s", sqlListener.Addr().String()),
+		fmt.Sprintf("--http-addr=%s", httpListener.Addr().String()),
 		fmt.Sprintf("--tenant-id=%d", tenantID),
-		"--insecure",
-	}
-	if err = sql.Close(); err != nil {
+	)
+	if err = sqlListener.Close(); err != nil {
 		return nil, err
 	}
-	if err = http.Close(); err != nil {
+	if err = httpListener.Close(); err != nil {
 		return nil, err
 	}
 
-	c := exec.Command(s.cockroachExecutable, args...)
+	c := exec.Command(args[0], args[1:]...)
 	process.Cmd = c
 	c.Env = append(os.Environ(), "COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR=true")
-
-	if c.Stdout != nil {
-		return nil, errors.New("exec: Stdout already set")
+	var f writerFunc = func(p []byte) (int, error) {
+		sc := bufio.NewScanner(strings.NewReader(string(p)))
+		for sc.Scan() {
+			log.Infof(ctx, "%s", sc.Text())
+		}
+		return len(p), nil
 	}
-	if c.Stderr != nil {
-		return nil, errors.New("exec: Stderr already set")
-	}
-	var b bytes.Buffer
-	c.Stdout = &b
-	c.Stderr = &b
+	c.Stdout = f
+	c.Stderr = f
 	err = c.Start()
 	if err != nil {
 		return nil, err
@@ -436,7 +448,6 @@ func (s *TestDirectoryServer) startTenantLocked(
 	err = s.stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
 		if err := c.Wait(); err != nil {
 			log.Infof(ctx, "finished %s with err %s", process.Cmd.Args, err)
-			log.Infof(ctx, "output %s", b.Bytes())
 			return
 		}
 		log.Infof(ctx, "finished %s with success", process.Cmd.Args)
@@ -446,9 +457,29 @@ func (s *TestDirectoryServer) startTenantLocked(
 		return nil, err
 	}
 
-	// Need to wait here for the spawned cockroach tenant process to get ready.
-	// Ideally - we want to check that it is up and connected to the KV host
-	// before we return.
-	time.Sleep(500 * time.Millisecond)
+	// Wait for the tenant to show healthy
+	start := time.Now()
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: transport}
+	for {
+		time.Sleep(300 * time.Millisecond)
+		_, err := client.Get(fmt.Sprintf("https://%s/health", httpListener.Addr().String()))
+		waitTime := timeutil.Now().Sub(start)
+		if err == nil {
+			log.Infof(ctx, "tenant is healthy")
+			break
+		}
+		if waitTime > 5*time.Second {
+			log.Infof(ctx, "waited more than 5 sec for the tenant to get healthy and it still isn't")
+			break
+		}
+		log.Infof(ctx, "waiting %s for healthy tenant: %s", waitTime, err)
+	}
+
+	// We currently set the password when we spawn the first tenant so wait
+	// a second to ensure the password is set.
+	time.Sleep(time.Second)
 	return process, nil
 }
