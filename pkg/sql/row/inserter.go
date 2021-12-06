@@ -188,7 +188,13 @@ func (ri *Inserter) InsertRow(
 		if ok {
 			for i := range entries {
 				e := &entries[i]
-				putFn(ctx, b, &e.Key, &e.Value, traceKV)
+
+				// We don't want to check any conflicts when trying to preserve deletes.
+				if ri.Helper.Indexes[idx].UseDeletePreservingEncoding() {
+					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
+				} else {
+					putFn(ctx, b, &e.Key, &e.Value, traceKV)
+				}
 			}
 		}
 	}

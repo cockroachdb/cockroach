@@ -118,7 +118,7 @@ UPSERT INTO ti VALUES (1, 3, 101)
 Scan /Table/60/1/1/0
 Put /Table/60/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
 Put (delete) /Table/60/2/2/100/1/0
-CPut /Table/60/2/3/101/1/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/60/2/3/101/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -173,7 +173,7 @@ UPSERT INTO tpi VALUES (3, 2, 'foo')
 ----
 Scan /Table/61/1/3/0
 Put /Table/61/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
-CPut /Table/61/2/"foo"/3/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/61/2/"foo"/3/0 -> /BYTES/0x0a0103
 
 # Upsert a row that matches the partial index before and after, but the index
 # entry doesn't change.
@@ -191,7 +191,7 @@ UPSERT INTO tpi VALUES (3, 2, 'foobar')
 Scan /Table/61/1/3/0
 Put /Table/61/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
 Put (delete) /Table/61/2/"foo"/3/0
-CPut /Table/61/2/"foobar"/3/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/61/2/"foobar"/3/0 -> /BYTES/0x0a0103
 
 # Upsert a row that matches the partial index before but not after.
 query T kvtrace
@@ -253,7 +253,7 @@ UPSERT INTO tei VALUES (1, 3, 500)
 Scan /Table/62/1/1/0
 Put /Table/62/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/500
 Put (delete) /Table/62/2/102/1/0
-CPut /Table/62/2/503/1/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/62/2/503/1/0 -> /BYTES/0x0a0103
 
 # Upsert a row with different values without changing the index entry.
 query T kvtrace
@@ -269,7 +269,7 @@ UPSERT INTO tei VALUES (2, 4, 499)
 Scan /Table/62/1/2/0
 Put /Table/62/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/499
 Put (delete) /Table/62/2/203/2/0
-CPut /Table/62/2/503/2/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/62/2/503/2/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Inverted Index With Delete Preserving Encoding
@@ -323,7 +323,7 @@ UPSERT INTO tii VALUES (1, ARRAY[1, 2, 2, NULL, 4, 4])
 Scan /Table/63/1/1/0
 Put /Table/63/1/1/0 -> /TUPLE/
 Put (delete) /Table/63/2/3/1/0
-InitPut /Table/63/2/4/1/0 -> /BYTES/0x0a0103
+Put /Table/63/2/4/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -378,5 +378,56 @@ Scan /Table/64/1/1/0
 Put /Table/64/1/1/0 -> /TUPLE/2:2:Int/3/
 Put (delete) /Table/64/2/2/"a"/"foo"/1/0
 Put (delete) /Table/64/2/2/"b"/"bar"/1/0
-InitPut /Table/64/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
-InitPut /Table/64/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
+Put /Table/64/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
+Put /Table/64/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
+
+# ---------------------------------------------------------
+# Unique Index With Delete Preserving Encoding
+# ---------------------------------------------------------
+statement ok
+CREATE TABLE tui (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    FAMILY (a, b, c),
+    UNIQUE INDEX (b, c)
+);
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'tui'
+
+let $updated_t_jsonb
+WITH
+  descs
+    AS (
+      SELECT
+        id,
+        crdb_internal.pb_to_json(
+          'cockroach.sql.sqlbase.Descriptor',
+          descriptor
+        )
+          AS descriptor
+      FROM
+        system.descriptor
+    )
+SELECT
+  CAST (json_set(descriptor, ARRAY['table', 'indexes', '0', 'useDeletePreservingEncoding'], 'true') AS STRING)
+FROM
+  descs WHERE id = $t_id;
+
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor',$$ $updated_t_jsonb $$), true)
+
+statement ok
+INSERT INTO tui VALUES (1, 2, 100), (2, 3, 200), (3, 4, 300)
+
+statement ok
+DELETE FROM tui WHERE a = 2
+
+query T kvtrace
+UPSERT INTO tui VALUES (1, 3, 200)
+----
+Scan /Table/65/1/1/0
+Put /Table/65/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
+Put (delete) /Table/65/2/2/100/0
+Put /Table/65/2/3/200/0 -> /BYTES/0x0a020389
