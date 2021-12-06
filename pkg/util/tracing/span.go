@@ -155,6 +155,9 @@ func (sp *Span) Meta() SpanMeta {
 // auxiliary trace sink). This does not apply to Spans derived from this one
 // when it was verbose.
 func (sp *Span) SetVerbose(to bool) {
+	if sp.done() {
+		return
+	}
 	// We allow toggling verbosity on and off for a finished span. This shouldn't
 	// matter either way as a finished span drops all new data, but if we
 	// prevented the toggling we could end up in weird states since IsVerbose()
