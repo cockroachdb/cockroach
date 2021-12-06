@@ -68,11 +68,15 @@ func (s *spanInner) SetVerbose(to bool) {
 	s.crdb.SetVerbose(to)
 }
 
-func (s *spanInner) GetRecording(recType RecordingType) Recording {
+// GetRecording returns the span's recording.
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
+func (s *spanInner) GetRecording(recType RecordingType, finishing bool) Recording {
 	if s.isNoop() {
 		return nil
 	}
-	return s.crdb.GetRecording(recType)
+	return s.crdb.GetRecording(recType, finishing)
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
