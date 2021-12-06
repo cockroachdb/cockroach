@@ -646,11 +646,15 @@ func (rc *RangeCache) tryLookup(
 		prevDesc = evictToken.Desc()
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
+	// Fork a context with a new span before reqCtx is captured by the DoChan
+	// closure below; the parent span might get finished by the time the closure
+	// starts. In the "leader" case, the closure will take ownership of the new
+	// span.
+	reqCtx, reqSpan := tracing.EnsureChildSpan(ctx, rc.tracer, "range lookup")
 	resC, leader := rc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
+		defer reqSpan.Finish()
 		var lookupRes EvictionToken
-		if err := rc.stopper.RunTaskWithErr(ctx, "rangecache: range lookup", func(ctx context.Context) error {
-			ctx, reqSpan := tracing.EnsureChildSpan(ctx, rc.tracer, "range lookup")
-			defer reqSpan.Finish()
+		if err := rc.stopper.RunTaskWithErr(reqCtx, "rangecache: range lookup", func(ctx context.Context) error {
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
 			// cancelation doesn't make sense.
@@ -747,6 +751,9 @@ func (rc *RangeCache) tryLookup(
 		if rc.coalesced != nil {
 			rc.coalesced <- struct{}{}
 		}
+		// In the leader case, the callback takes ownership of reqSpan. If we're not
+		// the leader, we've created the span for no reason and have to finish it.
+		reqSpan.Finish()
 	}
 
 	// Wait for the inflight request.
