@@ -92,16 +92,15 @@ func dropViewDependents(b BuildCtx, view catalog.TableDescriptor, behavior tree.
 			depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(dep.DependedOnBy), tree.ResolveRequireViewDesc)
 			onErrPanic(err)
 			if dependentDesc.GetParentID() != view.GetParentID() {
-				panic(sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-					name.FQString(), depViewName.FQString()))
+				panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
+					name.Object(), depViewName.FQString()),
+						"you can drop %s instead.", depViewName.Object()))
 			} else {
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-						name.Object(), depViewName.Object()),
-					"you can drop %s instead.", depViewName.Object()))
+				panic(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
+						name.Object(), depViewName.Object()))
+				}
 			}
-		}
-		// Decompose and recursively attempt to drop.
-		dropView(b, dependentDesc, behavior)
-	})
+			// Decompose and recursively attempt to drop.
+			dropView(b, dependentDesc, behavior)
+		})
 }
