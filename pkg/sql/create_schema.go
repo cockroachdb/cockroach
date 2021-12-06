@@ -78,7 +78,7 @@ func CreateUserDefinedSchemaDescriptor(
 				// Check if the object already exists in a dropped state
 				sc, err := descriptors.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
 					Required:       true,
-					AvoidCached:    true,
+					AvoidLeased:    true,
 					IncludeOffline: true,
 					IncludeDropped: true,
 				})

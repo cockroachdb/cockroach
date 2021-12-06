@@ -104,7 +104,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			}
 		}
 
-		if !flags.AvoidCached && !flags.RequireMutable && !lease.TestingTableLeasesAreDisabled() {
+		if !flags.AvoidLeased && !flags.RequireMutable && !lease.TestingTableLeasesAreDisabled() {
 			// If we have already read all of the descriptors, use it as a negative
 			// cache to short-circuit a lookup we know will be doomed to fail.
 			//
@@ -144,7 +144,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		// desired behavior based on the flags (and likely producing unintended
 		// behavior). See the similar comment on etDescriptorByName, which covers
 		// the ordinary name resolution path as well as DDL statements.
-		if desc.Adding() && (desc.IsUncommittedVersion() || flags.AvoidCached || flags.RequireMutable) {
+		if desc.Adding() && (desc.IsUncommittedVersion() || flags.AvoidLeased || flags.RequireMutable) {
 			return desc, nil
 		}
 		return nil, err
@@ -158,14 +158,14 @@ func (tc *Collection) getByName(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	name string,
-	avoidCached, mutable, avoidSynthetic bool,
+	avoidLeased, mutable, avoidSynthetic bool,
 ) (found bool, desc catalog.Descriptor, err error) {
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
 		if sc == nil {
 			// Schema descriptors are handled in a special way, see getSchemaByName
 			// function declaration for details.
-			return getSchemaByName(ctx, tc, txn, db, name, avoidCached, mutable, avoidSynthetic)
+			return getSchemaByName(ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic)
 		}
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
@@ -194,7 +194,7 @@ func (tc *Collection) getByName(
 		}
 	}
 
-	if !avoidCached && !mutable && !lease.TestingTableLeasesAreDisabled() {
+	if !avoidLeased && !mutable && !lease.TestingTableLeasesAreDisabled() {
 		var shouldReadFromStore bool
 		desc, shouldReadFromStore, err = tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
 		if err != nil {
@@ -254,7 +254,7 @@ func getSchemaByName(
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	name string,
-	avoidCached, mutable, avoidSynthetic bool,
+	avoidLeased, mutable, avoidSynthetic bool,
 ) (bool, catalog.Descriptor, error) {
 	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
 		return true, schemadesc.GetPublicSchema(), nil
@@ -274,7 +274,7 @@ func getSchemaByName(
 		// it on this path.
 		sc, err := tc.getSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
 			RequireMutable: mutable,
-			AvoidCached:    avoidCached,
+			AvoidLeased:    avoidLeased,
 			AvoidSynthetic: avoidSynthetic,
 		})
 		// Deal with the fact that ByID retrieval always uses required and the

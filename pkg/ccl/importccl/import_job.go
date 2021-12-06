@@ -738,7 +738,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 			) (err error) {
 				_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				})
 				if err != nil {
 					return err

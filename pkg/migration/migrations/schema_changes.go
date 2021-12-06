@@ -152,7 +152,7 @@ func readTableDescriptor(
 	) (err error) {
 		t, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached: true,
+				AvoidLeased: true,
 				Required:    true,
 			},
 		})

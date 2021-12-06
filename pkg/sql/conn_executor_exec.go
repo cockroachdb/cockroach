@@ -605,7 +605,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// If we're in an explicit txn, we allow AOST but only if it matches with
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
-		// to do that to force p.avoidCachedDescriptors to be set below.
+		// to do that to force p.avoidLeasedDescriptors to be set below.
 		asOf, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)

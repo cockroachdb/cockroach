@@ -674,7 +674,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
 				Required:    true,
-				AvoidCached: true,
+				AvoidLeased: true,
 			},
 			DesiredTableDescKind: tree.ResolveRequireTableDesc,
 		})

@@ -299,7 +299,7 @@ func processTableForMultiRegion(
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 		ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
 			Required:       true,
-			AvoidCached:    true,
+			AvoidLeased:    true,
 			IncludeOffline: true,
 		})
 	if err != nil {
@@ -1342,7 +1342,7 @@ func createImportingDescriptors(
 				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 					ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
 						Required:       true,
-						AvoidCached:    true,
+						AvoidLeased:    true,
 						IncludeOffline: true,
 					})
 				if err != nil {
@@ -1396,7 +1396,7 @@ func createImportingDescriptors(
 							table.ParentID,
 							tree.DatabaseLookupFlags{
 								Required:       true,
-								AvoidCached:    true,
+								AvoidLeased:    true,
 								IncludeOffline: true,
 							},
 						)
@@ -2307,7 +2307,7 @@ func (r *restoreResumer) dropDescriptors(
 		typDesc := details.TypeDescs[i]
 		mutType, err := descsCol.GetMutableTypeByID(ctx, txn, typDesc.ID, tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached:    true,
+				AvoidLeased:    true,
 				IncludeOffline: true,
 			},
 		})
@@ -2513,7 +2513,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 			ctx, txn, tbl.GetParentID(), tree.DatabaseLookupFlags{
 				Required:       true,
-				AvoidCached:    true,
+				AvoidLeased:    true,
 				IncludeOffline: true,
 			})
 		if err != nil {

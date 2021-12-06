@@ -667,7 +667,7 @@ func (sc *SchemaChanger) validateConstraints(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidCached = true
+		flags.AvoidLeased = true
 		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
 		return err
 	}); err != nil {
@@ -1385,7 +1385,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
 		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidCached = true
+		flags.AvoidLeased = true
 		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
 		return err
 	}); err != nil {
