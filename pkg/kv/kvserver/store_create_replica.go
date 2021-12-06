@@ -305,11 +305,11 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	// can happen during splits and merges, where the uninitialized (but
 	// also unquiesced) replica is removed from the unquiesced replica
 	// map in advance of this method being called.
-	s.unquiescedReplicas.Lock()
-	if _, ok := s.unquiescedReplicas.m[repl.RangeID]; !repl.mu.quiescent && !ok {
+	if !repl.mu.quiescent {
+		s.unquiescedReplicas.Lock()
 		s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
+		s.unquiescedReplicas.Unlock()
 	}
-	s.unquiescedReplicas.Unlock()
 	return nil
 }
 
