@@ -135,7 +135,7 @@ func fetchSpansForTargets(
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range targets {
 			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidCached = true
+			flags.AvoidLeased = true
 			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
 			if err != nil {
 				return err

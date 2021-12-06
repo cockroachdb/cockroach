@@ -164,14 +164,14 @@ type planner struct {
 
 	preparedStatements preparedStatementsAccessor
 
-	// avoidCachedDescriptors, when true, instructs all code that
+	// avoidLeasedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
 	// within the transaction. This is necessary to read descriptors
 	// from the store for:
 	// 1. Descriptors that are part of a schema change but are not
 	// modified by the schema change. (reading a table in CREATE VIEW)
 	// 2. Disable the use of the table cache in tests.
-	avoidCachedDescriptors bool
+	avoidLeasedDescriptors bool
 
 	// If set, the planner should skip checking for the SELECT privilege when
 	// initializing plans to read from a table. This should be used with care.

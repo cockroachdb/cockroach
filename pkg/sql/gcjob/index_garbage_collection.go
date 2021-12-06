@@ -69,7 +69,7 @@ func gcIndexes(
 			freshParentTableDesc, err := descriptors.GetMutableTableByID(
 				ctx, txn, parentID, tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidCached:    true,
+						AvoidLeased:    true,
 						Required:       true,
 						IncludeDropped: true,
 						IncludeOffline: true,

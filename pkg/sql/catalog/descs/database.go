@@ -61,7 +61,7 @@ func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
 	found, desc, err := tc.getByName(
-		ctx, txn, nil, nil, name, flags.AvoidCached, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, nil, nil, name, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if err != nil {
 		return nil, err

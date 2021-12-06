@@ -80,7 +80,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 	// Check if a type with the same name exists already.
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
 		Required:    false,
-		AvoidCached: true,
+		AvoidLeased: true,
 	}}
 	found, _, err := params.p.Descriptors().GetImmutableTypeByName(params.ctx, params.p.Txn(), n.typeName, flags)
 	if err != nil {

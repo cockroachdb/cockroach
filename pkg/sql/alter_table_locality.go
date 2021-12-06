@@ -71,7 +71,7 @@ func (p *planner) AlterTableLocality(
 		p.txn,
 		tableDesc.GetParentID(),
 		tree.DatabaseLookupFlags{
-			AvoidCached: true,
+			AvoidLeased: true,
 			Required:    true,
 		},
 	)
