@@ -112,6 +112,9 @@ const refreshKey = ""
 
 // Refresh is part of the protectedts.Cache interface.
 func (c *Cache) Refresh(ctx context.Context, asOf hlc.Timestamp) error {
+	if !c.started() {
+		log.Fatalf(ctx, "Cache.Refresh called before Cache.Start")
+	}
 	for !c.upToDate(asOf) {
 		ch, _ := c.sf.DoChan(refreshKey, c.doSingleFlightUpdate)
 		select {
@@ -256,6 +259,13 @@ func (c *Cache) upToDate(asOf hlc.Timestamp) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return asOf.LessEq(c.mu.lastUpdate)
+}
+
+// started returns true if the Cache's Start method has been called.
+func (c *Cache) started() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.mu.started
 }
 
 func overlaps(r *ptpb.Record, sp roachpb.Span) bool {
