@@ -124,6 +124,7 @@ go_library(
         "lookup_join.go",
         "max_one_row.go",
         "mem_metrics.go",
+        "mvcc_backfiller.go",
         "name_util.go",
         "notice.go",
         "opaque.go",
