@@ -117,6 +117,9 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
 func (sp *Span) GetRecording(recType RecordingType) Recording {
+	if sp.done() {
+		return nil
+	}
 	return sp.i.GetRecording(recType)
 }
 
