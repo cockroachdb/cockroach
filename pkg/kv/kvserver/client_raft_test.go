@@ -4090,6 +4090,72 @@ func TestRangeQuiescence(t *testing.T) {
 	}
 }
 
+// TestUninitializedReplicaRemainsQuiesced verifies that an uninitialized
+// replica remains quiesced until it receives the snapshot that initializes it.
+func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, desc, err := tc.Servers[0].ScratchRangeEx()
+	key := desc.StartKey.AsRawKey()
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+
+	// Block a snapshot.
+	blockSnapshot := make(chan struct{})
+	handlerFuncs := noopRaftHandlerFuncs()
+	handlerFuncs.snapErr = func(header *kvserver.SnapshotRequest_Header) error {
+		<-blockSnapshot
+		return nil
+	}
+	s1, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	tc.Servers[1].RaftTransport().Listen(s1.StoreID(), &unreliableRaftHandler{
+		rangeID:                    desc.RangeID,
+		RaftMessageHandler:         s1,
+		unreliableRaftHandlerFuncs: handlerFuncs,
+	})
+
+	// Try to up-replicate to s1. Should block on a learner snapshot after the new
+	// replica on s1 has been created, but before it has been initialized. While
+	// the replica is uninitialized, it should remain quiesced, even while it is
+	// receiving Raft traffic from the leader.
+	replicateErrChan := make(chan error)
+	go func() {
+		_, err := tc.AddVoters(key, tc.Target(1))
+		replicateErrChan <- err
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := s1.GetReplica(desc.RangeID)
+		if err == nil {
+			// IMPORTANT: the replica should always be quiescent while uninitialized.
+			require.False(t, repl.IsInitialized())
+			require.True(t, repl.IsQuiescent())
+		}
+		return err
+	})
+
+	// Let the snapshot through. The up-replication attempt should succeed, the
+	// replica should now be initialized, and the replica should quiesce again.
+	close(blockSnapshot)
+	require.NoError(t, <-replicateErrChan)
+	repl, err := s1.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	require.True(t, repl.IsInitialized())
+	testutils.SucceedsSoon(t, func() error {
+		if !repl.IsQuiescent() {
+			return errors.Errorf("%s not quiescent", repl)
+		}
+		return nil
+	})
+}
+
 // TestInitRaftGroupOnRequest verifies that an uninitialized Raft group
 // is initialized if a request is received, even if the current range
 // lease points to a different replica.
