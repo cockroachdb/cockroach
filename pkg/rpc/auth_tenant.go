@@ -145,6 +145,7 @@ var reqMethodAllowlist = [...]bool{
 	roachpb.Delete:         true,
 	roachpb.DeleteRange:    true,
 	roachpb.ClearRange:     true,
+	roachpb.RevertRange:    true,
 	roachpb.Scan:           true,
 	roachpb.ReverseScan:    true,
 	roachpb.EndTxn:         true,
