@@ -156,6 +156,7 @@ var reqMethodAllowlist = [...]bool{
 	roachpb.Export:         true,
 	roachpb.Refresh:        true,
 	roachpb.RefreshRange:   true,
+	roachpb.RevertRange:    true,
 }
 
 func reqAllowed(r roachpb.Request) bool {
