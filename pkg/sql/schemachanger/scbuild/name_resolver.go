@@ -33,6 +33,9 @@ func (b buildCtx) ResolveDatabase(
 		if p.IsExistenceOptional {
 			return nil
 		}
+		if string(name) == "" {
+			panic(pgerror.New(pgcode.Syntax, "empty database name"))
+		}
 		panic(sqlerrors.NewUndefinedDatabaseError(name.String()))
 	}
 	if err := b.AuthorizationAccessor().CheckPrivilege(b, db, p.RequiredPrivilege); err != nil {
