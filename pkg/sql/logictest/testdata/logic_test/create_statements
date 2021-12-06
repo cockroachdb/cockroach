@@ -123,11 +123,13 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 CREATE TABLE crdb_internal.cluster_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  CREATE TABLE crdb_internal.cluster_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  {}  {}
@@ -676,11 +678,13 @@ CREATE TABLE crdb_internal.node_contention_events (
 CREATE TABLE crdb_internal.node_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  CREATE TABLE crdb_internal.node_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  {}  {}
