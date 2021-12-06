@@ -196,7 +196,6 @@ func TestGRPCInterceptors(t *testing.T) {
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			var n int
 			finalRecs := sp.FinishAndGetRecording(tracing.RecordingVerbose)
-			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
