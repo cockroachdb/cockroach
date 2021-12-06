@@ -272,7 +272,7 @@ type DropForeignKeyRef struct {
 // reference.
 type RemoveSequenceOwnedBy struct {
 	mutationOp
-	TableID descpb.ID
+	SequenceID descpb.ID
 }
 
 // AddIndexPartitionInfo adds partitoning information into

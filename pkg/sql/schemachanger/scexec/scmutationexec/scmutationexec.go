@@ -303,11 +303,42 @@ func (m *visitor) RemoveRelationDependedOnBy(
 	return nil
 }
 
+func removeOwnedByFromColumn(col *descpb.ColumnDescriptor, seqID descpb.ID) (found bool) {
+	for idx := range col.OwnsSequenceIds {
+		if col.OwnsSequenceIds[idx] == seqID {
+			col.OwnsSequenceIds = append(
+				col.OwnsSequenceIds[:idx],
+				col.OwnsSequenceIds[idx+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func (m *visitor) RemoveSequenceOwnedBy(ctx context.Context, op scop.RemoveSequenceOwnedBy) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.SequenceID)
 	if err != nil {
 		return err
 	}
+	// Clean up the ownership inside the owning table first.
+	sequenceOwner := &tbl.GetSequenceOpts().SequenceOwner
+	ownedByTbl, err := m.checkOutTable(ctx, sequenceOwner.OwnerTableID)
+	if err != nil {
+		return err
+	}
+	col, err := ownedByTbl.FindColumnWithID(sequenceOwner.OwnerColumnID)
+	if err != nil {
+		return err
+	}
+	found := removeOwnedByFromColumn(col.ColumnDesc(), op.SequenceID)
+	if !found {
+		return errors.AssertionFailedf("unable to find sequence (%d) owned by"+
+			" inside table (%d) and column (%d)",
+			op.SequenceID,
+			sequenceOwner.OwnerTableID,
+			sequenceOwner.OwnerColumnID)
+	}
+	// Next, clean the ownership on the sequence.
 	tbl.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
 	tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
 	return nil
