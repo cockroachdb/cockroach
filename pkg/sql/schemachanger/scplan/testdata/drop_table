@@ -101,7 +101,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 15 MutationType ops
     *scop.MarkDescriptorAsDropped
       DescID: 58
     *scop.RemoveSequenceOwnedBy
-      TableID: 58
+      SequenceID: 58
     *scop.RemoveColumnDefaultExpression
       ColumnID: 5
       TableID: 57

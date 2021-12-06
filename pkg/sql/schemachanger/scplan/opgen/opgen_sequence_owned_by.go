@@ -30,7 +30,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.SequenceOwnedBy) scop.Op {
 					return &scop.RemoveSequenceOwnedBy{
-						TableID: this.SequenceID,
+						SequenceID: this.SequenceID,
 					}
 				}),
 			),

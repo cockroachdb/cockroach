@@ -1187,3 +1187,20 @@ CREATE VIEW scdrop3.scdrop3_v1 AS SELECT x FROM scdrop2.scdrop2_v1;
 
 statement ok
 DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE
+
+# Validates that if an owned by sequence is dropped, then the back reference
+# inside the table gets cleaned up.
+subtest validate-sequence-owner
+
+statement ok
+CREATE TABLE seqowner(name int);
+
+statement ok
+CREATE SEQUENCE seqowned OWNED BY seqowner.name;
+
+statement ok
+DROP SEQUENCE seqowned;
+
+# Reference to the sequences should have been removed.
+statement ok
+DROP TABLE seqowner;
