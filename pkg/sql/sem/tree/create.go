@@ -221,11 +221,14 @@ type CreateIndex struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CreateIndex) Format(ctx *FmtCtx) {
+	// Please also update indexForDisplay function in
+	// pkg/sql/catalog/catformat/index.go if there's any update to index
+	// definition components.
 	ctx.WriteString("CREATE ")
 	if node.Unique {
 		ctx.WriteString("UNIQUE ")
 	}
-	if node.Inverted && !ctx.HasFlags(FmtPGCatalog) {
+	if node.Inverted {
 		ctx.WriteString("INVERTED ")
 	}
 	ctx.WriteString("INDEX ")
@@ -241,14 +244,7 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString("ON ")
 	ctx.FormatNode(&node.Table)
-	if ctx.HasFlags(FmtPGCatalog) {
-		ctx.WriteString(" USING")
-		if node.Inverted {
-			ctx.WriteString(" gin")
-		} else {
-			ctx.WriteString(" btree")
-		}
-	}
+
 	ctx.WriteString(" (")
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
@@ -269,14 +265,8 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	}
 	if node.Predicate != nil {
-		if ctx.HasFlags(FmtPGCatalog) {
-			ctx.WriteString(" WHERE (")
-			ctx.FormatNode(node.Predicate)
-			ctx.WriteString(")")
-		} else {
-			ctx.WriteString(" WHERE ")
-			ctx.FormatNode(node.Predicate)
-		}
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 

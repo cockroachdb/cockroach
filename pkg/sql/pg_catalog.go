@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1840,65 +1839,23 @@ func indexDefFromDescriptor(
 	table catalog.TableDescriptor,
 	index catalog.Index,
 ) (string, error) {
-	colNames := index.IndexDesc().KeyColumnNames[index.ExplicitColumnStartIdx():]
-	indexDef := tree.CreateIndex{
-		Name:     tree.Name(index.GetName()),
-		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
-		Unique:   index.IsUnique(),
-		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, index.NumSecondaryStoredColumns()),
-		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
+	tableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName()))
+	partitionStr := ""
+	fmtStr, err := catformat.IndexForDisplay(
+		ctx,
+		table,
+		&tableName,
+		index,
+		partitionStr,
+		tree.FmtPGCatalog,
+		p.SemaCtx(),
+		p.SessionData(),
+		catformat.IndexDisplayShowCreate,
+	)
+	if err != nil {
+		return "", err
 	}
-	for i, name := range colNames {
-		elem := tree.IndexElem{
-			Column:    tree.Name(name),
-			Direction: tree.Ascending,
-		}
-		col, err := table.FindColumnWithName(tree.Name(name))
-		if err != nil {
-			return "", err
-		}
-		if col.IsExpressionIndexColumn() {
-			formattedExpr, err := schemaexpr.FormatExprForDisplay(
-				ctx, table, col.GetComputeExpr(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
-			)
-			if err != nil {
-				return "", err
-			}
-			expr, err := parser.ParseExpr(formattedExpr)
-			if err != nil {
-				return "", err
-			}
-			elem.Expr = expr
-		}
-		if index.GetKeyColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
-			elem.Direction = tree.Descending
-		}
-		indexDef.Columns[i] = elem
-	}
-	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-		name := index.GetStoredColumnName(i)
-		indexDef.Storing[i] = tree.Name(name)
-	}
-	if index.IsPartial() {
-		// Format the raw predicate for display in order to resolve user-defined
-		// types to a human readable form.
-		formattedPred, err := schemaexpr.FormatExprForDisplay(
-			ctx, table, index.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
-		)
-		if err != nil {
-			return "", err
-		}
-
-		pred, err := parser.ParseExpr(formattedPred)
-		if err != nil {
-			return "", err
-		}
-		indexDef.Predicate = pred
-	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog, tree.FmtDataConversionConfig(p.SessionData().DataConversionConfig))
-	fmtCtx.FormatNode(&indexDef)
-	return fmtCtx.String(), nil
+	return fmtStr, nil
 }
 
 var pgCatalogInheritsTable = virtualSchemaTable{

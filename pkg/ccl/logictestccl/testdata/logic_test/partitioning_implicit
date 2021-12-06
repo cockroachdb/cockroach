@@ -393,7 +393,7 @@ t          new_idx      CREATE INDEX new_idx ON test.public.t USING btree (d ASC
 t          t_a_b_c_idx  CREATE INDEX t_a_b_c_idx ON test.public.t USING btree (a ASC, b ASC, c ASC)
 t          t_b_idx      CREATE INDEX t_b_idx ON test.public.t USING btree (b ASC)
 t          t_c_key      CREATE UNIQUE INDEX t_c_key ON test.public.t USING btree (c ASC)
-t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j ASC)
+t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j)
 t          t_pkey       CREATE UNIQUE INDEX t_pkey ON test.public.t USING btree (pk ASC)
 
 statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
