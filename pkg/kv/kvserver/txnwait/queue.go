@@ -12,6 +12,7 @@ package txnwait
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"sync/atomic"
 	"time"
@@ -125,24 +126,44 @@ type waitingQueries struct {
 // A pendingTxn represents a transaction waiting to be pushed by one
 // or more PushTxn requests.
 type pendingTxn struct {
-	txn           atomic.Value // the most recent txn record
-	waitingPushes []*waitingPush
+	txn atomic.Value // the most recent txn record
+
+	// waitingPushes is a list that contains *waitingPush elements. We use a
+	// *list.List instead of a list.List directly because it makes ownership of
+	// the list easier to manage (see takeWaitingPushes). Using a pointer allows
+	// the List.Remove method to properly no-op if the list has been cleared and
+	// ensures that the List.PushBack method panics if the list has been cleared,
+	// instead of either of these operations corrupting the internal state of the
+	// list after it has been transferred away.
+	//
+	// However, to avoid an additional heap allocation, we embed a list.List value
+	// in this struct which the *list.List initially points to.
+	waitingPushes      *list.List
+	waitingPushesAlloc list.List
 }
 
 func (pt *pendingTxn) getTxn() *roachpb.Transaction {
 	return pt.txn.Load().(*roachpb.Transaction)
 }
 
+// takeWaitingPushes returns the pendingTxn's waitingPushes list, leaving a nil
+// list in its place. This can be used to transfer ownership of the list and its
+// interior references to the caller.
+func (pt *pendingTxn) takeWaitingPushes() *list.List {
+	wp := pt.waitingPushes
+	pt.waitingPushes = nil
+	return wp
+}
+
 func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 	set := map[uuid.UUID]struct{}{}
-	for _, push := range pt.waitingPushes {
+	for e := pt.waitingPushes.Front(); e != nil; e = e.Next() {
+		push := e.Value.(*waitingPush)
 		if id := push.req.PusherTxn.ID; id != (uuid.UUID{}) {
 			set[id] = struct{}{}
 			push.mu.Lock()
-			if push.mu.dependents != nil {
-				for txnID := range push.mu.dependents {
-					set[txnID] = struct{}{}
-				}
+			for txnID := range push.mu.dependents {
+				set[txnID] = struct{}{}
 			}
 			push.mu.Unlock()
 		}
@@ -184,7 +205,7 @@ type TestingKnobs struct {
 type Queue struct {
 	cfg Config
 	mu  struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		txns    map[uuid.UUID]*pendingTxn
 		queries map[uuid.UUID]*waitingQueries
 	}
@@ -216,31 +237,29 @@ func (q *Queue) Enable(_ roachpb.LeaseSequence) {
 // acquired by the replica.
 func (q *Queue) Clear(disable bool) {
 	q.mu.Lock()
-	var pushWaiters []chan *roachpb.Transaction
+	waitingPushesLists := make([]*list.List, 0, len(q.mu.txns))
+	waitingPushesCount := 0
 	for _, pt := range q.mu.txns {
-		for _, w := range pt.waitingPushes {
-			pushWaiters = append(pushWaiters, w.pending)
-		}
-		pt.waitingPushes = nil
+		waitingPushes := pt.takeWaitingPushes()
+		waitingPushesLists = append(waitingPushesLists, waitingPushes)
+		waitingPushesCount += waitingPushes.Len()
 	}
 
-	queryWaiters := q.mu.queries
-	queryWaitersCount := 0
-	for _, waitingQueries := range queryWaiters {
-		queryWaitersCount += waitingQueries.count
+	waitingQueriesMap := q.mu.queries
+	waitingQueriesCount := 0
+	for _, waitingQueries := range waitingQueriesMap {
+		waitingQueriesCount += waitingQueries.count
 	}
 
 	metrics := q.cfg.Metrics
 	metrics.PusheeWaiting.Dec(int64(len(q.mu.txns)))
-	metrics.PusherWaiting.Dec(int64(len(pushWaiters)))
-	metrics.QueryWaiting.Dec(int64(queryWaitersCount))
 
 	if log.V(1) {
 		log.Infof(
 			context.Background(),
 			"clearing %d push waiters and %d query waiters",
-			len(pushWaiters),
-			queryWaitersCount,
+			waitingPushesCount,
+			waitingQueriesCount,
 		)
 	}
 
@@ -254,19 +273,22 @@ func (q *Queue) Clear(disable bool) {
 	q.mu.Unlock()
 
 	// Send on the pending push waiter channels outside of the mutex lock.
-	for _, w := range pushWaiters {
-		w <- nil
+	for _, w := range waitingPushesLists {
+		for e := w.Front(); e != nil; e = e.Next() {
+			push := e.Value.(*waitingPush)
+			push.pending <- nil
+		}
 	}
 	// Close query waiters outside of the mutex lock.
-	for _, w := range queryWaiters {
+	for _, w := range waitingQueriesMap {
 		close(w.pending)
 	}
 }
 
 // IsEnabled is true if the queue is enabled.
 func (q *Queue) IsEnabled() bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 	return q.mu.txns != nil
 }
 
@@ -301,6 +323,8 @@ func (q *Queue) EnqueueTxn(txn *roachpb.Transaction) {
 		q.cfg.Metrics.PusheeWaiting.Inc(1)
 		pt = &pendingTxn{}
 		pt.txn.Store(txn)
+		pt.waitingPushes = &pt.waitingPushesAlloc
+		pt.waitingPushes.Init()
 		q.mu.txns[txn.ID] = pt
 	}
 }
@@ -327,30 +351,29 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 		q.mu.Unlock()
 		return
 	}
-	waitingPushes := pending.waitingPushes
-	pending.waitingPushes = nil
-	delete(q.mu.txns, txn.ID)
+	waitingPushes := pending.takeWaitingPushes()
 	pending.txn.Store(txn)
+	delete(q.mu.txns, txn.ID)
 	q.mu.Unlock()
 
 	metrics := q.cfg.Metrics
 	metrics.PusheeWaiting.Dec(1)
-	metrics.PusherWaiting.Dec(int64(len(waitingPushes)))
 
-	if log.V(1) && len(waitingPushes) > 0 {
-		log.Infof(ctx, "updating %d push waiters for %s", len(waitingPushes), txn.ID.Short())
+	if log.V(1) && waitingPushes.Len() > 0 {
+		log.Infof(ctx, "updating %d push waiters for %s", waitingPushes.Len(), txn.ID.Short())
 	}
 	// Send on pending waiter channels outside of the mutex lock.
-	for _, w := range waitingPushes {
-		w.pending <- txn
+	for e := waitingPushes.Front(); e != nil; e = e.Next() {
+		push := e.Value.(*waitingPush)
+		push.pending <- txn
 	}
 }
 
 // GetDependents returns a slice of transactions waiting on the specified
 // txn either directly or indirectly.
 func (q *Queue) GetDependents(txnID uuid.UUID) []uuid.UUID {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 	if q.mu.txns == nil {
 		// Not enabled; do nothing.
 		return nil
@@ -391,8 +414,6 @@ func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) 
 
 func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
 	if w, ok := q.mu.queries[txnID]; ok {
-		metrics := q.cfg.Metrics
-		metrics.QueryWaiting.Dec(int64(w.count))
 		log.VEventf(ctx, 2, "releasing %d waiting queries for %s", w.count, txnID.Short())
 		close(w.pending)
 		delete(q.mu.queries, txnID)
@@ -441,7 +462,8 @@ func (q *Queue) MaybeWaitForPush(
 		req:     req,
 		pending: make(chan *roachpb.Transaction, 1),
 	}
-	pending.waitingPushes = append(pending.waitingPushes, push)
+	pushElem := pending.waitingPushes.PushBack(push)
+	waitingPushesCount := pending.waitingPushes.Len()
 	if f := q.cfg.Knobs.OnPusherBlocked; f != nil {
 		f(ctx, req)
 	}
@@ -450,20 +472,29 @@ func (q *Queue) MaybeWaitForPush(
 	// indicate there is a new dependent and they should proceed
 	// to execute the QueryTxn command.
 	q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
-
-	if req.PusherTxn.ID != (uuid.UUID{}) {
-		log.VEventf(
-			ctx,
-			2,
-			"%s pushing %s (%d pending)",
-			req.PusherTxn.ID.Short(),
-			req.PusheeTxn.ID.Short(),
-			len(pending.waitingPushes),
-		)
-	} else {
-		log.VEventf(ctx, 2, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waitingPushes))
-	}
 	q.mu.Unlock()
+
+	// When we return, remove our push from the pending queue. This will be a
+	// no-op if the waitingPushes list has already been taken from the waitingPush
+	// with a call to takeWaitingPushes.
+	defer func() {
+		q.mu.Lock()
+		pending.waitingPushes.Remove(pushElem)
+		q.mu.Unlock()
+	}()
+
+	pusherStr := "non-txn"
+	if req.PusherTxn.ID != (uuid.UUID{}) {
+		pusherStr = req.PusherTxn.ID.Short()
+	}
+	log.VEventf(
+		ctx,
+		2,
+		"%s pushing %s (%d pending)",
+		pusherStr,
+		req.PusheeTxn.ID.Short(),
+		waitingPushesCount,
+	)
 
 	// Wait for any updates to the pusher txn to be notified when
 	// status, priority, or dependents (for deadlock detection) have
@@ -494,6 +525,7 @@ func (q *Queue) MaybeWaitForPush(
 
 	metrics := q.cfg.Metrics
 	metrics.PusherWaiting.Inc(1)
+	defer metrics.PusherWaiting.Dec(1)
 	tBegin := timeutil.Now()
 	defer func() { metrics.PusherWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
 
@@ -558,7 +590,7 @@ func (q *Queue) MaybeWaitForPush(
 			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
-				ctx, req.PusheeTxn, false, nil, q.cfg.Clock.Now(),
+				ctx, req.PusheeTxn, false, nil,
 			)
 			if pErr != nil {
 				return nil, pErr
@@ -682,7 +714,6 @@ func (q *Queue) MaybeWaitForQuery(
 	if !req.WaitForUpdate {
 		return nil
 	}
-	metrics := q.cfg.Metrics
 	q.mu.Lock()
 	// If the txn wait queue is not enabled or if the request is not
 	// contained within the replica, do nothing. The request can fall
@@ -722,26 +753,26 @@ func (q *Queue) MaybeWaitForQuery(
 		}
 		q.mu.queries[req.Txn.ID] = query
 	}
-	metrics.QueryWaiting.Inc(1)
 	q.mu.Unlock()
 
-	tBegin := timeutil.Now()
-	defer func() { metrics.QueryWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
-
-	// When we return, make sure to unregister the query so that it doesn't
-	// leak. If query.pending if closed, the query will have already been
-	// cleaned up, so this will be a no-op.
+	// When we return, make sure to unregister the query. If the query's reference
+	// count drops to 0, remove it from the queries map. Only do so if the map
+	// still contains the same waitingQueries reference, as it may have been
+	// removed already and replaced.
 	defer func() {
 		q.mu.Lock()
-		if query == q.mu.queries[req.Txn.ID] {
-			query.count--
-			metrics.QueryWaiting.Dec(1)
-			if query.count == 0 {
-				delete(q.mu.queries, req.Txn.ID)
-			}
+		query.count--
+		if query.count == 0 && query == q.mu.queries[req.Txn.ID] {
+			delete(q.mu.queries, req.Txn.ID)
 		}
 		q.mu.Unlock()
 	}()
+
+	metrics := q.cfg.Metrics
+	metrics.QueryWaiting.Inc(1)
+	defer metrics.QueryWaiting.Dec(1)
+	tBegin := timeutil.Now()
+	defer func() { metrics.QueryWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
 
 	log.VEventf(ctx, 2, "waiting on query for %s", req.Txn.ID.Short())
 	select {
@@ -794,7 +825,7 @@ func (q *Queue) startQueryPusherTxn(
 				var pErr *roachpb.Error
 				var updatedPusher *roachpb.Transaction
 				updatedPusher, waitingTxns, pErr = q.queryTxnStatus(
-					ctx, pusher.TxnMeta, true, waitingTxns, q.cfg.Clock.Now(),
+					ctx, pusher.TxnMeta, true, waitingTxns,
 				)
 				if pErr != nil {
 					errCh <- pErr
@@ -855,11 +886,7 @@ func (q *Queue) startQueryPusherTxn(
 // Returns the updated transaction (or nil if not updated) as well as
 // the list of transactions which are waiting on the updated txn.
 func (q *Queue) queryTxnStatus(
-	ctx context.Context,
-	txnMeta enginepb.TxnMeta,
-	wait bool,
-	dependents []uuid.UUID,
-	now hlc.Timestamp,
+	ctx context.Context, txnMeta enginepb.TxnMeta, wait bool, dependents []uuid.UUID,
 ) (*roachpb.Transaction, []uuid.UUID, *roachpb.Error) {
 	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
@@ -933,10 +960,10 @@ func (q *Queue) forcePushAbort(
 // For testing purposes only.
 func (q *Queue) TrackedTxns() map[uuid.UUID]struct{} {
 	m := make(map[uuid.UUID]struct{})
-	q.mu.Lock()
+	q.mu.RLock()
 	for k := range q.mu.txns {
 		m[k] = struct{}{}
 	}
-	q.mu.Unlock()
+	q.mu.RUnlock()
 	return m
 }
