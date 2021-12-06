@@ -268,6 +268,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	collectStats bool,
+	statementSQL string,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
@@ -278,13 +279,17 @@ func (dsp *DistSQLPlanner) setupFlows(
 		return nil, nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
 	}
 
-	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
+	const setupFlowRequestStmtMaxLength = 500
+	if len(statementSQL) > setupFlowRequestStmtMaxLength {
+		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
+	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           execinfra.Version,
-		EvalContext:       evalCtxProto,
+		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.EvalContext),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      collectStats,
+		StatementSQL:      statementSQL,
 	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
@@ -498,8 +503,16 @@ func (dsp *DistSQLPlanner) Run(
 		}()
 	}
 
+	// Currently, we get the statement only if there is a planner available in
+	// the planCtx which is the case only on the "main" query path (for
+	// user-issued queries).
+	// TODO(yuzefovich): propagate the statement in all cases.
+	var statementSQL string
+	if planCtx.planner != nil {
+		statementSQL = planCtx.planner.stmt.StmtNoConstants
+	}
 	ctx, flow, opChains, err := dsp.setupFlows(
-		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats,
+		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats, statementSQL,
 	)
 	if err != nil {
 		recv.SetError(err)
