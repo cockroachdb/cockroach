@@ -756,7 +756,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ACCESS ACTION ADD ADMIN ADMISSION AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
@@ -8736,6 +8736,14 @@ transaction_mode:
   {
     $$.val = tree.TransactionModes{UserPriority: $1.userPriority()}
   }
+| ADMISSION PRIORITY signed_iconst
+  {
+    p, err := $3.numVal().AsInt32()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = tree.TransactionModes{AdmissionPriority: &p}
+  }
 | transaction_read_mode
   {
     $$.val = tree.TransactionModes{ReadWriteMode: $1.readWriteMode()}
@@ -13259,6 +13267,7 @@ unreserved_keyword:
 | ACCESS
 | ADD
 | ADMIN
+| ADMISSION
 | AFTER
 | AGGREGATE
 | ALTER

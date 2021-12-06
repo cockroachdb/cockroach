@@ -1299,6 +1299,12 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`admission_priority`: {
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return fmt.Sprintf("%d", evalCtx.Txn.AdmissionHeader().Priority), nil
+		},
+	},
+
 	// CockroachDB extension.
 	`transaction_status`: {
 		Get: func(evalCtx *extendedEvalContext) (string, error) {

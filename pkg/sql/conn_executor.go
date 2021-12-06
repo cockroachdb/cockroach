@@ -2377,6 +2377,9 @@ func (ex *connExecutor) setTransactionModes(
 			return err
 		}
 	}
+	if modes.AdmissionPriority != nil {
+		ex.state.setAdmissionPriority(*modes.AdmissionPriority)
+	}
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
 		return errors.AssertionFailedf(
 			"unknown isolation level: %s", errors.Safe(modes.Isolation))

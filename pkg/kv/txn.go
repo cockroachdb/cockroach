@@ -284,6 +284,17 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 	return txn.mu.sender.SetUserPriority(userPriority)
 }
 
+func (txn *Txn) SetAdmissionPriority(p int32) {
+	if txn.typ != RootTxn {
+		panic(errors.AssertionFailedf("SetUserPriority() called on leaf txn"))
+	}
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	// TODO: admissionHeader in mu?
+	txn.admissionHeader.Priority = p
+}
+
 // TestingSetPriority sets the transaction priority. It is intended for
 // internal (testing) use only.
 func (txn *Txn) TestingSetPriority(priority enginepb.TxnPriority) {

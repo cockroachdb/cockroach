@@ -132,11 +132,12 @@ func (d DeferrableMode) String() string {
 
 // TransactionModes holds the transaction modes for a transaction.
 type TransactionModes struct {
-	Isolation     IsolationLevel
-	UserPriority  UserPriority
-	ReadWriteMode ReadWriteMode
-	AsOf          AsOfClause
-	Deferrable    DeferrableMode
+	Isolation         IsolationLevel
+	AdmissionPriority *int32
+	UserPriority      UserPriority
+	ReadWriteMode     ReadWriteMode
+	AsOf              AsOfClause
+	Deferrable        DeferrableMode
 }
 
 // Format implements the NodeFormatter interface.
@@ -148,6 +149,10 @@ func (node *TransactionModes) Format(ctx *FmtCtx) {
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
 		ctx.Printf("%s PRIORITY %s", sep, node.UserPriority)
+		sep = ","
+	}
+	if node.AdmissionPriority != nil {
+		ctx.Printf("%s ADMISSION PRIORITY %s", sep, *node.AdmissionPriority)
 		sep = ","
 	}
 	if node.ReadWriteMode != UnspecifiedReadWriteMode {
@@ -192,6 +197,13 @@ func (node *TransactionModes) Merge(other TransactionModes) error {
 			return errUserPrioritySpecifiedMultipleTimes
 		}
 		node.UserPriority = other.UserPriority
+	}
+	if other.AdmissionPriority != nil {
+		if node.AdmissionPriority != nil {
+			// TODO
+			return errUserPrioritySpecifiedMultipleTimes
+		}
+		node.AdmissionPriority = other.AdmissionPriority
 	}
 	if other.AsOf.Expr != nil {
 		if node.AsOf.Expr != nil {

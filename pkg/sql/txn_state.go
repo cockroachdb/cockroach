@@ -302,6 +302,12 @@ func (ts *txnState) setPriorityLocked(userPriority roachpb.UserPriority) error {
 	return nil
 }
 
+func (ts *txnState) setAdmissionPriority(p int32) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.mu.txn.SetAdmissionPriority(p)
+}
+
 func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 	switch mode {
 	case tree.UnspecifiedReadWriteMode:

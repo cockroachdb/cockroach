@@ -275,7 +275,8 @@ func (t ttlResumer) Resume(ctx context.Context, execCtx interface{}) error {
 								ctx,
 								"ttl_delete_low_pri",
 								txn,
-								"SET TRANSACTION PRIORITY LOW",
+								//"SET TRANSACTION PRIORITY LOW",
+								"SET TRANSACTION ADMISSION PRIORITY -256",
 							); err != nil {
 								return err
 							}

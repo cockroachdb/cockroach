@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
@@ -33,6 +34,10 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 		case tree.UnspecifiedUserPriority:
 		default:
 			m.SetDefaultTransactionPriority(n.Modes.UserPriority)
+		}
+
+		if n.Modes.AdmissionPriority != nil {
+			return errors.AssertionFailedf("admission priority defaults not yet implemented")
 		}
 
 		// Note: We also support SET DEFAULT_TRANSACTION_READ_ONLY TO ' .... '.
