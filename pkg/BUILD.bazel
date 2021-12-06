@@ -32,7 +32,7 @@ ALL_TESTS = [
     "//pkg/ccl/serverccl/diagnosticsccl:diagnosticsccl_test",
     "//pkg/ccl/serverccl/statusccl:statusccl_test",
     "//pkg/ccl/serverccl:serverccl_test",
-    "//pkg/ccl/spanconfigccl:spanconfigccl_test",
+    "//pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl:spanconfigsqltranslatorccl_test",
     "//pkg/ccl/sqlproxyccl/denylist:denylist_test",
     "//pkg/ccl/sqlproxyccl/idle:idle_test",
     "//pkg/ccl/sqlproxyccl/tenant:tenant_test",

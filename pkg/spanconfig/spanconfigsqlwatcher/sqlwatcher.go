@@ -61,6 +61,11 @@ func New(
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
+
+	if override := knobs.SQLWatcherCheckpointNoopsEveryDurationOverride; override.Nanoseconds() != 0 {
+		checkpointNoopsEvery = override
+	}
+
 	return &SQLWatcher{
 		codec:                codec,
 		settings:             settings,
@@ -90,7 +95,6 @@ func (s *SQLWatcher) watch(
 	startTS hlc.Timestamp,
 	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
 ) error {
-
 	// The callbacks below are invoked by both the rangefeeds we establish, both
 	// of which run on separate goroutines. We serialize calls to the handler
 	// function by invoking in this single watch thread (instead of pushing it

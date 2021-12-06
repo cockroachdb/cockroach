@@ -106,15 +106,15 @@ type SQLTranslator interface {
 	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
 }
 
-// FullTranslate translates the entire SQL zone configuration state to the
-// span configuration state. The timestamp at which such a translation is valid
-// is also returned.
+// FullTranslate translates the entire SQL zone configuration state to the span
+// configuration state. The timestamp at which such a translation is valid is
+// also returned.
 func FullTranslate(
 	ctx context.Context, s SQLTranslator,
 ) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
-	// As RANGE DEFAULT is the root of all zone configurations (including
-	// other named zones for the system tenant), we can construct the entire
-	// span configuration state by starting from RANGE DEFAULT.
+	// As RANGE DEFAULT is the root of all zone configurations (including other
+	// named zones for the system tenant), we can construct the entire span
+	// configuration state by starting from RANGE DEFAULT.
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
@@ -141,17 +141,6 @@ type SQLWatcher interface {
 		startTS hlc.Timestamp,
 		handler func(ctx context.Context, updates []DescriptorUpdate, checkpointTS hlc.Timestamp) error,
 	) error
-}
-
-// DescriptorUpdate captures the ID and type of a descriptor or zone that the
-// SQLWatcher has observed updated.
-type DescriptorUpdate struct {
-	// ID of the descriptor/zone that has been updated.
-	ID descpb.ID
-
-	// DescriptorType of the descriptor/zone that has been updated. Could be either
-	// the specific type or catalog.Any if no information is available.
-	DescriptorType catalog.DescriptorType
 }
 
 // ReconciliationDependencies captures what's needed by the span config
@@ -257,6 +246,17 @@ type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
 	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
+}
+
+// DescriptorUpdate captures the ID and type of a descriptor or zone that the
+// SQLWatcher has observed updated.
+type DescriptorUpdate struct {
+	// ID of the descriptor/zone that has been updated.
+	ID descpb.ID
+
+	// DescriptorType of the descriptor/zone that has been updated. Could be either
+	// the specific type or catalog.Any if no information is available.
+	DescriptorType catalog.DescriptorType
 }
 
 // Update captures a span and the corresponding config change. It's the unit of
