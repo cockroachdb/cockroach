@@ -53,7 +53,7 @@ func (r *Replica) unquiesceLocked() {
 }
 
 func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
-	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
+	if r.canUnquiesceRLocked() {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
 			log.Infof(ctx, "unquiescing %d", r.RangeID)
@@ -75,7 +75,7 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 }
 
 func (r *Replica) unquiesceAndWakeLeaderLocked() {
-	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
+	if r.canUnquiesceRLocked() {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
 			log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
@@ -91,6 +91,35 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 		data := encodeRaftCommand(raftVersionStandard, makeIDKey(), nil)
 		_ = r.mu.internalRaftGroup.Propose(data)
 	}
+}
+
+func (r *Replica) canUnquiesceRLocked() bool {
+	return r.mu.quiescent &&
+		// If the replica is uninitialized (i.e. it contains no replicated state),
+		// it is not allowed to unquiesce and begin Tick()'ing itself.
+		//
+		// Keeping uninitialized replicas quiesced even in the presence of Raft
+		// traffic avoids wasted work. We could Tick() these replicas, but doing so
+		// is unnecessary because uninitialized replicas can never win elections, so
+		// there is no reason for them to ever call an election. In fact,
+		// uninitialized replicas do not even know who their peers are, so there
+		// would be no way for them to call an election or for them to send any
+		// other non-reactive message. As a result, all work performed by an
+		// uninitialized replica is reactive and in response to incoming messages
+		// (see processRequestQueue).
+		//
+		// There are multiple ways for an uninitialized replica to be created and
+		// then abandoned, and we don't do a good job garbage collecting them at a
+		// later point (see https://github.com/cockroachdb/cockroach/issues/73424),
+		// so it is important that they are cheap. Keeping them quiesced instead of
+		// letting them unquiesce and tick every 200ms indefinitely avoids a
+		// meaningful amount of periodic work for each uninitialized replica.
+		r.isInitializedRLocked() &&
+		// A replica's Raft group begins in a dormant state and is initialized
+		// lazily in response to any Raft traffic (see stepRaftGroup) or KV request
+		// traffic (see maybeInitializeRaftGroup). If it has yet to be initialized,
+		// let it remain quiesced. The Raft group will be initialized soon enough.
+		r.mu.internalRaftGroup != nil
 }
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
