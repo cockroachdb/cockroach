@@ -507,6 +507,9 @@ type testClusterConfig struct {
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	localities map[int]roachpb.Locality
+	// declarativeSchemaChanger determines if the declarative schema changer
+	// is enabled.
+	declarativeSchemaChanger bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -610,6 +613,13 @@ var logicTestConfigs = []testClusterConfig{
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
+	},
+	{
+		name:                     "fakedist-declarative-schema",
+		numNodes:                 5,
+		overrideDistSQLMode:      "on",
+		overrideAutoStats:        "false",
+		declarativeSchemaChanger: true,
 	},
 	{
 		name:                "fakedist-vec-off",
@@ -797,6 +807,7 @@ var (
 		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
+		"fakedist-declarative-schema",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"
@@ -1649,6 +1660,20 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		if cfg.declarativeSchemaChanger {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = 'on'",
+			); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = 'off'",
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
