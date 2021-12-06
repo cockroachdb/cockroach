@@ -266,20 +266,12 @@ t6  CREATE TABLE public.t6 (
     FAMILY f2 (id2)
 )
 
-# Ensure default expressions are casted correctly.
-statement ok
+# Ensure DEFAULT expression triggers error.
+statement error computed column "x_1" cannot also have a DEFAULT expression
 CREATE TABLE t7 (x INT DEFAULT 1, y INT);
 INSERT INTO t7 (y) VALUES (1), (2), (3);
 ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
 INSERT INTO t7 (y) VALUES (4);
-
-query TI
-SELECT * FROM t7 ORDER BY y
-----
-1970-01-02 00:00:00 +0000 +0000  1
-1970-01-02 00:00:00 +0000 +0000  2
-1970-01-02 00:00:00 +0000 +0000  3
-1970-01-02 00:00:00 +0000 +0000  4
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
 statement ok
