@@ -81,8 +81,8 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 				onErrPanic(err)
 
 				return pgerror.Newf(
-					pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
-					name, depViewName)
+					pgcode.DependentObjectsStillExist, "cannot drop relation %q because view %q depends on it",
+					name.Object(), depViewName.Object())
 			}
 			dropView(c, dependentDesc, behavior)
 			return nil
@@ -127,6 +127,18 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 			}
 			sequence := c.MustReadTable(sequenceOwnedBy.SequenceID)
 			dropSequence(b, sequence, tree.DropCascade)
+			if behavior != tree.DropCascade {
+				scpb.ForEachRelationDependedOnBy(c, func(status scpb.Status,
+					targetStatus scpb.Status,
+					depBy *scpb.RelationDependedOnBy) {
+					if depBy.TableID == sequenceOwnedBy.SequenceID &&
+						depBy.DependedOnBy != tbl.GetID() {
+						panic(pgerror.Newf(
+							pgcode.DependentObjectsStillExist,
+							"cannot drop table a because other objects depend on it"))
+					}
+				})
+			}
 		})
 	}
 }
