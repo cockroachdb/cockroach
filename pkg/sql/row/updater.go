@@ -416,16 +416,21 @@ func (ru *Updater) UpdateRow(
 					} else {
 						continue
 					}
-					if traceKV {
-						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-						v := newEntry.Value.PrettyPrint()
-						if expValue != nil {
-							log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
-						} else {
-							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+
+					if index.UseDeletePreservingEncoding() {
+						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+					} else {
+						if traceKV {
+							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+							v := newEntry.Value.PrettyPrint()
+							if expValue != nil {
+								log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
+							} else {
+								log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+							}
 						}
+						batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
 					}
-					batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
 				} else if oldEntry.Family < newEntry.Family {
 					if oldEntry.Family == descpb.FamilyID(0) {
 						return nil, errors.AssertionFailedf(
@@ -446,15 +451,20 @@ func (ru *Updater) UpdateRow(
 							ru.Helper.TableDesc.GetName(), index.GetName(),
 						)
 					}
+
 					// In this case, the index now has a k/v that did not exist in the
 					// old row, so we should expect to not see a value for the new
 					// key, and put the new key in place.
-					if traceKV {
-						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-						v := newEntry.Value.PrettyPrint()
-						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+					if index.UseDeletePreservingEncoding() {
+						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+					} else {
+						if traceKV {
+							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+							v := newEntry.Value.PrettyPrint()
+							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+						}
+						batch.CPut(newEntry.Key, &newEntry.Value, nil)
 					}
-					batch.CPut(newEntry.Key, &newEntry.Value, nil)
 					newIdx++
 				}
 			}
@@ -477,12 +487,16 @@ func (ru *Updater) UpdateRow(
 				// and the old row values do not match the partial index
 				// predicate.
 				newEntry := &newEntries[newIdx]
-				if traceKV {
-					k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-					v := newEntry.Value.PrettyPrint()
-					log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+				if index.UseDeletePreservingEncoding() {
+					insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+				} else {
+					if traceKV {
+						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+						v := newEntry.Value.PrettyPrint()
+						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+					}
+					batch.CPut(newEntry.Key, &newEntry.Value, nil)
 				}
-				batch.CPut(newEntry.Key, &newEntry.Value, nil)
 				newIdx++
 			}
 		} else {
@@ -492,10 +506,13 @@ func (ru *Updater) UpdateRow(
 					return nil, err
 				}
 			}
-			putFn := insertInvertedPutFn
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				putFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				if index.UseDeletePreservingEncoding() {
+					insertPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				} else {
+					insertInvertedPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				}
 			}
 		}
 	}
