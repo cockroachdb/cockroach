@@ -65,7 +65,7 @@ func newUnloadedReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) *Replica {
 	if replicaID == 0 {
-		log.Fatalf(context.TODO(), "cannot construct a replica for range %d with a 0 replica ID", desc.RangeID)
+		log.Fatalf(ctx, "cannot construct a replica for range %d with a 0 replica ID", desc.RangeID)
 	}
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
