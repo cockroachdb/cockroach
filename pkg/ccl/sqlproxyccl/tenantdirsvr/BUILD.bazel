@@ -11,7 +11,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_logtags//:logtags",
         "@org_golang_google_grpc//:go_default_library",
     ],
