@@ -503,9 +503,56 @@ func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 
 // maybeAttachLease is used to augment a concurrency retry error with
 // information about the lease that the operation which hit this error was
-// operating under.
+// operating under. If the operation was performed on a follower that does not
+// hold the lease (e.g. a follower read), the provided lease will be empty.
 func maybeAttachLease(pErr *roachpb.Error, lease *roachpb.Lease) *roachpb.Error {
 	if wiErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+		// If we hit an intent on the leaseholder, attach information about the
+		// lease to WriteIntentErrors, which is necessary to keep the lock-table
+		// in sync with the applied state.
+		//
+		// However, if we hit an intent during a follower read, the lock-table will
+		// be disabled, so we won't be able to use it to wait for the resolution of
+		// the intent. Instead of waiting locally, we replace the WriteIntentError
+		// with an InvalidLeaseError so that the request will be redirected to the
+		// leaseholder. Beyond implementation constraints, waiting for conflicting
+		// intents on the leaseholder instead of on a follower is preferable
+		// because:
+		// - the leaseholder is notified of and reactive to lock-table state
+		//   transitions.
+		// - the leaseholder is able to more efficiently resolve intents, if
+		//   necessary, without the risk of multiple follower<->leaseholder
+		//   round-trips compounding. If the follower was to attempt to resolve
+		//   multiple intents during a follower read then the PushTxn and
+		//   ResolveIntent requests would quickly be more expensive (in terms of
+		//   latency) than simply redirecting the entire read request to the
+		//   leaseholder and letting the leaseholder coordinate the intent
+		//   resolution.
+		// - after the leaseholder has received a response from a ResolveIntent
+		//   request, it has a guarantee that the intent resolution has been applied
+		//   locally and that no future read will observe the intent. This is not
+		//   true on follower replicas. Due to the asynchronous nature of Raft, both
+		//   due to quorum voting and due to async commit acknowledgement from
+		//   leaders to followers, it is possible for a ResolveIntent request to
+		//   complete and then for a future read on a follower to observe the
+		//   pre-resolution state of the intent. This effect is transient and will
+		//   eventually disappear once the follower catches up on its Raft log, but
+		//   it creates an opportunity for momentary thrashing if a follower read
+		//   was to resolve an intent and then immediately attempt to read again.
+		//
+		// This behavior of redirecting follower read attempts to the leaseholder
+		// replica if they encounter conflicting intents on a follower means that
+		// follower read eligibility is a function of the "resolved timestamp" over
+		// a read's key span, and not just the "closed timestamp" over its key span.
+		// Architecturally, this is consistent with Google Spanner, who maintains a
+		// concept of "safe time", "paxos safe time", "transaction manager safe
+		// time". "safe time" is analogous to the "resolved timestamp" in
+		// CockroachDB and "paxos safe time" is analogous to the "closed timestamp"
+		// in CockroachDB. In Spanner, it is the "safe time" of a replica that
+		// determines follower read eligibility.
+		if lease.Empty() /* followerRead */ {
+			return roachpb.NewErrorWithTxn(&roachpb.InvalidLeaseError{}, pErr.GetTxn())
+		}
 		wiErr.LeaseSequence = lease.Sequence
 		return roachpb.NewErrorWithTxn(wiErr, pErr.GetTxn())
 	}
