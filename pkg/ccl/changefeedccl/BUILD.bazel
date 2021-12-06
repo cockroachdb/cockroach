@@ -118,6 +118,7 @@ go_library(
         "@dev_gocloud//pubsub/mempubsub",
         "@go_googleapis//google/pubsub/v1:pubsub_go_proto",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_protobuf//types/known/timestamppb",
         "@org_golang_x_oauth2//google",
     ],
 )
@@ -138,7 +139,6 @@ go_test(
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",
         "sink_cloudstorage_test.go",
-        "sink_pubsub_test.go",
         "sink_test.go",
         "sink_webhook_test.go",
         "testfeed_test.go",
