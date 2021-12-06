@@ -138,10 +138,10 @@ func (sp *Span) Finish() {
 // would appear to be unfinished in the recording (it's illegal to collect the
 // recording after the span finishes, except by using this method).
 func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
+	// Reach directly into sp.i to pass the finishing argument.
+	rec := sp.i.GetRecording(recType, true /* finishing */)
 	sp.Finish()
-	// Reach directly into sp.i to avoid the detectUseAfterFinish() check in
-	// sp.GetRecording().
-	return sp.i.GetRecording(recType)
+	return rec
 }
 
 // GetRecording retrieves the current recording, if the Span has recording
@@ -170,7 +170,7 @@ func (sp *Span) GetRecording(recType RecordingType) Recording {
 	if sp.detectUseAfterFinish() {
 		return nil
 	}
-	return sp.i.GetRecording(recType)
+	return sp.i.GetRecording(recType, false /* finishing */)
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
