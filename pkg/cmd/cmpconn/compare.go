@@ -48,59 +48,59 @@ var (
 			out := make([]interface{}, len(x))
 			for i, v := range x {
 				switch t := v.(type) {
-				case *pgtype.TextArray:
+				case pgtype.TextArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = ""
 					}
-				case *pgtype.BPCharArray:
+				case pgtype.BPCharArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = ""
 					}
-				case *pgtype.VarcharArray:
+				case pgtype.VarcharArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = ""
 					}
-				case *pgtype.Int8Array:
+				case pgtype.Int8Array:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.Int8Array{}
 					}
-				case *pgtype.Float8Array:
+				case pgtype.Float8Array:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.Float8Array{}
 					}
-				case *pgtype.UUIDArray:
+				case pgtype.UUIDArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.UUIDArray{}
 					}
-				case *pgtype.ByteaArray:
+				case pgtype.ByteaArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.ByteaArray{}
 					}
-				case *pgtype.InetArray:
+				case pgtype.InetArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.InetArray{}
 					}
-				case *pgtype.TimestampArray:
+				case pgtype.TimestampArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.TimestampArray{}
 					}
-				case *pgtype.BoolArray:
+				case pgtype.BoolArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.BoolArray{}
 					}
-				case *pgtype.DateArray:
+				case pgtype.DateArray:
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.BoolArray{}
 					}
-				case *pgtype.Varbit:
+				case pgtype.Varbit:
 					if t.Status == pgtype.Present {
 						s, _ := t.EncodeText(nil, nil)
 						v = string(s)
 					}
-				case *pgtype.Bit:
-					vb := pgtype.Varbit(*t)
+				case pgtype.Bit:
+					vb := pgtype.Varbit(t)
 					v = &vb
-				case *pgtype.Interval:
+				case pgtype.Interval:
 					if t.Status == pgtype.Present {
 						v = duration.DecodeDuration(int64(t.Months), int64(t.Days), t.Microseconds*1000)
 					}
@@ -113,7 +113,7 @@ var (
 					// non-zero.
 					// See https://github.com/cockroachdb/cockroach/issues/41563
 					v = strings.Replace(t, ":00+00:00", ":00+00", 1)
-				case *pgtype.Numeric:
+				case pgtype.Numeric:
 					if t.Status == pgtype.Present {
 						v = apd.NewWithBigInt(t.Int, t.Exp)
 					}
@@ -135,7 +135,7 @@ var (
 			var a, b, min, sub apd.Decimal
 			a.Abs(x)
 			b.Abs(y)
-			if a.Cmp(&b) > 1 {
+			if a.Cmp(&b) > 0 {
 				min.Set(&b)
 			} else {
 				min.Set(&a)
