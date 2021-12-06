@@ -144,7 +144,7 @@ UPDATE ti SET b = b + 1, c = c + 1
 Scan /Table/57/{1-2}
 Put /Table/57/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
 Put (delete) /Table/57/2/2/100/1/0
-CPut /Table/57/2/3/101/1/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/57/2/3/101/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -199,7 +199,7 @@ UPDATE tpi SET b = b - 3, c = 'foo'
 ----
 Scan /Table/58/{1-2}
 Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
-CPut /Table/58/2/"foo"/3/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/58/2/"foo"/3/0 -> /BYTES/0x0a0103
 
 # Update a row that matches the partial index before and after, but the index
 # entry doesn't change.
@@ -217,7 +217,7 @@ UPDATE tpi SET b = b + 1, c = 'foobar'
 Scan /Table/58/{1-2}
 Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
 Put (delete) /Table/58/2/"foo"/3/0
-CPut /Table/58/2/"foobar"/3/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/58/2/"foobar"/3/0 -> /BYTES/0x0a0103
 
 # Update a row that matches the partial index before but not after.
 query T kvtrace
@@ -279,7 +279,7 @@ UPDATE tei SET a = a + 1, b = b + 100
 Scan /Table/59/{1-2}
 Put /Table/59/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
 Put (delete) /Table/59/2/102/1/0
-CPut /Table/59/2/203/1/0 -> /BYTES/0x0a0103 (expecting does not exist)
+Put /Table/59/2/203/1/0 -> /BYTES/0x0a0103
 
 # Update a row with different values without changing the index entry.
 query T kvtrace
@@ -340,7 +340,7 @@ UPDATE tii SET b = ARRAY[1, 2, 2, NULL, 4, 4]
 Scan /Table/60/{1-2}
 Put /Table/60/1/1/0 -> /TUPLE/
 Put (delete) /Table/60/2/3/1/0
-InitPut /Table/60/2/4/1/0 -> /BYTES/0x0a0103
+Put /Table/60/2/4/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -395,5 +395,5 @@ Scan /Table/61/{1-2}
 Put /Table/61/1/1/0 -> /TUPLE/2:2:Int/3/
 Put (delete) /Table/61/2/2/"a"/"foo"/1/0
 Put (delete) /Table/61/2/2/"b"/"bar"/1/0
-InitPut /Table/61/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
-InitPut /Table/61/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
+Put /Table/61/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
+Put /Table/61/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
