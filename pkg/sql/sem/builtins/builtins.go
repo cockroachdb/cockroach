@@ -37,6 +37,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -4352,6 +4353,34 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(v), nil
 			},
 			Info:       "Returns the version of CockroachDB this node is running.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.is_at_least_version": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"version", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.Newf("expected string value, got %T", args[0])
+				}
+				arg, err := roachpb.ParseVersion(string(s))
+				if err != nil {
+					return nil, err
+				}
+				activeVersion := ctx.Settings.Version.ActiveVersionOrEmpty(ctx.Context)
+				if activeVersion == (clusterversion.ClusterVersion{}) {
+					return nil, errors.AssertionFailedf("invalid uninitialized version")
+				}
+				if arg.LessEq(activeVersion.Version) {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info:       "Returns true if the cluster version is not older than the argument.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
