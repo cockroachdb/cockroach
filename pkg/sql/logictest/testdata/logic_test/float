@@ -139,3 +139,23 @@ query FFF
 SELECT -0.1234567890123456, 123456789012345.6, 1234567.890123456
 ----
 -0.1234567890123457 123456789012345.7 1234567.890123457
+
+# Regression test to make sure `IS NAN` does not coerce NaN to a string.
+statement error unsupported comparison operator: <tuple> = <decimal>
+SELECT ROW() IS NAN
+
+statement error unsupported comparison operator: <tuple> != <decimal>
+SELECT ROW() IS NOT NAN
+
+statement error unsupported comparison operator: <string> = <decimal>
+SELECT 'NaN'::string IS NAN
+
+query BB
+SELECT 'nan'::float IS NAN, 'nan'::float IS NOT NAN
+----
+true  false
+
+query BB
+SELECT 'nan'::decimal IS NAN, 'nan'::decimal IS NOT NAN
+----
+true  false

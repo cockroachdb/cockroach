@@ -168,6 +168,8 @@ func (expr *NumVal) Format(ctx *FmtCtx) {
 	s := expr.origString
 	if s == "" {
 		s = expr.value.String()
+	} else if strings.EqualFold(s, "NaN") {
+		s = "'NaN'"
 	}
 	if expr.negative {
 		ctx.WriteByte('-')
@@ -305,11 +307,18 @@ func (expr *NumVal) ResolveAsType(
 		}
 		return &expr.resInt, nil
 	case types.FloatFamily:
-		f, _ := constant.Float64Val(expr.value)
-		if expr.negative {
-			f = -f
+		if strings.EqualFold(expr.origString, "NaN") {
+			// We need to check NaN separately since expr.value is unknownVal for NaN.
+			// TODO(sql-experience): unknownVal is also used for +Inf and -Inf,
+			// so we may need to handle those in the future too.
+			expr.resFloat = DFloat(math.NaN())
+		} else {
+			f, _ := constant.Float64Val(expr.value)
+			if expr.negative {
+				f = -f
+			}
+			expr.resFloat = DFloat(f)
 		}
-		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
 	case types.DecimalFamily:
 		dd := &expr.resDecimal
