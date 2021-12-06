@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,7 +28,6 @@ import (
 
 func TestSavepoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 70220, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
