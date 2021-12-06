@@ -288,7 +288,7 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 ) ([]catalog.TableDescriptor, error) {
 	// Ensure the given ID does indeed belong to a database.
 	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidCached: false,
+		AvoidLeased: false,
 	})
 	if err != nil {
 		return nil, err
@@ -336,7 +336,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 
 	schemaFlags := tree.SchemaLookupFlags{
 		Required:       flags.Required,
-		AvoidCached:    flags.RequireMutable || flags.AvoidCached,
+		AvoidLeased:    flags.RequireMutable || flags.AvoidLeased,
 		IncludeDropped: flags.IncludeDropped,
 		IncludeOffline: flags.IncludeOffline,
 	}

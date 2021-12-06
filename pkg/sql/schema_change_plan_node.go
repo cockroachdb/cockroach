@@ -103,7 +103,7 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 					tree.ObjectLookupFlags{
 						CommonLookupFlags: tree.CommonLookupFlags{
 							Required:    true,
-							AvoidCached: true,
+							AvoidLeased: true,
 						},
 					})
 				if err != nil {

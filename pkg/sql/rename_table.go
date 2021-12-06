@@ -322,7 +322,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				},
 			})
 		if err != nil {
@@ -352,7 +352,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				}})
 		if err != nil {
 			return err
@@ -453,7 +453,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				}})
 		if err != nil {
 			return err

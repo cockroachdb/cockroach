@@ -55,8 +55,8 @@ var _ resolver.SchemaResolver = &planner{}
 // use(someVar)
 func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
 	if flags.skipCache {
-		defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
-		p.avoidCachedDescriptors = true
+		defer func(prev bool) { p.avoidLeasedDescriptors = prev }(p.avoidLeasedDescriptors)
+		p.avoidLeasedDescriptors = true
 	}
 	if flags.contextDatabaseID != descpb.InvalidID {
 		defer func(prev descpb.ID) { p.contextDatabaseID = prev }(p.contextDatabaseID)
@@ -140,7 +140,7 @@ func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
-		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
+		tree.DatabaseLookupFlags{AvoidLeased: p.avoidLeasedDescriptors})
 	if err != nil || dbDesc == nil {
 		return false, catalog.ResolvedObjectPrefix{}, err
 	}
@@ -170,7 +170,7 @@ func (p *planner) LookupObject(
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	sc := p.Accessor()
 	flags.CommonLookupFlags.Required = false
-	flags.CommonLookupFlags.AvoidCached = p.avoidCachedDescriptors
+	flags.CommonLookupFlags.AvoidLeased = p.avoidLeasedDescriptors
 
 	// Check if we are looking up a type which matches a built-in type in
 	// CockroachDB but is an extension type on the public schema in PostgreSQL.
@@ -185,7 +185,7 @@ func (p *planner) LookupObject(
 				return found, prefix, nil, err
 			}
 			dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
-				tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
+				tree.DatabaseLookupFlags{AvoidLeased: p.avoidLeasedDescriptors})
 			if err != nil {
 				return found, prefix, nil, err
 			}
@@ -205,7 +205,7 @@ func (p *planner) LookupObject(
 func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{
 		Required:    required,
-		AvoidCached: p.avoidCachedDescriptors,
+		AvoidLeased: p.avoidLeasedDescriptors,
 	}
 }
 
@@ -229,7 +229,7 @@ func (p *planner) IsTableVisible(
 	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), schemaID,
 		tree.SchemaLookupFlags{
 			Required:    true,
-			AvoidCached: p.avoidCachedDescriptors})
+			AvoidLeased: p.avoidLeasedDescriptors})
 	if err != nil {
 		return false, false, err
 	}
@@ -238,7 +238,7 @@ func (p *planner) IsTableVisible(
 		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
 			tree.DatabaseLookupFlags{
 				Required:    true,
-				AvoidCached: p.avoidCachedDescriptors})
+				AvoidLeased: p.avoidLeasedDescriptors})
 		if err != nil {
 			return false, false, err
 		}
@@ -512,7 +512,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 	const required = true
 	flags := tree.CommonLookupFlags{
 		Required:       required,
-		AvoidCached:    p.avoidCachedDescriptors,
+		AvoidLeased:    p.avoidLeasedDescriptors,
 		RequireMutable: true,
 	}
 	if targets.Databases != nil {
@@ -661,7 +661,7 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 	for _, id := range ids {
 		desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached:    true,
+				AvoidLeased:    true,
 				IncludeDropped: true,
 				IncludeOffline: true,
 			},
@@ -689,7 +689,7 @@ func (p *planner) getQualifiedTableName(
 			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
-			AvoidCached:    true,
+			AvoidLeased:    true,
 		})
 	if err != nil {
 		return nil, err
@@ -708,7 +708,7 @@ func (p *planner) getQualifiedTableName(
 		tree.SchemaLookupFlags{
 			IncludeOffline: true,
 			IncludeDropped: true,
-			AvoidCached:    true,
+			AvoidLeased:    true,
 		})
 	switch {
 	case err == nil:
