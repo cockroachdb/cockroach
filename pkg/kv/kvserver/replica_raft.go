@@ -515,7 +515,16 @@ func (r *Replica) handleRaftReady(
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (_ handleRaftReadyStats, _ string, foo error) {
+) (_ handleRaftReadyStats, _ string, retErr error) {
+	defer func() {
+		// handleRaftReadyRaftMuLocked is not prepared to handle context
+		// cancellation, so assert that it's never canceled.
+		if err := ctx.Err(); err != nil {
+			retErr = errors.AssertionFailedf(
+				"unexpected context cancellation in handleRaftReadyRaftMuLocked: %s", err)
+		}
+	}()
+
 	var stats handleRaftReadyStats
 	if inSnap.Desc != nil {
 		stats.snap.offered = true
