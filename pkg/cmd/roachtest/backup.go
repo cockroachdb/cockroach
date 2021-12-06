@@ -213,6 +213,8 @@ func registerBackupMixedVersion(r *testRegistry) {
 			// in the backup code. Here, we force the range containing this data through the gc queue which
 			// will GC the old revision as it is not the latest and well past the gc.ttl.
 			workaroundForAncientData := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+				db := c.Conn(ctx, 1)
+				waitForFullReplication(t, db)
 				t.Status("sending enqueue_range request for queue=gc and range=5")
 				req := &serverpb.EnqueueRangeRequest{
 					Queue:           "gc",
@@ -224,16 +226,17 @@ func registerBackupMixedVersion(r *testRegistry) {
 				var resp serverpb.EnqueueRangeResponse
 				err := httputil.PostJSON(*http.DefaultClient, url, req, &resp)
 				require.NoError(t, err)
+				t.l.Printf("EnqueueRangeResponse: %v", resp)
 			}
 
 			u := newVersionUpgradeTest(c,
 				uploadAndStartFromCheckpointFixture(roachNodes, predV),
 				waitForUpgradeStep(roachNodes),
 				preventAutoUpgradeStep(1),
+				workaroundForAncientData,
 				loadBackupDataStep,
 				// Upgrade some of the nodes.
 				binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
-				workaroundForAncientData,
 				// Backup from new node should succeed
 				successfulBackupStep(1),
 				// Backup from new node with revision history should succeed
