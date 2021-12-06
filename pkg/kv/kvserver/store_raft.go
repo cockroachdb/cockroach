@@ -572,7 +572,7 @@ func (s *Store) processRaft(ctx context.Context) {
 		return
 	}
 
-	s.scheduler.Start(ctx, s.stopper)
+	s.scheduler.Start(s.stopper)
 	// Wait for the scheduler worker goroutines to finish.
 	if err := s.stopper.RunAsyncTask(ctx, "sched-wait", s.scheduler.Wait); err != nil {
 		s.scheduler.Wait(ctx)
