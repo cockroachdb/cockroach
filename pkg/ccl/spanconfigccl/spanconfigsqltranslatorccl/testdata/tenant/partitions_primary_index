@@ -1,0 +1,138 @@
+# This test creates partitions for a secondary tenant, on a table's primary
+# index. It moves the zone configurations on these partitions through the steps
+# described inline, making assertions along the way.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION one_two VALUES IN (1, 2),
+  PARTITION three_four VALUES IN (3, 4),
+  PARTITION default VALUES IN (default)
+);
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER TABLE db.t CONFIGURE ZONE USING num_voters=5;
+----
+
+query-sql
+SHOW ZONE CONFIGURATION FOR DATABASE db
+----
+DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR TABLE db.t
+----
+TABLE db.public.t ALTER TABLE db.public.t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	num_voters = 5,
+	constraints = '[]',
+	voter_constraints = '[]',
+	lease_preferences = '[]'
+
+query-sql
+SHOW ZONE CONFIGURATION FOR PARTITION one_two OF TABLE db.t
+----
+TABLE db.public.t ALTER TABLE db.public.t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 7,
+	num_voters = 5,
+	constraints = '[]',
+	voter_constraints = '[]',
+	lease_preferences = '[]'
+
+
+# There is no zone configuration set on any of the partitions initially. So
+# there is just one entry here which covers the entire table's span.
+translate database=db table=t
+----
+/Tenant/10/Table/5{6-7}                    num_replicas=7 num_voters=5
+
+
+exec-sql
+ALTER PARTITION one_two OF TABLE db.t CONFIGURE ZONE USING global_reads=true
+----
+
+# Now that we have a zone configuration on one of the partitions, `one_two`,
+# which implies two (adjacent) spans. Both these configs have global reads set
+# to true. The table's spans before and after the partitions span continue to
+# have the table's zone configuration.
+translate database=db table=t
+----
+/Tenant/10/Table/56{-/1/1}                 num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{1-2}                global_reads=true num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{2-3}                global_reads=true num_replicas=7 num_voters=5
+/Tenant/10/Table/5{6/1/3-7}                num_replicas=7 num_voters=5
+
+# Change two fields on the second partition. One of them (num_voters) is an
+# override on the value set on the database's zone config. The other, gc.ttlseconds,
+# is not set on either the table or the database.
+exec-sql
+ALTER PARTITION three_four OF TABLE db.t CONFIGURE ZONE USING gc.ttlseconds=5;
+ALTER PARTITION three_four OF TABLE db.t CONFIGURE ZONE USING num_voters=3
+----
+
+# We expect 2 more (adjacent) spans for the second partition now. These should
+# have the correct values of gc.ttlseconds (5) and num_voters (3).
+translate database=db table=t
+----
+/Tenant/10/Table/56{-/1/1}                 num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{1-2}                global_reads=true num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{2-3}                global_reads=true num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{3-4}                ttl_seconds=5 num_replicas=7 num_voters=3
+/Tenant/10/Table/56/1/{4-5}                ttl_seconds=5 num_replicas=7 num_voters=3
+/Tenant/10/Table/5{6/1/5-7}                num_replicas=7 num_voters=5
+
+exec-sql
+ALTER PARTITION default OF TABLE db.t CONFIGURE ZONE USING num_voters=6
+----
+
+# Now that we've set a zone configuration on the default partition we get a few
+# more entries. Of note is that this default partition is on the primary index.
+# This results in a span before the primary index starts
+# (which will always be empty) but has the span config of the table. We also have
+# a span for all other secondary indexes with the same config at the end.
+# We get two more spans that subdivide the primary index as well. One before the
+# start of the first partition and one after the end of the second partition. This
+# second span covers the remaining primary index. Both these spans have num_voters
+# set to 6, as that's what we did above.
+translate database=db table=t
+----
+/Tenant/10/Table/56{-/1}                   num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1{-/1}                 num_replicas=7 num_voters=6
+/Tenant/10/Table/56/1/{1-2}                global_reads=true num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{2-3}                global_reads=true num_replicas=7 num_voters=5
+/Tenant/10/Table/56/1/{3-4}                ttl_seconds=5 num_replicas=7 num_voters=3
+/Tenant/10/Table/56/1/{4-5}                ttl_seconds=5 num_replicas=7 num_voters=3
+/Tenant/10/Table/56/{1/5-2}                num_replicas=7 num_voters=6
+/Tenant/10/Table/5{6/2-7}                  num_replicas=7 num_voters=5
+
+# Discard the table's zone configuration. This essentially means that the table
+# has a "placeholder" zone config (to capture partition subzone configs).
+exec-sql
+ALTER TABLE db.t CONFIGURE ZONE DISCARD
+----
+
+# The expectation here is very similar to above, except the spans before the
+# primary index and for secondary indexes now inherit num_voters from the
+# database. This is because we removed the explicit zone configuration on the
+# table above (which is where num_voters=5 was coming from).
+translate database=db table=t
+----
+/Tenant/10/Table/56{-/1}                   num_replicas=7
+/Tenant/10/Table/56/1{-/1}                 num_replicas=7 num_voters=6
+/Tenant/10/Table/56/1/{1-2}                global_reads=true num_replicas=7
+/Tenant/10/Table/56/1/{2-3}                global_reads=true num_replicas=7
+/Tenant/10/Table/56/1/{3-4}                ttl_seconds=5 num_replicas=7 num_voters=3
+/Tenant/10/Table/56/1/{4-5}                ttl_seconds=5 num_replicas=7 num_voters=3
+/Tenant/10/Table/56/{1/5-2}                num_replicas=7 num_voters=6
+/Tenant/10/Table/5{6/2-7}                  num_replicas=7

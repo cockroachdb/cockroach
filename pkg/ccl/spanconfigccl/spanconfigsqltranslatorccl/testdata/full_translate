@@ -1,0 +1,64 @@
+# Test a full reconciliation pass with default named zone configs, a single
+# database with a single table within it.
+
+exec-sql
+CREATE DATABASE db;
+CREATE SCHEMA sc;
+CREATE TYPE typ AS ENUM();
+CREATE TABLE db.t();
+----
+
+# We expect only the following spans:
+# - Meta ranges: min -> Liveness range start
+# - Liveness range
+# - System ranges:
+#   - Liveness range end -> Timeseries range start
+#   - Timeseries range end -> system range end
+# - Timeseries range
+# - All system tables (there should be no entry for pseudo IDs or IDs for which
+#   no table exist)
+# - The user created table
+full-translate
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
+/System/{NodeLivenessMax-tsd}              range system
+/System{/tsd-tse}                          range default
+/System{tse-/Max}                          range system
+/Table/{3-4}                               range system
+/Table/{4-5}                               range system
+/Table/{5-6}                               range system
+/Table/{6-7}                               range system
+/Table/{8-9}                               range system
+/Table/1{1-2}                              range system
+/Table/1{2-3}                              range system
+/Table/1{3-4}                              range system
+/Table/1{4-5}                              range system
+/Table/1{5-6}                              range system
+/Table/{19-20}                             range system
+/Table/2{0-1}                              range system
+/Table/2{1-2}                              range system
+/Table/2{3-4}                              range system
+/Table/2{4-5}                              range system
+/Table/2{5-6}                              ttl_seconds=600 num_replicas=5
+/Table/2{6-7}                              range system
+/Table/2{7-8}                              ttl_seconds=600 num_replicas=5
+/Table/2{8-9}                              range system
+/NamespaceTable/{30-Max}                   range system
+/{NamespaceTable/Max-Table/32}             range system
+/Table/3{2-3}                              range system
+/Table/3{3-4}                              range system
+/Table/3{4-5}                              range system
+/Table/3{5-6}                              range system
+/Table/3{6-7}                              range system
+/Table/3{7-8}                              range system
+/Table/{39-40}                             range system
+/Table/4{0-1}                              range system
+/Table/4{1-2}                              range system
+/Table/4{2-3}                              range system
+/Table/4{3-4}                              range system
+/Table/4{4-5}                              range system
+/Table/4{5-6}                              ttl_seconds=7200 num_replicas=5
+/Table/4{6-7}                              range system
+/Table/4{7-8}                              range system
+/Table/{59-60}                             range default

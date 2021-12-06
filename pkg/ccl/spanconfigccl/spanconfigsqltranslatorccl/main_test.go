@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package spanconfigccl_test
+package spanconfigsqltranslatorccl
 
 import (
 	"os"
@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
 	defer utilccl.TestingEnableEnterprise()()

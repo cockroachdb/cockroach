@@ -37,13 +37,20 @@ var _ spanconfig.SQLTranslator = &SQLTranslator{}
 type SQLTranslator struct {
 	execCfg *sql.ExecutorConfig
 	codec   keys.SQLCodec
+	knobs   *spanconfig.TestingKnobs
 }
 
 // New constructs and returns a SQLTranslator.
-func New(execCfg *sql.ExecutorConfig, codec keys.SQLCodec) *SQLTranslator {
+func New(
+	execCfg *sql.ExecutorConfig, codec keys.SQLCodec, knobs *spanconfig.TestingKnobs,
+) *SQLTranslator {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
 	return &SQLTranslator{
 		execCfg: execCfg,
 		codec:   codec,
+		knobs:   knobs,
 	}
 }
 
@@ -64,7 +71,7 @@ func (s *SQLTranslator) Translate(
 
 		// For every ID we want to translate, first expand it to descendant leaf
 		// IDs that have span configurations associated for them. We also
-		// de-duplicate leaf IDs so as to not generate redundant entries.
+		// de-duplicate leaf IDs to not generate redundant entries.
 		seen := make(map[descpb.ID]struct{})
 		var leafIDs descpb.IDs
 		for _, id := range ids {
@@ -80,8 +87,7 @@ func (s *SQLTranslator) Translate(
 			}
 		}
 
-		// For every leaf ID, which has been de-duplicated, generate span
-		// configurations.
+		// For every unique leaf ID, generate span configurations.
 		for _, leafID := range leafIDs {
 			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
 			if err != nil {
@@ -116,10 +122,12 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	})
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			// The descriptor has been deleted. Nothing to do here.
-			return nil, nil
+			return nil, nil // the descriptor has been deleted; nothing to do here
 		}
 		return nil, err
+	}
+	if s.knobs.ExcludeDroppedDescriptorsFromLookup && desc.Dropped() {
+		return nil, nil // we're excluding this descriptor; nothing to do here
 	}
 
 	if desc.DescriptorType() != catalog.Table {
@@ -297,10 +305,12 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	})
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			// The descriptor has been deleted. Nothing to do here.
-			return nil, nil
+			return nil, nil // the descriptor has been deleted; nothing to do here
 		}
 		return nil, err
+	}
+	if s.knobs.ExcludeDroppedDescriptorsFromLookup && desc.Dropped() {
+		return nil, nil // we're excluding this descriptor; nothing to do here
 	}
 
 	switch desc.DescriptorType() {

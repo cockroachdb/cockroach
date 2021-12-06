@@ -125,3 +125,23 @@ func TestingDefaultSpanConfig() SpanConfig {
 		NumReplicas: 3,
 	}
 }
+
+// TestingSystemSpanConfig exports the system span config for testing purposes.
+func TestingSystemSpanConfig() SpanConfig {
+	return SpanConfig{
+		RangeMinBytes: 128 << 20, // 128 MB
+		RangeMaxBytes: 512 << 20, // 512 MB
+		// Use 25 hours instead of the previous 24 to make users successful by
+		// default. Users desiring to take incremental backups every 24h may
+		// incorrectly assume that the previous default 24h was sufficient to do
+		// that. But the equation for incremental backups is:
+		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
+		// We think most new users' incremental backups will complete within an
+		// hour, and larger clusters will have more experienced operators and will
+		// understand how to change these settings if needed.
+		GCPolicy: GCPolicy{
+			TTLSeconds: 25 * 60 * 60,
+		},
+		NumReplicas: 5,
+	}
+}
