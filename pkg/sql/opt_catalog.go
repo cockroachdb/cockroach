@@ -159,9 +159,9 @@ func (oc *optCatalog) ResolveSchema(
 ) (cat.Schema, cat.SchemaName, error) {
 	if flags.AvoidDescriptorCaches {
 		defer func(prev bool) {
-			oc.planner.avoidCachedDescriptors = prev
-		}(oc.planner.avoidCachedDescriptors)
-		oc.planner.avoidCachedDescriptors = true
+			oc.planner.avoidLeasedDescriptors = prev
+		}(oc.planner.avoidLeasedDescriptors)
+		oc.planner.avoidLeasedDescriptors = true
 	}
 
 	oc.tn.ObjectNamePrefix = *name
@@ -197,9 +197,9 @@ func (oc *optCatalog) ResolveDataSource(
 ) (cat.DataSource, cat.DataSourceName, error) {
 	if flags.AvoidDescriptorCaches {
 		defer func(prev bool) {
-			oc.planner.avoidCachedDescriptors = prev
-		}(oc.planner.avoidCachedDescriptors)
-		oc.planner.avoidCachedDescriptors = true
+			oc.planner.avoidLeasedDescriptors = prev
+		}(oc.planner.avoidLeasedDescriptors)
+		oc.planner.avoidLeasedDescriptors = true
 	}
 
 	oc.tn = *name
@@ -227,9 +227,9 @@ func (oc *optCatalog) ResolveDataSourceByID(
 ) (_ cat.DataSource, isAdding bool, _ error) {
 	if flags.AvoidDescriptorCaches {
 		defer func(prev bool) {
-			oc.planner.avoidCachedDescriptors = prev
-		}(oc.planner.avoidCachedDescriptors)
-		oc.planner.avoidCachedDescriptors = true
+			oc.planner.avoidLeasedDescriptors = prev
+		}(oc.planner.avoidLeasedDescriptors)
+		oc.planner.avoidLeasedDescriptors = true
 	}
 
 	tableLookup, err := oc.planner.LookupTableByID(ctx, descpb.ID(dataSourceID))

@@ -543,7 +543,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
 		flags := tree.CommonLookupFlags{
-			AvoidCached:    true,
+			AvoidLeased:    true,
 			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
@@ -795,7 +795,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidCached = true
+		flags.AvoidLeased = true
 		desc, err := descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
 		if err != nil {
 			return err

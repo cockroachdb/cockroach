@@ -125,7 +125,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// See #34416.
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
-	lookupFlags.AvoidCached = true
+	lookupFlags.AvoidLeased = true
 	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
 	if err != nil {
 		return err

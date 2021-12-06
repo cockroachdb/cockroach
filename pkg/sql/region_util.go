@@ -1128,7 +1128,7 @@ func SynthesizeRegionConfig(
 
 	regionConfig := multiregion.RegionConfig{}
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidCached:    !o.useCache,
+		AvoidLeased:    !o.useCache,
 		Required:       true,
 		IncludeOffline: o.includeOffline,
 	})
@@ -1147,7 +1147,7 @@ func SynthesizeRegionConfig(
 		regionEnumID,
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached:    !o.useCache,
+				AvoidLeased:    !o.useCache,
 				IncludeOffline: o.includeOffline,
 			},
 		},

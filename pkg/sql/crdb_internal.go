@@ -3299,7 +3299,7 @@ CREATE TABLE crdb_internal.zones (
 			if zs.Database != "" {
 				_, database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, descpb.ID(id), tree.DatabaseLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				})
 				if err != nil {
 					return err

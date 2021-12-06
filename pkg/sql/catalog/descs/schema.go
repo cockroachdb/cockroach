@@ -67,7 +67,7 @@ func (tc *Collection) getSchemaByName(
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
 	found, desc, err := tc.getByName(
-		ctx, txn, db, nil, schemaName, flags.AvoidCached, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, db, nil, schemaName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if err != nil {
 		return nil, err

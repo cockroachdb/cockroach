@@ -68,7 +68,7 @@ func (tc *Collection) getObjectByName(
 		return prefix, nil, err
 	}
 	if desc.Adding() && desc.IsUncommittedVersion() &&
-		(flags.RequireMutable || flags.CommonLookupFlags.AvoidCached) {
+		(flags.RequireMutable || flags.CommonLookupFlags.AvoidLeased) {
 		// Special case: We always return tables in the adding state if they were
 		// created in the same transaction and a descriptor (effectively) read in
 		// the same transaction is requested. What this basically amounts to is
@@ -143,11 +143,11 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	// we should read its parents from the store too to ensure
 	// that subsequent name resolution finds the latest name
 	// in the face of a concurrent rename.
-	avoidCachedForParent := flags.AvoidCached || flags.RequireMutable
+	avoidLeasedForParent := flags.AvoidLeased || flags.RequireMutable
 	// Resolve the database.
 	parentFlags := tree.DatabaseLookupFlags{
 		Required:       flags.Required,
-		AvoidCached:    avoidCachedForParent,
+		AvoidLeased:    avoidLeasedForParent,
 		IncludeDropped: flags.IncludeDropped,
 		IncludeOffline: flags.IncludeOffline,
 	}
@@ -192,7 +192,7 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 
 	prefix.Schema = sc
 	found, obj, err := tc.getByName(
-		ctx, txn, db, sc, objectName, flags.AvoidCached, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, db, sc, objectName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if !found || err != nil {
 		return prefix, nil, err

@@ -2758,7 +2758,7 @@ CREATE TABLE d1.t2 (name int);
 					Required:       true,
 					RequireMutable: true,
 					IncludeOffline: true,
-					AvoidCached:    true,
+					AvoidLeased:    true,
 				}})
 			if err != nil {
 				return err

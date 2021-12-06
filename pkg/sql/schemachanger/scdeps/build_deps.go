@@ -69,7 +69,7 @@ func (d *buildDeps) MayResolveDatabase(
 	ctx context.Context, name tree.Name,
 ) catalog.DatabaseDescriptor {
 	db, err := d.descsCollection.GetImmutableDatabaseByName(ctx, d.txn, string(name), tree.DatabaseLookupFlags{
-		AvoidCached: true,
+		AvoidLeased: true,
 	})
 	if err != nil {
 		panic(err)
@@ -86,7 +86,7 @@ func (d *buildDeps) MayResolveSchema(
 	}
 	db := d.MayResolveDatabase(ctx, name.CatalogName)
 	schema, err := d.descsCollection.GetSchemaByName(ctx, d.txn, db, name.Schema(), tree.SchemaLookupFlags{
-		AvoidCached: true,
+		AvoidLeased: true,
 	})
 	if err != nil {
 		panic(err)
@@ -100,7 +100,7 @@ func (d *buildDeps) MayResolveTable(
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidCached: true,
+			AvoidLeased: true,
 		},
 		DesiredObjectKind: tree.TableObject,
 	})
@@ -119,7 +119,7 @@ func (d *buildDeps) MayResolveType(
 ) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidCached: true,
+			AvoidLeased: true,
 		},
 		DesiredObjectKind: tree.TypeObject,
 	})
@@ -140,7 +140,7 @@ func (d *buildDeps) ReadObjectNamesAndIDs(
 		CommonLookupFlags: tree.CommonLookupFlags{
 			Required:       true,
 			RequireMutable: false,
-			AvoidCached:    true,
+			AvoidLeased:    true,
 			IncludeOffline: true,
 			IncludeDropped: true,
 		},
@@ -181,7 +181,7 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	flags := tree.CommonLookupFlags{
 		Required:       true,
 		RequireMutable: false,
-		AvoidCached:    true,
+		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}

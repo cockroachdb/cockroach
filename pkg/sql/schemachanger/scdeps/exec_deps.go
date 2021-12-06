@@ -88,7 +88,7 @@ func (d *txnDeps) MustReadImmutableDescriptor(
 	flags := tree.CommonLookupFlags{
 		Required:       true,
 		RequireMutable: false,
-		AvoidCached:    true,
+		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
@@ -270,7 +270,7 @@ func (d *txnDeps) GetResumeSpans(
 	table, err := d.descsCollection.GetImmutableTableByID(ctx, d.txn, tableID, tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
 			Required:    true,
-			AvoidCached: true,
+			AvoidLeased: true,
 		},
 	})
 	if err != nil {
