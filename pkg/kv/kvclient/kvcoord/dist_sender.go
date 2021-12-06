@@ -20,6 +20,7 @@ import (
 	"time"
 	"unsafe"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1971,6 +1972,14 @@ func (ds *DistSender) sendToReplicas(
 			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(),
 		}
 		br, err = transport.SendNext(ctx, ba)
+		if err == nil && first && br.Txn != nil && ba.Txn.Status == roachpb.PENDING && br.Txn.Status == roachpb.COMMITTED && keys.ScratchRangeMin.Equal(br.Txn.Key) {
+			err = circuit.ErrBreakerOpen
+			t := grpcutil.RequestDidNotStart(err) // true
+			log.Infof(ctx, "injected did not start = %t", t)
+			if !t {
+				panic("x")
+			}
+		}
 		ds.maybeIncrementErrCounters(br, err)
 
 		if err != nil {
