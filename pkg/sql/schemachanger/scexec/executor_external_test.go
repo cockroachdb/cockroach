@@ -114,13 +114,13 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 		CommonLookupFlags: tree.CommonLookupFlags{
 			Required:       true,
 			RequireMutable: true,
-			AvoidCached:    true,
+			AvoidLeased:    true,
 		},
 	}
 	immFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
 			Required:    true,
-			AvoidCached: true,
+			AvoidLeased: true,
 		},
 	}
 	run := func(t *testing.T, c testCase) {

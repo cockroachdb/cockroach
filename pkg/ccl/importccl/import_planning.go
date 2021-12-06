@@ -278,7 +278,7 @@ func resolveUDTsUsedByImportInto(
 		_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, table.GetParentID(),
 			tree.DatabaseLookupFlags{
 				Required:    true,
-				AvoidCached: true,
+				AvoidLeased: true,
 			})
 		if err != nil {
 			return err
@@ -288,7 +288,7 @@ func resolveUDTsUsedByImportInto(
 				immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						Required:    true,
-						AvoidCached: true,
+						AvoidLeased: true,
 					},
 				})
 				if err != nil {
@@ -304,7 +304,7 @@ func resolveUDTsUsedByImportInto(
 			immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				},
 			})
 			if err != nil {
@@ -489,7 +489,7 @@ func importPlanHook(
 			// database, so it must exist.
 			txn := p.ExtendedEvalContext().Txn
 			db, err = p.Accessor().GetDatabaseDesc(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
-				AvoidCached: true,
+				AvoidLeased: true,
 				Required:    true,
 			})
 			if err != nil {

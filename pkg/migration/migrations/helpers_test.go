@@ -138,7 +138,7 @@ func GetTable(
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
 			table, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidCached: true,
+					AvoidLeased: true,
 					Required:    true,
 				},
 			})

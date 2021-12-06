@@ -148,7 +148,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
 	`, strings.Join(cols, `,`), n.tableDesc.GetID(), index.GetID())
 	// If were'in in an AOST context, propagate it to the inner statement so that
-	// the inner statement gets planned with planner.avoidCachedDescriptors set,
+	// the inner statement gets planned with planner.avoidLeasedDescriptors set,
 	// like the outter one.
 	if params.p.EvalContext().AsOfSystemTime != nil {
 		ts := params.p.txn.ReadTimestamp()

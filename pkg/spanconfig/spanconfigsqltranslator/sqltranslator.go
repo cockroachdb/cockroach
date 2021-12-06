@@ -98,6 +98,16 @@ func (s *SQLTranslator) Translate(
 	return entries, translateTxn.CommitTimestamp(), nil
 }
 
+// descLookupFlags is the set of look up flags used when fetching descriptors.
+var descLookupFlags = tree.CommonLookupFlags{
+	// We can (do) generate span configurations for dropped and offline tables.
+	IncludeDropped: true,
+	IncludeOffline: true,
+
+	// We want consistent reads.
+	AvoidLeased: true,
+}
+
 // generateSpanConfigurations generates the span configurations for the given
 // ID. The ID must belong to an object that has a span configuration associated
 // with it, i.e, it should either belong to a table or a named zone.
@@ -109,11 +119,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	}
 
 	// We're dealing with a SQL object.
-	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
-		// We can (do) generate span configurations for dropped/offline tables.
-		IncludeDropped: true,
-		IncludeOffline: true,
-	})
+	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, descLookupFlags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// The descriptor has been deleted. Nothing to do here.
@@ -288,13 +294,7 @@ func (s *SQLTranslator) findDescendantLeafIDs(
 func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) (descpb.IDs, error) {
-	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
-		// It is reasonable for us to need to traverse zone configuration
-		// hierarchies for dropped/offline descriptors. For example, when reacting
-		// to a SQLWatcher event when a table is moved from PUBLIC to OFFLINE.
-		IncludeDropped: true,
-		IncludeOffline: true,
-	})
+	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, descLookupFlags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// The descriptor has been deleted. Nothing to do here.
