@@ -94,6 +94,10 @@ func (m *mockFlow) IsVectorized() bool {
 	panic("not implemented")
 }
 
+func (m *mockFlow) Stmt() string {
+	return ""
+}
+
 func (m *mockFlow) GetFlowCtx() *execinfra.FlowCtx {
 	panic("not implemented")
 }

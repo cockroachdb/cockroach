@@ -113,6 +113,11 @@ type Flow interface {
 	// IsVectorized returns whether this flow will run with vectorized execution.
 	IsVectorized() bool
 
+	// Stmt is the statement the physical plan for which this flow is part of.
+	// It is populated on a best effort basis (only available for user-issued
+	// queries that are also not like BulkIO/CDC related).
+	Stmt() string
+
 	// GetFlowCtx returns the flow context of this flow.
 	GetFlowCtx() *execinfra.FlowCtx
 
@@ -176,6 +181,8 @@ type FlowBase struct {
 	waitGroup sync.WaitGroup
 
 	onFlowCleanup func()
+
+	stmt string
 
 	doneFn func()
 
@@ -244,6 +251,7 @@ func NewFlowBase(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	onFlowCleanup func(),
+	stmt string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
 	// cluster, where the SQL node is single tenant. The tenant below is used
@@ -267,7 +275,13 @@ func NewFlowBase(
 		admissionInfo:         admissionInfo,
 		onFlowCleanup:         onFlowCleanup,
 		status:                flowNotStarted,
+		stmt:                  stmt,
 	}
+}
+
+// Stmt is part of the Flow interface.
+func (f *FlowBase) Stmt() string {
+	return f.stmt
 }
 
 // GetFlowCtx is part of the Flow interface.

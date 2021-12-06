@@ -268,6 +268,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	collectStats bool,
+	stmt string,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
@@ -285,6 +286,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		EvalContext:       evalCtxProto,
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      collectStats,
+		Stmt:              stmt,
 	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
@@ -498,8 +500,16 @@ func (dsp *DistSQLPlanner) Run(
 		}()
 	}
 
+	// Currently, we get the statement only if there is a planner available in
+	// the planCtx which is the case only on the "main" query path (for
+	// user-issued queries).
+	// TODO(yuzefovich): propagate the stmt in all cases.
+	var stmt string
+	if planCtx.planner != nil {
+		stmt = planCtx.planner.stmt.StmtNoConstants
+	}
 	ctx, flow, opChains, err := dsp.setupFlows(
-		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats,
+		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats, stmt,
 	)
 	if err != nil {
 		recv.SetError(err)

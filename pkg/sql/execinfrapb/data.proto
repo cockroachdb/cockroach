@@ -329,3 +329,19 @@ message DistSQLVersionGossipInfo {
 message DistSQLDrainingInfo {
   optional bool draining = 1 [(gogoproto.nullable) = false];
 }
+
+// DistSQLRemoteFlowInfo contains some information about a single DistSQL remote
+// flow.
+message DistSQLRemoteFlowInfo {
+  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowID",
+                              (gogoproto.customtype) = "FlowID"];
+
+  // Timestamp must be in the UTC timezone.
+  optional google.protobuf.Timestamp timestamp = 2 [
+    (gogoproto.nullable) = false, (gogoproto.stdtime) = true
+  ];
+
+  // Stmt is the statement the physical plan for which this flow is part of.
+  optional string stmt = 3 [(gogoproto.nullable) = false];
+}

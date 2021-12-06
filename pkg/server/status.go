@@ -354,33 +354,29 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 
 	nodeIDOrZero, _ := b.sqlServer.sqlIDContainer.OptionalNodeID()
 
-	running, runningSince, queued, queuedSince := b.flowScheduler.Serialize()
-	if len(running) != len(runningSince) {
-		return nil, errors.Errorf("mismatched lengths of running and runningSince")
-	}
-	if len(queued) != len(queuedSince) {
-		return nil, errors.Errorf("mismatched lengths of queued and queuedSince")
-	}
+	running, queued := b.flowScheduler.Serialize()
 	response := &serverpb.ListDistSQLFlowsResponse{
 		Flows: make([]serverpb.DistSQLRemoteFlows, 0, len(running)+len(queued)),
 	}
-	for i, f := range running {
+	for _, f := range running {
 		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
-			FlowID: f,
+			FlowID: f.FlowID,
 			Infos: []serverpb.DistSQLRemoteFlows_Info{{
 				NodeID:    nodeIDOrZero,
-				Timestamp: runningSince[i],
+				Timestamp: f.Timestamp,
 				Status:    serverpb.DistSQLRemoteFlows_RUNNING,
+				Stmt:      f.Stmt,
 			}},
 		})
 	}
-	for i, f := range queued {
+	for _, f := range queued {
 		response.Flows = append(response.Flows, serverpb.DistSQLRemoteFlows{
-			FlowID: f,
+			FlowID: f.FlowID,
 			Infos: []serverpb.DistSQLRemoteFlows_Info{{
 				NodeID:    nodeIDOrZero,
-				Timestamp: queuedSince[i],
+				Timestamp: f.Timestamp,
 				Status:    serverpb.DistSQLRemoteFlows_QUEUED,
+				Stmt:      f.Stmt,
 			}},
 		})
 	}

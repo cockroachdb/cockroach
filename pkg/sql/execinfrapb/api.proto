@@ -51,6 +51,10 @@ message SetupFlowRequest {
   // observed, since the resulting stats are added as structured data to a
   // trace.
   optional bool CollectStats = 9 [(gogoproto.nullable) = false];
+
+  // Stmt is the statement the physical plan for which this flow is part of. It
+  // is populated on a best effort basis.
+  optional string Stmt = 10 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
