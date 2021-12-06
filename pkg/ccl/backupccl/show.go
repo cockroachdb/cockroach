@@ -214,29 +214,41 @@ func showBackupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		str, err := toFn()
+		dest, err := toFn()
 		if err != nil {
 			return err
 		}
 
+		var subdir string
+
 		if inColFn != nil {
-			collection, err := inColFn()
+			subdir = dest
+			dest, err = inColFn()
 			if err != nil {
 				return err
 			}
-			parsed, err := url.Parse(collection)
-			if err != nil {
-				return err
-			}
-			parsed.Path = path.Join(parsed.Path, str)
-			str = parsed.String()
 		}
 
-		if err := checkShowBackupURIPrivileges(ctx, p, str); err != nil {
+		if err := checkShowBackupURIPrivileges(ctx, p, dest); err != nil {
 			return err
 		}
 
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str, p.User())
+		if subdir != "" {
+			parsed, err := url.Parse(dest)
+			if err != nil {
+				return err
+			}
+			if strings.EqualFold(subdir, "LATEST") {
+				subdir, err = readLatestFile(ctx, dest, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+				if err != nil {
+					return errors.Wrap(err, "read LATEST path")
+				}
+			}
+			parsed.Path = path.Join(parsed.Path, subdir)
+			dest = parsed.String()
+		}
+
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, dest, p.User())
 		if err != nil {
 			return errors.Wrapf(err, "make storage")
 		}
