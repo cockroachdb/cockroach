@@ -681,21 +681,10 @@ func splitBatchAndCheckForRefreshSpans(
 	// the event that the one of the partial batches was to forward its read
 	// timestamp during a server-side refresh. If any such request exists then
 	// we unset the CanForwardReadTimestamp flag.
-	if len(parts) > 1 && ba.CanForwardReadTimestamp {
-		hasRefreshSpans := func() bool {
-			for _, part := range parts {
-				for _, req := range part {
-					if roachpb.NeedsRefresh(req.GetInner()) {
-						return true
-					}
-				}
-			}
-			return false
-		}()
-		if hasRefreshSpans {
-			ba.CanForwardReadTimestamp = false
-		}
+	if len(parts) > 1 {
+		unsetCanForwardReadTimestampFlag(ba)
 	}
+
 	return parts
 }
 
@@ -707,7 +696,7 @@ func splitBatchAndCheckForRefreshSpans(
 // different range would also need to refresh. Such behavior could cause
 // a transaction to observe an inconsistent snapshot and violate
 // serializability.
-func unsetCanForwardReadTimestampFlag(ctx context.Context, ba *roachpb.BatchRequest) {
+func unsetCanForwardReadTimestampFlag(ba *roachpb.BatchRequest) {
 	if !ba.CanForwardReadTimestamp {
 		// Already unset.
 		return
@@ -1203,7 +1192,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}
 	// Make sure the CanForwardReadTimestamp flag is set to false, if necessary.
-	unsetCanForwardReadTimestampFlag(ctx, &ba)
+	unsetCanForwardReadTimestampFlag(&ba)
 
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
