@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1285,8 +1286,53 @@ func TestManagerLeaseMemoryMonitorDropDeletes(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	//manager := s.LeaseManager().(*Manager)
+	manager := s.LeaseManager().(*Manager)
 	// Prevent non-explicit Acquire to leases for testing purposes.
 	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
+
+	// Create table with some values.
+	tdb.Exec(t, "CREATE TABLE foo (col1 INT, col2 INT)")
+	var tableID descpb.ID
+	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
+
+	// Acquire leases
+	var tableDesc catalog.Descriptor
+	_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
+		tableDesc = desc.ImmutableCopy()
+		return nil
+	}, nil)
+	require.NoError(t, err)
+	{
+		last, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+		require.NoError(t, err)
+		last.Release(ctx)
+	}
+
+	// Confirm leased descriptor memory count is tracked in monitor.
+	prevUsed := manager.boundAccount.Used()
+	log.Infof(ctx, "before acquire: %v", prevUsed)
+
+	acquired, err := manager.Acquire(ctx, tableDesc.GetModificationTime(), tableID)
+	require.NoError(t, err)
+
+	log.Infof(ctx, "Leased Descriptor %v Size: %v", acquired.GetID(), acquired.Underlying().ByteSize())
+	expMemSize := prevUsed + acquired.Underlying().ByteSize()
+	currMemSize := manager.boundAccount.Used()
+	log.Infof(ctx, "after acquire: %v", currMemSize)
+	require.Equal(t, expMemSize, currMemSize,
+		"Lease acquisition memory consumption does not match")
+	prevUsed = currMemSize
+
+	// Drop table.
+	log.Infof(ctx, "Before drop: %v", currMemSize)
+	tdb.Exec(t, "DROP TABLE foo")
+	acquired.Release(ctx)
+
+	// Confirm the dropped table is reflected in the memory monitor.
+	expMemSize = prevUsed - acquired.Underlying().ByteSize()
+	currMemSize = manager.boundAccount.Used()
+	log.Infof(ctx, "After drop: %v", currMemSize)
+	require.Equal(t, expMemSize, currMemSize,
+		"Lease acquisition memory consumption does not match")
 
 }
