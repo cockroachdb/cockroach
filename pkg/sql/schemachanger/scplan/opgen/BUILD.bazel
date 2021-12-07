@@ -6,6 +6,7 @@ go_library(
         "op_funcs.go",
         "op_gen.go",
         "opgen_check_constraint.go",
+        "opgen_check_constraint_type_reference.go",
         "opgen_column.go",
         "opgen_column_name.go",
         "opgen_column_type_reference.go",
