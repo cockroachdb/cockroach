@@ -234,7 +234,10 @@ type ProviderOpts interface {
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
 	CleanSSH() error
-	ConfigSSH() error
+
+	// ConfigSSH takes a list of zones and configures SSH for machines in those
+	// zones for the given provider.
+	ConfigSSH(zones []string) error
 	Create(names []string, opts CreateOpts, providerOpts ProviderOpts) error
 	Reset(vms List) error
 	Delete(vms List) error

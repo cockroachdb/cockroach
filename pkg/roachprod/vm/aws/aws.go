@@ -339,23 +339,24 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH ensures that for each region we're operating in, we have
-// a <user>-<hash> keypair where <hash> is a hash of the public key.
-// We use a hash since a user probably has multiple machines they're
-// running roachprod on and these machines (ought to) have separate
-// ssh keypairs.  If the remote keypair doesn't exist, we'll upload
-// the user's ~/.ssh/id_rsa.pub file or ask them to generate one.
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface.
+func (p *Provider) ConfigSSH(zones []string) error {
 	keyName, err := p.sshKeyName()
 	if err != nil {
 		return err
 	}
 
-	regions, err := p.allRegions(p.Config.availabilityZoneNames())
+	regions, err := p.allRegions(zones)
 	if err != nil {
 		return err
 	}
 
+	// Ensure that for each region we're operating in, we have
+	// a <user>-<hash> keypair where <hash> is a hash of the public key.
+	// We use a hash since a user probably has multiple machines they're
+	// running roachprod on and these machines (ought to) have separate
+	// ssh keypairs.  If the remote keypair doesn't exist, we'll upload
+	// the user's ~/.ssh/id_rsa.pub file or ask them to generate one.
 	var g errgroup.Group
 	for _, r := range regions {
 		// capture loop variable
@@ -386,7 +387,7 @@ func (p *Provider) Create(
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// We need to make sure that the SSH keys have been distributed to all regions
-	if err := p.ConfigSSH(); err != nil {
+	if err := p.ConfigSSH(providerOpts.CreateZones); err != nil {
 		return err
 	}
 
@@ -616,6 +617,8 @@ func (p *Provider) List() (vm.List, error) {
 	return p.listRegions(regions, *defaultOpts)
 }
 
+// listRegions lists VMs in the regions passed.
+// It ignores region-specific errors.
 func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
@@ -627,7 +630,8 @@ func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, er
 		g.Go(func() error {
 			vms, err := p.listRegion(region, opts)
 			if err != nil {
-				return err
+				fmt.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
+				return nil
 			}
 			mux.Lock()
 			ret = append(ret, vms...)

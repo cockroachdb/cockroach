@@ -360,8 +360,9 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH TODO(peter): document
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface
+func (p *Provider) ConfigSSH(zones []string) error {
+	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
 		cmd := exec.Command("gcloud", args...)
