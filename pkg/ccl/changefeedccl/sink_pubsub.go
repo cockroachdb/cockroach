@@ -46,6 +46,7 @@ const authDefault = "default"
 const gcpScheme = "gcppubsub"
 const memScheme = "mem"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
+const numOfWorkers = 1024
 
 // isPubsubSInk returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
@@ -115,12 +116,13 @@ type pubsubSink struct {
 func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, error) {
 	var credsJSON []byte
 	var creds *google.Credentials
+	var err error
 	authOption := u.consumeParam(authParam)
 
 	// implemented according to https://github.com/cockroachdb/cockroach/pull/64737
 	switch authOption {
 	case authImplicit:
-		creds, err := google.FindDefaultCredentials(ctx, gcpScope)
+		creds, err = google.FindDefaultCredentials(ctx, gcpScope)
 		if err != nil {
 			return nil, err
 		}
@@ -174,9 +176,9 @@ func MakePubsubSink(
 	//}
 
 	ctx, cancel := context.WithCancel(ctx)
-	// currently just hardcoding numWorkers to 128, it will be a config option later down the road
+	// currently just hardcoding numWorkers to 1024, it will be a config option later down the road
 	p := &pubsubSink{
-		workerCtx: ctx, url: sinkURL, numWorkers: 1024,
+		workerCtx: ctx, url: sinkURL, numWorkers: numOfWorkers,
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
 	//creates a topic for each target
@@ -216,11 +218,6 @@ func MakePubsubSink(
 // getWorkerCtx returns workerCtx
 func (p *pubsubSink) getWorkerCtx() context.Context {
 	return p.workerCtx
-}
-
-// getURL returns url
-func (p *pubsubSink) getURL() sinkURL {
-	return p.url
 }
 
 func timeIt(ctx context.Context, fmtOrStr string, args ...interface{}) func() {

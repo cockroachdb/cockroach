@@ -1481,6 +1481,9 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 
 	ctx := context.Background()
 	sinkDest, err := cdctest.MakeMockPubsubSink(ctx, memPubsubURL)
+	if err != nil {
+		return nil, err
+	}
 
 	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
