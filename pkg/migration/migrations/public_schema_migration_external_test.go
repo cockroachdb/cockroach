@@ -12,12 +12,17 @@ package migrations_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -26,8 +31,18 @@ import (
 func TestPublicSchemaMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors-1),
+		false,
+	)
+	// 2048 KiB batch size - 4x the public schema migration's minBatchSizeInBytes.
+	const maxCommandSize = 1 << 22
+	kvserver.MaxCommandSize.Override(ctx, &settings.SV, maxCommandSize)
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
@@ -65,6 +80,17 @@ func TestPublicSchemaMigration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.Exec(`INSERT INTO defaultdb.s.table_in_uds VALUES (1), (2), (3)`)
 	require.NoError(t, err)
+
+	// Create large descriptors to ensure we're batching descriptors.
+	// The name of the table is approx 1000 bytes.
+	// Thus, we create approximately 5000 KiB of descriptors in this database.
+	// This is also larger than the 2048 KiB max command size we set.
+	// The batch size in the migration is 512 KiB so this ensures we have at
+	// least two batches.
+	for i := 0; i < 500; i++ {
+		_, err = db.Exec(fmt.Sprintf(`CREATE TABLE defaultdb.t%s%d()`, strings.Repeat("x", 10000), i))
+		require.NoError(t, err)
+	}
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors).String())
@@ -159,5 +185,17 @@ func TestPublicSchemaMigration(t *testing.T) {
 		err = rows.Scan(&x)
 		require.NoError(t, err)
 		require.Equal(t, x, i)
+	}
+
+	// Verify that the tables with large descriptor sizes have parentSchemaIDs
+	// that are not 29.
+	const oldPublicSchemaID = 29
+	var parentSchemaID int
+	for i := 0; i < 500; i++ {
+		row = db.QueryRow(fmt.Sprintf(`SELECT "parentSchemaID" FROM system.namespace WHERE name = 't%s%d'`, strings.Repeat("x", 10000), i))
+		err = row.Scan(&parentSchemaID)
+		require.NoError(t, err)
+		require.NotEqual(t, parentSchemaID, descpb.InvalidID)
+		require.NotEqual(t, oldPublicSchemaID, parentSchemaID)
 	}
 }

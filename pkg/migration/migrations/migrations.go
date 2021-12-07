@@ -75,6 +75,11 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		alterTableProtectedTimestampRecords,
 	),
+	migration.NewTenantMigration("update synthetic public schemas to be backed by a descriptor",
+		toCV(clusterversion.PublicSchemasWithDescriptors),
+		NoPrecondition,
+		publicSchemaMigration,
+	),
 }
 
 func init() {
