@@ -27,6 +27,7 @@ import "google/protobuf/timestamp.proto";
 enum EncryptionMode {
   Passphrase = 0;
   KMS = 1;
+  None = 2; 
 }
 
 // BackupEncryptionOptions stores information resolved during the BACKUP/RESTORE
@@ -49,6 +50,10 @@ message BackupEncryptionOptions {
   // KMSInfo specifies the KMS and encrypted DataKey pair to use for
   // encryption or decryption when mode == KMS.
   KMSInfo kms_info  = 3 [(gogoproto.customname) = "KMSInfo"];
+  
+  string raw_passphrae = 4;
+  repeated string raw_kms_uris = 5;
+  
 }
 
 // EncryptionInfo is stored IN PLAINTEXT along side collections of encrypted

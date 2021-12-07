@@ -67,14 +67,6 @@ const (
 	defaultLocalityValue     = "default"
 )
 
-type encryptionMode int
-
-const (
-	noEncryption encryptionMode = iota
-	passphrase
-	kms
-)
-
 type tableAndIndex struct {
 	tableID descpb.ID
 	indexID descpb.IndexID
@@ -484,16 +476,6 @@ type annotatedBackupStatement struct {
 	*jobs.CreatedByInfo
 }
 
-// backupEncryptionParams is a structured representation of the encryption
-// options that the user provided in the backup statement.
-type backupEncryptionParams struct {
-	encryptMode          encryptionMode
-	kmsURIs              []string
-	encryptionPassphrase []byte
-
-	kmsEnv *backupKMSEnv
-}
-
 func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 	switch backup := stmt.(type) {
 	case *annotatedBackupStatement:
@@ -626,22 +608,22 @@ func backupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	encryptionParams := backupEncryptionParams{}
+	encryptionParams := jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_None}
 
 	var pwFn func() (string, error)
-	encryptionParams.encryptMode = noEncryption
+	encryptionParams.Mode = jobspb.EncryptionMode_KMS
 	if backupStmt.Options.EncryptionPassphrase != nil {
 		fn, err := p.TypeAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 		pwFn = fn
-		encryptionParams.encryptMode = passphrase
+		encryptionParams.Mode = jobspb.EncryptionMode_Passphrase
 	}
 
-	var kmsFn func() ([]string, *backupKMSEnv, error)
+	var kmsFn func() ([]string, error)
 	if backupStmt.Options.EncryptionKMSURI != nil {
-		if encryptionParams.encryptMode != noEncryption {
+		if encryptionParams.Mode != jobspb.EncryptionMode_None {
 			return nil, nil, nil, false,
 				errors.New("cannot have both encryption_passphrase and kms option set")
 		}
@@ -650,17 +632,14 @@ func backupPlanHook(
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
-		kmsFn = func() ([]string, *backupKMSEnv, error) {
+		kmsFn = func() ([]string, error) {
 			res, err := fn()
 			if err == nil {
-				return res, &backupKMSEnv{
-					settings: p.ExecCfg().Settings,
-					conf:     &p.ExecCfg().ExternalIODirConfig,
-				}, nil
+				return res, nil
 			}
-			return nil, nil, err
+			return nil, err
 		}
-		encryptionParams.encryptMode = kms
+		encryptionParams.Mode = jobspb.EncryptionMode_KMS
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -709,8 +688,8 @@ func backupPlanHook(
 			endTime = asOf.Timestamp
 		}
 
-		switch encryptionParams.encryptMode {
-		case passphrase:
+		switch encryptionParams.Mode {
+		case jobspb.EncryptionMode_Passphrase:
 			pw, err := pwFn()
 			if err != nil {
 				return err
@@ -718,9 +697,9 @@ func backupPlanHook(
 			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
 				return err
 			}
-			encryptionParams.encryptionPassphrase = []byte(pw)
-		case kms:
-			encryptionParams.kmsURIs, encryptionParams.kmsEnv, err = kmsFn()
+			encryptionParams.RawPassphrae = pw
+		case jobspb.EncryptionMode_KMS:
+			encryptionParams.RawKmsUris, err = kmsFn()
 			if err != nil {
 				return err
 			}
@@ -770,6 +749,7 @@ func backupPlanHook(
 			IncrementalFrom:     incrementalFrom,
 			FullCluster:         backupStmt.Coverage() == tree.AllDescriptors,
 			ResolvedCompleteDbs: completeDBs,
+			EncryptionOptions:   &encryptionParams,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
@@ -805,13 +785,13 @@ func backupPlanHook(
 
 		// TODO(dt): move this to job execution phase.
 		backupDetails, backupManifest, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(), encryptionParams,
+			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(),
 		)
 		if err != nil {
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs, backupDetails.Destination.Subdir, initialDetails.Destination.IncrementalStorage)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.RawKmsUris, backupDetails.Destination.Subdir, initialDetails.Destination.IncrementalStorage)
 		if err != nil {
 			return err
 		}
@@ -1182,12 +1162,12 @@ func getReintroducedSpans(
 }
 
 func makeNewEncryptionOptions(
-	ctx context.Context, encryptionParams backupEncryptionParams,
+	ctx context.Context, encryptionParams jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
 	var encryptionOptions *jobspb.BackupEncryptionOptions
 	var encryptionInfo *jobspb.EncryptionInfo
-	switch encryptionParams.encryptMode {
-	case passphrase:
+	switch encryptionParams.Mode {
+	case jobspb.EncryptionMode_Passphrase:
 		salt, err := storageccl.GenerateSalt()
 		if err != nil {
 			return nil, nil, err
@@ -1196,8 +1176,8 @@ func makeNewEncryptionOptions(
 		encryptionInfo = &jobspb.EncryptionInfo{Salt: salt}
 		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  storageccl.GenerateKey(encryptionParams.encryptionPassphrase, salt)}
-	case kms:
+			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), salt)}
+	case jobspb.EncryptionMode_KMS:
 		// Generate a 32 byte/256-bit crypto-random number which will serve as
 		// the data key for encrypting the BACKUP data and manifest files.
 		plaintextDataKey := make([]byte, 32)
@@ -1207,7 +1187,7 @@ func makeNewEncryptionOptions(
 		}
 
 		encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
-			getEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.kmsURIs, plaintextDataKey, encryptionParams.kmsEnv)
+			getEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.RawKmsUris, plaintextDataKey, kmsEnv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1405,7 +1385,6 @@ func getBackupDetailAndManifest(
 	txn *kv.Txn,
 	initialDetails jobspb.BackupDetails,
 	user security.SQLUsername,
-	encryptionParams backupEncryptionParams,
 ) (jobspb.BackupDetails, BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
@@ -1453,8 +1432,10 @@ func getBackupDetailAndManifest(
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
 
+	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
+
 	prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, user, makeCloudStorage, prevs,
-		encryptionParams)
+		*initialDetails.EncryptionOptions, kmsEnv)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
@@ -1654,7 +1635,7 @@ func getBackupDetailAndManifest(
 	// need to generate encryption specific data.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
-		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, encryptionParams)
+		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *initialDetails.EncryptionOptions, kmsEnv)
 		if err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
