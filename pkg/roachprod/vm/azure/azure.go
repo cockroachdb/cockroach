@@ -110,7 +110,7 @@ func (p *Provider) CleanSSH() error {
 
 // ConfigSSH implements vm.Provider, is a no-op, and returns nil.
 // On Azure, the SSH public key is set as part of VM instance creation.
-func (p *Provider) ConfigSSH() error {
+func (p *Provider) ConfigSSH(zones []string) error {
 	return nil
 }
 

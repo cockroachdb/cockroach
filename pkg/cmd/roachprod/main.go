@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -143,7 +144,10 @@ if the user would like to update the keys on the remote hosts.
 
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.SetupSSH(args[0])
+		zonesMap := make(map[string][]string)
+		// Only adding aws zones because only aws.ConfigSSH uses it.
+		zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
+		return roachprod.SetupSSH(args[0], zonesMap)
 	}),
 }
 
@@ -313,7 +317,8 @@ var syncCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync()
+		// Running `roachprod sync` doesn't need to config ssh
+		_, err := roachprod.Sync(nil, false)
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),

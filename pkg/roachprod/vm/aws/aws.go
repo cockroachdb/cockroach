@@ -345,13 +345,13 @@ func (p *Provider) CleanSSH() error {
 // running roachprod on and these machines (ought to) have separate
 // ssh keypairs.  If the remote keypair doesn't exist, we'll upload
 // the user's ~/.ssh/id_rsa.pub file or ask them to generate one.
-func (p *Provider) ConfigSSH() error {
+func (p *Provider) ConfigSSH(zones []string) error {
 	keyName, err := p.sshKeyName()
 	if err != nil {
 		return err
 	}
 
-	regions, err := p.allRegions(p.Config.availabilityZoneNames())
+	regions, err := p.allRegions(zones)
 	if err != nil {
 		return err
 	}
@@ -386,7 +386,7 @@ func (p *Provider) Create(
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// We need to make sure that the SSH keys have been distributed to all regions
-	if err := p.ConfigSSH(); err != nil {
+	if err := p.ConfigSSH(providerOpts.CreateZones); err != nil {
 		return err
 	}
 
@@ -627,7 +627,8 @@ func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, er
 		g.Go(func() error {
 			vms, err := p.listRegion(region, opts)
 			if err != nil {
-				return err
+				fmt.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
+				return nil
 			}
 			mux.Lock()
 			ret = append(ret, vms...)

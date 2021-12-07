@@ -361,7 +361,7 @@ func (p *Provider) CleanSSH() error {
 }
 
 // ConfigSSH TODO(peter): document
-func (p *Provider) ConfigSSH() error {
+func (p *Provider) ConfigSSH(zones []string) error {
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
 		cmd := exec.Command("gcloud", args...)

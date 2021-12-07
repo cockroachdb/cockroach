@@ -234,7 +234,7 @@ type ProviderOpts interface {
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
 	CleanSSH() error
-	ConfigSSH() error
+	ConfigSSH(zones []string) error
 	Create(names []string, opts CreateOpts, providerOpts ProviderOpts) error
 	Reset(vms List) error
 	Delete(vms List) error
