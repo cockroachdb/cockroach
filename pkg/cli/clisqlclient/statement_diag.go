@@ -12,6 +12,7 @@ package clisqlclient
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -97,20 +98,49 @@ func StmtDiagListOutstandingRequests(conn Conn) ([]StmtDiagActivationRequest, er
 	return result, nil
 }
 
+// TODO(yuzefovich): remove this in 22.2.
+func isAtLeast22dot1ClusterVersion(conn Conn) (bool, error) {
+	// Check whether the migration to add the conditional diagnostics columns to
+	// the statement_diagnostics_requests system table has already been run.
+	row, err := conn.QueryRow(`
+SELECT
+  count(*)
+FROM
+  [SHOW COLUMNS FROM system.statement_diagnostics_requests]
+WHERE
+  column_name = 'min_execution_latency';`, nil /* args */)
+	if err != nil {
+		return false, err
+	}
+	c, ok := row[0].(int64)
+	if !ok {
+		return false, nil
+	}
+	return c == 1, nil
+}
+
 func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationRequest, error) {
-	// Converting an INTERVAL to a number of milliseconds within that interval
-	// is a pain - we extract the number of seconds and multiply it by 1000,
-	// then we extract the number of milliseconds and add that up to the
-	// previous result; however, we have now double counted the seconds field,
-	// so we have to remove that times 1000.
-	getMilliseconds := `EXTRACT(epoch FROM min_execution_latency)::INT8 * 1000 +
+	var extraColumns string
+	atLeast22dot1, err := isAtLeast22dot1ClusterVersion(conn)
+	if err != nil {
+		return nil, err
+	}
+	if atLeast22dot1 {
+		// Converting an INTERVAL to a number of milliseconds within that
+		// interval is a pain - we extract the number of seconds and multiply it
+		// by 1000, then we extract the number of milliseconds and add that up
+		// to the previous result; however, we have now double counted the
+		// seconds field, so we have to remove that times 1000.
+		getMilliseconds := `EXTRACT(epoch FROM min_execution_latency)::INT8 * 1000 +
                         EXTRACT(millisecond FROM min_execution_latency)::INT8 -
                         EXTRACT(second FROM min_execution_latency)::INT8 * 1000`
+		extraColumns = ", " + getMilliseconds + ", expires_at"
+	}
 	rows, err := conn.Query(
-		`SELECT id, statement_fingerprint, requested_at, `+getMilliseconds+`, expires_at
+		fmt.Sprintf(`SELECT id, statement_fingerprint, requested_at%s
 		 FROM system.statement_diagnostics_requests
 		 WHERE NOT completed
-		 ORDER BY requested_at DESC`,
+		 ORDER BY requested_at DESC`, extraColumns),
 		nil, /* args */
 	)
 	if err != nil {
@@ -125,12 +155,14 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 			return nil, err
 		}
 		var minExecutionLatency time.Duration
-		if ms, ok := vals[3].(int64); ok {
-			minExecutionLatency = time.Millisecond * time.Duration(ms)
-		}
 		var expiresAt time.Time
-		if e, ok := vals[4].(time.Time); ok {
-			expiresAt = e
+		if atLeast22dot1 {
+			if ms, ok := vals[3].(int64); ok {
+				minExecutionLatency = time.Millisecond * time.Duration(ms)
+			}
+			if e, ok := vals[4].(time.Time); ok {
+				expiresAt = e
+			}
 		}
 		info := StmtDiagActivationRequest{
 			ID:                  vals[0].(int64),
