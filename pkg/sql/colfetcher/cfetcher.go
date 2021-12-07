@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -262,6 +263,15 @@ type cFetcher struct {
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
 
+	// usesStreamer indicates whether the cFetcher performs reads using the
+	// kvcoord.Streamer API.
+	usesStreamer bool
+	streamerInfo struct {
+		*kvstreamer.Streamer
+		budgetAcc   *mon.BoundAccount
+		budgetLimit int64
+	}
+
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
 		// state is the queue of next states of the state machine. The 0th entry
@@ -369,14 +379,17 @@ func (rf *cFetcher) resetBatch() {
 }
 
 // Init sets up a Fetcher based on the table args. Only columns present in
-// tableArgs.cols will be fetched.
+// tableArgs.cols will be fetched. It returns whether the Streamer API will be
+// used.
 func (rf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
+	streamerBudgetAcc *mon.BoundAccount,
 	tableArgs *cFetcherTableArgs,
 	hasSystemColumns bool,
-) error {
+	tryStreamer bool,
+) (usesStreamer bool, _ error) {
 	rf.kvFetcherMemAcc = kvFetcherMemAcc
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
@@ -558,7 +571,7 @@ func (rf *cFetcher) Init(
 	var err error
 	rf.maxKeysPerRow, err = table.desc.KeysPerRow(table.index.GetID())
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_ = table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
@@ -572,7 +585,33 @@ func (rf *cFetcher) Init(
 	rf.table = table
 	rf.accountingHelper.Init(allocator, rf.table.typs)
 
-	return nil
+	if rf.maxKeysPerRow > 1 {
+		// Currently, the streamer only supports cases with a single column
+		// family.
+		tryStreamer = false
+	}
+
+	rf.usesStreamer = tryStreamer
+	if rf.usesStreamer {
+		// Give three quarters of the memory limit to the streamer budget and
+		// keep the remaining quarter for the output batch.
+		//
+		// We use +3 here in order to round up.
+		rf.memoryLimit = (rf.memoryLimit + 3) / 4
+		rf.streamerInfo.budgetLimit = 3 * rf.memoryLimit
+		rf.streamerInfo.budgetAcc = streamerBudgetAcc
+	}
+
+	return rf.usesStreamer, nil
+}
+
+//gcassert:inline
+func (rf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
+	rf.fetcher = f
+	rf.machine.lastRowPrefix = nil
+	rf.machine.limitHint = int(limitHint)
+	rf.machine.state[0] = stateResetBatch
+	rf.machine.state[1] = stateInitFetch
 }
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
@@ -598,6 +637,9 @@ func (rf *cFetcher) StartScan(
 	}
 	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
+	}
+	if rf.usesStreamer {
+		return errors.AssertionFailedf("cFetcher.StartScan is called when the Streamer API should be used")
 	}
 
 	// If we have a limit hint, we limit the first batch size. Subsequent
@@ -642,11 +684,43 @@ func (rf *cFetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	rf.fetcher = f
-	rf.machine.lastRowPrefix = nil
-	rf.machine.limitHint = int(limitHint)
-	rf.machine.state[0] = stateResetBatch
-	rf.machine.state[1] = stateInitFetch
+	rf.setFetcher(f, limitHint)
+	return nil
+}
+
+// StartScanStreaming initializes and starts the key-value scan using the
+// Streamer API. Can be used multiple times.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly. The caller can only reuse the
+// spans slice after the fetcher has been closed (which happens when the fetcher
+// emits the first zero batch), and if the caller does, it becomes responsible
+// for the memory accounting.
+func (rf *cFetcher) StartScanStreaming(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, spans roachpb.Spans, limitHint rowinfra.RowLimit,
+) error {
+	if !rf.usesStreamer {
+		return errors.AssertionFailedf("cFetcher.StartScanStreaming called when not using the Streamer API")
+	}
+	rf.streamerInfo.Streamer = kvstreamer.NewStreamer(
+		flowCtx.Cfg.DistSender,
+		flowCtx.Stopper(),
+		flowCtx.Txn,
+		flowCtx.EvalCtx.Settings,
+		row.GetWaitPolicy(rf.lockWaitPolicy),
+		rf.streamerInfo.budgetLimit,
+		rf.streamerInfo.budgetAcc,
+	)
+	rf.streamerInfo.Streamer.Init(
+		kvstreamer.OutOfOrder,
+		kvstreamer.Hints{UniqueRequests: true},
+	)
+	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, rf.streamerInfo.Streamer, spans, rf.lockStrength)
+	if err != nil {
+		return err
+	}
+	f := row.NewKVStreamingFetcher(kvBatchFetcher)
+	rf.setFetcher(f, limitHint)
 	return nil
 }
 
@@ -1437,8 +1511,19 @@ func (rf *cFetcher) Release() {
 }
 
 func (rf *cFetcher) Close(ctx context.Context) {
-	if rf != nil && rf.fetcher != nil {
-		rf.fetcher.Close(ctx)
-		rf.fetcher = nil
+	if rf != nil {
+		if rf.fetcher != nil {
+			rf.fetcher.Close(ctx)
+			rf.fetcher = nil
+		}
+		if rf.usesStreamer {
+			// We have to cleanup the streamer after closing the fetcher because
+			// the latter might release some memory tracked by the budget of the
+			// streamer.
+			if rf.streamerInfo.Streamer != nil {
+				rf.streamerInfo.Streamer.Cancel()
+				rf.streamerInfo.budgetAcc.Clear(ctx)
+			}
+		}
 	}
 }
