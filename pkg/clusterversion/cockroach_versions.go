@@ -291,6 +291,9 @@ const (
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
 	// WriteAtRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
+	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
+	// have an entry in system.namespace upon being restored.
+	InsertPublicSchemaNamespaceEntryOnRestore
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
 	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
@@ -522,7 +525,7 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
 	{
-		Key:     PublicSchemasWithDescriptors,
+		Key:     InsertPublicSchemaNamespaceEntryOnRestore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 18},
 	},
 	{
@@ -540,6 +543,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ProbeRequest,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
+	},
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 28},
 	},
 
 	// *************************************************
