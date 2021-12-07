@@ -1494,33 +1494,20 @@ func PrepareTransactionForRetry(
 	return txn
 }
 
-// PrepareTransactionForRefresh returns whether the transaction can be refreshed
-// to the specified timestamp to avoid a client-side transaction restart. If
-// true, returns a cloned, updated Transaction object with the provisional
-// commit timestamp and read timestamp set appropriately.
-func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
-	if txn.CommitTimestampFixed {
-		return false, nil
-	}
-	newTxn := txn.Clone()
-	newTxn.Refresh(timestamp)
-	return true, newTxn
-}
-
-// CanTransactionRefresh returns whether the transaction specified in the
-// supplied error can be retried at a refreshed timestamp to avoid a client-side
-// transaction restart. If true, returns a cloned, updated Transaction object
-// with the provisional commit timestamp and read timestamp set appropriately.
-func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
+// TransactionRefreshTimestamp returns whether the supplied error is a retry
+// error that can be discarded if the transaction in the error is refreshed. If
+// true, the function returns the timestamp that the Transaction object should
+// be refreshed at in order to discard the error and avoid a restart.
+func TransactionRefreshTimestamp(pErr *Error) (bool, hlc.Timestamp) {
 	txn := pErr.GetTxn()
 	if txn == nil {
-		return false, nil
+		return false, hlc.Timestamp{}
 	}
 	timestamp := txn.WriteTimestamp
 	switch err := pErr.GetDetail().(type) {
 	case *TransactionRetryError:
 		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
-			return false, nil
+			return false, hlc.Timestamp{}
 		}
 	case *WriteTooOldError:
 		// TODO(andrei): Chances of success for on write-too-old conditions might be
@@ -1532,9 +1519,9 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 	case *ReadWithinUncertaintyIntervalError:
 		timestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(err))
 	default:
-		return false, nil
+		return false, hlc.Timestamp{}
 	}
-	return PrepareTransactionForRefresh(txn, timestamp)
+	return true, timestamp
 }
 
 func readWithinUncertaintyIntervalRetryTimestamp(
