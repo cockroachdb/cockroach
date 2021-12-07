@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstoragedeprecated"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -137,8 +137,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	beforeWrites := s0.Clock().Now()
 	gcSoon()
 
-	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor))
-	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
+	pts := ptstoragedeprecated.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor))
+	ptsWithDB := ptstoragedeprecated.WithDatabase(pts, s0.DB())
 	startKey := getTableStartKey("foo")
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4(),

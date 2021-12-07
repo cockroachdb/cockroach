@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package ptstorage implements protectedts.Storage.
-package ptstorage
+// Package ptstorageproxy implements protectedts.Storage.
+package ptstorageproxy
 
 import (
 	"context"
@@ -17,51 +17,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstoragedeprecated"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // storage interacts with the durable state of the protectedts subsystem.
 type storage struct {
-	settings *cluster.Settings
+	deprecatedStorage protectedts.Storage
+	storage           protectedts.Storage
+}
+
+// New creates a new Storage.
+func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.Storage {
+	return &storage{
+		deprecatedStorage: ptstoragedeprecated.New(settings, ex),
+		storage:           ptstorage.New(settings),
+	}
 }
 
 var _ protectedts.Storage = (*storage)(nil)
 
-// New creates a new Storage.
-func New(settings *cluster.Settings) protectedts.Storage {
-	return &storage{settings: settings}
-}
-
 func (s *storage) Protect(ctx context.Context, txn *kv.Txn, record *ptpb.Record) error {
-	panic("implement me")
+	return s.deprecatedStorage.Protect(ctx, txn, record)
 }
 
 func (s *storage) GetRecord(
 	ctx context.Context, txn *kv.Txn, uuid uuid.UUID,
 ) (*ptpb.Record, error) {
-	panic("implement me")
+	return s.deprecatedStorage.GetRecord(ctx, txn, uuid)
 }
 
 func (s *storage) MarkVerified(ctx context.Context, txn *kv.Txn, uuid uuid.UUID) error {
-	panic("implement me")
+	return s.deprecatedStorage.MarkVerified(ctx, txn, uuid)
 }
 
 func (s *storage) Release(ctx context.Context, txn *kv.Txn, uuid uuid.UUID) error {
-	panic("implement me")
+	return s.deprecatedStorage.Release(ctx, txn, uuid)
 }
 
 func (s *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, error) {
-	panic("implement me")
+	return s.deprecatedStorage.GetMetadata(ctx, txn)
 }
 
 func (s *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error) {
-	panic("implement me")
+	return s.deprecatedStorage.GetState(ctx, txn)
 }
 
 func (s *storage) UpdateTimestamp(
 	ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp,
 ) error {
-	panic("implement me")
+	return s.deprecatedStorage.UpdateTimestamp(ctx, txn, id, timestamp)
 }

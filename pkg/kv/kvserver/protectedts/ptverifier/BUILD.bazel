@@ -31,7 +31,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/kv/kvserver/protectedts/ptstorage",
+        "//pkg/kv/kvserver/protectedts/ptstoragedeprecated",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",

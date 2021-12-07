@@ -1,15 +1,18 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "ptstorage",
+    name = "ptstorageproxy",
     srcs = ["storage.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage",
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorageproxy",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptstorage",
+        "//pkg/kv/kvserver/protectedts/ptstoragedeprecated",
         "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
     ],

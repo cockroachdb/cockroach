@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstoragedeprecated"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -48,7 +48,7 @@ func TestCacheBasic(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
+	p := ptstoragedeprecated.WithDatabase(ptstoragedeprecated.New(s.ClusterSettings(),
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very short.
@@ -117,7 +117,7 @@ func TestRefresh(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
+	p := ptstoragedeprecated.WithDatabase(ptstoragedeprecated.New(s.ClusterSettings(),
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
@@ -225,7 +225,7 @@ func TestStart(t *testing.T) {
 	setup := func() (*testcluster.TestCluster, *ptcache.Cache) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		s := tc.Server(0)
-		p := ptstorage.New(s.ClusterSettings(),
+		p := ptstoragedeprecated.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor))
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -258,7 +258,7 @@ func TestQueryRecord(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
+	p := ptstoragedeprecated.WithDatabase(ptstoragedeprecated.New(s.ClusterSettings(),
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -315,7 +315,7 @@ func TestIterate(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
+	p := ptstoragedeprecated.WithDatabase(ptstoragedeprecated.New(s.ClusterSettings(),
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
@@ -380,7 +380,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
+	p := ptstoragedeprecated.WithDatabase(ptstoragedeprecated.New(s.ClusterSettings(),
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.

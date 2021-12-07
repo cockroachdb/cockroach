@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstoragedeprecated"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -63,8 +63,8 @@ func TestVerifier(t *testing.T) {
 		}),
 	)
 
-	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor))
-	withDB := ptstorage.WithDatabase(pts, s.DB())
+	pts := ptstoragedeprecated.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor))
+	withDB := ptstoragedeprecated.WithDatabase(pts, s.DB())
 	db := kv.NewDB(s.DB().AmbientContext, tsf, s.Clock(), s.Stopper())
 	ptv := ptverifier.New(db, pts)
 	makeTableSpan := func(tableID uint32) roachpb.Span {

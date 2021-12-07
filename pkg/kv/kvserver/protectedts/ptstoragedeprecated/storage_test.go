@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package ptstorage_test
+package ptstoragedeprecated_test
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstoragedeprecated"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -337,7 +337,7 @@ func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tCtx.state.Version++
 		tCtx.state.NumRecords--
 		tCtx.state.NumSpans -= uint64(len(rec.Spans))
-		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: rec.Spans})
+		encoded, err := protoutil.Marshal(&ptstoragedeprecated.Spans{Spans: rec.Spans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes -= uint64(len(encoded) + len(rec.Meta) + len(rec.MetaType))
 	}
@@ -393,7 +393,7 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tCtx.state.Version++
 		tCtx.state.NumRecords++
 		tCtx.state.NumSpans += uint64(len(rec.Spans))
-		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: p.spans})
+		encoded, err := protoutil.Marshal(&ptstoragedeprecated.Spans{Spans: p.spans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
 	}
@@ -433,7 +433,7 @@ func (test testCase) run(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	s := tc.Server(0)
-	pts := ptstorage.New(s.ClusterSettings(),
+	pts := ptstoragedeprecated.New(s.ClusterSettings(),
 		s.InternalExecutor().(*sql.InternalExecutor))
 	db := s.DB()
 	tCtx := testContext{
@@ -540,7 +540,7 @@ func TestCorruptData(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
-		pts := ptstorage.New(s.ClusterSettings(),
+		pts := ptstoragedeprecated.New(s.ClusterSettings(),
 			s.InternalExecutor().(*sql.InternalExecutor))
 
 		rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableSpan(42))
@@ -586,7 +586,7 @@ func TestCorruptData(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
-		pts := ptstorage.New(s.ClusterSettings(),
+		pts := ptstoragedeprecated.New(s.ClusterSettings(),
 			s.InternalExecutor().(*sql.InternalExecutor))
 
 		rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableSpan(42))
@@ -641,7 +641,7 @@ func TestErrorsFromSQL(t *testing.T) {
 	s := tc.Server(0)
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	wrappedIE := &wrappedInternalExecutor{wrapped: ie}
-	pts := ptstorage.New(s.ClusterSettings(), wrappedIE)
+	pts := ptstoragedeprecated.New(s.ClusterSettings(), wrappedIE)
 
 	wrappedIE.setErrFunc(func(string) error {
 		return errors.New("boom")
