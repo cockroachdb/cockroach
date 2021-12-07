@@ -10,6 +10,7 @@ go_library(
         "delete_deprecated_namespace_tabledesc.go",
         "ensure_no_draining_names.go",
         "fix_descriptor_migration.go",
+        "insert_missing_public_schema_namespace_entry.go",
         "join_tokens.go",
         "migrations.go",
         "records_based_registry.go",

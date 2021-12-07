@@ -148,6 +148,11 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		seedTenantSpanConfigsMigration,
 	),
+	migration.NewTenantMigration("insert missing system.namespace entries for public schemas",
+		toCV(clusterversion.InsertPublicSchemaNamespaceEntryOnRestore),
+		NoPrecondition,
+		insertMissingPublicSchemaNamespaceEntry,
+	),
 }
 
 func init() {
