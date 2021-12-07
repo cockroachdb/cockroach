@@ -1,7 +1,16 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
 package cdctest
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"gocloud.dev/pubsub"
@@ -9,20 +18,20 @@ import (
 
 // MockPubsubSink is the Webhook sink used in tests.
 type MockPubsubSink struct {
-	sub *pubsub.Subscription
-	ctx context.Context
+	sub      *pubsub.Subscription
+	ctx      context.Context
 	groupCtx ctxgroup.Group
-	errChan chan error
-	url string
+	errChan  chan error
+	url      string
 	shutdown func()
-	mu                 struct {
+	mu       struct {
 		syncutil.Mutex
-		rows             []string
+		rows []string
 	}
 }
 
 // MakeMockPubsubSink returns a MockPubsubSink object initialized with the given url and context
-func MakeMockPubsubSink(url string, ctx context.Context) (*MockPubsubSink, error){
+func MakeMockPubsubSink(ctx context.Context, url string) (*MockPubsubSink, error) {
 	ctx, shutdown := context.WithCancel(ctx)
 	groupCtx := ctxgroup.WithContext(ctx)
 	p := &MockPubsubSink{
@@ -42,7 +51,7 @@ func (p *MockPubsubSink) Close() {
 }
 
 // Dial opens a subscriber using the url of the MockPubsubSink
-func (p *MockPubsubSink) Dial() error{
+func (p *MockPubsubSink) Dial() error {
 	var err error
 	p.sub, err = pubsub.OpenSubscription(p.ctx, p.url)
 	if err != nil {
@@ -62,7 +71,7 @@ func (p *MockPubsubSink) receive() {
 		if err != nil {
 			select {
 			case <-p.ctx.Done():
-			case p.errChan <-err:
+			case p.errChan <- err:
 			default:
 			}
 			return
@@ -87,7 +96,7 @@ func (p *MockPubsubSink) push(msg string) {
 }
 
 // Pop removes and returns the first string in the rows string slice
-func (p *MockPubsubSink) Pop() *string{
+func (p *MockPubsubSink) Pop() *string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.mu.rows) > 0 {
@@ -99,11 +108,11 @@ func (p *MockPubsubSink) Pop() *string{
 }
 
 // CheckSinkError checks the errChan for any errors and returns it
-func (p *MockPubsubSink)CheckSinkError() error{
+func (p *MockPubsubSink) CheckSinkError() error {
 	select {
-		case err := <-p.errChan:
-			return err
-		default:
+	case err := <-p.errChan:
+		return err
+	default:
 	}
 	return nil
 }

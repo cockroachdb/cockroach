@@ -1472,15 +1472,15 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	// creates a uuid as the url so that each testfeed object has a unique sink
 	// tests like TestManyChangefeedsOneTable require testfeeds to receive their own messages
 	// regardless of what the topic is
-	memPubsubUrl := fmt.Sprintf("%s://%s", memScheme, uuid.NewString())
+	memPubsubURL := fmt.Sprintf("%s://%s", memScheme, uuid.NewString())
 
 	if createStmt.SinkURI == nil {
 		createStmt.SinkURI = tree.NewStrVal(
-			memPubsubUrl)
+			memPubsubURL)
 	}
 
 	ctx := context.Background()
-	sinkDest, err := cdctest.MakeMockPubsubSink(memPubsubUrl, ctx)
+	sinkDest, err := cdctest.MakeMockPubsubSink(ctx, memPubsubURL)
 
 	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
@@ -1498,7 +1498,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		return nil, err
 	}
 	err = c.mockSink.Dial()
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1524,9 +1524,9 @@ func (p *pubsubFeed) Partitions() []string {
 }
 
 // extractJSONMessagePubsub extracts the value, key, and topic from a pubsub message
-func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error){
+func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error) {
 	parsed := payload{}
-	err = gojson.Unmarshal(wrapped, &parsed);
+	err = gojson.Unmarshal(wrapped, &parsed)
 	if err != nil {
 		return
 	}
@@ -1534,12 +1534,11 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 	keyParsed := parsed.Key
 	topic = parsed.Topic
 
-
-	value, err = reformatJSON(valueParsed);
+	value, err = reformatJSON(valueParsed)
 	if err != nil {
 		return
 	}
-	key, err = reformatJSON(keyParsed);
+	key, err = reformatJSON(keyParsed)
 	if err != nil {
 		return
 	}

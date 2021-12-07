@@ -9,11 +9,16 @@
 package changefeedccl
 
 import (
-	_ "cloud.google.com/go/pubsub"
-	gcpClient "cloud.google.com/go/pubsub/apiv1"
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
+	"net/url"
+	"path"
+
+	// gcp pubsub driver used by gocloud.dev/pubsub
+	_ "cloud.google.com/go/pubsub"
+	gcpClient "cloud.google.com/go/pubsub/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -25,14 +30,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/gcppubsub"
+	// in memory pubsub driver used by gocloud.dev/pubsub
 	_ "gocloud.dev/pubsub/mempubsub"
 	"golang.org/x/oauth2/google"
 	pbapi "google.golang.org/genproto/googleapis/pubsub/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"hash/crc32"
-	"net/url"
-	"path"
 )
 
 const credentialsParam = "CREDENTIALS"
@@ -66,7 +69,7 @@ type pubsubMessage struct {
 	alloc   kvevent.Alloc
 	message payload
 	isFlush bool
-	topicId descpb.ID
+	topicID descpb.ID
 	logIt   func()
 }
 
@@ -109,7 +112,7 @@ type pubsubSink struct {
 }
 
 // getGCPCredentials returns gcp credentials parsed out from url
-func getGCPCredentials(u sinkURL, ctx context.Context) (*google.Credentials, error) {
+func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, error) {
 	var credsJSON []byte
 	var creds *google.Credentials
 	authOption := u.consumeParam(authParam)
@@ -145,7 +148,9 @@ func createGCPURL(u sinkURL, topicName string) (string, error) {
 }
 
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
-func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets) (Sink, error) {
+func MakePubsubSink(
+	ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
+) (Sink, error) {
 
 	sinkURL := sinkURL{u, u.Query()}
 	pubsubTopicName := sinkURL.consumeParam(changefeedbase.SinkParamTopicName)
@@ -192,7 +197,7 @@ func MakePubsubSink(ctx context.Context, u *url.URL, opts map[string]string, tar
 	// creates custom pubsub object based on scheme
 	switch u.Scheme {
 	case gcpScheme:
-		creds, err := getGCPCredentials(p.url, ctx)
+		creds, err := getGCPCredentials(ctx, p.url)
 		if err != nil {
 			_ = p.close()
 			return nil, err
@@ -213,13 +218,12 @@ func (p *pubsubSink) getWorkerCtx() context.Context {
 	return p.workerCtx
 }
 
-// getUrl returns url
-func (p *pubsubSink) getUrl() sinkURL {
+// getURL returns url
+func (p *pubsubSink) getURL() sinkURL {
 	return p.url
 }
 
-func timeIt(ctx context.Context,
-	fmtOrStr string, args ...interface{}) func() {
+func timeIt(ctx context.Context, fmtOrStr string, args ...interface{}) func() {
 	start := timeutil.Now()
 	return func() {
 		log.Infof(ctx, "%s took duration=%s",
@@ -236,7 +240,7 @@ func (p *pubsubSink) emitRow(
 	alloc kvevent.Alloc,
 ) error {
 	m := pubsubMessage{logIt: timeIt(ctx, "key:%s, mvcc:%s", string(key), mvcc),
-		alloc: alloc, isFlush: false, topicId: topic.GetID(), message: payload{
+		alloc: alloc, isFlush: false, topicID: topic.GetID(), message: payload{
 			Key:   key,
 			Value: value,
 			Topic: p.topics[topic.GetID()].topicName,
@@ -262,14 +266,16 @@ func (p *pubsubSink) emitRow(
 }
 
 // EmitResolvedTimestamp sends resolved timestamp message
-func (p *pubsubSink) emitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
+func (p *pubsubSink) emitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
 		return errors.Wrap(err, "encoding resolved timestamp")
 	}
 
-	for topicId := range p.topics {
-		err = p.sendMessage(payload, topicId, "")
+	for topicID := range p.topics {
+		err = p.sendMessage(payload, topicID, "")
 		if err != nil {
 			return errors.Wrap(err, "emitting resolved timestamp")
 		}
@@ -328,18 +334,18 @@ func (p *pubsubSink) close() error {
 }
 
 // sendMessage sends a message to the topic
-func (p *pubsubSink) sendMessage(m []byte, topicId descpb.ID, key string) error {
+func (p *pubsubSink) sendMessage(m []byte, topicID descpb.ID, key string) error {
 	var c *gcpClient.PublisherClient
 	var err error
-	if p.topics[topicId].topicClient.As(&c) {
-		gcpMessage := &pbapi.PublishRequest{Topic: p.topics[topicId].pathName}
+	if p.topics[topicID].topicClient.As(&c) {
+		gcpMessage := &pbapi.PublishRequest{Topic: p.topics[topicID].pathName}
 		ts := timestamppb.Now()
 		gcpMessage.Messages = append(gcpMessage.Messages, &pbapi.PubsubMessage{Data: m, OrderingKey: key, PublishTime: ts})
 		_, err = c.Publish(context.Background(), gcpMessage)
 	} else {
 		// this is for mempubsub since As() on mempubsub returns an unexported topic type that we cannot interact with
 		// https://github.com/google/go-cloud/blob/master/pubsub/mempubsub/mem.go#L185-L188
-		err = p.topics[topicId].topicClient.Send(p.workerCtx, &pubsub.Message{
+		err = p.topics[topicID].topicClient.Send(p.workerCtx, &pubsub.Message{
 			Body: m,
 		})
 	}
@@ -389,7 +395,7 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
-			err = p.sendMessage(b, msg.topicId, string(msg.message.Key))
+			err = p.sendMessage(b, msg.topicID, string(msg.message.Key))
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
@@ -482,7 +488,8 @@ func (p *gcpPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp, _ hlc.Timestamp,
+	updated hlc.Timestamp,
+	_ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
@@ -493,7 +500,9 @@ func (p *gcpPubsubSink) EmitRow(
 }
 
 // EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
-func (p *gcpPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
+func (p *gcpPubsubSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
 	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
 }
 
@@ -546,7 +555,8 @@ func (p *memPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp, _ hlc.Timestamp,
+	updated hlc.Timestamp,
+	_ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
@@ -557,7 +567,9 @@ func (p *memPubsubSink) EmitRow(
 }
 
 // EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
-func (p *memPubsubSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error {
+func (p *memPubsubSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
 	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
 }
 

@@ -818,7 +818,7 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType: tpccWorkloadType,
+				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1,
 				workloadDuration:         "30m",
 				initialScan:              true,
