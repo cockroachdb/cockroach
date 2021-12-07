@@ -7056,6 +7056,7 @@ index_def:
         StorageParams:    $10.storageParams(),
         Predicate:        $11.expr(),
       },
+      ExplicitIndex: true,
     }
   }
 | INVERTED INDEX opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -7433,7 +7434,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { 
+  AS typename                  {
                                   // Valid option values must be integer types (ex. int2, bigint)
                                   parsedType := $2.colType()
                                   if parsedType.Family() != types.IntFamily {

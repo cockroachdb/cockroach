@@ -559,8 +559,8 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 1656389978  t6_pkey            541687103     0        0          1546506610  2631952481  0            0
 1656389977  t6_expr_idx        541687103     0        0          1546506610  2631952481  0            0
 1656389976  t6_expr_expr1_idx  541687103     0        0          1546506610  2631952481  0            0
-1656389983  t6_expr_key        541687103     0        0          1546506610  2631952481  0            0
-1656389982  t6_expr_idx1       541687103     0        0          1546506610  2631952481  0            0
+1656389983  t6_expr_idx1       541687103     0        0          1546506610  2631952481  0            0
+1656389982  t6_expr_idx2       541687103     0        0          1546506610  2631952481  0            0
 71          mv1                541687103     100071   0          1546506610  0           0            0
 311312971   mv1_pkey           541687103     0        0          1546506610  2631952481  0            0
 
@@ -592,8 +592,8 @@ t6                 NULL      NULL       0              0              true      
 t6_pkey            NULL      NULL       0              0              false        false        p
 t6_expr_idx        NULL      NULL       0              0              false        false        p
 t6_expr_expr1_idx  NULL      NULL       0              0              false        false        p
-t6_expr_key        NULL      NULL       0              0              false        false        p
 t6_expr_idx1       NULL      NULL       0              0              false        false        p
+t6_expr_idx2       NULL      NULL       0              0              false        false        p
 mv1                NULL      NULL       0              0              true         false        p
 mv1_pkey           NULL      NULL       0              0              false        false        p
 
@@ -625,8 +625,8 @@ t6                 false      r        5         0          false       true
 t6_pkey            false      i        1         0          false       false
 t6_expr_idx        false      i        1         0          false       false
 t6_expr_expr1_idx  false      i        2         0          false       false
-t6_expr_key        false      i        1         0          false       false
 t6_expr_idx1       false      i        1         0          false       false
+t6_expr_idx2       false      i        1         0          false       false
 mv1                false      m        2         0          false       true
 mv1_pkey           false      i        1         0          false       false
 
@@ -658,8 +658,8 @@ t6                 false        false           false           0             NU
 t6_pkey            false        false           false           0             NULL    NULL
 t6_expr_idx        false        false           false           0             NULL    NULL
 t6_expr_expr1_idx  false        false           false           0             NULL    NULL
-t6_expr_key        false        false           false           0             NULL    NULL
 t6_expr_idx1       false        false           false           0             NULL    NULL
+t6_expr_idx2       false        false           false           0             NULL    NULL
 mv1                false        false           false           0             NULL    NULL
 mv1_pkey           false        false           false           0             NULL    NULL
 
@@ -728,8 +728,8 @@ attrelid    relname            attname                   atttypid  attstattarget
 1656389977  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
 1656389976  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      7       0         -1
 1656389976  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       8       0         -1
-1656389983  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      9       0         -1
-1656389982  t6_expr_idx1       crdb_internal_idx_expr_4  16        0              1       10      0         -1
+1656389983  t6_expr_idx1       crdb_internal_idx_expr_3  25        0              -1      9       0         -1
+1656389982  t6_expr_idx2       crdb_internal_idx_expr_4  16        0              1       10      0         -1
 71          mv1                ?column?                  20        0              8       1       0         -1
 71          mv1                rowid                     20        0              8       2       0         -1
 311312971   mv1_pkey           rowid                     20        0              8       2       0         -1
@@ -797,8 +797,8 @@ t6_pkey            rowid                     -1         NULL      NULL        NU
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_key        crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_idx1       crdb_internal_idx_expr_4  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx1       crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx2       crdb_internal_idx_expr_4  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -866,8 +866,8 @@ t6_pkey            rowid                     false         true        0        
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
-t6_expr_key        crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
-t6_expr_idx1       crdb_internal_idx_expr_4  false         true        0            NULL    NULL        NULL
+t6_expr_idx1       crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
+t6_expr_idx2       crdb_internal_idx_expr_4  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
 mv1_pkey           rowid                     false         true        0            NULL    NULL        NULL
@@ -927,7 +927,7 @@ WHERE n.nspname = 'public'
 ----
 relname            attname                   typname   attcollation  collname
 t1                 d                         varchar   3403232968    default
-t6_expr_key        crdb_internal_idx_expr_3  text      3403232968    default
+t6_expr_idx1       crdb_internal_idx_expr_3  text      3403232968    default
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  text      3403232968    default
 t6                 c                         text      3403232968    default
 t5                 c                         text      3403232968    default
@@ -992,8 +992,8 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 1656389978  public      t6         t6_pkey            NULL
 1656389977  public      t6         t6_expr_idx        NULL
 1656389976  public      t6         t6_expr_expr1_idx  NULL
-1656389983  public      t6         t6_expr_key        NULL
-1656389982  public      t6         t6_expr_idx1       NULL
+1656389983  public      t6         t6_expr_idx1       NULL
+1656389982  public      t6         t6_expr_idx2       NULL
 311312971   public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
@@ -1016,8 +1016,8 @@ crdb_oid    tablename  indexname          indexdef
 1656389978  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
 1656389977  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 1656389976  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-1656389983  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-1656389982  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
+1656389983  t6         t6_expr_idx1       CREATE UNIQUE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree (lower(c) ASC)
+1656389982  t6         t6_expr_idx2       CREATE INDEX t6_expr_idx2 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
 311312971   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
@@ -1066,8 +1066,8 @@ relname            indkey  indexprs                    indpred
 t6_pkey            6       NULL                        NULL
 t6_expr_idx        0       (a + b)                     NULL
 t6_expr_expr1_idx  0 0     (lower(c)) (a + b)          NULL
-t6_expr_key        0       (lower(c))                  NULL
-t6_expr_idx1       0       (m = 'foo'::public.mytype)  m = 'foo'::public.mytype
+t6_expr_idx1       0       (lower(c))                  NULL
+t6_expr_idx2       0       (m = 'foo'::public.mytype)  m = 'foo'::public.mytype
 
 statement ok
 SET DATABASE = system
@@ -1276,7 +1276,7 @@ oid         conname        connamespace  contype  condef
 3419369536  primary        541687103     p        PRIMARY KEY (value ASC)
 3540172298  index_key      541687103     u        UNIQUE (b ASC, c ASC)
 3540172299  t1_a_key       541687103     u        UNIQUE (a ASC)
-3734875191  t6_expr_key    541687103     u        UNIQUE (lower(c) ASC)
+3734875191  t6_expr_idx1   541687103     u        UNIQUE (lower(c) ASC)
 3823689858  fk             541687103     f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
 4221688865  fk             541687103     f        FOREIGN KEY (t1_id) REFERENCES t1(a)
 
@@ -1300,7 +1300,7 @@ fk_b_c         f        false          false        true          67        0   
 primary        p        false          false        true          61        0         4179599057
 index_key      u        false          false        true          60        0         1229708770
 t1_a_key       u        false          false        true          60        0         1229708771
-t6_expr_key    u        false          false        true          70        0         1656389983
+t6_expr_idx1   u        false          false        true          70        0         1656389983
 fk             f        false          false        true          64        0         1229708770
 fk             f        false          false        true          63        0         1229708771
 
@@ -1330,7 +1330,7 @@ t1_pkey        0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
 index_key      0          NULL         NULL         NULL
 t1_a_key       0          NULL         NULL         NULL
-t6_expr_key    0          NULL         NULL         NULL
+t6_expr_idx1   0          NULL         NULL         NULL
 
 query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
@@ -1365,7 +1365,7 @@ fk_b_c         true        0            true          {2,3}
 primary        true        0            true          {1}
 index_key      true        0            true          {3,4}
 t1_a_key       true        0            true          {2}
-t6_expr_key    true        0            true          {9}
+t6_expr_idx1   true        0            true          {9}
 fk             true        0            true          {1,2}
 fk             true        0            true          {1}
 
@@ -1387,7 +1387,7 @@ t1_pkey        NULL     NULL       NULL       NULL       NULL       NULL        
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
 index_key      NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
 t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
-t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
+t6_expr_idx1   NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
@@ -4856,8 +4856,8 @@ WHERE tablename = 'partial_index_table'
 ----
 indexname                   indexdef
 partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
-partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
+partial_index_table_a_idx   CREATE UNIQUE INDEX partial_index_table_a_idx ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
+partial_index_table_a_idx1  CREATE UNIQUE INDEX partial_index_table_a_idx1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 query TT colnames
 SELECT conname, condef
@@ -4867,8 +4867,8 @@ WHERE t.relname = 'partial_index_table'
 ORDER BY conname
 ----
 conname                     condef
-partial_index_table_a_key   UNIQUE (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
+partial_index_table_a_idx   UNIQUE (a ASC) WHERE (a > 0)
+partial_index_table_a_idx1  UNIQUE (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 subtest regression_46799
 statement ok

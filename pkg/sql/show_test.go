@@ -128,7 +128,7 @@ func TestShowCreateTable(t *testing.T) {
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX idx_if (f ASC, i ASC) STORING (s, d),
-	UNIQUE INDEX %[1]s_d_key (d ASC),
+	UNIQUE INDEX %[1]s_d_idx (d ASC),
 	FAMILY "primary" (i, f, d, rowid),
 	FAMILY fam_1_s (s)
 )`,

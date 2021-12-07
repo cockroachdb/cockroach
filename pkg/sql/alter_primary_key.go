@@ -160,12 +160,11 @@ func (p *planner) AlterPrimaryKey(
 		return pgerror.Newf(pgcode.DuplicateRelation, "index with name %s already exists", alterPKNode.Name)
 	}
 	newPrimaryIndexDesc := &descpb.IndexDescriptor{
-		Name:              name,
-		Unique:            true,
-		CreatedExplicitly: true,
-		EncodingType:      descpb.PrimaryIndexEncoding,
-		Type:              descpb.IndexDescriptor_FORWARD,
-		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
+		Name:         name,
+		Unique:       true,
+		EncodingType: descpb.PrimaryIndexEncoding,
+		Type:         descpb.IndexDescriptor_FORWARD,
+		Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
 	}
 
 	// If the new index is requested to be sharded, set up the index descriptor

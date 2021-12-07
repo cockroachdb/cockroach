@@ -165,6 +165,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
+				ExplicitIndex: rng.Intn(2) == 0,
 			})
 		} else {
 			defs = append(defs, &indexDef)

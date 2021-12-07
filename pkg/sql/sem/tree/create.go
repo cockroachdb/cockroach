@@ -993,6 +993,12 @@ type UniqueConstraintTableDef struct {
 	PrimaryKey   bool
 	WithoutIndex bool
 	IfNotExists  bool
+
+	// ExplicitIndex is true when the unique index was created explicitly using
+	// a UNIQUE INDEX clause in either CREATE TABLE or CREATE INDEX. It is false
+	// when the unique index was implicitly created from a CONSTRAINT ... UNIQUE
+	// clause in CREATE TABLE or ALTER TABLE.
+	ExplicitIndex bool
 }
 
 // SetName implements the TableDef interface.

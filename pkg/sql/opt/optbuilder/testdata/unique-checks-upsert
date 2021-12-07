@@ -1801,7 +1801,7 @@ ON CONFLICT (a) WHERE b > 10 DO UPDATE SET a = 10
 ----
 upsert uniq_partial_constraint_and_index
  ├── columns: <none>
- ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
+ ├── arbiter indexes: uniq_partial_constraint_and_index_a_idx
  ├── canary column: uniq_partial_constraint_and_index.k:10
  ├── fetch columns: uniq_partial_constraint_and_index.k:10 uniq_partial_constraint_and_index.a:11 uniq_partial_constraint_and_index.b:12
  ├── insert-mapping:
@@ -1825,7 +1825,7 @@ upsert uniq_partial_constraint_and_index
  │    │    │    ├── scan uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.k:10!null uniq_partial_constraint_and_index.a:11 uniq_partial_constraint_and_index.b:12
  │    │    │    │    └── partial index predicates
- │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    │         └── uniq_partial_constraint_and_index_a_idx: filters (true)
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:11 = 1
  │    │    └── filters (true)
@@ -1855,7 +1855,7 @@ upsert uniq_partial_constraint_and_index
                      │    ├── scan uniq_partial_constraint_and_index
                      │    │    ├── columns: uniq_partial_constraint_and_index.k:20!null uniq_partial_constraint_and_index.a:21 uniq_partial_constraint_and_index.b:22
                      │    │    └── partial index predicates
-                     │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+                     │    │         └── uniq_partial_constraint_and_index_a_idx: filters (true)
                      │    └── filters
                      │         └── uniq_partial_constraint_and_index.b:22 > 10
                      └── filters
@@ -1905,7 +1905,7 @@ upsert uniq_constraint_and_partial_index
  │    │    │    ├── scan uniq_constraint_and_partial_index
  │    │    │    │    ├── columns: uniq_constraint_and_partial_index.k:10!null uniq_constraint_and_partial_index.a:11 uniq_constraint_and_partial_index.b:12
  │    │    │    │    └── partial index predicates
- │    │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
+ │    │    │    │         └── uniq_constraint_and_partial_index_a_idx: filters
  │    │    │    │              └── uniq_constraint_and_partial_index.b:12 > 0
  │    │    │    └── filters
  │    │    │         └── uniq_constraint_and_partial_index.a:11 = 1
@@ -1929,7 +1929,7 @@ upsert uniq_constraint_and_partial_index
                      ├── scan uniq_constraint_and_partial_index
                      │    ├── columns: uniq_constraint_and_partial_index.k:21!null uniq_constraint_and_partial_index.a:22
                      │    └── partial index predicates
-                     │         └── uniq_constraint_and_partial_index_a_key: filters
+                     │         └── uniq_constraint_and_partial_index_a_idx: filters
                      │              └── uniq_constraint_and_partial_index.b:23 > 0
                      └── filters
                           ├── a:27 = uniq_constraint_and_partial_index.a:22

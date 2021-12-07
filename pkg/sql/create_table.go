@@ -1677,9 +1677,10 @@ func NewTableDesc(
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
-				Name:             string(d.Name),
-				StoreColumnNames: d.Storing.ToStrings(),
-				Version:          indexEncodingVersion,
+				Name:              string(d.Name),
+				StoreColumnNames:  d.Storing.ToStrings(),
+				Version:           indexEncodingVersion,
+				CreatedExplicitly: true,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1797,10 +1798,11 @@ func NewTableDesc(
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           true,
-				StoreColumnNames: d.Storing.ToStrings(),
-				Version:          indexEncodingVersion,
+				Name:              string(d.Name),
+				Unique:            true,
+				StoreColumnNames:  d.Storing.ToStrings(),
+				Version:           indexEncodingVersion,
+				CreatedExplicitly: d.ExplicitIndex,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2446,6 +2448,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					def = &tree.UniqueConstraintTableDef{
 						IndexTableDef: indexDef,
 						PrimaryKey:    idx.Primary(),
+						ExplicitIndex: idx.IsCreatedExplicitly(),
 					}
 				}
 				if idx.IsPartial() {

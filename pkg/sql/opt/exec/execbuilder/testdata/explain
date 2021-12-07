@@ -1617,10 +1617,10 @@ vectorized: true
 • insert
 │ into: u(k, v)
 │ auto commit
-│ arbiter indexes: u_pkey, u_v_key
+│ arbiter indexes: u_pkey, u_v_idx
 │
 └── • lookup join (anti)
-    │ table: u@u_v_key
+    │ table: u@u_v_idx
     │ equality: (column2) = (v)
     │ equality cols are key
     │

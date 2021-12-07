@@ -239,11 +239,11 @@ delete ambig
       │    ├── scan ambig
       │    │    ├── columns: partial_index_put1:7 ambig.partial_index_del1:8 check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    └── partial index predicates
-      │    │         ├── ambig_partial_index_put1_key: filters
+      │    │         ├── ambig_partial_index_put1_idx: filters
       │    │         │    └── partial_index_put1:7 > 0
-      │    │         ├── ambig_partial_index_del1_key: filters
+      │    │         ├── ambig_partial_index_del1_idx: filters
       │    │         │    └── ambig.partial_index_del1:8 > 0
-      │    │         └── ambig_partial_index_put1_idx: filters
+      │    │         └── ambig_partial_index_put1_idx1: filters
       │    │              └── check1:9 > 0
       │    └── filters
       │         └── ambig.partial_index_del1:8 = 5
@@ -431,11 +431,11 @@ update ambig
       │    │    │    ├── scan ambig
       │    │    │    │    ├── columns: ambig.partial_index_put1:7 ambig.partial_index_del1:8 ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    └── partial index predicates
-      │    │    │    │         ├── ambig_partial_index_put1_key: filters
+      │    │    │    │         ├── ambig_partial_index_put1_idx: filters
       │    │    │    │         │    └── ambig.partial_index_put1:7 > 0
-      │    │    │    │         ├── ambig_partial_index_del1_key: filters
+      │    │    │    │         ├── ambig_partial_index_del1_idx: filters
       │    │    │    │         │    └── ambig.partial_index_del1:8 > 0
-      │    │    │    │         └── ambig_partial_index_put1_idx: filters
+      │    │    │    │         └── ambig_partial_index_put1_idx1: filters
       │    │    │    │              └── ambig.check1:9 > 0
       │    │    │    └── filters
       │    │    │         └── (ambig.partial_index_put1:7 = 10) AND (ambig.partial_index_del1:8 = 20)
@@ -1011,7 +1011,7 @@ INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
 ----
 insert uniq
  ├── columns: <none>
- ├── arbiter indexes: uniq_pkey uniq_b_key
+ ├── arbiter indexes: uniq_pkey uniq_b_idx
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1022,10 +1022,10 @@ insert uniq
       ├── project
       │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    └── upsert-distinct-on
-      │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_key_distinct:19
-      │         ├── grouping columns: column2:7!null arbiter_uniq_b_key_distinct:19
+      │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_idx_distinct:19
+      │         ├── grouping columns: column2:7!null arbiter_uniq_b_idx_distinct:19
       │         ├── project
-      │         │    ├── columns: arbiter_uniq_b_key_distinct:19 column1:6!null column2:7!null column3:8!null
+      │         │    ├── columns: arbiter_uniq_b_idx_distinct:19 column1:6!null column2:7!null column3:8!null
       │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    ├── grouping columns: column1:6!null
@@ -1039,7 +1039,7 @@ insert uniq
       │         │    │    │    │    ├── scan uniq
       │         │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │         │    │    │    │    │    └── partial index predicates
-      │         │    │    │    │    │         └── uniq_b_key: filters
+      │         │    │    │    │    │         └── uniq_b_idx: filters
       │         │    │    │    │    │              └── c:11 = 'foo'
       │         │    │    │    │    └── filters
       │         │    │    │    │         └── column1:6 = a:9
@@ -1048,7 +1048,7 @@ insert uniq
       │         │    │    │    │    ├── scan uniq
       │         │    │    │    │    │    ├── columns: a:14!null b:15 c:16
       │         │    │    │    │    │    └── partial index predicates
-      │         │    │    │    │    │         └── uniq_b_key: filters
+      │         │    │    │    │    │         └── uniq_b_idx: filters
       │         │    │    │    │    │              └── c:16 = 'foo'
       │         │    │    │    │    └── filters
       │         │    │    │    │         └── c:16 = 'foo'
@@ -1061,7 +1061,7 @@ insert uniq
       │         │    │         └── first-agg [as=column3:8]
       │         │    │              └── column3:8
       │         │    └── projections
-      │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:19]
+      │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_idx_distinct:19]
       │         └── aggregations
       │              ├── first-agg [as=column1:6]
       │              │    └── column1:6
@@ -1080,7 +1080,7 @@ INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'b
 ----
 insert uniq
  ├── columns: <none>
- ├── arbiter indexes: uniq_b_key u2
+ ├── arbiter indexes: uniq_b_idx u2
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
@@ -1098,10 +1098,10 @@ insert uniq
       │         │    ├── project
       │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_key_distinct:19
-      │         │    │         ├── grouping columns: column2:7!null arbiter_uniq_b_key_distinct:19
+      │         │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_idx_distinct:19
+      │         │    │         ├── grouping columns: column2:7!null arbiter_uniq_b_idx_distinct:19
       │         │    │         ├── project
-      │         │    │         │    ├── columns: arbiter_uniq_b_key_distinct:19 column1:6!null column2:7!null column3:8!null
+      │         │    │         │    ├── columns: arbiter_uniq_b_idx_distinct:19 column1:6!null column2:7!null column3:8!null
       │         │    │         │    ├── anti-join (hash)
       │         │    │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    ├── anti-join (hash)
@@ -1114,7 +1114,7 @@ insert uniq
       │         │    │         │    │    │    │    ├── scan uniq
       │         │    │         │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │         │    │         │    │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │    │         ├── uniq_b_key: filters
+      │         │    │         │    │    │    │    │         ├── uniq_b_idx: filters
       │         │    │         │    │    │    │    │         │    └── c:11 = 'foo'
       │         │    │         │    │    │    │    │         └── u2: filters
       │         │    │         │    │    │    │    │              └── c:11 = 'bar'
@@ -1128,7 +1128,7 @@ insert uniq
       │         │    │         │    │    │    ├── scan uniq
       │         │    │         │    │    │    │    ├── columns: a:14!null b:15 c:16
       │         │    │         │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │         ├── uniq_b_key: filters
+      │         │    │         │    │    │    │         ├── uniq_b_idx: filters
       │         │    │         │    │    │    │         │    └── c:16 = 'foo'
       │         │    │         │    │    │    │         └── u2: filters
       │         │    │         │    │    │    │              └── c:16 = 'bar'
@@ -1138,7 +1138,7 @@ insert uniq
       │         │    │         │    │         ├── column2:7 = b:15
       │         │    │         │    │         └── column3:8 = 'bar'
       │         │    │         │    └── projections
-      │         │    │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:19]
+      │         │    │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_idx_distinct:19]
       │         │    │         └── aggregations
       │         │    │              ├── first-agg [as=column1:6]
       │         │    │              │    └── column1:6
@@ -1194,7 +1194,7 @@ insert uniq
       │    │    ├── scan uniq
       │    │    │    ├── columns: a:9!null b:10 c:11
       │    │    │    └── partial index predicates
-      │    │    │         ├── uniq_b_key: filters
+      │    │    │         ├── uniq_b_idx: filters
       │    │    │         │    └── c:11 = 'foo'
       │    │    │         └── u2: filters
       │    │    │              └── c:11 = 'bar'
@@ -1271,7 +1271,7 @@ INSERT INTO uniq VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' DO UPDATE 
 ----
 upsert uniq
  ├── columns: <none>
- ├── arbiter indexes: uniq_b_key
+ ├── arbiter indexes: uniq_b_idx
  ├── canary column: a:10
  ├── fetch columns: a:10 b:11 c:12
  ├── insert-mapping:
@@ -1293,15 +1293,15 @@ upsert uniq
       │    │    │    ├── project
       │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    └── ensure-upsert-distinct-on
-      │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_key_distinct:9
-      │    │    │    │         ├── grouping columns: column2:7!null arbiter_uniq_b_key_distinct:9
+      │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_idx_distinct:9
+      │    │    │    │         ├── grouping columns: column2:7!null arbiter_uniq_b_idx_distinct:9
       │    │    │    │         ├── project
-      │    │    │    │         │    ├── columns: arbiter_uniq_b_key_distinct:9 column1:6!null column2:7!null column3:8!null
+      │    │    │    │         │    ├── columns: arbiter_uniq_b_idx_distinct:9 column1:6!null column2:7!null column3:8!null
       │    │    │    │         │    ├── values
       │    │    │    │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │         │    │    └── (1, 1, 'bar')
       │    │    │    │         │    └── projections
-      │    │    │    │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:9]
+      │    │    │    │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_idx_distinct:9]
       │    │    │    │         └── aggregations
       │    │    │    │              ├── first-agg [as=column1:6]
       │    │    │    │              │    └── column1:6
@@ -1312,7 +1312,7 @@ upsert uniq
       │    │    │    │    ├── scan uniq
       │    │    │    │    │    ├── columns: a:10!null b:11 c:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    │    │    │    └── partial index predicates
-      │    │    │    │    │         ├── uniq_b_key: filters
+      │    │    │    │    │         ├── uniq_b_idx: filters
       │    │    │    │    │         │    └── c:12 = 'foo'
       │    │    │    │    │         └── u2: filters
       │    │    │    │    │              └── c:12 = 'bar'
@@ -1342,7 +1342,7 @@ DO UPDATE SET partial_index_put1 = 10, partial_index_del1 = 20
 ----
 upsert ambig
  ├── columns: <none>
- ├── arbiter indexes: ambig_partial_index_put1_key
+ ├── arbiter indexes: ambig_partial_index_put1_idx
  ├── canary column: rowid:15
  ├── fetch columns: ambig.partial_index_put1:12 ambig.partial_index_del1:13 ambig.check1:14 rowid:15
  ├── insert-mapping:
@@ -1369,10 +1369,10 @@ upsert ambig
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column1:7!null column2:8!null check1_default:9 rowid_default:10
       │    │    │    │    │    └── ensure-upsert-distinct-on
-      │    │    │    │    │         ├── columns: column1:7!null column2:8!null check1_default:9 rowid_default:10 arbiter_ambig_partial_index_put1_key_distinct:11
-      │    │    │    │    │         ├── grouping columns: column1:7!null arbiter_ambig_partial_index_put1_key_distinct:11
+      │    │    │    │    │         ├── columns: column1:7!null column2:8!null check1_default:9 rowid_default:10 arbiter_ambig_partial_index_put1_idx_distinct:11
+      │    │    │    │    │         ├── grouping columns: column1:7!null arbiter_ambig_partial_index_put1_idx_distinct:11
       │    │    │    │    │         ├── project
-      │    │    │    │    │         │    ├── columns: arbiter_ambig_partial_index_put1_key_distinct:11 column1:7!null column2:8!null check1_default:9 rowid_default:10
+      │    │    │    │    │         │    ├── columns: arbiter_ambig_partial_index_put1_idx_distinct:11 column1:7!null column2:8!null check1_default:9 rowid_default:10
       │    │    │    │    │         │    ├── project
       │    │    │    │    │         │    │    ├── columns: check1_default:9 rowid_default:10 column1:7!null column2:8!null
       │    │    │    │    │         │    │    ├── values
@@ -1382,7 +1382,7 @@ upsert ambig
       │    │    │    │    │         │    │         ├── NULL::INT8 [as=check1_default:9]
       │    │    │    │    │         │    │         └── unique_rowid() [as=rowid_default:10]
       │    │    │    │    │         │    └── projections
-      │    │    │    │    │         │         └── (column1:7 > 0) OR NULL::BOOL [as=arbiter_ambig_partial_index_put1_key_distinct:11]
+      │    │    │    │    │         │         └── (column1:7 > 0) OR NULL::BOOL [as=arbiter_ambig_partial_index_put1_idx_distinct:11]
       │    │    │    │    │         └── aggregations
       │    │    │    │    │              ├── first-agg [as=column2:8]
       │    │    │    │    │              │    └── column2:8
@@ -1395,11 +1395,11 @@ upsert ambig
       │    │    │    │    │    ├── scan ambig
       │    │    │    │    │    │    ├── columns: ambig.partial_index_put1:12 ambig.partial_index_del1:13 ambig.check1:14 rowid:15!null crdb_internal_mvcc_timestamp:16 tableoid:17
       │    │    │    │    │    │    └── partial index predicates
-      │    │    │    │    │    │         ├── ambig_partial_index_put1_key: filters
+      │    │    │    │    │    │         ├── ambig_partial_index_put1_idx: filters
       │    │    │    │    │    │         │    └── ambig.partial_index_put1:12 > 0
-      │    │    │    │    │    │         ├── ambig_partial_index_del1_key: filters
+      │    │    │    │    │    │         ├── ambig_partial_index_del1_idx: filters
       │    │    │    │    │    │         │    └── ambig.partial_index_del1:13 > 0
-      │    │    │    │    │    │         └── ambig_partial_index_put1_idx: filters
+      │    │    │    │    │    │         └── ambig_partial_index_put1_idx1: filters
       │    │    │    │    │    │              └── ambig.check1:14 > 0
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── ambig.partial_index_put1:12 > 0

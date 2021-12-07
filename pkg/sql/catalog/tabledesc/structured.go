@@ -205,8 +205,9 @@ func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, er
 		segments = append(segments, segmentName)
 	}
 
-	// Add the final segment.
-	if idx.Unique {
+	// Add the final segment. Unique partial and unique expression indexes
+	// should always have the "idx" suffix.
+	if idx.Unique && !idx.CreatedExplicitly {
 		segments = append(segments, "key")
 	} else {
 		segments = append(segments, "idx")

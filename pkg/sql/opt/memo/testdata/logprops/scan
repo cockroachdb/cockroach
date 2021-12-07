@@ -348,11 +348,11 @@ project
  └── scan c
       ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
       ├── partial index predicates
-      │    ├── c_x_key: filters
+      │    ├── c_x_idx: filters
       │    │    └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
       │    │         ├── variable: s:4 [type=string]
       │    │         └── const: 'foo' [type=string]
-      │    └── c_y_key: filters
+      │    └── c_y_idx: filters
       │         └── eq [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
       │              ├── variable: s:4 [type=string]
       │              └── const: 'bar' [type=string]
@@ -372,7 +372,7 @@ index-join c
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── prune: (1-3)
  ├── interesting orderings: (+1 opt(4)) (+2 opt(4)) (+3,+1 opt(4))
- └── scan c@c_x_key,partial
+ └── scan c@c_x_idx,partial
       ├── columns: k:1(int!null) x:2(int!null)
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(1)
@@ -390,7 +390,7 @@ index-join c
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── prune: (1-3)
  ├── interesting orderings: (+1 opt(4)) (+2 opt(4)) (+3,+1 opt(4))
- └── scan c@c_y_key,partial
+ └── scan c@c_y_idx,partial
       ├── columns: k:1(int!null) y:3(int)
       ├── key: (1)
       ├── fd: (1)-->(3), (3)~~>(1)

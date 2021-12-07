@@ -61,11 +61,12 @@ func TestIndexInterface(t *testing.T) {
 			INDEX s3 (c2, c3) STORING (c5, c6),
 			INDEX s4 (c5) USING HASH WITH BUCKET_COUNT=8,
 			UNIQUE INDEX s5 (c1, c4) WHERE c4 = 'x',
-			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2)
+			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2),
+			CONSTRAINT s7 UNIQUE (c4, c5)
 		);
 	`)
 
-	indexNames := []string{"pk", "s1", "s2", "s3", "s4", "s5", "s6"}
+	indexNames := []string{"pk", "s1", "s2", "s3", "s4", "s5", "s6", "s7"}
 	indexColumns := [][]string{
 		{"c1", "c2", "c3"},
 		{"c4", "c5"},
@@ -74,6 +75,7 @@ func TestIndexInterface(t *testing.T) {
 		{"crdb_internal_c5_shard_8", "c5"},
 		{"c1", "c4"},
 		{"c7"},
+		{"c4", "c5"},
 	}
 	extraColumnsAsPkColOrdinals := [][]int{
 		{},
@@ -82,6 +84,7 @@ func TestIndexInterface(t *testing.T) {
 		{0},
 		{0, 1, 2},
 		{1, 2},
+		{0, 1, 2},
 		{0, 1, 2},
 	}
 
@@ -108,6 +111,7 @@ func TestIndexInterface(t *testing.T) {
 	s4 := indexes[4]
 	s5 := indexes[5]
 	s6 := indexes[6]
+	s7 := indexes[7]
 
 	// Check that GetPrimaryIndex returns the primary index.
 	require.Equal(t, pk, tableI.GetPrimaryIndex())
@@ -242,8 +246,6 @@ func TestIndexInterface(t *testing.T) {
 	for _, idx := range indexes {
 		require.False(t, idx.IsDisabled(),
 			errMsgFmt, "IsDisabled", idx.GetName())
-		require.False(t, idx.IsCreatedExplicitly(),
-			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
 		if idx.Primary() {
 			require.Equal(t, descpb.IndexDescriptorVersion(0x4), idx.GetVersion(),
 				errMsgFmt, "GetVersion", idx.GetName())
@@ -266,7 +268,9 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsPartial", idx.GetName())
 		require.Equal(t, idx == s5, idx.GetPredicate() != "",
 			errMsgFmt, "GetPredicate", idx.GetName())
-		require.Equal(t, idx == s5 || idx == pk, idx.IsUnique(),
+		require.Equal(t, idx == pk || idx == s7, !idx.IsCreatedExplicitly(),
+			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
+		require.Equal(t, idx == s5 || idx == pk || idx == s7, idx.IsUnique(),
 			errMsgFmt, "IsUnique", idx.GetName())
 		require.Equal(t, idx == s2 || idx == s6, idx.GetType() == descpb.IndexDescriptor_INVERTED,
 			errMsgFmt, "GetType", idx.GetName())
