@@ -660,8 +660,9 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	deadline *hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
-	for retries := 0; ; retries++ {
-		if retries > 0 {
+	var prevPErr *roachpb.Error
+	for {
+		if prevPErr != nil {
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		if batch != nil {
@@ -681,11 +682,11 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 		}
 
 		// If we can retry, set a higher batch timestamp and continue.
-		// Allow one retry only; a non-txn batch containing overlapping
-		// spans will always experience WriteTooOldError.
-		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, deadline) {
+		if success || !canDoServersideRetry(ctx, pErr, prevPErr, ba, br, latchSpans, deadline) {
 			break
 		}
+
+		prevPErr = pErr
 	}
 	return batch, br, res, pErr
 }

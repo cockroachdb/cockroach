@@ -10254,7 +10254,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// 1PC serializable transaction will fail instead of retrying if
 		// BatchRequest.CanForwardReadTimestamp is not true.
 		{
-			name: "no serverside-refresh of write too old on 1PC txn and refresh spans",
+			name: "no serverside-refresh of write too old on 1PC txn",
 			setupFn: func() (hlc.Timestamp, error) {
 				_, _ = put("d", "put")
 				return put("d", "put")
@@ -10271,7 +10271,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// 1PC serializable transaction will retry locally.
 		{
-			name: "serverside-refresh of write too old on 1PC txn",
+			name: "serverside-refresh of write too old on 1PC txn without prior reads",
 			setupFn: func() (hlc.Timestamp, error) {
 				_, _ = put("e", "put")
 				return put("e", "put")
@@ -10312,7 +10312,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// The previous test shows different behavior for a non-transactional
 		// request or a 1PC one.
 		{
-			name: "no serverside-refresh with failed cput despite write too old errors on txn",
+			name: "no serverside-refresh with failed cput despite write too old errors on non-1PC txn",
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("e1", "put")
 			},
@@ -10502,6 +10502,60 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &put2, &et)
+				return
+			},
+		},
+		// Non-transactional requests cannot contain overlapping writes. Such
+		// requests will create write-write conflicts with themselves and never
+		// succeed.
+		{
+			name: "no serverside-refresh of write too old on overlapping puts on non-txn request",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("j1", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				put1 := putArgs(roachpb.Key("j1"), []byte("put2"))
+				put2 := putArgs(roachpb.Key("j1"), []byte("put3"))
+				ba.Add(&put1, &put2)
+				return
+			},
+			expErr: "WriteTooOldError",
+		},
+		// Handle overlapping writes and a write too old error in non-1PC transaction.
+		{
+			name: "serverside-refresh of write too old on overlapping puts on non-1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("j2", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
+				ts = ts.Prev()
+				ba.Txn = newTxn("j2", ts)
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
+				put1 := putArgs(roachpb.Key("j2"), []byte("put2"))
+				put2 := putArgs(roachpb.Key("j2"), []byte("put3"))
+				ba.Add(&put1, &put2)
+				assignSeqNumsForReqs(ba.Txn, &put1, &put2)
+				return
+			},
+		},
+		// Handle overlapping writes and a write too old error in 1PC transaction.
+		{
+			name: "serverside-refresh of write too old on overlapping puts on 1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("j3", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
+				ts = ts.Prev()
+				ba.Txn = newTxn("j3", ts)
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
+				put1 := putArgs(roachpb.Key("j3"), []byte("put2"))
+				put2 := putArgs(roachpb.Key("j3"), []byte("put3"))
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				ba.Add(&put1, &put2, &et)
+				assignSeqNumsForReqs(ba.Txn, &put1, &put2, &et)
 				return
 			},
 		},
