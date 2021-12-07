@@ -1276,26 +1276,56 @@ func TestManagerLeaseMemoryMonitorNewVersions(t *testing.T) {
 	}
 }
 
+// TestManagerLeaseMemoryMonitorDropDeletes confirms the memory size shrinks
+// accordingly to the size of the table descriptor when table is dropped.
 func TestManagerLeaseMemoryMonitorDropDeletes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	var tableID descpb.ID
+	type DropReleaseMu struct {
+		mu     sync.Mutex
+		isDrop bool
+	}
+	dropReleaseMu := DropReleaseMu{
+		mu:     sync.Mutex{},
+		isDrop: false,
+	}
+	releaseChan := make(chan descpb.ID)
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &ManagerTestingKnobs{
+				LeaseStoreTestingKnobs: StorageTestingKnobs{
+					LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
+						dropReleaseMu.mu.Lock()
+						defer dropReleaseMu.mu.Unlock()
+						if id == tableID && dropReleaseMu.isDrop {
+							releaseChan <- id
+						}
+					},
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, serverArgs)
 
 	var stopper *stop.Stopper
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	stopper = s.Stopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	manager := s.LeaseManager().(*Manager)
 	// Prevent non-explicit Acquire to leases for testing purposes.
 	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
+	// Lower GC TTL since drops have delays waiting for GC job.
+	tdb.Exec(t, "ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1")
 
 	// Create table with some values.
 	tdb.Exec(t, "CREATE TABLE foo (col1 INT, col2 INT)")
-	var tableID descpb.ID
+	//TODO: Remove comment on table when drops don't incur a lease to the Comments table.
+	tdb.Exec(t, "COMMENT ON TABLE foo IS 'hello'")
 	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
 
-	// Acquire leases
+	// Acquire leases on the tableDescriptor.
+	manager := s.LeaseManager().(*Manager)
 	var tableDesc catalog.Descriptor
 	_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
 		tableDesc = desc.ImmutableCopy()
@@ -1311,7 +1341,6 @@ func TestManagerLeaseMemoryMonitorDropDeletes(t *testing.T) {
 	// Confirm leased descriptor memory count is tracked in monitor.
 	prevUsed := manager.boundAccount.Used()
 	log.Infof(ctx, "before acquire: %v", prevUsed)
-
 	acquired, err := manager.Acquire(ctx, tableDesc.GetModificationTime(), tableID)
 	require.NoError(t, err)
 
@@ -1323,16 +1352,19 @@ func TestManagerLeaseMemoryMonitorDropDeletes(t *testing.T) {
 		"Lease acquisition memory consumption does not match")
 	prevUsed = currMemSize
 
-	// Drop table.
+	// Drop table and release acquired lease on tableDescriptor.
 	log.Infof(ctx, "Before drop: %v", currMemSize)
+	dropReleaseMu.mu.Lock()
+	dropReleaseMu.isDrop = true
+	dropReleaseMu.mu.Unlock()
 	tdb.Exec(t, "DROP TABLE foo")
 	acquired.Release(ctx)
 
 	// Confirm the dropped table is reflected in the memory monitor.
+	<-releaseChan
 	expMemSize = prevUsed - acquired.Underlying().ByteSize()
 	currMemSize = manager.boundAccount.Used()
 	log.Infof(ctx, "After drop: %v", currMemSize)
 	require.Equal(t, expMemSize, currMemSize,
-		"Lease acquisition memory consumption does not match")
-
+		"Lease drop memory does not match")
 }
