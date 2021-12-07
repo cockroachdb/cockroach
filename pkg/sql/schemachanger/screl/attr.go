@@ -66,6 +66,10 @@ const (
 	Target
 	// Username is the username of the element
 	Username
+	// ConstraintType is the ID of a constraint
+	ConstraintType
+	// ConstraintOrdinal is the ordinal of the constraints
+	ConstraintOrdinal
 )
 
 var t = reflect.TypeOf
@@ -103,10 +107,14 @@ var Schema = rel.MustSchema("screl",
 	rel.EntityMapping(t((*scpb.UniqueConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(ConstraintType, "ConstraintType"),
+		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
 	),
 	rel.EntityMapping(t((*scpb.CheckConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(Name, "Name"),
+		rel.EntityAttr(ConstraintType, "ConstraintType"),
+		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
 	),
 	rel.EntityMapping(t((*scpb.Sequence)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
@@ -203,6 +211,8 @@ var Schema = rel.MustSchema("screl",
 	rel.EntityMapping(t((*scpb.ConstraintName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(Name, "Name"),
+		rel.EntityAttr(ConstraintType, "ConstraintType"),
+		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
 	),
 )
 

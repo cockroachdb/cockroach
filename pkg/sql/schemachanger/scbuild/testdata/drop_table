@@ -194,6 +194,26 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 2
     referenceId: 55
+- DROP ForeignKeyBackReference:{DescID: 54, ReferencedDescID: 59, Name: fk_customers}
+  state: PUBLIC
+  details:
+    name: fk_customers
+    originColumns:
+    - 1
+    originId: 54
+    referenceColumns:
+    - 4
+    referenceId: 59
+- DROP ForeignKeyBackReference:{DescID: 55, ReferencedDescID: 59, Name: fk_orders}
+  state: PUBLIC
+  details:
+    name: fk_orders
+    originColumns:
+    - 2
+    originId: 55
+    referenceColumns:
+    - 4
+    referenceId: 59
 - DROP IndexName:{DescID: 59, IndexID: 1, Name: shipments_pkey}
   state: PUBLIC
   details:
@@ -204,6 +224,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     descriptorId: 59
+- DROP Locality:{DescID: 60}
+  state: PUBLIC
+  details:
+    descriptorId: 60
 - DROP Locality:{DescID: 61}
   state: PUBLIC
   details:
@@ -214,6 +238,13 @@ DROP TABLE defaultdb.shipments CASCADE;
     databaseId: 51
     descriptorId: 59
     name: shipments
+    schemaId: 50
+- DROP Namespace:{DescID: 60, Name: sq1}
+  state: PUBLIC
+  details:
+    databaseId: 51
+    descriptorId: 60
+    name: sq1
     schemaId: 50
 - DROP Namespace:{DescID: 61, Name: v1}
   state: PUBLIC
@@ -226,6 +257,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     descriptorId: 59
+    owner: root
+- DROP Owner:{DescID: 60}
+  state: PUBLIC
+  details:
+    descriptorId: 60
     owner: root
 - DROP Owner:{DescID: 61}
   state: PUBLIC
@@ -258,8 +294,13 @@ DROP TABLE defaultdb.shipments CASCADE;
 - DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
   state: PUBLIC
   details:
+    columnID: 2
     dependedOn: 61
     tableId: 59
+- DROP Sequence:{DescID: 60}
+  state: PUBLIC
+  details:
+    sequenceId: 60
 - DROP SequenceOwnedBy:{DescID: 60, ReferencedDescID: 59}
   state: PUBLIC
   details:
@@ -284,6 +325,23 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     descriptorId: 59
+    privileges: 2
+    username: root
+- DROP UserPrivileges:{DescID: 60, Username: admin}
+  state: PUBLIC
+  details:
+    descriptorId: 60
+    privileges: 2
+    username: admin
+- DROP UserPrivileges:{DescID: 60, Username: public}
+  state: PUBLIC
+  details:
+    descriptorId: 60
+    username: public
+- DROP UserPrivileges:{DescID: 60, Username: root}
+  state: PUBLIC
+  details:
+    descriptorId: 60
     privileges: 2
     username: root
 - DROP UserPrivileges:{DescID: 61, Username: admin}

@@ -62,7 +62,7 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
+PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -72,6 +72,8 @@ PreCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
     [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [DefaultExpression:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
@@ -83,6 +85,16 @@ PreCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 54
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 55
+    *scop.UpdateRelationDeps
+      TableID: 55
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 56
+    *scop.UpdateRelationDeps
+      TableID: 56
 PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT

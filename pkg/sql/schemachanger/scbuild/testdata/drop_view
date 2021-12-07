@@ -163,26 +163,31 @@ DROP VIEW defaultdb.v1 CASCADE
 - DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 56
     tableId: 55
 - DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 57
     tableId: 55
 - DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 57
     tableId: 56
 - DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 58
     tableId: 56
 - DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}
   state: PUBLIC
   details:
+    columnID: 1
     dependedOn: 61
     tableId: 58
 - DROP UserPrivileges:{DescID: 55, Username: admin}
