@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvstreamer",
+    srcs = [
+        "avg_response_estimator.go",
+        "budget.go",
+        "streamer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission",
+        "//pkg/util/mon",
+        "//pkg/util/quotapool",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "kvstreamer_test",
+    srcs = [
+        "avg_response_estimator_test.go",
+        "main_test.go",
+        "streamer_test.go",
+    ],
+    embed = [":kvstreamer"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

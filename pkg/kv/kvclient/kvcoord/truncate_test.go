@@ -164,7 +164,7 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: intersection failure: %v", i, err)
 			continue
 		}
-		reqs, pos, err := truncate(original.Requests, rs)
+		reqs, pos, err := Truncate(original.Requests, rs)
 		if err != nil || test.err != "" {
 			if !testutils.IsError(err, test.err) {
 				t.Errorf("%d: %v (expected: %q)", i, err, test.err)
