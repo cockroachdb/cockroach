@@ -6116,7 +6116,6 @@ func TestRangeStatsComputation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
-	ctx := context.Background()
 
 	baseStats := tc.repl.GetMVCCStats()
 
@@ -6162,9 +6161,9 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:            101,
+		LiveBytes:            103,
 		KeyBytes:             28,
-		ValBytes:             73,
+		ValBytes:             75,
 		IntentBytes:          23,
 		LiveCount:            2,
 		KeyCount:             2,
@@ -6172,10 +6171,6 @@ func TestRangeStatsComputation(t *testing.T) {
 		IntentCount:          1,
 		SeparatedIntentCount: 1,
 	})
-	if !tc.engine.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
-		expMS.LiveBytes += 2
-		expMS.ValBytes += 2
-	}
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
