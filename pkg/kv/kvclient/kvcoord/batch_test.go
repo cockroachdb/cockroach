@@ -49,6 +49,14 @@ func TestBatchPrevNext(t *testing.T) {
 			expFW: max,
 			expBW: min,
 		},
+		{
+			spans: span("a"), key: "a",
+			// Done with `key < a`, so `a <= key` is next.
+			expFW: "a",
+			// Done with `key >= a`, and there's nothing in `[min, a]`, so we return
+			// min here.
+			expBW: min,
+		},
 		{spans: span("a", "b", "c", "d"), key: "c",
 			// Done with `key < c`, so `c <= key` next.
 			expFW: "c",
@@ -87,19 +95,24 @@ func TestBatchPrevNext(t *testing.T) {
 		{spans: abc, key: "b",
 			// We've seen `key < b` so we still need to hit `b`.
 			expFW: "b",
-			// We've seen `key >= b`, so hop over the gap to `a`. Similar to the
-			// first test case.
-			expBW: "a",
+			// We've seen `key >=b`, so hop over the gap to `a`, similar to the first
+			// test case. [`a`] is represented as [`a`,`a.Next()`), so we expect prev
+			// to return a.Next() here..
+			expBW: "a\x00",
 		},
 		{spans: abc, key: "b\x00",
 			// No surprises.
 			expFW: "c",
-			expBW: "b",
+			// Similar to the explanation above, we expect [`b`] = [`b`, `b.Next()`)
+			// here.
+			expBW: "b\x00",
 		},
 		{spans: abc, key: "bb",
 			// Ditto.
 			expFW: "c",
-			expBW: "b",
+			// Similar to the explanation above, we expect [`b`] = [`b`, `b.Next()`)
+			// here.
+			expBW: "b\x00",
 		},
 
 		// Multiple candidates. No surprises, just a sanity check.

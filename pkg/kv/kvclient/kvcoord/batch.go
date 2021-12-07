@@ -144,18 +144,16 @@ func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 		}
 		endKey := h.EndKey
 		if len(endKey) == 0 {
-			// This is unintuitive, but if we have a point request at `x=k` then that request has
-			// already been satisfied (since the batch has already been executed for all keys `>=
-			// k`). We treat `k` as `[k,k)` which does the right thing below. It also does when `x >
-			// k` and `x < k`, so we're good.
+			// If we have a point request for `x < k` then that request has not been
+			// satisfied (since the batch has only been executed for keys `>=k`). We
+			// treat `x` as `[x, x.Next())` which does the right thing below. This
+			// also works when `x > k` or `x=k` as the logic below will skip `x`.
 			//
-			// Note that if `x` is /Local/k/something, then AddrUpperBound below will turn it into
-			// `k\x00`, and so we're looking at the key range `[k, k\x00)`. This is exactly what we
-			// want since otherwise the result would be `k` and so the caller would restrict itself
-			// to `key < k`, but that excludes `k` itself and thus all local keys attached to it.
+			// Note that if `x` is /Local/k/something then we can never be in this
+			// branch as local keys always have a suffix (i.e non-empty end key).
 			//
-			// See TestBatchPrevNext for a test case with commentary.
-			endKey = h.Key
+			// See TestBatchPrevNext for test cases with commentary.
+			endKey = h.Key.Next()
 		}
 		eAddr, err := keys.AddrUpperBound(endKey)
 		if err != nil {
