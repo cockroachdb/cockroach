@@ -12,7 +12,6 @@ package migrations
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 func publicSchemaMigration(
@@ -69,7 +67,6 @@ ORDER BY ns_db.id ASC;
 	}
 
 	for _, dbID := range databaseIDs {
-		fmt.Println("dbID:", dbID)
 		if err := createPublicSchemaForDatabase(ctx, dbID, d); err != nil {
 			return err
 		}
@@ -81,93 +78,102 @@ ORDER BY ns_db.id ASC;
 func createPublicSchemaForDatabase(
 	ctx context.Context, dbID descpb.ID, d migration.TenantDeps,
 ) error {
-	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-	) error {
-		found, desc, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{})
-		if err != nil {
-			return err
-		}
-		if !found {
-			return errors.Newf("expected to find database with id %d", dbID)
-		}
-		if desc.HasPublicSchemaWithDescriptor() {
-			// If the database already has a descriptor backed public schema,
-			// there is no work to be done.
-			return nil
-		}
-		dbDescBuilder := dbdesc.NewBuilder(desc.DatabaseDesc())
-		dbDesc := dbDescBuilder.BuildExistingMutableDatabase()
+	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB,
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			return createPublicSchemaDescriptor(ctx, txn, descriptors, dbID, d)
+		})
+}
 
-		b := txn.NewBatch()
+func createPublicSchemaDescriptor(
+	ctx context.Context,
+	txn *kv.Txn,
+	descriptors *descs.Collection,
+	dbID descpb.ID,
+	d migration.TenantDeps,
+) error {
+	_, desc, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return err
+	}
+	if desc.HasPublicSchemaWithDescriptor() {
+		// If the database already has a descriptor backed public schema,
+		// there is no work to be done.
+		return nil
+	}
+	dbDescBuilder := dbdesc.NewBuilder(desc.DatabaseDesc())
+	dbDesc := dbDescBuilder.BuildExistingMutableDatabase()
 
-		publicSchemaDesc, _, err := sql.CreateSchemaDescriptorWithPrivileges(
-			ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleName(), security.AdminRoleName(), true, /* allocateID */
-		)
-		if err != nil {
-			return err
-		}
-		publicSchemaID := publicSchemaDesc.GetID()
-		newKey := catalogkeys.MakeSchemaNameKey(d.Codec, dbID, publicSchemaDesc.GetName())
-		oldKey := catalogkeys.EncodeNameKey(d.Codec, catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, tree.PublicSchema))
-		// Remove namespace entry for old public schema.
-		b.Del(oldKey)
-		b.CPut(newKey, publicSchemaID, nil)
-		if err := catalogkv.WriteNewDescToBatch(
-			ctx,
-			false,
-			d.Settings,
-			b,
-			d.Codec,
-			publicSchemaID,
-			publicSchemaDesc,
-		); err != nil {
-			return err
-		}
+	b := txn.NewBatch()
 
-		if desc.DatabaseDesc().Schemas == nil {
-			dbDesc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {
-					ID: publicSchemaID,
-				},
-			}
-		} else {
-			dbDesc.Schemas[tree.PublicSchema] = descpb.DatabaseDescriptor_SchemaInfo{
+	publicSchemaDesc, _, err := sql.CreateSchemaDescriptorWithPrivileges(
+		ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleName(), security.AdminRoleName(), true, /* allocateID */
+	)
+	if err != nil {
+		return err
+	}
+	publicSchemaID := publicSchemaDesc.GetID()
+	newKey := catalogkeys.MakeSchemaNameKey(d.Codec, dbID, publicSchemaDesc.GetName())
+	oldKey := catalogkeys.EncodeNameKey(d.Codec, catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, tree.PublicSchema))
+	// Remove namespace entry for old public schema.
+	b.Del(oldKey)
+	b.CPut(newKey, publicSchemaID, nil)
+	if err := catalogkv.WriteNewDescToBatch(
+		ctx,
+		false,
+		d.Settings,
+		b,
+		d.Codec,
+		publicSchemaID,
+		publicSchemaDesc,
+	); err != nil {
+		return err
+	}
+
+	if dbDesc.Schemas == nil {
+		dbDesc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
+			tree.PublicSchema: {
 				ID: publicSchemaID,
-			}
+			},
 		}
-		if err := descriptors.WriteDescToBatch(ctx, false, dbDesc, b); err != nil {
-			return err
+	} else {
+		dbDesc.Schemas[tree.PublicSchema] = descpb.DatabaseDescriptor_SchemaInfo{
+			ID: publicSchemaID,
 		}
-		allDescriptors, err := descriptors.GetAllDescriptors(ctx, txn)
-		if err != nil {
-			return err
-		}
-		if err := migrateObjectsInDatabase(ctx, dbID, d, b, publicSchemaID, descriptors, allDescriptors); err != nil {
-			return err
-		}
+	}
+	if err := descriptors.WriteDescToBatch(ctx, false, dbDesc, b); err != nil {
+		return err
+	}
+	allDescriptors, err := descriptors.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return err
+	}
+	if err := migrateObjectsInDatabase(ctx, dbID, d, txn, publicSchemaID, descriptors, allDescriptors); err != nil {
+		return err
+	}
 
-		return txn.Run(ctx, b)
-	})
+	return txn.Run(ctx, b)
 }
 
 func migrateObjectsInDatabase(
 	ctx context.Context,
 	dbID descpb.ID,
 	d migration.TenantDeps,
-	batch *kv.Batch,
+	txn *kv.Txn,
 	newPublicSchemaID descpb.ID,
 	descriptors *descs.Collection,
 	allDescriptors []catalog.Descriptor,
 ) error {
+	const minBatchSizeInBytes = 1 << 20 /* 512 KiB batch size */
+	currSize := 0
 	var modifiedDescs []catalog.MutableDescriptor
+	batch := txn.NewBatch()
 	for _, desc := range allDescriptors {
-		b := desc.NewBuilder()
 		// Only update descriptors in the parent db and public schema.
 		if desc.Dropped() || desc.GetParentID() != dbID ||
 			(desc.GetParentSchemaID() != keys.PublicSchemaID && desc.GetParentSchemaID() != descpb.InvalidID) {
 			continue
 		}
+		b := desc.NewBuilder()
 		updateDesc := func(mut catalog.MutableDescriptor, newPublicSchemaID descpb.ID) {
 			oldKey := catalogkeys.MakeObjectNameKey(d.Codec, mut.GetParentID(), mut.GetParentSchemaID(), mut.GetName())
 			batch.Del(oldKey)
@@ -181,9 +187,30 @@ func migrateObjectsInDatabase(
 		case *tabledesc.Mutable:
 			updateDesc(mut, newPublicSchemaID)
 			mut.UnexposedParentSchemaID = newPublicSchemaID
+			currSize += mut.Size()
 		case *typedesc.Mutable:
 			updateDesc(mut, newPublicSchemaID)
 			mut.ParentSchemaID = newPublicSchemaID
+			currSize += mut.Size()
+		}
+
+		// Once we reach the minimum batch size, write the batch and create a new
+		// one.
+		if currSize >= minBatchSizeInBytes {
+			for _, modified := range modifiedDescs {
+				err := descriptors.WriteDescToBatch(
+					ctx, false, modified, batch,
+				)
+				if err != nil {
+					return err
+				}
+			}
+			if err := txn.Run(ctx, batch); err != nil {
+				return err
+			}
+			currSize = 0
+			batch = txn.NewBatch()
+			modifiedDescs = make([]catalog.MutableDescriptor, 0)
 		}
 	}
 	for _, modified := range modifiedDescs {
@@ -194,5 +221,5 @@ func migrateObjectsInDatabase(
 			return err
 		}
 	}
-	return nil
+	return txn.Run(ctx, batch)
 }
