@@ -515,7 +515,7 @@ func (p *gcpPubsubSink) Close() error {
 		_ = p.client.Close()
 	}
 	if p.conn != nil {
-		//_ = p.conn.Close()  nolint:grpcconnclose
+		_ = p.conn.Close() // nolint:grpcconnclose
 	}
 	if p.cleanup != nil {
 		p.cleanup()
