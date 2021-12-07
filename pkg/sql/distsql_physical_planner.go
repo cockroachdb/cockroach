@@ -254,6 +254,11 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 			v.err = newQueryNotSupportedErrorf("array %s cannot be executed with distsql", t)
 			return false, expr
 		}
+	case *tree.DTuple:
+		if t.ResolvedType() == types.AnyTuple {
+			v.err = newQueryNotSupportedErrorf("tuple %s cannot be executed with distsql", t)
+			return false, expr
+		}
 	}
 	return true, expr
 }

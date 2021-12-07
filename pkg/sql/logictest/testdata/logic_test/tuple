@@ -1084,3 +1084,41 @@ ORDER BY
 ----
 {}
 {"(1,cat)"}
+
+query T
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+----
+(1,{})
+(2,"{""(1,2)""}")
+
+statement error VALUES types tuple\{decimal, tuple\{int, int\}\[\]\} and tuple\{decimal, tuple\{int, int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+
+statement error VALUES types tuple\{decimal, tuple\{int, int, int\}\[\]\} and tuple\{decimal, tuple\{int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
+  )
+    AS t2 (c3, c4)
