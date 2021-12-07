@@ -447,6 +447,16 @@ func (dsp *DistSQLPlanner) Run(
 				localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
 			}
 		}
+		for _, proc := range plan.Processors {
+			if js := proc.Spec.Core.JoinReader; js != nil {
+				if !js.MaintainOrdering && js.IsIndexJoin() {
+					// Index joins when ordering doesn't have to be maintained
+					// are executed via the Streamer API that has concurrency.
+					localState.HasConcurrency = true
+					break
+				}
+			}
+		}
 	}
 	if localState.MustUseLeafTxn() && txn != nil {
 		// Set up leaf txns using the txnCoordMeta if we need to.
