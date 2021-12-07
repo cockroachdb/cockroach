@@ -36,6 +36,9 @@ export interface ISortedTablePagination {
 export interface ColumnDescriptor<T> {
   // Title string that should appear in the header column.
   title: React.ReactNode;
+  // Hides the dashed title underline, which represents that a tooltip exists.
+  // Defaults to false and shows the underline if not defined.
+  hideTitleUnderline?: boolean;
   // Function which generates the contents of an individual cell in this table.
   cell: (obj: T) => React.ReactNode;
   // Function which returns a value that can be used to sort the collection of
@@ -128,6 +131,9 @@ const cx = classNames.bind(styles);
 export interface SortableColumn {
   // Text that will appear in the title header of the table.
   title: React.ReactNode;
+  // Hides the dashed title underline, which represents that a tooltip exists.
+  // Defaults to false and shows the underline if not defined.
+  hideTitleUnderline?: boolean;
   // Function which provides the contents for this column for a given row index
   // in the dataset.
   cell: (rowIndex: number) => React.ReactNode;
@@ -252,6 +258,7 @@ export class SortedTable<T> extends React.Component<
           return {
             name: cd.name,
             title: cd.title,
+            hideTitleUnderline: cd.hideTitleUnderline,
             cell: index => cd.cell(sorted[index]),
             columnTitle: cd.sort ? cd.name : undefined,
             rollup: rollups[ii],
