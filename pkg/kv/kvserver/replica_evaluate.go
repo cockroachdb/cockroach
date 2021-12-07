@@ -518,6 +518,10 @@ func evaluateCommand(
 // for transactional requests, retrying is possible if the transaction had not
 // performed any prior reads that need refreshing.
 //
+// prevPErr, if not nil, specifies the error previously observed and passed to
+// this function. Its existence indicates that the current error was hit during
+// a server-side retry.
+//
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
 // the request can be evaluated. If ba is a transactional request, then dealine
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
@@ -526,7 +530,7 @@ func evaluateCommand(
 // timestamp.
 func canDoServersideRetry(
 	ctx context.Context,
-	pErr *roachpb.Error,
+	pErr, prevPErr *roachpb.Error,
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	latchSpans *spanset.SpanSet,
@@ -576,6 +580,36 @@ func canDoServersideRetry(
 		}
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.WriteTooOldError:
+			// Check if this is the second WriteTooOld error in a row. When a
+			// write-write conflict that creates a WriteTooOld error is encountered,
+			// evaluateBatch will continue running each request in the batch in order
+			// to determine the maximum conflict timestamp. It then returns this
+			// maximum timestamp in its WriteTooOld error, which canDoServersideRetry
+			// uses to compute a server-side retry timestamp. This means that during a
+			// server-side retry (where latches are not dropped between retries), it
+			// is not possible to conflict with a write that was not previously seen.
+			//
+			// For non-transactional batches, this means that the only time that we
+			// would expect to see back-to-back WriteTooOld errors is when the
+			// non-transactional batch contains overlapping writes, and as a result,
+			// is observing write-write conflicts with itself. These batches will
+			// never succeed, so we stop them from retrying.
+			//
+			// For transactional batches, this means that we never expect to see
+			// back-to-back WriteTooOld errors. Overlapping writes within a
+			// transaction do not create WriteTooOld conflicts. Instead, the intent
+			// value left by the first write is simply replaced by a new intent value
+			// at the same timestamp.
+			//
+			// NOTE: a transactional batch may initially attempt to perform a 1PC
+			// evaluation (see evaluate1PC). In doing so, it attempts to evaluate as a
+			// non-transactional batch. If such a batch contains overlapping writes
+			// that create a WriteTooOld error, then it will be rejected, fall back to
+			// the non-1PC evaluation path, and succeed.
+			if _, ok := prevPErr.GetDetail().(*roachpb.WriteTooOldError); ok {
+				return false
+			}
+
 			newTimestamp = tErr.ActualTimestamp
 		default:
 			return false

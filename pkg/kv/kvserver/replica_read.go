@@ -281,18 +281,19 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		rec = evalCtx
 	}
 
-	for retries := 0; ; retries++ {
-		if retries > 0 {
+	var prevPErr *roachpb.Error
+	for {
+		if prevPErr != nil {
 			// It is safe to call Clear on an uninitialized BoundAccount.
 			boundAccount.Clear(ctx)
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, ui, true /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
-		// Allow one retry only.
-		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
+		if pErr == nil || !canDoServersideRetry(ctx, pErr, prevPErr, ba, br, latchSpans, nil /* deadline */) {
 			break
 		}
+		prevPErr = pErr
 	}
 
 	if pErr != nil {
