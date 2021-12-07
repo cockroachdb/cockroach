@@ -446,14 +446,26 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-statement error "orders_customer_fkey" is referenced by foreign key from table "orders"
+statement error "customers" is referenced by foreign key from table "orders"
 DROP TABLE defaultdb.customers;
 
 statement ok
 CREATE SEQUENCE defaultdb.sq1 OWNED BY defaultdb.shipments.carrier;
 
-statement error cannot drop table sq1 because other objects depend on it
+statement ok
 DROP TABLE defaultdb.shipments;
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
 
 statement ok
 CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
@@ -463,6 +475,11 @@ DROP TABLE defaultdb.shipments;
 
 statement ok
 DROP TABLE defaultdb.shipments CASCADE;
+
+# Back references for shipments should be cleaned up for any foreign
+# keys so dropping customers and orders should be safe.
+statement ok
+DROP TABLE defaultdb.customers CASCADE;
 
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
@@ -1060,3 +1077,81 @@ DROP TABLE multi_t1,multi_t2
 
 statement ok
 DROP SEQUENCE multi_sq1, multi_sq1
+
+# Sequence related back ref test
+subtest seq-back-ref
+
+statement ok
+CREATE SEQUENCE sqbf1;
+
+statement ok
+CREATE TABLE sbt1 (test INT not null, value INT not null DEFAULT nextval('sqbf1'))
+
+statement ok
+CREATE VIEW sbv1 AS SELECT  nextval('sqbf1')
+
+statement ok
+INSERT into sbt1 VALUES(1)
+
+statement ok
+select * from sbv1
+
+statement ok
+DROP SEQUENCE sqbf1 CASCADE
+
+# Default expression is dropped so this should error out.
+statement error null value in column "value" violates not-null constraint
+INSERT into sbt1 VALUES(1)
+
+# View referencing it should also be cleaned up.
+statement error relation "sbv1" does not exist
+select * from sbv1
+
+subtest fk-backref-cleanup
+statement ok
+CREATE TABLE IF NOT EXISTS defaultdb.orders (
+    id INT PRIMARY KEY,
+    customer INT UNIQUE NOT NULL REFERENCES defaultdb.customers (id),
+    orderTotal DECIMAL(9,2),
+    INDEX (customer)
+  );
+
+statement ok
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
+ statement ok
+ DROP TABLE defaultdb.customers CASCADE;
+
+ statement ok
+ DROP TABLE defaultdb.orders CASCADE;
+
+ # Foreign key back constraints should be cleaned up.
+ statement ok
+INSERT into  defaultdb.shipments values ( gen_random_uuid(), 'a', 'b', 10842)
+
+statement ok
+DROP TABLE defaultdb.shipments CASCADE;
+
+subtest validate-drops-with-multiple-constraints
+
+# When decomposing and dropping this table we will have multiple
+# constraints that need to be cleaned up.
+statement ok
+CREATE TABLE const (a INT, b INT,
+CONSTRAINT id_unique UNIQUE (a),
+CONSTRAINT b_unique UNIQUE (b)
+);
+
+statement ok
+DROP TABLE const

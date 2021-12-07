@@ -186,14 +186,16 @@ func decomposeDefaultExprToElements(
 		DefaultExpr:     defaultExpr,
 		UsesSequenceIDs: sequenceIDs,
 	}
-	addOrDropForDir(b, dir, &expressionElem)
-	// Decompose any elements required for expressions.
-	decomposeExprToElements(b,
-		defaultExpr,
-		exprTypeDefault,
-		table,
-		column,
-		dir)
+	if !b.HasTarget(dir, &expressionElem) {
+		addOrDropForDir(b, dir, &expressionElem)
+		// Decompose any elements required for expressions.
+		decomposeExprToElements(b,
+			defaultExpr,
+			exprTypeDefault,
+			table,
+			column,
+			dir)
+	}
 }
 
 // decomposeDescToElements converts generic parts
@@ -301,7 +303,9 @@ func decomposeSequenceDescToElements(
 		sequenceOwnedBy := &scpb.SequenceOwnedBy{
 			SequenceID:   seq.GetID(),
 			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
-		addOrDropForDir(b, dir, sequenceOwnedBy)
+		if !b.HasTarget(dir, sequenceOwnedBy) {
+			addOrDropForDir(b, dir, sequenceOwnedBy)
+		}
 	}
 }
 
@@ -378,7 +382,9 @@ func decomposeTableDescToElements(
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
 		}
-		addOrDropForDir(b, dir, &outBoundFk)
+		if !b.HasTarget(dir, &outBoundFk) {
+			addOrDropForDir(b, dir, &outBoundFk)
+		}
 		return nil
 	})
 	if err != nil {
@@ -394,7 +400,9 @@ func decomposeTableDescToElements(
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
 		}
-		addOrDropForDir(b, dir, &inBoundFk)
+		if !b.HasTarget(dir, &inBoundFk) {
+			addOrDropForDir(b, dir, &inBoundFk)
+		}
 		return nil
 	})
 	if err != nil {
@@ -402,40 +410,37 @@ func decomposeTableDescToElements(
 	}
 	// Add any constraints without indexes first.
 	for idx, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		constraintID := &scpb.ConstraintID{
-			Type:    scpb.ConstraintID_UniqueWithoutIndex,
-			Ordinal: uint32(idx),
-		}
 		constraintName := &scpb.ConstraintName{
-			TableID:      tbl.GetID(),
-			ConstraintID: constraintID,
-			Name:         constraint.Name,
+			TableID:           tbl.GetID(),
+			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
+			ConstraintOrdinal: uint32(idx),
+			Name:              constraint.Name,
 		}
 		uniqueWithoutConstraint := &scpb.UniqueConstraint{
-			ConstraintID: constraintID,
-			TableID:      tbl.GetID(),
-			IndexID:      0, // Invalid ID
-			ColumnIDs:    constraint.ColumnIDs,
+			TableID:           tbl.GetID(),
+			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
+			ConstraintOrdinal: uint32(idx),
+			IndexID:           0, // Invalid ID
+			ColumnIDs:         constraint.ColumnIDs,
 		}
 		addOrDropForDir(b, dir, uniqueWithoutConstraint)
 		addOrDropForDir(b, dir, constraintName)
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
-		constraintID := &scpb.ConstraintID{
-			Type:    scpb.ConstraintID_CheckConstraint,
-			Ordinal: uint32(idx),
-		}
 		constraintName := &scpb.ConstraintName{
-			TableID:      tbl.GetID(),
-			ConstraintID: constraintID,
-			Name:         constraint.Name,
+			TableID:           tbl.GetID(),
+			ConstraintType:    scpb.ConstraintType_Check,
+			ConstraintOrdinal: uint32(idx),
+			Name:              constraint.Name,
 		}
 		checkConstraint := &scpb.CheckConstraint{
-			TableID:   tbl.GetID(),
-			Name:      constraint.Name,
-			Validated: constraint.Validity == descpb.ConstraintValidity_Validated,
-			ColumnIDs: constraint.ColumnIDs,
+			ConstraintType:    scpb.ConstraintType_Check,
+			ConstraintOrdinal: uint32(idx),
+			TableID:           tbl.GetID(),
+			Name:              constraint.Name,
+			Validated:         constraint.Validity == descpb.ConstraintValidity_Validated,
+			ColumnIDs:         constraint.ColumnIDs,
 		}
 		addOrDropForDir(b, dir, checkConstraint)
 		addOrDropForDir(b, dir, constraintName)
@@ -456,12 +461,24 @@ func decomposeTableDescToElements(
 		}
 	}
 	for _, depBy := range tbl.GetDependedOnBy() {
-		dependedOnBy := &scpb.RelationDependedOnBy{
-			DependedOnBy: depBy.ID,
-			TableID:      tbl.GetID(),
+		if len(depBy.ColumnIDs) == 0 {
+			dependedOnBy := &scpb.RelationDependedOnBy{
+				DependedOnBy: depBy.ID,
+				TableID:      tbl.GetID(),
+			}
+			if !b.HasTarget(dir, dependedOnBy) {
+				addOrDropForDir(b, dir, dependedOnBy)
+			}
 		}
-		if !b.HasTarget(dir, dependedOnBy) {
-			addOrDropForDir(b, dir, dependedOnBy)
+		for _, colID := range depBy.ColumnIDs {
+			dependedOnBy := &scpb.RelationDependedOnBy{
+				DependedOnBy: depBy.ID,
+				TableID:      tbl.GetID(),
+				ColumnID:     colID,
+			}
+			if !b.HasTarget(dir, dependedOnBy) {
+				addOrDropForDir(b, dir, dependedOnBy)
+			}
 		}
 	}
 	//TODO (fqazi) Computed Expressions / Update expressions can be moved out
