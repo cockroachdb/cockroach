@@ -643,7 +643,7 @@ statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
 
 statement error database "db1" has a non-empty schema "public" and CASCADE was not specified
-DROP DATABASE db1
+DROP DATABASE db1 RESTRICT
 
 statement ok
 SET experimental_use_new_schema_changer = 'unsafe_always'
@@ -677,9 +677,22 @@ SELECT 'a'::db1.sc1.typ::string
 statement ok
 SET experimental_use_new_schema_changer = 'unsafe'
 
+let $desc_count_pre_drop
+select count(*) from system.descriptor
+
 # Actually drop the database now.
 statement ok
 DROP DATABASE db1 CASCADE
+
+let $desc_count_post_drop
+select count(*) from system.descriptor
+
+# Excluding anything that needs GC, we should drop by 4 (2 types [array and
+# normal], 2 schema's)
+query I
+select $desc_count_pre_drop-$desc_count_post_drop
+----
+4
 
 # Tests for computed column rewrites.
 statement ok
@@ -1052,8 +1065,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.sc1", "'db1-a'.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "'db1-a'.public", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "'db1-a'.sc1", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "User": "root"}
+1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.public"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "User": "root"}
 1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}
 
 # Sanity: Dropping multiple objects in the builder or resolving any dependencies
@@ -1155,3 +1168,22 @@ CONSTRAINT b_unique UNIQUE (b)
 
 statement ok
 DROP TABLE const
+
+subtest schema-dep-sanity
+
+# Test that we can drop multiple schemas as part of a single DROP statement,with
+# interleaved dependencies between schemas. As a result some child elements will
+# be added by a different schema due to cascaded drop behavior. i.e. Cross
+# schema behavior for views and tables.
+statement ok
+CREATE SCHEMA scdrop1;
+CREATE SCHEMA scdrop2;
+CREATE SCHEMA scdrop3;
+CREATE TABLE scdrop1.scdrop1_t1 (x INT);
+CREATE TABLE scdrop1.scdrop1_t2 (x INT);
+CREATE TABLE scdrop2.scdrop2_t1 (x INT);
+CREATE VIEW scdrop2.scdrop2_v1 AS SELECT x FROM scdrop1.scdrop1_t1;
+CREATE VIEW scdrop3.scdrop3_v1 AS SELECT x FROM scdrop2.scdrop2_v1;
+
+statement ok
+DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE

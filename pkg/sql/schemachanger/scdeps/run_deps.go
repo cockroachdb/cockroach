@@ -154,9 +154,7 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 }
 
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
-func (d *jobExecutionDeps) WithTxnInJob(
-	ctx context.Context, fn func(ctx context.Context, txndeps scrun.JobTxnRunDependencies) error,
-) error {
+func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {

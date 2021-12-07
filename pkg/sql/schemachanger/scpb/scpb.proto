@@ -49,6 +49,7 @@ message ElementProto {
   ComputedExprTypeReference computedExprTypeReference = 28 [(gogoproto.moretags) = "parent:\"Column, Type\""];
   ViewDependsOnType viewDependsOnType = 29 [(gogoproto.moretags) = "parent:\"View, Type\""];
   ColumnTypeReference columnTypeReference = 30 [(gogoproto.moretags) = "parent:\"Column, Type\""];
+  DatabaseSchemaEntry schemaEntry = 31 [(gogoproto.moretags) = "parent:\"Database, Schema\""];
 }
 
 message Target {
@@ -391,4 +392,9 @@ message DefaultPrivilege {
     cockroach.sql.sqlbase.DefaultPrivilegesForRole.ForAllRolesPseudoRole for_all_roles = 3;
   }
     map<uint32, DefaultObjectPrivilege> privileges_per_object = 4;
+}
+
+message DatabaseSchemaEntry {
+  uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 schema_id = 2 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }

@@ -155,8 +155,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 57
+    *scop.CreateGcJobForTable
+      TableID: 57
     *scop.LogEvent
       DescID: 59
       Direction: 2
@@ -169,8 +169,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 59
+    *scop.CreateGcJobForTable
+      TableID: 59
     *scop.LogEvent
       DescID: 58
       Direction: 2
@@ -183,8 +183,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
         Username: root
-    *scop.CreateGcJobForDescriptor
-      DescID: 58
+    *scop.CreateGcJobForTable
+      TableID: 58
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;
