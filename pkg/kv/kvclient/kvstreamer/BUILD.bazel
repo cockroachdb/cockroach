@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvstreamer",
+    srcs = [
+        "budget.go",
+        "streamer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission",
+        "//pkg/util/buildutil",
+        "//pkg/util/mon",
+        "//pkg/util/quotapool",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
+    ],
+)

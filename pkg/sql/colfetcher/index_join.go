@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -102,6 +103,9 @@ type ColIndexJoin struct {
 	// maintainOrdering is true when the index join is required to maintain its
 	// input ordering, in which case the ordering of the spans cannot be changed.
 	maintainOrdering bool
+
+	// usesStreamer indicates whether rf is using the Streamer API.
+	usesStreamer bool
 }
 
 var _ colexecop.KVReader = &ColIndexJoin{}
@@ -174,16 +178,27 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// the memory accounting - we don't double count for any memory of
 			// spans because the spanAssembler released all of the relevant
 			// memory from its account in GetSpans().
-			if err := s.rf.StartScan(
-				s.Ctx,
-				s.flowCtx.Txn,
-				spans,
-				nil,   /* bsHeader */
-				false, /* limitBatches */
-				rowinfra.NoBytesLimit,
-				rowinfra.NoRowLimit,
-				s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
-			); err != nil {
+			var err error
+			if s.usesStreamer {
+				err = s.rf.StartScanStreaming(
+					s.Ctx,
+					s.flowCtx,
+					spans,
+					rowinfra.NoRowLimit,
+				)
+			} else {
+				err = s.rf.StartScan(
+					s.Ctx,
+					s.flowCtx.Txn,
+					spans,
+					nil,   /* bsHeader */
+					false, /* limitBatches */
+					rowinfra.NoBytesLimit,
+					rowinfra.NoRowLimit,
+					s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+				)
+			}
+			if err != nil {
 				colexecerror.InternalError(err)
 			}
 			s.state = indexJoinScanning
@@ -385,6 +400,7 @@ func NewColIndexJoin(
 	allocator *colmem.Allocator,
 	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
+	streamerBudgetAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
@@ -466,7 +482,12 @@ func NewColIndexJoin(
 		false, /* reverse */
 		flowCtx.TraceKV,
 	}
-	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns); err != nil {
+	tryStreamer := row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) && !spec.MaintainOrdering
+	var usesStreamer bool
+	if usesStreamer, err = fetcher.Init(
+		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, streamerBudgetAcc,
+		tableArgs, spec.HasSystemColumns, tryStreamer,
+	); err != nil {
 		fetcher.Release()
 		return nil, err
 	}
@@ -482,6 +503,7 @@ func NewColIndexJoin(
 		spanAssembler:    spanAssembler,
 		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
+		usesStreamer:     usesStreamer,
 	}
 	op.prepareMemLimit(inputTypes)
 

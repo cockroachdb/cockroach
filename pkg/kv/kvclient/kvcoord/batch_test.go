@@ -169,7 +169,7 @@ func TestBatchPrevNext(t *testing.T) {
 				args.Key, args.EndKey = span.Key, span.EndKey
 				ba.Add(args)
 			}
-			if next, err := next(ba.Requests, roachpb.RKey(test.key)); err != nil {
+			if next, err := Next(ba.Requests, roachpb.RKey(test.key)); err != nil {
 				t.Error(err)
 			} else if !bytes.Equal(next, roachpb.Key(test.expFW)) {
 				t.Errorf("next: expected %q, got %q", test.expFW, next)
