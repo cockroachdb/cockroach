@@ -132,7 +132,7 @@ func (p *Provider) CleanSSH() error {
 }
 
 // ConfigSSH is part of the vm.Provider interface.  This implementation is a no-op.
-func (p *Provider) ConfigSSH() error {
+func (p *Provider) ConfigSSH(zones []string) error {
 	return nil
 }
 
