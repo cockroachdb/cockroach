@@ -28,7 +28,7 @@ func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	dev lint --filter=TestLowercaseFunctionNames --short --timeout=1m
 	dev lint pkg/cmd/dev
 `,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
 	addCommonBuildFlags(lintCmd)
@@ -36,7 +36,8 @@ func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	return lintCmd
 }
 
-func (d *dev) lint(cmd *cobra.Command, pkgs []string) error {
+func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
+	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	filter := mustGetFlagString(cmd, filterFlag)
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
@@ -50,6 +51,7 @@ func (d *dev) lint(cmd *cobra.Command, pkgs []string) error {
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
+	args = append(args, additionalBazelArgs...)
 	args = append(args, "--", "-test.v")
 	if short {
 		args = append(args, "-test.short")

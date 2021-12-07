@@ -3,6 +3,7 @@ exports_files(["testdata/errcheck_excludes.txt"])
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 # gazelle:build_tags lint
+# gazelle:build_tags nightly
 
 go_library(
     name = "lint",
@@ -13,14 +14,19 @@ go_library(
 
 go_test(
     name = "lint_test",
-    srcs = ["lint_test.go"],
+    srcs = [
+        "lint_test.go",
+        "nightly_lint_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":lint"],
     gotags = ["lint"],
     visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/cmd/urlcheck/lib/urlcheck",
         "//pkg/internal/codeowners",
+        "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",
