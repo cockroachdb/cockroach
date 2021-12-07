@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -575,6 +576,15 @@ func (rf *cFetcher) Init(
 	return nil
 }
 
+//gcassert:inline
+func (rf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
+	rf.fetcher = f
+	rf.machine.lastRowPrefix = nil
+	rf.machine.limitHint = int(limitHint)
+	rf.machine.state[0] = stateResetBatch
+	rf.machine.state[1] = stateInitFetch
+}
+
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
@@ -642,11 +652,30 @@ func (rf *cFetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	rf.fetcher = f
-	rf.machine.lastRowPrefix = nil
-	rf.machine.limitHint = int(limitHint)
-	rf.machine.state[0] = stateResetBatch
-	rf.machine.state[1] = stateInitFetch
+	rf.setFetcher(f, limitHint)
+	return nil
+}
+
+// StartScanStreaming initializes and starts the key-value scan using the
+// Streamer API. Can be used multiple times.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly. The caller can only reuse the
+// spans slice after the fetcher has been closed (which happens when the fetcher
+// emits the first zero batch), and if the caller does, it becomes responsible
+// for the memory accounting.
+func (rf *cFetcher) StartScanStreaming(
+	ctx context.Context,
+	streamer *kvstreamer.Streamer,
+	spans roachpb.Spans,
+	limitHint rowinfra.RowLimit,
+) error {
+	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, rf.lockStrength)
+	if err != nil {
+		return err
+	}
+	f := row.NewKVStreamingFetcher(kvBatchFetcher)
+	rf.setFetcher(f, limitHint)
 	return nil
 }
 
@@ -1437,8 +1466,10 @@ func (rf *cFetcher) Release() {
 }
 
 func (rf *cFetcher) Close(ctx context.Context) {
-	if rf != nil && rf.fetcher != nil {
-		rf.fetcher.Close(ctx)
-		rf.fetcher = nil
+	if rf != nil {
+		if rf.fetcher != nil {
+			rf.fetcher.Close(ctx)
+			rf.fetcher = nil
+		}
 	}
 }

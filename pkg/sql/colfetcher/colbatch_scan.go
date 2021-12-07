@@ -231,7 +231,9 @@ func NewColBatchScan(
 		flowCtx.TraceKV,
 	}
 
-	if err = fetcher.Init(flowCtx.Codec(), allocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns); err != nil {
+	if err = fetcher.Init(
+		flowCtx.Codec(), allocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns,
+	); err != nil {
 		fetcher.Release()
 		return nil, err
 	}
