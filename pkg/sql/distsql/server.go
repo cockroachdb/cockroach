@@ -408,8 +408,19 @@ func (ds *ServerImpl) setupFlow(
 	// that have no remote flows and also no concurrency, the txn comes from
 	// localState.Txn. Otherwise, we create a txn based on the request's
 	// LeafTxnInputState.
+	useLeaf := false
+	for _, proc := range req.Flow.Processors {
+		if jr := proc.Core.JoinReader; jr != nil {
+			if !jr.MaintainOrdering && jr.IsIndexJoin() {
+				// Index joins when ordering doesn't have to be maintained are
+				// executed via the Streamer API that has concurrency.
+				useLeaf = true
+				break
+			}
+		}
+	}
 	var txn *kv.Txn
-	if localState.IsLocal && !f.ConcurrentTxnUse() {
+	if localState.IsLocal && !f.ConcurrentTxnUse() && !useLeaf {
 		txn = localState.Txn
 	} else {
 		// If I haven't created the leaf already, do it now.
