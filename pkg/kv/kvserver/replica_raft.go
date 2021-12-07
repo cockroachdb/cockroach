@@ -469,17 +469,6 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 	})
 }
 
-// raftSchedulerCtx annotates a given Raft scheduler context with information
-// about the replica. The method may return a cached instance of this context.
-func (r *Replica) raftSchedulerCtx(schedulerCtx context.Context) context.Context {
-	if v := r.schedulerCtx.Load(); v != nil {
-		return v.(context.Context)
-	}
-	schedulerCtx = r.AnnotateCtx(schedulerCtx)
-	r.schedulerCtx.Store(schedulerCtx)
-	return schedulerCtx
-}
-
 type handleSnapshotStats struct {
 	offered bool
 	applied bool
