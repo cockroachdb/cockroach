@@ -127,21 +127,30 @@ func BenchmarkSpanCreation(b *testing.B) {
 	for i := 0; i < numChildren; i++ {
 		childNames[i] = fmt.Sprintf("child%d", i)
 	}
-	b.RunParallel(func(pb *testing.PB) {
-		b.ReportAllocs()
-		sps := make([]*Span, 0, 10)
-		for pb.Next() {
-			sps = sps[:0]
-			ctx, sp := tr.StartSpanCtx(context.Background(), "root")
-			sps = append(sps, sp)
-			for j := 0; j < numChildren; j++ {
-				var sp *Span
-				ctx, sp = EnsureChildSpan(ctx, tr, childNames[j])
-				sps = append(sps, sp)
-			}
-			for j := len(sps) - 1; j >= 0; j-- {
-				sps[j].Finish()
-			}
-		}
-	})
+
+	for _, detachedChild := range []bool{false, true} {
+		b.Run(fmt.Sprintf("detached-child=%t", detachedChild), func(b *testing.B) {
+			b.RunParallel(func(pb *testing.PB) {
+				b.ReportAllocs()
+				sps := make([]*Span, 0, 10)
+				for pb.Next() {
+					sps = sps[:0]
+					ctx, sp := tr.StartSpanCtx(context.Background(), "root")
+					sps = append(sps, sp)
+					for j := 0; j < numChildren; j++ {
+						var sp *Span
+						if !detachedChild {
+							ctx, sp = EnsureChildSpan(ctx, tr, childNames[j])
+						} else {
+							ctx, sp = EnsureForkSpan(ctx, tr, childNames[j])
+						}
+						sps = append(sps, sp)
+					}
+					for j := len(sps) - 1; j >= 0; j-- {
+						sps[j].Finish()
+					}
+				}
+			})
+		})
+	}
 }

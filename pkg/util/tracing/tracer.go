@@ -44,12 +44,13 @@ import (
 )
 
 const (
+	// maxRecordedSpansPerTrace limits the number of spans per recording, keeping
+	// recordings from getting too large.
+	maxRecordedSpansPerTrace = 1000
 	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
 	// use a comfortable limit.
 	maxLogBytesPerSpan        = 256 * (1 << 10) // 256 KiB
 	maxStructuredBytesPerSpan = 10 * (1 << 10)  // 10 KiB
-	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
-	maxChildrenPerSpan = 1000
 	// maxSpanRegistrySize limits the number of local root spans tracked in
 	// a Tracer's registry.
 	maxSpanRegistrySize = 5000
@@ -724,7 +725,7 @@ func (t *Tracer) startSpanGeneric(
 	helper.crdbSpan.operation = opName
 	helper.crdbSpan.mu.recording.logs = makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */)
 	helper.crdbSpan.mu.recording.structured = makeSizeLimitedBuffer(maxStructuredBytesPerSpan, helper.structuredEventsAlloc[:])
-	helper.crdbSpan.mu.recording.openChildren = helper.childrenAlloc[:0]
+	helper.crdbSpan.mu.openChildren = helper.childrenAlloc[:0]
 	if opts.SpanKind != oteltrace.SpanKindUnspecified {
 		helper.crdbSpan.setTagLocked(spanKindTagKey, attribute.StringValue(opts.SpanKind.String()))
 	}
@@ -739,21 +740,24 @@ func (t *Tracer) startSpanGeneric(
 	s := &helper.span
 
 	{
-		// If a parent is specified and the parent is recording, link the newly
-		// created Span to the parent so that the parent will later be able to
-		// collect the child's recording.
+		// If a parent is specified, link the newly created Span to the parent.
+		// While the parent is alive, the child will be part of the
+		// activeSpansRegistry indirectly through this link. If the parent is
+		// recording, it will also use this link to collect the child's recording.
 		if opts.Parent != nil && opts.Parent.i.crdb != nil {
 			parent := opts.Parent.i.crdb
-			if parent.recordingType() != RecordingOff {
-				// We're going to hold the parent's lock while we link both the parent
-				// to the child and the child to the parent.
-				parent.withLock(func() {
-					added := parent.addChildLocked(s.i.crdb, !opts.ParentDoesNotCollectRecording)
-					if added {
-						s.i.crdb.mu.parent = opts.Parent.i.crdb
-					}
-				})
-			}
+			// We're going to hold the parent's lock while we link both the parent
+			// to the child and the child to the parent.
+			parent.withLock(func() {
+				added := parent.addChildLocked(s.i.crdb, !opts.ParentDoesNotCollectRecording)
+				if added {
+					s.i.crdb.mu.parent = opts.Parent.i.crdb
+				} else {
+					// The parent has already finished. Clear it so the would-be child
+					// looks like a root and gets added to the activeSpansRegistry below.
+					opts.Parent = nil
+				}
+			})
 		}
 		s.i.crdb.enableRecording(opts.recordingType())
 	}
@@ -763,13 +767,6 @@ func (t *Tracer) startSpanGeneric(
 	//
 	// NB: (opts.Parent != nil && opts.Parent.i.crdb == nil) is not possible at
 	// the moment, but let's not rely on that.
-	//
-	// TODO(andrei): We should be adding to the registry also if the span has a
-	// local parent but the parent is not recording, since in that case we haven't
-	// linked the span to the parent above. But I don't want to do that before
-	// optimizing the registry code. For now, not adding the span to the registry
-	// in this case doesn't really matter, since the only cases where we're
-	// creating spans is when the parent is recording.
 	if opts.Parent == nil || opts.Parent.i.crdb == nil {
 		t.activeSpansRegistry.addSpan(s.i.crdb)
 	}

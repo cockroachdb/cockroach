@@ -453,8 +453,8 @@ func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 	return spanOps
 }
 
-// TestTracer_VisitSpans verifies that in-flight local root Spans
-// are tracked by the Tracer, and that Finish'ed Spans are not.
+// TestTracer_VisitSpans verifies that in-flight Spans are tracked by the
+// Tracer, and that Finish'ed Spans are not.
 func TestTracer_VisitSpans(t *testing.T) {
 	tr1 := NewTracer()
 	tr2 := NewTracer()
@@ -466,17 +466,14 @@ func TestTracer_VisitSpans(t *testing.T) {
 	childChild := tr2.StartSpan("root.child.remotechild", WithRemoteParent(child.Meta()))
 	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithRemoteParent(child.Meta()))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 2)
-
-	child.ImportRemoteSpans(childChildFinished.GetRecording(RecordingVerbose))
-
-	childChildFinished.Finish()
+	child.ImportRemoteSpans(childChildFinished.FinishAndGetRecording(RecordingVerbose))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 1)
 
-	// Even though only `root` is tracked by tr1, we also reach
-	// root.child and (via ImportRemoteSpans) the remote child.
+	// All spans are part of the recording (root.child.remotechilddone was
+	// manually imported).
 	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedSpanOps(t, tr1))
 	require.Len(t, getSortedSpanOps(t, tr1), 3)
-	require.Equal(t, []string{"root.child.remotechild"}, getSortedSpanOps(t, tr2))
+	require.ElementsMatch(t, []string{"root.child.remotechild"}, getSortedSpanOps(t, tr2))
 
 	childChild.Finish()
 	child.Finish()
