@@ -1,3 +1,11 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
 package changefeedccl
 
 import (
@@ -454,12 +462,6 @@ func (p *gcpPubsubSink) Dial() error {
 	}
 	p.client = pubClient
 
-	// Construct a *pubsub.Topic. if user  spcifies specific topic
-	//fullPath, err := parseGCPURL(p.pubsubSink.getUrl())
-	//if err != nil {
-	//	return errors.Wrap(err, "parsing url")
-	//}
-
 	for _, topic := range p.pubsubSink.topics {
 		topicPath, err := createGCPURL(p.pubsubSink.url, topic.topicName)
 		if err != nil {
@@ -472,14 +474,6 @@ func (p *gcpPubsubSink) Dial() error {
 		}
 		topic.pathName = topicPath
 	}
-	//
-	//
-	//topic, err := gcppubsub.OpenTopicByPath(pubClient, fullPath, nil)
-	//if err != nil {
-	//	return errors.Wrap(err, "opening topic")
-	//}
-	//
-	//p.pubsubSink.setTopic(topic)
 	return nil
 }
 
@@ -521,7 +515,7 @@ func (p *gcpPubsubSink) Close() error {
 		_ = p.client.Close()
 	}
 	if p.conn != nil {
-		_ = p.conn.Close()
+		//_ = p.conn.Close()  nolint:grpcconnclose
 	}
 	if p.cleanup != nil {
 		p.cleanup()
