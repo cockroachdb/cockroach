@@ -1417,6 +1417,221 @@
             "github.com/cockroachdb/cockroach/.*$": "first-party code"
         }
     },
+    "ST1000": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*$": "skipped in default staticcheck config",
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1001": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1003": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*$": "skipped in default staticcheck config",
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1005": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1006": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1008": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1011": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1011": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1012": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1013": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1015": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1016": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*$": "skipped in default staticcheck config",
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1017": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1018": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1019": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1020": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*$": "skipped in default staticcheck config",
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1021": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*$": "skipped in default staticcheck config",
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1022": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*$": "skipped in default staticcheck config",
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
+    "ST1023": {
+        "exclude_files": {
+            "github.com/cockroachdb/cockroach/.*\\.eg\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "github.com/cockroachdb/cockroach/.*_generated\\.go$": "generated code"
+        },
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
     "stdmethods": {
         "only_files": {
             "github.com/cockroachdb/cockroach/.*$": "first-party code"

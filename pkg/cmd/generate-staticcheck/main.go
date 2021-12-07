@@ -20,6 +20,7 @@ import (
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/simple"
 	"honnef.co/go/tools/staticcheck"
+	"honnef.co/go/tools/stylecheck"
 )
 
 const (
@@ -84,9 +85,9 @@ func main() {
 		Analyzers []*lint.Analyzer
 		CheckType string
 	}{
-		// TODO: stylecheck? #73568
 		// TODO: Consider adding quickfix checks.
 		{Analyzers: staticcheck.Analyzers, CheckType: "staticcheck"},
+		{Analyzers: stylecheck.Analyzers, CheckType: "stylecheck"},
 		{Analyzers: simple.Analyzers, CheckType: "simple"},
 	} {
 		for _, v := range check.Analyzers {
