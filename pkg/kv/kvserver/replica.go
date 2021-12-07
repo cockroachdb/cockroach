@@ -191,6 +191,8 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
+	// A replica's AmbientCtx includes the log tags from the parent node and
+	// store.
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
@@ -238,8 +240,12 @@ type Replica struct {
 	// connectionClass controls the ConnectionClass used to send raft messages.
 	connectionClass atomicConnectionClass
 
-	// schedulerCtx is a cached instance of an annotated Raft scheduler context.
-	schedulerCtx atomic.Value // context.Context
+	// raftCtx is the Context to use for below-Raft work on this replica. The
+	// context is pre-determined in order to save on allocations for annotating
+	// with the replica ID. The Raft contexts that raftCtx replaces don't have
+	// anything interesting in them, so the operations using this raftCtx don't
+	// miss out on anything.
+	raftCtx context.Context
 
 	// raftMu protects Raft processing the replica.
 	//
