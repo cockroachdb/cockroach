@@ -144,18 +144,28 @@ func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 		}
 		endKey := h.EndKey
 		if len(endKey) == 0 {
-			// This is unintuitive, but if we have a point request at `x=k` then that request has
-			// already been satisfied (since the batch has already been executed for all keys `>=
-			// k`). We treat `k` as `[k,k)` which does the right thing below. It also does when `x >
-			// k` and `x < k`, so we're good.
+			// If we have a point request for `x < k` then that request has not been
+			// satisfied (since the batch has only been executed for keys `>=k`). We
+			// treat `x` as `[x, x.Next())` which does the right thing below. This
+			// also works when `x > k` or `x=k` as the logic below will skip `x`.
 			//
-			// Note that if `x` is /Local/k/something, then AddrUpperBound below will turn it into
-			// `k\x00`, and so we're looking at the key range `[k, k\x00)`. This is exactly what we
-			// want since otherwise the result would be `k` and so the caller would restrict itself
-			// to `key < k`, but that excludes `k` itself and thus all local keys attached to it.
+			// Note that if the key is /Local/x/something, then instead of using
+			// /Local/x/something.Next() as the end key, we rely on AddrUpperBound to
+			// handle local keys. In particular, AddrUpperBound will turn it into
+			// `x\x00`, so we're looking at the key-range `[x, x.Next())`. This is
+			// exactly what we want as the local key is contained in that range.
 			//
-			// See TestBatchPrevNext for a test case with commentary.
-			endKey = h.Key
+			// See TestBatchPrevNext for test cases with commentary.
+			if keys.IsLocal(h.Key) {
+				// It's worth noting that even if we used /Local/x/something.Next(),
+				// AddrUpperBound would do the right thing because it strips suffixes
+				// from local keys before addressing their upper bound. However, we make
+				// this explicit distinction to illustrate the trickiness involved with
+				// local keys here.
+				endKey = h.Key
+			} else {
+				endKey = h.Key.Next()
+			}
 		}
 		eAddr, err := keys.AddrUpperBound(endKey)
 		if err != nil {
