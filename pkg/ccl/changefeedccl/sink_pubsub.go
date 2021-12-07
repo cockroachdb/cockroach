@@ -154,8 +154,8 @@ func MakePubsubSink(
 	ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
 
-	sinkURL := sinkURL{u, u.Query()}
-	pubsubTopicName := sinkURL.consumeParam(changefeedbase.SinkParamTopicName)
+	pubsubURL := sinkURL{u, u.Query()}
+	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
@@ -178,7 +178,7 @@ func MakePubsubSink(
 	ctx, cancel := context.WithCancel(ctx)
 	// currently just hardcoding numWorkers to 1024, it will be a config option later down the road
 	p := &pubsubSink{
-		workerCtx: ctx, url: sinkURL, numWorkers: numOfWorkers,
+		workerCtx: ctx, url: pubsubURL, numWorkers: numOfWorkers,
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
 	//creates a topic for each target
