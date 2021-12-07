@@ -15,7 +15,6 @@ package lease
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1206,90 +1204,10 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 	}
 }
 
-// TestTableDescriptorByteSizeOrder inserts different amount of data in each
-// Table and guarantees the relative order of the TableDescriptor sizes are
-// correct.
-func TestTableDescriptorByteSizeOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	params := base.TestServerArgs{}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	// Create tables with varying number of columns.
-	tdb.Exec(t, "CREATE TABLE small   (col1 INT)")
-	tdb.Exec(t, "CREATE TABLE medium  (col1 INT, col2 INT)")
-	tdb.Exec(t, "CREATE TABLE big     (col1 INT, col2 INT, col3 INT)")
-	tdb.Exec(t, "CREATE TABLE biggest (col1 INT, col2 INT, col3 INT, col4 INT)")
-
-	// Retrieve each table descriptor's byte sizes.
-	manager := s.LeaseManager().(*Manager)
-	tableSizes := map[string]int64{"small": 0, "medium": 0, "big": 0, "biggest": 0}
-	for size := range tableSizes {
-		var tableID descpb.ID
-		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
-		desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
-		require.NoError(t, err)
-		tableSizes[size] = desc.Underlying().ByteSize()
-	}
-
-	// Confirm TableDescriptor byte size orders are in correct order.
-	actual := rankByDescSize(tableSizes)
-	expected := []string{"small", "medium", "big", "biggest"}
-	for i, size := range actual {
-		require.Equal(t, expected[i], size.Desc, "Not sorted in correct order for %s: %d", size.Desc, size.ByteSize)
-	}
-
-	// Create tables with varying number of indexes.
-	tdb.Exec(t, "CREATE TABLE small_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1))")
-	tdb.Exec(t, "CREATE TABLE medium_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2))")
-	tdb.Exec(t, "CREATE TABLE big_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3))")
-	tdb.Exec(t, "CREATE TABLE biggest_i (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3, col4))")
-
-	// Retrieve each table descriptor's byte sizes.
-	tableSizes = map[string]int64{"small_i": 0, "medium_i": 0, "big_i": 0, "biggest_i": 0}
-	for size := range tableSizes {
-		var tableID descpb.ID
-		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
-		desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
-		require.NoError(t, err)
-		tableSizes[size] = desc.Underlying().ByteSize()
-	}
-
-	// Confirm TableDescriptor byte size orders are in correct order.
-	actual = rankByDescSize(tableSizes)
-	expected = []string{"small_i", "medium_i", "big_i", "biggest_i"}
-	for i, size := range actual {
-		require.Equal(t, expected[i], size.Desc, "Not sorted in correct order for %s: %d", size.Desc, size.ByteSize)
-	}
-}
-
-// rankByDescSize is a helper function to sort pairs of descriptors and their
-// byte sizes in order of increasing byte size.
-func rankByDescSize(descToSize map[string]int64) DescSizeList {
-	descSizes := make(DescSizeList, len(descToSize))
-	i := 0
-	for k, v := range descToSize {
-		descSizes[i] = DescSize{k, v}
-		i++
-	}
-	sort.Sort(descSizes)
-	return descSizes
-}
-
-type DescSize struct {
-	Desc     string
-	ByteSize int64
-}
-
-type DescSizeList []DescSize
-
-func (d DescSizeList) Len() int           { return len(d) }
-func (d DescSizeList) Less(i, j int) bool { return d[i].ByteSize < d[j].ByteSize }
-func (d DescSizeList) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }
-
-func TestManagerLeaseMemoryMonitor(t *testing.T) {
+// TestManagerLeaseMemoryMonitorNewVersions confirms the leased descriptor
+// memory size is accurately recorded in the lease manager's memory monitor when
+// new/multiple versions of the descriptor are created.
+func TestManagerLeaseMemoryMonitorNewVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var stopper *stop.Stopper
@@ -1299,38 +1217,76 @@ func TestManagerLeaseMemoryMonitor(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	manager := s.LeaseManager().(*Manager)
 	// Prevent non-explicit Acquire to leases for testing purposes.
 	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
-	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	var tableID descpb.ID
-	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
 
-	manager := s.LeaseManager().(*Manager)
-	const N = 5
-	descs := make([]catalog.Descriptor, N+1)
+	for _, tc := range []struct {
+		sqlCommand string
+		descName   string
+		descID     descpb.ID
+		N          int
+	}{
+		{
+			sqlCommand: "CREATE TABLE foo (i INT PRIMARY KEY)",
+			descName:   "foo",
+			N:          5,
+		},
+		{
+			sqlCommand: "CREATE SCHEMA IF NOT EXISTS schema_one",
+			descName:   "schema_one",
+			N:          1,
+		},
+	} {
+		t.Run(fmt.Sprintf("%d versions of %v", tc.N, tc.descName), func(t *testing.T) {
 
-	// Create N versions of table descriptor.
-	for i := 0; i < N; i++ {
-		_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
-			descs[i] = desc.ImmutableCopy()
-			return nil
-		}, nil)
-		require.NoError(t, err)
+			tdb.Exec(t, tc.sqlCommand)
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = '"+tc.descName+"'").Scan(&tc.descID)
+			descs := make([]catalog.Descriptor, tc.N+1)
+
+			// Create total N versions of descriptor.
+			for i := 0; i < tc.N; i++ {
+				_, err := manager.Publish(ctx, tc.descID, func(desc catalog.MutableDescriptor) error {
+					descs[i] = desc.ImmutableCopy()
+					return nil
+				}, nil)
+				require.NoError(t, err)
+			}
+			{
+				last, err := manager.Acquire(ctx, s.Clock().Now(), tc.descID)
+				require.NoError(t, err)
+				descs[tc.N] = last.Underlying()
+				last.Release(ctx)
+			}
+
+			// Confirm leased descriptor memory count is tracked in monitor.
+			prevUsed := manager.boundAccount.Used()
+			for i := 0; i < tc.N; i++ {
+				acquired, err := manager.Acquire(ctx, descs[tc.N-i-1].GetModificationTime(), tc.descID)
+				require.NoError(t, err)
+
+				expMemSize := prevUsed + acquired.Underlying().ByteSize()
+				currMemSize := manager.boundAccount.Used()
+				require.Equal(t, expMemSize, currMemSize,
+					"Lease acquisition memory consumption does not match")
+				prevUsed = currMemSize
+			}
+		})
 	}
-	{
-		last, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
-		require.NoError(t, err)
-		descs[N] = last.Underlying()
-		last.Release(ctx)
-	}
+}
 
-	acquired, err := manager.Acquire(ctx, descs[0].GetModificationTime(), tableID)
-	if err != nil {
-		return
-	}
+func TestManagerLeaseMemoryMonitorDropDeletes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
-	// Extract memory monitor information.
-	print(acquired.Underlying().GetModificationTime().String())
-	log.Infof(ctx, "number of bytes allocated: %d", manager.mon.AllocBytes())
-	log.Infof(ctx, "number of bytes currently allocated through this account %d", manager.boundAccount.Used())
+	var stopper *stop.Stopper
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	stopper = s.Stopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	//manager := s.LeaseManager().(*Manager)
+	// Prevent non-explicit Acquire to leases for testing purposes.
+	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
+
 }

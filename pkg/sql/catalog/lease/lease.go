@@ -1247,7 +1247,6 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 				},
 				func(ctx context.Context) {
 					m.storage.release(ctx, m.stopper, &lease)
-					//TODO(james): shrink memory monitored for leased descriptors. Confirm.
 					log.Infof(ctx, "released orphaned lease: %+v", lease)
 					wg.Done()
 				}); err != nil {

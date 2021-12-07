@@ -187,7 +187,6 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			firstAttempt = false
 			continue
 		}
-		//TODO(james): Confirm lease is removed from active and thus memory monitor should shrink.
 		// We allow count == 0 after the first attempt.
 		if count > 1 || (count == 0 && firstAttempt) {
 			log.Warningf(ctx, "unexpected results while deleting lease %+v: "+
