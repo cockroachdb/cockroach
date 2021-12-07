@@ -28,18 +28,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-func readPrecedingIntentState(t *testing.T, d *datadriven.TestData) PrecedingIntentState {
-	var str string
-	d.ScanArgs(t, "preceding", &str)
-	switch str {
-	case "separated":
-		return ExistingIntentSeparated
-	case "none":
-		return NoExistingIntent
-	}
-	panic("unknown state")
-}
-
 func readTxnDidNotUpdateMeta(t *testing.T, d *datadriven.TestData) bool {
 	var txnDidNotUpdateMeta bool
 	d.ScanArgs(t, "txn-did-not-update-meta", &txnDidNotUpdateMeta)
@@ -246,9 +234,8 @@ func TestIntentDemuxWriter(t *testing.T) {
 				var txn int
 				d.ScanArgs(t, "txn", &txn)
 				txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
-				state := readPrecedingIntentState(t, d)
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				scratch, err = w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, scratch)
+				scratch, err = w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}

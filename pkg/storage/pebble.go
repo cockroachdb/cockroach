@@ -1024,11 +1024,8 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
 }
 
 // ClearIntent implements the Engine interface.
-func (p *Pebble) ClearIntent(
-	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) error {
-	_, err :=
-		p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, nil)
+func (p *Pebble) ClearIntent(key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error {
+	_, err := p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, nil)
 	return err
 }
 
@@ -1125,11 +1122,6 @@ func (p *Pebble) PutEngineKey(key EngineKey, value []byte) error {
 		return emptyKeyError()
 	}
 	return p.db.Set(key.Encode(), value, pebble.Sync)
-}
-
-// OverrideTxnDidNotUpdateMetaToFalse implements the Engine interface.
-func (p *Pebble) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
-	return overrideTxnDidNotUpdateMetaToFalse(ctx, p.settings)
 }
 
 func (p *Pebble) put(key MVCCKey, value []byte) error {
@@ -1385,9 +1377,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(
-		p.db, p.db.NewIndexedBatch(), false, /* writeOnly */
-		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1397,8 +1387,7 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly,
-		overrideTxnDidNotUpdateMetaToFalse(context.TODO(), p.settings))
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly)
 }
 
 // NewSnapshot implements the Engine interface.
@@ -1872,7 +1861,7 @@ func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 }
 
 func (p *pebbleReadOnly) ClearIntent(
-	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	panic("not implemented")
 }
@@ -1928,10 +1917,6 @@ func (p *pebbleReadOnly) LogData(data []byte) error {
 }
 
 func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
 	panic("not implemented")
 }
 
@@ -2232,12 +2217,4 @@ func pebbleExportToSst(
 	}
 
 	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
-}
-
-// See the comment for Writer.OverrideTxnDidNotUpdateMetaToFalse.
-func overrideTxnDidNotUpdateMetaToFalse(ctx context.Context, st *cluster.Settings) bool {
-	// The fix to the single delete bug in 21.2 has nothing to do with
-	// PebbleFormatVersioned, but both are part of the 21.2 beta, which will be
-	// the earliest production version of 21.2.
-	return !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.PebbleFormatVersioned)
 }

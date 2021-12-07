@@ -1048,11 +1048,7 @@ func (b *putBuffer) putInlineMeta(
 var trueValue = true
 
 func (b *putBuffer) putIntentMeta(
-	ctx context.Context,
-	writer Writer,
-	key MVCCKey,
-	helper txnDidNotUpdateMetaHelper,
-	meta *enginepb.MVCCMetadata,
+	ctx context.Context, writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, alreadyExists bool,
 ) (keyBytes, valBytes int64, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
@@ -1060,7 +1056,12 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	helper.populateMeta(ctx, meta)
+	if alreadyExists {
+		// Absence represents false.
+		meta.TxnDidNotUpdateMeta = nil
+	} else {
+		meta.TxnDidNotUpdateMeta = &trueValue
+	}
 	bytes, err := b.marshalMeta(meta)
 	if err != nil {
 		return 0, 0, err
@@ -1069,71 +1070,6 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, err
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), nil
-}
-
-// txnDidNotUpdateMetaHelper is used to decide what to put in the MVCCMetadata
-// proto, and what value to pass in the txnDidNotUpdateMeta parameter of
-// PutIntent.
-//
-// Note that separated intents are understood by v21.1 already, though we
-// assume they were never actively written there (the cluster setting defaults
-// to false and there are known bugs). Therefore all nodes in a cluster (v21.1
-// or v21.2) understand separated intents. This understanding by v21.1
-// includes reading and resolving separated intents, and setting
-// MVCCMetadata.TxnDidNotUpdateMeta to true. Note that since v21.1 nodes only
-// write MVCCMetadata to interleaved intents, they can only set
-// MVCCMetadata.TxnDidNotUpdateMeta to true for interleaved intents, which is
-// harmless since interleaved intents do not invoke the SingleDelete
-// optimization.
-//
-// However, when migrating from v21.1 to v21.2, and running in a mixed version
-// cluster, we need to be careful. A v21.1 node can become the leaseholder for
-// a range after a separated intent was written by a v21.2 node. Hence they
-// can resolve separated intents. The logic in v21.1 for using SingleDelete
-// when resolving intents is similarly buggy, and the Pebble code included in
-// v21.1 will not make this buggy usage correct. The solution is for v21.2
-// nodes to never set txnDidNotUpdateMeta=true when writing separated intents,
-// until the cluster version is at the version when the buggy code was fixed
-// in v21.2. So v21.1 code will never use SingleDelete when resolving these
-// separated intents (since the only separated intents being written are by
-// v21.2 nodes).
-//
-// Details about this helper:
-// - The txnDidNotUpdateMeta field is about what happened prior to this Put,
-//   and is intended to be passed through to Writer.PutIntent.
-//   In general it can be true in 2 cases:
-//   - There was no prior intent.
-//   - MVCCMetadata.TxnDidNotUpdateMeta is true: v21.2 nodes will never set
-//     this to true in a mixed version cluster (see next bullet). However,
-//     v21.1 nodes can set it to true.
-//   What saves us is that it is only used by intentDemuxWriter when there was
-//   an existing separated intent that was written once and the writer is
-//   writing interleaved intents, and the true value enables SingleDelete of
-//   the existing separated intent. This transition can happen when an intent
-//   written at a v21.2 node is rewritten on a v21.1 node. So it is irrelevant
-//   for the first case above. And since v21.2 nodes never set
-//   MVCCMetadata.TxnDidNotUpdateMeta to true in a mixed version cluster, the
-//   situation in which this value is used will always be false, which takes
-//   care of case 2 above.
-//
-// - The state field describes the preceding intent state. It is intended to
-//   be used for populating the MVCCMetadata.TxnDidNotUpdateMeta. This is
-//   where we use Writer.OverrideTxnDidNotUpdateMetaToFa
-// TODO(sumeer): We should get rid of txnDidNotUpdateMetaHelper since it's
-// only storing the PrecedingIntentState, and txnDidNotUpdateMetaHelper is
-// too heavyweight for that purpose.
-type txnDidNotUpdateMetaHelper struct {
-	state PrecedingIntentState
-	w     Writer
-}
-
-func (t txnDidNotUpdateMetaHelper) populateMeta(ctx context.Context, meta *enginepb.MVCCMetadata) {
-	if t.state == NoExistingIntent && !t.w.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
-		meta.TxnDidNotUpdateMeta = &trueValue
-	} else {
-		// Absence represents false.
-		meta.TxnDidNotUpdateMeta = nil
-	}
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -1482,18 +1418,6 @@ func mvccPutInternal(
 		return err
 	}
 
-	// Compute PrecedingIntentState and whether the transaction has previously
-	// updated the intent. This is to prepare for a later Put.
-	var precedingIntentState PrecedingIntentState
-	if !ok || buf.meta.Txn == nil {
-		// !ok represents no meta (no actual intent and no manufactured meta).
-		// buf.meta.Txn==nil represents a manufactured meta, i.e., there is no
-		// intent.
-		precedingIntentState = NoExistingIntent
-	} else {
-		precedingIntentState = ExistingIntentSeparated
-	}
-
 	// Determine the read and write timestamps for the write. For a
 	// non-transactional write, these will be identical. For a transactional
 	// write, we read at the transaction's read timestamp but write intents at its
@@ -1758,12 +1682,15 @@ func mvccPutInternal(
 
 	var metaKeySize, metaValSize int64
 	if newMeta.Txn != nil {
+		// Determine whether the transaction had previously written an intent on
+		// this key and we intend to update that intent, or whether this is the
+		// first time an intent is being written. ok represents the presence of a
+		// meta (an actual intent or a manufactured meta). buf.meta.Txn!=nil
+		// represents a non-manufactured meta, i.e., there is an intent.
+		alreadyExists := ok && buf.meta.Txn != nil
+		// Write the intent metadata key.
 		metaKeySize, metaValSize, err = buf.putIntentMeta(
-			ctx, writer, metaKey,
-			txnDidNotUpdateMetaHelper{
-				state: precedingIntentState,
-				w:     writer,
-			}, newMeta)
+			ctx, writer, metaKey, newMeta, alreadyExists)
 		if err != nil {
 			return err
 		}
@@ -3059,7 +2986,6 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 	metaTimestamp := meta.Timestamp.ToTimestamp()
-	precedingIntentState := ExistingIntentSeparated
 	canSingleDelHelper := singleDelOptimizationHelper{
 		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
 		_hasIgnoredSeqs:   len(intent.IgnoredSeqNums) > 0,
@@ -3201,16 +3127,10 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, err = buf.putIntentMeta(
-				ctx, rw, metaKey,
-				txnDidNotUpdateMetaHelper{
-					state: precedingIntentState,
-					w:     rw,
-				},
-				&buf.newMeta)
+				ctx, rw, metaKey, &buf.newMeta, true /* alreadyExists */)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
-			err =
-				rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
+			err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onCommitIntent(), meta.Txn.ID)
 		}
 		if err != nil {
 			return false, err
@@ -3335,8 +3255,7 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err =
-			rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
+		if err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -3355,8 +3274,7 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: valueSize,
 	}
-	if err =
-		rw.ClearIntent(metaKey.Key, precedingIntentState, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
+	if err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 		return false, err
 	}
 	metaKeySize := int64(metaKey.EncodedSize())
