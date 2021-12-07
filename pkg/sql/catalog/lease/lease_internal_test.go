@@ -1320,7 +1320,6 @@ func TestManagerLeaseMemoryMonitorDropDeletes(t *testing.T) {
 
 	// Create table with some values.
 	tdb.Exec(t, "CREATE TABLE foo (col1 INT, col2 INT)")
-	//TODO: Remove comment on table when drops don't incur a lease to the Comments table.
 	tdb.Exec(t, "COMMENT ON TABLE foo IS 'hello'")
 	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
 
