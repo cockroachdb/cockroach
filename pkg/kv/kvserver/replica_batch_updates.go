@@ -182,6 +182,9 @@ func maybeBumpReadTimestampToWriteTimestamp(
 	if ba.Txn == nil {
 		return false
 	}
+	if !ba.CanForwardReadTimestamp {
+		return false
+	}
 	if ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
 		return false
 	}
@@ -189,11 +192,11 @@ func maybeBumpReadTimestampToWriteTimestamp(
 	if !ok {
 		return false
 	}
-	etArg := arg.(*roachpb.EndTxnRequest)
-	if ba.CanForwardReadTimestamp && !batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, etArg) {
-		return tryBumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp, latchSpans)
+	et := arg.(*roachpb.EndTxnRequest)
+	if batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, et.Deadline) {
+		return false
 	}
-	return false
+	return tryBumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp, latchSpans)
 }
 
 // tryBumpBatchTimestamp attempts to bump ba's read and write timestamps to ts.
@@ -230,7 +233,7 @@ func tryBumpBatchTimestamp(
 		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
 	ba.Timestamp = ts
-	if txn := ba.Txn; txn == nil {
+	if ba.Txn == nil {
 		return true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
@@ -240,8 +243,6 @@ func tryBumpBatchTimestamp(
 	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s)",
 		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	ba.Txn = ba.Txn.Clone()
-	ba.Txn.ReadTimestamp = ts
-	ba.Txn.WriteTimestamp = ts
-	ba.Txn.WriteTooOld = false
+	ba.Txn.Refresh(ts)
 	return true
 }
