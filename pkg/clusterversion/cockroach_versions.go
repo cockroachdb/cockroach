@@ -291,8 +291,9 @@ const (
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
 	// WriteAtRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
-	// Public schema is backed by a descriptor.
-	PublicSchemasWithDescriptors
+	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
+	// have an entry in system.namespace upon being restored.
+	InsertPublicSchemaNamespaceEntryOnRestore
 	// UnsplitRangesInAsyncGCJobs moves ranges unsplitting from transaction of
 	// "drop table"/"truncate table" to async gc jobs
 	UnsplitRangesInAsyncGCJobs
@@ -325,6 +326,8 @@ const (
 	// This version comes with a migration to populate the same seed data
 	// for existing tenants.
 	SeedTenantSpanConfigs
+	// Public schema is backed by a descriptor.
+	PublicSchemasWithDescriptors
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -539,7 +542,7 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 16},
 	},
 	{
-		Key:     PublicSchemasWithDescriptors,
+		Key:     InsertPublicSchemaNamespaceEntryOnRestore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 18},
 	},
 	{
@@ -569,6 +572,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SeedTenantSpanConfigs,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 32},
+	},
+	{
+		Key:     PublicSchemasWithDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
 	},
 
 	// *************************************************
