@@ -57,8 +57,8 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Sequence) scop.Op {
-					return &scop.CreateGcJobForDescriptor{
-						DescID: this.SequenceID,
+					return &scop.CreateGcJobForTable{
+						TableID: this.SequenceID,
 					}
 				}),
 			),

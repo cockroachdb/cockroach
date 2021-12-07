@@ -61,6 +61,11 @@ func init() {
 						Direction: scpb.Target_DROP,
 					}
 				}),
+				emit(func(this *scpb.Schema) scop.Op {
+					return &scop.DeleteDescriptor{
+						DescriptorID: this.SchemaID,
+					}
+				}),
 			),
 		),
 	)

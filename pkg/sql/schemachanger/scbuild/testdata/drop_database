@@ -171,6 +171,16 @@ DROP DATABASE db1 CASCADE
     dependentObjects:
     - 55
     - 56
+- DROP DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 55}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    schemaId: 55
+- DROP DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 56}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    schemaId: 56
 - DROP DefaultExpression:{DescID: 59, ColumnID: 3}
   state: PUBLIC
   details:
@@ -238,66 +248,80 @@ DROP DATABASE db1 CASCADE
 - DROP Namespace:{DescID: 57, Name: sq1}
   state: PUBLIC
   details:
-    databaseId: 55
+    databaseId: 54
     descriptorId: 57
     name: sq1
-    schemaId: 54
+    schemaId: 55
 - DROP Namespace:{DescID: 58, Name: sq1}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 58
     name: sq1
-    schemaId: 54
+    schemaId: 56
 - DROP Namespace:{DescID: 59, Name: t1}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 59
     name: t1
-    schemaId: 54
+    schemaId: 56
 - DROP Namespace:{DescID: 60, Name: t1}
   state: PUBLIC
   details:
-    databaseId: 55
+    databaseId: 54
     descriptorId: 60
     name: t1
-    schemaId: 54
+    schemaId: 55
 - DROP Namespace:{DescID: 61, Name: v1}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 61
     name: v1
-    schemaId: 54
+    schemaId: 56
 - DROP Namespace:{DescID: 62, Name: v2}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 62
     name: v2
-    schemaId: 54
+    schemaId: 56
 - DROP Namespace:{DescID: 63, Name: v3}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 63
     name: v3
-    schemaId: 54
+    schemaId: 56
 - DROP Namespace:{DescID: 64, Name: v4}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 64
     name: v4
-    schemaId: 54
+    schemaId: 56
+- DROP Namespace:{DescID: 65, Name: typ}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    descriptorId: 65
+    name: typ
+    schemaId: 56
+- DROP Namespace:{DescID: 66, Name: _typ}
+  state: PUBLIC
+  details:
+    databaseId: 54
+    descriptorId: 66
+    name: _typ
+    schemaId: 56
 - DROP Namespace:{DescID: 67, Name: v5}
   state: PUBLIC
   details:
-    databaseId: 56
+    databaseId: 54
     descriptorId: 67
     name: v5
-    schemaId: 54
+    schemaId: 56
 - DROP Owner:{DescID: 57}
   state: PUBLIC
   details:

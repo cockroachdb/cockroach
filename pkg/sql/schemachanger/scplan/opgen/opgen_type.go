@@ -47,13 +47,18 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				// TODO(ajwerner): The move to DELETE_ONLY should be marked
-				// non-revertible.
-				minPhase(scop.PreCommitPhase),
+				minPhase(scop.PostCommitPhase),
 				revertible(false),
+				emit(func(this *scpb.Type, md *scpb.ElementMetadata) scop.Op {
+					return &scop.LogEvent{Metadata: *md,
+						DescID:    this.TypeID,
+						Element:   &scpb.ElementProto{Type: this},
+						Direction: scpb.Target_DROP,
+					}
+				}),
 				emit(func(this *scpb.Type) scop.Op {
-					return &scop.DrainDescriptorName{
-						TableID: this.TypeID,
+					return &scop.DeleteDescriptor{
+						DescriptorID: this.TypeID,
 					}
 				}),
 			),

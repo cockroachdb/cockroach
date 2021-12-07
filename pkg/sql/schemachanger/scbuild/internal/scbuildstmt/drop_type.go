@@ -85,5 +85,17 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 	canDrop(arrayType)
 	// Create drop elements for both.
 	b.EnqueueDrop(&scpb.Type{TypeID: typ.GetID()})
+	b.EnqueueDrop(&scpb.Namespace{
+		DatabaseID:   typ.GetParentID(),
+		SchemaID:     typ.GetParentSchemaID(),
+		DescriptorID: typ.GetID(),
+		Name:         typ.GetName(),
+	})
 	b.EnqueueDrop(&scpb.Type{TypeID: arrayType.GetID()})
+	b.EnqueueDrop(&scpb.Namespace{
+		DatabaseID:   arrayType.GetParentID(),
+		SchemaID:     arrayType.GetParentSchemaID(),
+		DescriptorID: arrayType.GetID(),
+		Name:         arrayType.GetName(),
+	})
 }

@@ -102,6 +102,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     name: val
     tableId: 57
+- DROP DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    schemaId: 54
 - DROP DefaultExpression:{DescID: 57, ColumnID: 3}
   state: PUBLIC
   details:
@@ -151,59 +156,73 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - DROP Namespace:{DescID: 56, Name: sq1}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 56
     name: sq1
-    schemaId: 50
+    schemaId: 54
 - DROP Namespace:{DescID: 57, Name: t1}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 57
     name: t1
-    schemaId: 50
+    schemaId: 54
 - DROP Namespace:{DescID: 58, Name: v1}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 58
     name: v1
-    schemaId: 50
+    schemaId: 54
 - DROP Namespace:{DescID: 59, Name: v2}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 59
     name: v2
-    schemaId: 50
+    schemaId: 54
 - DROP Namespace:{DescID: 60, Name: v3}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 60
     name: v3
-    schemaId: 50
+    schemaId: 54
 - DROP Namespace:{DescID: 61, Name: v4}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 61
     name: v4
-    schemaId: 50
+    schemaId: 54
+- DROP Namespace:{DescID: 62, Name: typ}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    descriptorId: 62
+    name: typ
+    schemaId: 54
+- DROP Namespace:{DescID: 63, Name: _typ}
+  state: PUBLIC
+  details:
+    databaseId: 50
+    descriptorId: 63
+    name: _typ
+    schemaId: 54
 - DROP Namespace:{DescID: 64, Name: v5}
   state: PUBLIC
   details:
-    databaseId: 54
+    databaseId: 50
     descriptorId: 64
     name: v5
-    schemaId: 50
+    schemaId: 54
 - DROP Namespace:{DescID: 65, Name: v6}
   state: PUBLIC
   details:
-    databaseId: 55
+    databaseId: 50
     descriptorId: 65
     name: v6
-    schemaId: 50
+    schemaId: 55
 - DROP Owner:{DescID: 56}
   state: PUBLIC
   details:
