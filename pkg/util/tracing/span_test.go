@@ -334,7 +334,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParent(sp))
 	defer ch.Finish()
-	children := sp.i.crdb.mu.recording.openChildren
+	children := sp.i.crdb.mu.openChildren
 	require.Len(t, children, 1)
 	require.Equal(t, ch.i.crdb, children[0].crdbSpan)
 	ch.RecordStructured(&types.Int32Value{Value: 5})
@@ -344,25 +344,34 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	require.Len(t, rec[0].StructuredRecords, 1)
 }
 
-// TestSpanMaxChildren verifies that a Span can
-// track at most maxChildrenPerSpan direct children.
-func TestSpanMaxChildren(t *testing.T) {
+// TestRecordingMaxSpans verifies that recordings don't grow over the limit.
+func TestRecordingMaxSpans(t *testing.T) {
 	tr := NewTracer()
-	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
 	defer sp.Finish()
-	numChildren := maxChildrenPerSpan + 123
-	children := make([]*Span, numChildren)
+	extraChildren := 10
+	numChildren := maxRecordedSpansPerTrace + extraChildren
 	for i := 0; i < numChildren; i++ {
-		children[i] = tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
-		exp := i + 1
-		if exp > maxChildrenPerSpan {
-			exp = maxChildrenPerSpan
+		child := tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
+		exp := i + 2
+		// maxRecordedSpansPerTrace technically limits the number of child spans, so
+		// we add one for the root.
+		over := false
+		if exp > maxRecordedSpansPerTrace+1 {
+			exp = maxRecordedSpansPerTrace + 1
+			over = true
 		}
-		require.Len(t, sp.i.crdb.mu.recording.openChildren, exp)
+		if over {
+			// Structured events from children that are not included in the recording
+			// are still collected (subject to the structured recording bytes limit).
+			child.RecordStructured(&types.Int32Value{Value: int32(i)})
+		}
+		child.Finish()
+		require.Len(t, sp.GetRecording(RecordingVerbose), exp)
 	}
-	for _, s := range children {
-		s.Finish()
-	}
+	rec := sp.GetRecording(RecordingVerbose)
+	root := rec[0]
+	require.Len(t, root.StructuredRecords, extraChildren)
 }
 
 type explodyNetTr struct {
