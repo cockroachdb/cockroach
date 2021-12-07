@@ -15,6 +15,8 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -114,6 +116,19 @@ type joinReader struct {
 	rowAlloc           rowenc.EncDatumRowAlloc
 	shouldLimitBatches bool
 	readerType         joinReaderType
+
+	keyLocking     descpb.ScanLockingStrength
+	lockWaitPolicy lock.WaitPolicy
+
+	// usesStreamer indicates whether the joinReader performs the lookups using
+	// the kvcoord.Streamer API.
+	usesStreamer bool
+	streamerInfo struct {
+		kvcoord.Streamer
+		budget      kvcoord.Budget
+		budgetAcc   mon.BoundAccount
+		budgetLimit int64
+	}
 
 	input execinfra.RowSource
 
@@ -279,6 +294,7 @@ func newJoinReader(
 	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		shouldLimitBatches = false
 	}
+	tryStreamer := !spec.MaintainOrdering && row.UseStreamerEnabled.Get(&flowCtx.EvalCtx.Settings.SV)
 	jr := &joinReader{
 		desc:                              tableDesc,
 		maintainOrdering:                  spec.MaintainOrdering,
@@ -287,6 +303,9 @@ func newJoinReader(
 		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
 		shouldLimitBatches:                shouldLimitBatches,
 		readerType:                        readerType,
+		keyLocking:                        spec.LockingStrength,
+		lockWaitPolicy:                    row.GetWaitPolicy(spec.LockingWaitPolicy),
+		usesStreamer:                      readerType == indexJoinReaderType && tryStreamer,
 		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
@@ -433,6 +452,25 @@ func newJoinReader(
 		return nil, err
 	}
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
+
+	if jr.usesStreamer {
+		maxKeysPerRow, err := jr.desc.KeysPerRow(jr.index.GetID())
+		if err != nil {
+			return nil, err
+		}
+		if maxKeysPerRow > 1 {
+			// Currently, the streamer only supports cases with a single column
+			// family.
+			jr.usesStreamer = false
+		} else {
+			// jr.batchSizeBytes will be used up by the input batch, and we'll
+			// give everything else to the streamer budget. Note that
+			// budgetLimit will always be positive given that memoryLimit is at
+			// least 8MiB and batchSizeBytes is at most 4MiB.
+			jr.streamerInfo.budgetLimit = memoryLimit - jr.batchSizeBytes
+			jr.streamerInfo.budgetAcc = jr.MemMonitor.MakeBoundAccount()
+		}
+	}
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
@@ -803,24 +841,35 @@ func (jr *joinReader) readInput() (
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
-	var bytesLimit rowinfra.BytesLimit
-	if !jr.shouldLimitBatches {
-		bytesLimit = rowinfra.NoBytesLimit
-	} else {
-		bytesLimit = jr.lookupBatchBytesLimit
-		if jr.lookupBatchBytesLimit == 0 {
-			bytesLimit = rowinfra.DefaultBatchBytesLimit
-		}
-	}
 	// Note that the fetcher takes ownership of the spans slice - it will modify
 	// it and perform the memory accounting. We don't care about the
 	// modification here, but we want to be conscious about the memory
 	// accounting - we don't double count for any memory of spans because the
 	// joinReaderStrategy doesn't account for any memory used by the spans.
-	if err := jr.fetcher.StartScan(
-		jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
-		jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
-	); err != nil {
+	if jr.usesStreamer {
+		var kvBatchFetcher *row.TxnKVStreamer
+		kvBatchFetcher, err = row.NewTxnKVStreamer(jr.Ctx, jr.streamerInfo.Streamer, spans, jr.keyLocking)
+		if err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		err = jr.fetcher.StartScanFrom(jr.Ctx, kvBatchFetcher, jr.FlowCtx.TraceKV)
+	} else {
+		var bytesLimit rowinfra.BytesLimit
+		if !jr.shouldLimitBatches {
+			bytesLimit = rowinfra.NoBytesLimit
+		} else {
+			bytesLimit = jr.lookupBatchBytesLimit
+			if jr.lookupBatchBytesLimit == 0 {
+				bytesLimit = rowinfra.DefaultBatchBytesLimit
+			}
+		}
+		err = jr.fetcher.StartScan(
+			jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
+			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+		)
+	}
+	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
@@ -935,6 +984,26 @@ func (jr *joinReader) performMemoryAccounting() error {
 func (jr *joinReader) Start(ctx context.Context) {
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
 	jr.input.Start(ctx)
+	if jr.usesStreamer {
+		var err error
+		jr.streamerInfo.budget, err = kvcoord.NewBudget(ctx, &jr.streamerInfo.budgetAcc, jr.streamerInfo.budgetLimit)
+		if err != nil {
+			jr.MoveToDraining(err)
+			return
+		}
+		jr.streamerInfo.Streamer = kvcoord.NewStreamer(
+			jr.FlowCtx.Cfg.DistSender,
+			jr.FlowCtx.Stopper(),
+			jr.FlowCtx.Txn,
+			jr.FlowCtx.EvalCtx.Settings,
+			jr.lockWaitPolicy,
+		)
+		jr.streamerInfo.Streamer.Init(
+			kvcoord.OutOfOrder,
+			kvcoord.StreamerHints{UniqueRequests: true},
+			jr.streamerInfo.budget,
+		)
+	}
 	jr.runningState = jrReadingInput
 }
 
@@ -946,6 +1015,12 @@ func (jr *joinReader) ConsumerClosed() {
 
 func (jr *joinReader) close() {
 	if jr.InternalClose() {
+		if jr.usesStreamer {
+			if jr.streamerInfo.Streamer != nil {
+				jr.streamerInfo.Streamer.Cancel()
+			}
+			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
+		}
 		if jr.fetcher != nil {
 			jr.fetcher.Close(jr.Ctx)
 		}
