@@ -753,11 +753,23 @@ func NewColOperator(
 			kvFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
 			)
+			var streamerBudgetAcc *mon.BoundAccount
+			// We have an index join, and when the ordering doesn't have to be
+			// maintained, we might use the Streamer API which requires a
+			// separate memory account that is bound to an unlimited memory
+			// monitor.
+			if !core.JoinReader.MaintainOrdering {
+				streamerBudgetAcc = args.MonitorRegistry.CreateUnlimitedMemAccount(
+					ctx, flowCtx, "streamer" /* opName */, spec.ProcessorID,
+				)
+			}
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
-				ctx, getStreamingAllocator(ctx, args), colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
-				flowCtx, args.ExprHelper, inputs[0].Root, core.JoinReader, post, inputTypes,
+				ctx, getStreamingAllocator(ctx, args),
+				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
+				kvFetcherMemAcc, streamerBudgetAcc, flowCtx, args.ExprHelper,
+				inputs[0].Root, core.JoinReader, post, inputTypes,
 			)
 			if err != nil {
 				return r, err
