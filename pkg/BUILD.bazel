@@ -118,6 +118,7 @@ ALL_TESTS = [
     "//pkg/keys:keys_test",
     "//pkg/kv/bulk:bulk_test",
     "//pkg/kv/kvclient/kvcoord:kvcoord_test",
+    "//pkg/kv/kvclient/kvstreamer:kvstreamer_test",
     "//pkg/kv/kvclient/rangecache:rangecache_test",
     "//pkg/kv/kvclient/rangefeed/rangefeedbuffer:rangefeedbuffer_test",
     "//pkg/kv/kvclient/rangefeed:rangefeed_test",

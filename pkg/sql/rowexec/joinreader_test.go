@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -1314,6 +1315,8 @@ func TestIndexJoiner(t *testing.T) {
 				c.outputTypes,
 				c.expected,
 				txn,
+				s.Stopper(),
+				s.DistSenderI().(*kvcoord.DistSender),
 			)
 		})
 	}
