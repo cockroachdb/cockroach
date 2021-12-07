@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -231,7 +232,7 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		processArgs = append(processArgs, configArgList()...)
 		processArgs = append(processArgs, "-c", compilationMode)
 		processArgs = append(processArgs, parsedArgs.additional...)
-		fmt.Println("running bazel w/ args: ", processArgs)
+		fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(processArgs))
 		cmd := exec.Command("bazel", processArgs...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
