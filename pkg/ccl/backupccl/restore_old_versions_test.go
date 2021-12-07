@@ -257,8 +257,10 @@ ORDER BY object_type, object_name`, [][]string{
 
 	t.Run("public_schema_mixed_version", func(t *testing.T) {
 		dirs, err := ioutil.ReadDir(publicSchemaDirs)
+		fmt.Println(publicSchemaDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
+			fmt.Println(dir.Name())
 			require.True(t, dir.IsDir())
 			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
 			require.NoError(t, err)
