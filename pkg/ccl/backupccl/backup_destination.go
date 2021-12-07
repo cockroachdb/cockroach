@@ -33,7 +33,8 @@ func fetchPreviousBackups(
 	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	prevBackupURIs []string,
-	encryptionParams backupEncryptionParams,
+	encryptionParams jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) ([]BackupManifest, *jobspb.BackupEncryptionOptions, error) {
 	if len(prevBackupURIs) == 0 {
 		return nil, nil, nil
@@ -41,7 +42,7 @@ func fetchPreviousBackups(
 
 	baseBackup := prevBackupURIs[0]
 	encryptionOptions, err := getEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
-		encryptionParams)
+		encryptionParams, kmsEnv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -234,10 +235,11 @@ func getEncryptionFromBase(
 	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
-	encryptionParams backupEncryptionParams,
+	encryptionParams jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
 	var encryptionOptions *jobspb.BackupEncryptionOptions
-	if encryptionParams.encryptMode != noEncryption {
+	if encryptionParams.Mode != jobspb.EncryptionMode_None {
 		exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
 		if err != nil {
 			return nil, err
@@ -248,15 +250,15 @@ func getEncryptionFromBase(
 			return nil, err
 		}
 
-		switch encryptionParams.encryptMode {
-		case passphrase:
+		switch encryptionParams.Mode {
+		case jobspb.EncryptionMode_Passphrase:
 			encryptionOptions = &jobspb.BackupEncryptionOptions{
 				Mode: jobspb.EncryptionMode_Passphrase,
-				Key:  storageccl.GenerateKey(encryptionParams.encryptionPassphrase, opts.Salt),
+				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), opts.Salt),
 			}
-		case kms:
-			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(encryptionParams.kmsURIs,
-				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), encryptionParams.kmsEnv)
+		case jobspb.EncryptionMode_KMS:
+			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
+				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
 			if err != nil {
 				return nil, err
 			}
