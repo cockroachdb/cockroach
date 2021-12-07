@@ -88,7 +88,7 @@ func TestIndexInterface(t *testing.T) {
 
 	immutable := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
 	require.NotNil(t, immutable)
-	var tableI catalog.TableDescriptor = immutable
+	var tableI = immutable
 	require.NotNil(t, tableI)
 
 	// Find indexes by name, check that names are correct and that indexes
