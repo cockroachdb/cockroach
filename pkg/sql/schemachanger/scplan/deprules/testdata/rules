@@ -153,7 +153,7 @@ rules
   to: relation-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
-    - $dep[Type] IN ['*scpb.ForeignKeyBackReference', '*scpb.RelationDependedOnBy', '*scpb.ViewDependsOnType', '*scpb.DefaultExprTypeReference', '*scpb.OnUpdateExprTypeReference', '*scpb.ComputedExprTypeReference']
+    - $dep[Type] IN ['*scpb.ForeignKeyBackReference', '*scpb.RelationDependedOnBy', '*scpb.ViewDependsOnType', '*scpb.DefaultExprTypeReference', '*scpb.OnUpdateExprTypeReference', '*scpb.ComputedExprTypeReference', '*scpb.ColumnTypeReference', '*scpb.CheckTypeReference']
     - $relation[DescID] = $id
     - $dep[ReferencedDescID] = $id
     - $relation-target[Type] = '*scpb.Target'

@@ -49,6 +49,7 @@ message ElementProto {
   ComputedExprTypeReference computedExprTypeReference = 28 [(gogoproto.moretags) = "parent:\"Column, Type\""];
   ViewDependsOnType viewDependsOnType = 29 [(gogoproto.moretags) = "parent:\"View, Type\""];
   ColumnTypeReference columnTypeReference = 30 [(gogoproto.moretags) = "parent:\"Column, Type\""];
+  CheckTypeReference checkTypeReference = 31  [(gogoproto.moretags) = "parent:\"Table, Type\""];
 }
 
 message Target {
@@ -220,6 +221,13 @@ message ColumnTypeReference {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  uint32 type_id = 3 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+message CheckTypeReference {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 constraint_ordinal = 2;
   uint32 type_id = 3 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 

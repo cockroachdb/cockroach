@@ -230,7 +230,7 @@ CREATE TYPE typ AS ENUM('a')
 statement ok
 CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
 
-statement error cannot drop type "typ" because other objects still depend on it: test.public.v
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it.
 DROP TYPE typ
 
 statement ok
@@ -239,7 +239,7 @@ DROP VIEW v
 statement ok
 CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
 
-statement error cannot drop type "typ" because other objects still depend on it: test.public.v
+statement error cannot drop type "typ" because other objects \(\[test.public.v\]\) still depend on it.
 DROP TYPE typ
 
 statement ok
@@ -252,14 +252,14 @@ statement ok
 CREATE VIEW v AS (SELECT i FROM t)
 
 # Note that v does not depend on typ since it does not use column k.
-statement error cannot drop type "typ" because other objects still depend on it: test.public.t
+statement error cannot drop type "typ" because other objects \(\[test.public.t\]\) still depend on it
 DROP TYPE typ
 
 statement ok
 CREATE VIEW v_dep AS (SELECT k FROM t)
 
 # Since v_dep depends on t.k which uses type typ, v_dep has a dependency to typ.
-statement error cannot drop type "typ" because other objects still depend on it: test.public.t, test.public.v_dep
+statement error cannot drop type "typ" because other objects \(\[test.public.t test.public.v_dep\]\) still depend on it.
 DROP TYPE typ
 
 statement ok
@@ -268,7 +268,7 @@ CREATE TYPE typ2 AS ENUM('a')
 statement ok
 CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
 
-statement error cannot drop type "typ2" because other objects still depend on it: test.public.v3
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it.
 DROP TYPE typ2
 
 statement ok
@@ -283,13 +283,13 @@ CREATE TYPE typ2 AS ENUM('a')
 statement ok
 CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
 
-statement error cannot drop type "typ2" because other objects still depend on it: test.public.v3
+statement error cannot drop type "typ2" because other objects \(\[test.public.v3\]\) still depend on it.
 DROP TYPE typ2
 
 statement ok
 ALTER TYPE typ2 RENAME TO typ3
 
-statement error cannot drop type "typ3" because other objects still depend on it: test.public.v3
+statement error cannot drop type "typ3" because other objects \(\[test.public.v3\]\) still depend on it.
 DROP TYPE typ3
 
 statement ok
@@ -302,7 +302,7 @@ statement ok
 CREATE VIEW v4 AS (SELECT i FROM t4)
 
 # Note that v4 does not depend on typ4.
-statement error cannot drop type "typ4" because other objects still depend on it: test.public.t4
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4\]\) still depend on it.
 DROP TYPE typ4
 
 statement ok
@@ -321,7 +321,7 @@ statement ok
 CREATE VIEW v4_dep AS (SELECT j FROM t4)
 
 # Since v4_dep depends on t4.j which is of type typ4, v4_dep has a dependency to typ4.
-statement error cannot drop type "typ4" because other objects still depend on it: test.public.t4, test.public.v4_dep
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it.
 DROP type typ4
 
 statement ok
@@ -334,21 +334,21 @@ CREATE TABLE t5 (i INT, j STRING DEFAULT 'a'::typ5::string)
 statement ok
 CREATE VIEW v5 AS (SELECT i FROM t5)
 
-statement error cannot drop type "typ5" because other objects still depend on it: test.public.t5
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5\]\) still depend on it.
 DROP TYPE typ5
 
 statement ok
 CREATE VIEW v5_dep AS (SELECT j FROM t5)
 
 # Since v5_dep depends on t5.j which uses type typ5, v5_dep has a dependency to typ5.
-statement error cannot drop type "typ5" because other objects still depend on it: test.public.t5, test.public.v5_dep
+statement error cannot drop type "typ5" because other objects \(\[test.public.t5 test.public.v5_dep\]\) still depend on it.
 DROP TYPE typ5
 
 statement ok
 CREATE VIEW v6 AS (SELECT j FROM v4_dep)
 
 # v6 depends on v4_dep.j, which depends on t4.j, which depends on typ4, so v6 also depends on typ4.
-statement error cannot drop type "typ4" because other objects still depend on it: test.public.t4, test.public.v4_dep, test.public.v6
+statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it.
 DROP TYPE typ4
 
 statement ok
@@ -360,14 +360,14 @@ statement ok
 CREATE VIEW v7 AS (SELECT i FROM t6)
 
 # Note that v7 does not depend on t6.
-statement error cannot drop type "typ6" because other objects still depend on it: test.public.t6
+statement error cannot drop type "typ6" because other objects \(\[test.public.t6\]\) still depend on it.
 DROP TYPE typ6
 
 statement ok
 CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
 
 # v7_dep depends on typ6 now.
-statement error cannot drop type "typ6" because other objects still depend on it: test.public.t6, test.public.v7_dep
+statement error annot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it.
 DROP TYPE typ6
 
 
@@ -503,21 +503,21 @@ CREATE TYPE typ8 AS ENUM ('hello');
 statement ok
 CREATE TABLE t8 (x typ8)
 
-statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
 DROP TYPE typ8
 
 # Now add a column with the using the type.
 statement ok
 ALTER TABLE t8 ADD COLUMN y typ8
 
-statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
 DROP TYPE typ8
 
 # If we drop the original column x, t8 should still depend on t.
 statement ok
 ALTER TABLE t8 DROP COLUMN x
 
-statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
 DROP TYPE typ8
 
 # Now remove the other column.
@@ -532,7 +532,7 @@ statement ok
 CREATE TYPE typ8 AS ENUM ('hello');
 ALTER TABLE t8 ADD COLUMN x typ8[]
 
-statement error cannot drop type "typ8" because other objects still depend on it: test.public.t8
+statement error cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it.
 DROP TYPE typ8
 
 statement ok
@@ -1155,3 +1155,41 @@ CONSTRAINT b_unique UNIQUE (b)
 
 statement ok
 DROP TABLE const
+
+subtest drop-type-closure
+
+# Tables with expressions and different varieties of type
+# referecnes.
+statement ok
+CREATE TYPE d_tc AS ENUM ('hello');
+CREATE TYPE d2_tc AS ENUM ('howdy');
+CREATE TABLE ttc1 (x d_tc);
+CREATE TABLE ttc2 (y d_tc[]);
+CREATE TABLE ttc3 (
+  x BOOL DEFAULT ('hello'::d_tc = 'hello'::d_tc),
+  y STRING AS ('howdy'::d2_tc::STRING) STORED,
+  CHECK ('hello'::d_tc::string = 'hello'),
+  INDEX i(y) WHERE ('hello'::d_tc = 'hello'::d_tc)
+);
+
+
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc1 test.public.ttc2 test.public.ttc3\]\) still depend on it.
+DROP TYPE d_tc;
+
+statement ok
+DROP TABLE ttc1;
+
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc2 test.public.ttc3\]\) still depend on it.
+DROP TYPE d_tc;
+
+statement ok
+DROP TABLE ttc2;
+
+statement error cannot drop type "d_tc" because other objects \(\[test.public.ttc3\]\) still depend on it.
+DROP TYPE d_tc;
+
+statement ok
+DROP TABLE ttc3;
+
+statement ok
+DROP TYPE d_tc;

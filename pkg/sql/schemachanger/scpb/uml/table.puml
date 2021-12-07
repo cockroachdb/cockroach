@@ -215,6 +215,12 @@ ColumnTypeReference :  TableID
 ColumnTypeReference :  ColumnID
 ColumnTypeReference :  TypeID
 
+object CheckTypeReference
+
+CheckTypeReference :  TableID
+CheckTypeReference :  ConstraintOrdinal
+CheckTypeReference :  TypeID
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -264,4 +270,6 @@ View <|-- ViewDependsOnType
 Type <|-- ViewDependsOnType
 Column <|-- ColumnTypeReference
 Type <|-- ColumnTypeReference
+Table <|-- CheckTypeReference
+Type <|-- CheckTypeReference
 @enduml

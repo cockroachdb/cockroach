@@ -407,3 +407,16 @@ func ForEachColumnTypeReference (b NodeIterator, elementFunc func(status Status,
 	}
   })
 }
+func (e CheckTypeReference) element() {}
+
+// ForEachCheckTypeReference iterates over nodes of type CheckTypeReference.
+func ForEachCheckTypeReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *CheckTypeReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*CheckTypeReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}

@@ -289,7 +289,8 @@ func init() {
 	depNeedsRelationToExitSynthDrop("dependency (ref desc) needs relation/type as non-synthetically dropped",
 		[]interface{}{(*scpb.ForeignKeyBackReference)(nil), (*scpb.RelationDependedOnBy)(nil),
 			(*scpb.ViewDependsOnType)(nil), (*scpb.DefaultExprTypeReference)(nil),
-			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil)},
+			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil),
+			(*scpb.ColumnTypeReference)(nil), (*scpb.CheckTypeReference)(nil)},
 		screl.ReferencedDescID)
 }
 
