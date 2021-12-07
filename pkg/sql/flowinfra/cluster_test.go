@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -49,6 +48,7 @@ import (
 func TestClusterFlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	const numNodes = 3
 	const numRows = 100
 
@@ -90,11 +90,6 @@ func TestClusterFlow(t *testing.T) {
 		//
 		// Note that the ranges won't necessarily be local to the table readers, but
 		// that doesn't matter for the purposes of this test.
-
-		// Start a span (useful to look at spans using Lightstep).
-		sp := tc.ServerTyped(0).Tracer().StartSpan("cluster test")
-		ctx := tracing.ContextWithSpan(context.Background(), sp)
-		defer sp.Finish()
 
 		now := tc.Server(0).Clock().NowAsClockTimestamp()
 		txnProto := roachpb.MakeTransaction(
