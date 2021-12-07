@@ -660,7 +660,13 @@ func (s *Store) receiveSnapshot(
 		return err
 	}
 	inSnap.placeholder = placeholder
-	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
+
+	// Use a background context for applying the snapshot, as handleRaftReady is
+	// not prepared to deal with arbitrary context cancellation. Also, we've
+	// already received the entire snapshot here, so there's no point in
+	// abandoning application half-way through if the caller goes away.
+	applyCtx := s.AnnotateCtx(context.Background())
+	if err := s.processRaftSnapshotRequest(applyCtx, header, inSnap); err != nil {
 		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
 	return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
