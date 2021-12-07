@@ -216,7 +216,7 @@ func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
 // the comparator configured during writer creation). `Close` cannot have been
 // called.
 func (fw *SSTWriter) ClearIntent(
-	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	panic("ClearIntent is unsupported")
 }
@@ -232,11 +232,6 @@ func (fw *SSTWriter) ClearEngineKey(key EngineKey) error {
 	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
 	fw.DataSize += int64(len(key.Key))
 	return fw.fw.Delete(fw.scratch)
-}
-
-// OverrideTxnDidNotUpdateMetaToFalse implements the Writer interface.
-func (fw *SSTWriter) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
-	panic("OverrideTxnDidNotUpdateMetaToFalse is unsupported")
 }
 
 // An error is returned if it is not greater than any previous point key
