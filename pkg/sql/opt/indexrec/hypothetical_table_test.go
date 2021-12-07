@@ -28,24 +28,23 @@ func TestBuildOptAndHypTableMaps(t *testing.T) {
 		t.Errorf("expected table2 to be %+v,\n got %+v\n", table2, oldTables[table2.ID()])
 	}
 
-	// One index candidate is an existing index.
-	newIndexesTable1 := len(indexCandidates[table1]) - 1
+	// A hypothetical table's index count is equivalent to its number of index
+	// candidates plus 1 for the primary index.
+	indexCountTable1 := len(indexCandidates[table1]) + 1
+	indexCountTable2 := len(indexCandidates[table2]) + 1
 
-	// Two index candidates are existing indexes.
-	newIndexesTable2 := len(indexCandidates[table2]) - 2
-
-	if hypTables[1].IndexCount()-oldTables[1].IndexCount() != newIndexesTable1 {
+	if hypTables[1].IndexCount() != indexCountTable1 {
 		t.Errorf(
 			"expected table1's index count to be %d, got %d\n",
-			hypTables[1].IndexCount()-oldTables[1].IndexCount(),
-			newIndexesTable1,
+			hypTables[1].IndexCount(),
+			indexCountTable1,
 		)
 	}
 
-	if hypTables[2].IndexCount()-oldTables[2].IndexCount() != newIndexesTable2 {
+	if hypTables[2].IndexCount() != indexCountTable2 {
 		t.Errorf("expected table2's index count to be %d, got %d\n",
-			hypTables[2].IndexCount()-oldTables[2].IndexCount(),
-			newIndexesTable2,
+			hypTables[2].IndexCount(),
+			indexCountTable2,
 		)
 	}
 }

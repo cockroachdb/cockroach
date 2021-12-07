@@ -37,12 +37,8 @@ func BuildOptAndHypTableMaps(
 		var hypTable hypotheticalTable
 		hypTable.init(t, hypIndexes)
 
-		indexOrd := t.IndexCount()
-		for _, index := range indexes {
-			// Do not add the index if it is equivalent to an existing index.
-			if hypTable.indexExists(index) {
-				continue
-			}
+		for i, index := range indexes {
+			indexOrd := i + 1
 			var hypIndex hypotheticalIndex
 			hypIndex.init(
 				&hypTable,
@@ -52,7 +48,6 @@ func BuildOptAndHypTableMaps(
 				t.Zone().(*zonepb.ZoneConfig),
 			)
 			hypIndexes = append(hypIndexes, hypIndex)
-			indexOrd++
 		}
 
 		hypTable.hypotheticalIndexes = hypIndexes
@@ -88,7 +83,9 @@ func (ht *hypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalInde
 
 // IndexCount is part of the cat.Table interface.
 func (ht *hypotheticalTable) IndexCount() int {
-	return len(ht.hypotheticalIndexes) + ht.Table.IndexCount()
+	// A hypotheticalTable stores the embedded table's primary index in addition
+	// to its hypothetical indexes.
+	return len(ht.hypotheticalIndexes) + 1
 }
 
 // WritableIndexCount is part of the cat.Table interface.
@@ -103,33 +100,34 @@ func (ht *hypotheticalTable) DeletableIndexCount() int {
 
 // Index is part of the cat.Table interface.
 func (ht *hypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
-	existingIndexCount := ht.Table.IndexCount()
-	if i < existingIndexCount {
-		return ht.Table.Index(i)
+	if i == cat.PrimaryIndex {
+		return ht.Table.Index(cat.PrimaryIndex)
 	}
-	hypOrd := i - existingIndexCount
-	return &ht.hypotheticalIndexes[hypOrd]
+	return &ht.hypotheticalIndexes[i-1]
 }
 
-// indexExists checks whether an index is present in the hypotheticalTable's
-// embedded table.
-func (ht *hypotheticalTable) indexExists(index []cat.IndexColumn) bool {
+// existingRedundantIndex checks whether an index with the same explicit columns
+// as the index argument is present in the hypotheticalTable's embedded table.
+// If so, it returns the first instance of such an existing index. Otherwise, it
+// returns nil.
+func (ht *hypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
-		existingIndex := ht.Index(i)
-		if existingIndex.ExplicitColumnCount() != len(index) {
+		indexCols := index.cols
+		existingIndex := ht.Table.Index(i)
+		if existingIndex.ExplicitColumnCount() != len(indexCols) {
 			continue
 		}
 		indexExists := true
 		for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
 			indexCol := existingIndex.Column(j)
-			if indexCol != index[j] {
+			if indexCol != indexCols[j] {
 				indexExists = false
 				break
 			}
 		}
 		if indexExists {
-			return true
+			return existingIndex
 		}
 	}
-	return false
+	return nil
 }
