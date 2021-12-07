@@ -2100,6 +2100,7 @@ const distSQLFlowsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   flow_id UUID NOT NULL,
   node_id INT NOT NULL,
+  stmt    STRING NULL,
   since   TIMESTAMPTZ NOT NULL,
   status  STRING NOT NULL
 )
@@ -2146,12 +2147,13 @@ func populateDistSQLFlowsTable(
 		flowID := tree.NewDUuid(tree.DUuid{UUID: f.FlowID.UUID})
 		for _, info := range f.Infos {
 			nodeID := tree.NewDInt(tree.DInt(info.NodeID))
+			stmt := tree.NewDString(info.Stmt)
 			since, err := tree.MakeDTimestampTZ(info.Timestamp, time.Millisecond)
 			if err != nil {
 				return err
 			}
 			status := tree.NewDString(strings.ToLower(info.Status.String()))
-			if err = addRow(flowID, nodeID, since, status); err != nil {
+			if err = addRow(flowID, nodeID, stmt, since, status); err != nil {
 				return err
 			}
 		}

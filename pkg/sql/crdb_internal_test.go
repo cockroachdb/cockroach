@@ -585,6 +585,8 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		),
 	)
 
+	const query = "SELECT * FROM test.foo"
+
 	// When maxRunningFlows is 0, we expect the remote flows to be queued up and
 	// the test query will error out; when it is 1, we block the execution of
 	// running flows.
@@ -632,7 +634,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			g.GoCtx(func(ctx context.Context) error {
 				conn := tc.ServerConn(gatewayNodeID)
 				atomic.StoreInt64(&queryRunningAtomic, 1)
-				_, err := conn.ExecContext(ctx, "SELECT * FROM test.foo")
+				_, err := conn.ExecContext(ctx, query)
 				atomic.StoreInt64(&queryRunningAtomic, 0)
 				return err
 			})
@@ -663,8 +665,15 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 				queuedStatus  = "queued"
 			)
 			getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
+				querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)
+				// Check that all remote flows (if any) correspond to the
+				// expected statement.
+				stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
+				for _, stmt := range stmts {
+					require.Equal(t, query, stmt[0])
+				}
 				var num int
-				db.QueryRow(t, fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)).Scan(&num)
+				db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
 				return num
 			}
 			for nodeID := 0; nodeID < numNodes; nodeID++ {
