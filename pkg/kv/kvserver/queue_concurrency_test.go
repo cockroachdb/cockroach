@@ -44,7 +44,8 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(ctx)
 
 	// We'll use this many ranges, each of which is added a few times to the
@@ -70,7 +71,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	store := &Store{
 		cfg: StoreConfig{
 			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
-			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+			AmbientCtx:        log.AmbientContext{Tracer: tr},
 			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
 		},
 	}

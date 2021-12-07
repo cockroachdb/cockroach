@@ -168,7 +168,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	}
 
 	// Make a db with a short heartbeat interval.
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ambient := log.AmbientContext{Tracer: s.Cfg.AmbientCtx.Tracer}
 	tsf := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -2291,7 +2291,7 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		return distSender.Send(ctx, ba)
 	}
 
-	ambientCtx := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ambientCtx := log.AmbientContext{Tracer: s.Cfg.AmbientCtx.Tracer}
 	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
 		AmbientCtx: ambientCtx,
 		Settings:   s.Cfg.Settings,
