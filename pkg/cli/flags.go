@@ -998,6 +998,9 @@ func init() {
 	{
 		f := mtTestDirectorySvr.Flags()
 		intFlag(f, &testDirectorySvrContext.port, cliflags.TestDirectoryListenPort)
+		stringFlag(f, &testDirectorySvrContext.certsDir, cliflags.TestDirectoryTenantCertsDir)
+		stringFlag(f, &testDirectorySvrContext.tenantBaseDir, cliflags.TestDirectoryTenantBaseDir)
+		stringFlag(f, &testDirectorySvrContext.kvAddrs, cliflags.KVAddrs)
 	}
 
 	// userfile upload command.

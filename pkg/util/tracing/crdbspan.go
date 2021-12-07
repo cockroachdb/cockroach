@@ -165,12 +165,13 @@ func (s *crdbSpan) finish() bool {
 		}
 		s.mu.finished = true
 
-		finishTime := timeutil.Now()
-		duration := finishTime.Sub(s.startTime)
-		if duration == 0 {
-			duration = time.Nanosecond
+		if s.recordingType() != RecordingOff {
+			duration := timeutil.Since(s.startTime)
+			if duration == 0 {
+				duration = time.Nanosecond
+			}
+			s.mu.duration = duration
 		}
-		s.mu.duration = duration
 
 		// Shallow-copy the children so they can be processed outside the lock.
 		children = make([]*crdbSpan, len(s.mu.recording.openChildren))
@@ -547,7 +548,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	// more.
 	wantTags := recordingType == RecordingVerbose
 	if wantTags {
-		if s.mu.duration == -1 {
+		if !s.mu.finished {
 			addTag("_unfinished", "1")
 		}
 		addTag("_verbose", "1")
