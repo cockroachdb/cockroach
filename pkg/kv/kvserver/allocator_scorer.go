@@ -895,7 +895,7 @@ func rankedCandidateListForRebalancing(
 				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
 			}
-			if !cand.less(existing) {
+			if !cand.less(existing) && cand.store.StoreID != existing.store.StoreID {
 				// If `cand` is not worse than `existing`, add it to the list.
 				comparableCands = append(comparableCands, cand)
 				if !needRebalanceFrom && !needRebalanceTo && existing.less(cand) {
@@ -944,12 +944,10 @@ func rankedCandidateListForRebalancing(
 					}
 				}
 			}
-			// NB: Due to step 2 from above, we're guaranteed to have a non-empty `sl`
-			// at this point.
-			//
-			// TODO(a-robinson): Some moderate refactoring could extract this logic
-			// out into the loop below, avoiding duplicate balanceScore calculations.
-			if options.shouldRebalanceBasedOnThresholds(ctx, existing.store, sl) {
+			// NB: If we have any candidates that are at least as good as the existing
+			// replicas in terms of diversity and disk fullness, check whether the
+			// existing replicas' stats are divergent enough to justify a rebalance.
+			if len(sl.stores) > 0 && options.shouldRebalanceBasedOnThresholds(ctx, existing.store, sl) {
 				shouldRebalanceCheck = true
 				break
 			}
