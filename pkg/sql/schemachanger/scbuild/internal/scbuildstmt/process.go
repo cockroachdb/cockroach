@@ -93,4 +93,6 @@ func Process(b BuildCtx, n tree.Statement) {
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
 	fn.Call(in)
+	// Finalize, the event log state for the current statement.
+	b.FinalizeEventLogState(n)
 }

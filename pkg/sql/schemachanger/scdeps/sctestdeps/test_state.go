@@ -18,10 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/redact"
 )
 
 // TestState is a backing struct used to implement all schema changer
@@ -97,4 +100,16 @@ func (s *TestState) JobRecord(jobID jobspb.JobID) *jobs.Record {
 		return nil
 	}
 	return &s.jobs[idx]
+}
+
+// FormatAstAsRedactableString implements scbuild.AstFormatter
+func (s *TestState) FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString {
+	// Return the SQL back non-redacted and not fully resolved for the purposes
+	// of testing.
+	return redact.RedactableString(statement.String())
+}
+
+// AstFormatter dummy formatter for AST nodes.
+func (s *TestState) AstFormatter() scbuild.AstFormatter {
+	return s
 }

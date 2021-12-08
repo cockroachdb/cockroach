@@ -61,6 +61,7 @@ message TargetState {
 
 message Statement {
   string statement = 1;
+  string redacted_statement = 2;
 }
 
 message Authorization {

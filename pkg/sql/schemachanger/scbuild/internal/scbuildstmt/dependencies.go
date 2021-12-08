@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/redact"
 )
 
 // BuildCtx wraps BuilderState and exposes various convenience methods for the
@@ -64,6 +65,8 @@ type Dependencies interface {
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
+
+	AstFormatter() AstFormatter
 }
 
 // CatalogReader should implement descriptor resolution, namespace lookups, and
@@ -140,6 +143,8 @@ type EventLogState interface {
 	// EventLogStateWithNewSourceElementID returns an EventLogState with an
 	// incremented source element ID
 	EventLogStateWithNewSourceElementID() EventLogState
+
+	FinalizeEventLogState(statement tree.Statement)
 }
 
 // TreeContextBuilder exposes convenient tree-package context builder methods.
@@ -265,4 +270,11 @@ type TableElementIDGenerator interface {
 	// NextIndexID returns the ID that should be used for any new index added to
 	// this table descriptor.
 	NextIndexID(tbl catalog.TableDescriptor) descpb.IndexID
+}
+
+// AstFormatter provides interfaces for formatting AST nodes.
+type AstFormatter interface {
+	// FormatAstAsRedactableString formats a tree.Statement into SQL with fully
+	// qualified names, where parts can be redacted.
+	FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString
 }
