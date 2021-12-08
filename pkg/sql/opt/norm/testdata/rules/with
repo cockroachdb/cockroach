@@ -394,40 +394,40 @@ norm
 WITH foo AS (INSERT INTO a VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: k:13!null i:14 f:15 s:16 j:17
+ ├── columns: k:14!null i:15 f:16 s:17 j:18
  ├── cardinality: [1 - 1]
  ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(13-17)
+ ├── fd: ()-->(14-18)
  ├── insert a
  │    ├── columns: a.k:1!null a.i:2 a.f:3 a.s:4 a.j:5
  │    ├── insert-mapping:
- │    │    ├── column1:8 => a.k:1
- │    │    ├── i_default:9 => a.i:2
- │    │    ├── f_default:10 => a.f:3
- │    │    ├── s_default:11 => a.s:4
- │    │    └── j_default:12 => a.j:5
+ │    │    ├── column1:9 => a.k:1
+ │    │    ├── i_default:10 => a.i:2
+ │    │    ├── f_default:11 => a.f:3
+ │    │    ├── s_default:12 => a.s:4
+ │    │    └── j_default:13 => a.j:5
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    └── values
- │         ├── columns: column1:8!null i_default:9 f_default:10 s_default:11 j_default:12
+ │         ├── columns: column1:9!null i_default:10 f_default:11 s_default:12 j_default:13
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
- │         ├── fd: ()-->(8-12)
+ │         ├── fd: ()-->(9-13)
  │         └── (1, NULL, NULL, NULL, NULL)
  └── with-scan &1 (foo)
-      ├── columns: k:13!null i:14 f:15 s:16 j:17
+      ├── columns: k:14!null i:15 f:16 s:17 j:18
       ├── mapping:
-      │    ├──  a.k:1 => k:13
-      │    ├──  a.i:2 => i:14
-      │    ├──  a.f:3 => f:15
-      │    ├──  a.s:4 => s:16
-      │    └──  a.j:5 => j:17
+      │    ├──  a.k:1 => k:14
+      │    ├──  a.i:2 => i:15
+      │    ├──  a.f:3 => f:16
+      │    ├──  a.s:4 => s:17
+      │    └──  a.j:5 => j:18
       ├── cardinality: [1 - 1]
       ├── key: ()
-      └── fd: ()-->(13-17)
+      └── fd: ()-->(14-18)
 
 norm expect-not=InlineWith
 WITH foo AS (SELECT crdb_internal.notice('foo')) SELECT * FROM foo
@@ -547,17 +547,17 @@ norm format=show-all
 WITH cte AS (INSERT INTO child VALUES (1, 1) RETURNING c) SELECT c FROM cte UNION SELECT c+1 FROM cte
 ----
 with &2 (cte)
- ├── columns: c:14(int!null)
+ ├── columns: c:16(int!null)
  ├── cardinality: [1 - 2]
  ├── volatile, mutations
- ├── stats: [rows=2, distinct(14)=2, null(14)=0]
+ ├── stats: [rows=2, distinct(16)=2, null(16)=0]
  ├── cost: 1056.9075
- ├── key: (14)
+ ├── key: (16)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
  │    ├── insert-mapping:
- │    │    ├── column1:5 => t.public.child.c:1
- │    │    └── column2:6 => t.public.child.p:2
+ │    │    ├── column1:7 => t.public.child.c:1
+ │    │    └── column2:8 => t.public.child.p:2
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
@@ -566,92 +566,92 @@ with &2 (cte)
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
- │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+ │    │    ├── columns: column1:7(int!null) column2:8(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0]
+ │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
  │    │    ├── cost: 0.02
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(5,6)
- │    │    ├── prune: (5,6)
+ │    │    ├── fd: ()-->(7,8)
+ │    │    ├── prune: (7,8)
  │    │    └── tuple [type=tuple{int, int}]
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 1 [type=int]
  │    └── f-k-checks
  │         └── f-k-checks-item: child(p) -> parent(p)
  │              └── anti-join (hash)
- │                   ├── columns: p:7(int!null)
+ │                   ├── columns: p:9(int!null)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
  │                   ├── cost: 1056.7675
  │                   ├── key: ()
- │                   ├── fd: ()-->(7)
+ │                   ├── fd: ()-->(9)
  │                   ├── cte-uses
- │                   │    └── &1: count=1 used-columns=(6)
+ │                   │    └── &1: count=1 used-columns=(8)
  │                   ├── with-scan &1
- │                   │    ├── columns: p:7(int!null)
+ │                   │    ├── columns: p:9(int!null)
  │                   │    ├── mapping:
- │                   │    │    └──  column2:6(int) => p:7(int)
+ │                   │    │    └──  column2:8(int) => p:9(int)
  │                   │    ├── cardinality: [1 - 1]
- │                   │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ │                   │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
  │                   │    ├── cost: 0.01
  │                   │    ├── key: ()
- │                   │    ├── fd: ()-->(7)
- │                   │    ├── prune: (7)
+ │                   │    ├── fd: ()-->(9)
+ │                   │    ├── prune: (9)
  │                   │    └── cte-uses
- │                   │         └── &1: count=1 used-columns=(6)
+ │                   │         └── &1: count=1 used-columns=(8)
  │                   ├── scan t.public.parent
- │                   │    ├── columns: t.public.parent.p:8(int!null)
- │                   │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
+ │                   │    ├── columns: t.public.parent.p:10(int!null)
+ │                   │    ├── stats: [rows=1000, distinct(10)=1000, null(10)=0]
  │                   │    ├── cost: 1044.22
- │                   │    ├── key: (8)
- │                   │    ├── prune: (8)
- │                   │    ├── interesting orderings: (+8)
- │                   │    └── unfiltered-cols: (8-10)
+ │                   │    ├── key: (10)
+ │                   │    ├── prune: (10)
+ │                   │    ├── interesting orderings: (+10)
+ │                   │    └── unfiltered-cols: (10-12)
  │                   └── filters
- │                        └── eq [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
- │                             ├── variable: p:7 [type=int]
- │                             └── variable: t.public.parent.p:8 [type=int]
+ │                        └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+ │                             ├── variable: p:9 [type=int]
+ │                             └── variable: t.public.parent.p:10 [type=int]
  └── union
-      ├── columns: c:14(int!null)
-      ├── left columns: c:11(int)
-      ├── right columns: "?column?":13(int)
+      ├── columns: c:16(int!null)
+      ├── left columns: c:13(int)
+      ├── right columns: "?column?":15(int)
       ├── cardinality: [1 - 2]
       ├── immutable
-      ├── stats: [rows=2, distinct(14)=2, null(14)=0]
+      ├── stats: [rows=2, distinct(16)=2, null(16)=0]
       ├── cost: 0.1
-      ├── key: (14)
+      ├── key: (16)
       ├── with-scan &2 (cte)
-      │    ├── columns: c:11(int!null)
+      │    ├── columns: c:13(int!null)
       │    ├── mapping:
-      │    │    └──  t.public.child.c:1(int) => c:11(int)
+      │    │    └──  t.public.child.c:1(int) => c:13(int)
       │    ├── cardinality: [1 - 1]
-      │    ├── stats: [rows=1, distinct(11)=1, null(11)=0]
+      │    ├── stats: [rows=1, distinct(13)=1, null(13)=0]
       │    ├── cost: 0.01
       │    ├── key: ()
-      │    ├── fd: ()-->(11)
-      │    └── prune: (11)
+      │    ├── fd: ()-->(13)
+      │    └── prune: (13)
       └── project
-           ├── columns: "?column?":13(int!null)
+           ├── columns: "?column?":15(int!null)
            ├── cardinality: [1 - 1]
            ├── immutable
-           ├── stats: [rows=1, distinct(13)=1, null(13)=0]
+           ├── stats: [rows=1, distinct(15)=1, null(15)=0]
            ├── cost: 0.04
            ├── key: ()
-           ├── fd: ()-->(13)
-           ├── prune: (13)
+           ├── fd: ()-->(15)
+           ├── prune: (15)
            ├── with-scan &2 (cte)
-           │    ├── columns: c:12(int!null)
+           │    ├── columns: c:14(int!null)
            │    ├── mapping:
-           │    │    └──  t.public.child.c:1(int) => c:12(int)
+           │    │    └──  t.public.child.c:1(int) => c:14(int)
            │    ├── cardinality: [1 - 1]
-           │    ├── stats: [rows=1, distinct(12)=1, null(12)=0]
+           │    ├── stats: [rows=1, distinct(14)=1, null(14)=0]
            │    ├── cost: 0.01
            │    ├── key: ()
-           │    ├── fd: ()-->(12)
-           │    └── prune: (12)
+           │    ├── fd: ()-->(14)
+           │    └── prune: (14)
            └── projections
-                └── plus [as="?column?":13, type=int, outer=(12), immutable]
-                     ├── variable: c:12 [type=int]
+                └── plus [as="?column?":15, type=int, outer=(14), immutable]
+                     ├── variable: c:14 [type=int]
                      └── const: 1 [type=int]
 
 # Original CTE is inlined, adding "NOT MATERIALIZED" should not change the behavior.

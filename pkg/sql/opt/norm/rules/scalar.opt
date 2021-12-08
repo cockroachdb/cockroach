@@ -59,12 +59,26 @@ $item
 (SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
-# that's equivalent to the desired static type.
-
+# that's identical to the desired static type.
+#
 # Note that CastExpr removes unnecessary casts during type-checking; this rule
 # can still be helpful if some other rule creates an unnecessary CastExpr.
 [EliminateCast, Normalize]
 (Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+=>
+$input
+
+# EliminateAssignmentCast discards the assignment cast operator if the input
+# type and the target type are identical and the assignment cast is guaranteed
+# to be a no-op. See AssignmentCastIsNoop for an explanation of what makes an
+# assignment cast a no-op.
+[EliminateAssignmentCast, Normalize]
+(AssignmentCast
+    $input:*
+    $targetTyp:* &
+        (HasColType $input $targetTyp) &
+        (AssignmentCastIsNoop $targetTyp)
+)
 =>
 $input
 

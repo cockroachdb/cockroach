@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -664,6 +665,157 @@ func (c *CustomFuncs) PushColumnRemappingIntoValues(
 
 	// Construct and return a new ProjectExpr with the new ValuesExpr as input.
 	return c.f.ConstructProject(newValues, newProjections, newPassthrough)
+}
+
+// AssignmentCastCols returns the set of column IDs that undergo an assignment
+// cast in the given projections, and are not referenced by any other projection.
+func (c *CustomFuncs) AssignmentCastCols(projections memo.ProjectionsExpr) opt.ColSet {
+	var castCols opt.ColSet
+	for i := range projections {
+		col, _, ok := extractAssignmentCastInputColAndTargetType(projections[i].Element)
+		if !ok {
+			continue
+		}
+		referencedInOtherProjection := false
+		for j := range projections {
+			if i != j && projections[j].ScalarProps().OuterCols.Contains(col) {
+				referencedInOtherProjection = true
+				break
+			}
+		}
+		if !referencedInOtherProjection {
+			castCols.Add(col)
+		}
+	}
+	return castCols
+}
+
+// PushAssignmentCastsIntoValues pushes assignment cast projections into Values
+// rows.
+//
+// Example:
+//
+// project
+//  ├── columns: x:2 y:3
+//  ├── values
+//  │    ├── columns: column1:1
+//  │    ├── cardinality: [2 - 2]
+//  │    ├── (1,)
+//  │    └── (2,)
+//  └── projections
+//       ├── assignment-cast: STRING [as=x:2]
+//       │    └── column1:1
+//       └── 'foo' [as=y:3]
+// =>
+// project
+//  ├── columns: x:2 y:3
+//  ├── values
+//  │    ├── columns: x:2
+//  │    ├── cardinality: [2 - 2]
+//  │    ├── tuple
+//  │    │    └── assignment-cast: STRING
+//  │    │        └── 1
+//  │    └── tuple
+//  │         └── assignment-cast: STRING
+//  │             └── 2
+//  └── projections
+//       └── 'foo' [as=y:3]
+//
+// This allows other rules to fire, with the ultimate goal of eliminating the
+// project so that the insert fast-path optimization is used in more cases and
+// uniqueness checks for gen_random_uuid() values are eliminated in more cases.
+//
+// castCols is the set of columns produced by the values expression that undergo
+// an assignment cast in a projection. It must not include columns that are
+// referenced by more than one projection.
+func (c *CustomFuncs) PushAssignmentCastsIntoValues(
+	values *memo.ValuesExpr,
+	projections memo.ProjectionsExpr,
+	passthrough opt.ColSet,
+	castCols opt.ColSet,
+) memo.RelExpr {
+	// Create copies of the original passthrough columns, values columns, and
+	// values types.
+	newPassthrough := passthrough.Copy()
+	newValuesCols := make(opt.ColList, len(values.Cols))
+	newValuesTypes := make([]*types.T, len(values.Cols))
+	for i, col := range values.Cols {
+		newValuesCols[i] = col
+		newValuesTypes[i] = c.f.Metadata().ColumnMeta(col).Type
+	}
+
+	// Collect the list of new projections. Only projections that are assignment
+	// casts of columns output by the values expression will be altered. They
+	// will map a new column produced by the new values expression to their
+	// output column. castOrds tracks the column ordinals in the values
+	// expression to push assignment casts down to.
+	var castOrds util.FastIntSet
+	newProjections := make(memo.ProjectionsExpr, 0, len(projections))
+	for i := range projections {
+		col, targetType, ok := extractAssignmentCastInputColAndTargetType(projections[i].Element)
+		if !ok || !castCols.Contains(col) {
+			// If the projection is not an assignment cast of a variable from
+			// the values expression, leave it unaltered.
+			newProjections = append(newProjections, projections[i])
+			continue
+		}
+
+		ord, ok := values.Cols.Find(col)
+		if !ok {
+			panic(errors.AssertionFailedf("could not find column %d", col))
+		}
+
+		// The projection column becomes an output column of the values
+		// expression and a passthrough column in the project.
+		newValuesCols[ord] = projections[i].Col
+		newValuesTypes[ord] = targetType
+		castOrds.Add(ord)
+		newPassthrough.Add(projections[i].Col)
+	}
+
+	// Build a list of the new rows with assignment casts pushed down to each
+	// datum.
+	newRowType := types.MakeTuple(newValuesTypes)
+	newRows := make(memo.ScalarListExpr, len(values.Rows))
+	for i := range values.Rows {
+		oldRow := values.Rows[i].(*memo.TupleExpr)
+		newRow := make(memo.ScalarListExpr, len(oldRow.Elems))
+		for ord := range newRow {
+			if castOrds.Contains(ord) {
+				// Wrap the original element in an assignment cast.
+				newRow[ord] = c.f.ConstructAssignmentCast(oldRow.Elems[ord], newValuesTypes[ord])
+			} else {
+				// If an assignment cast is not pushed into this values element,
+				// use the original element.
+				newRow[ord] = oldRow.Elems[ord]
+			}
+		}
+		newRows[i] = c.f.ConstructTuple(newRow, newRowType)
+	}
+
+	return c.f.ConstructProject(
+		c.f.ConstructValues(
+			newRows,
+			&memo.ValuesPrivate{Cols: newValuesCols, ID: c.f.Metadata().NextUniqueID()},
+		),
+		newProjections,
+		newPassthrough,
+	)
+}
+
+// extractAssignmentCastInputColAndType returns the column that the assignment
+// cast operates on and the target type of the assignment cast if the expression
+// is of the form (AssignmentCast (Variable ...)). If the expression is not of
+// this form, then ok=false is returned.
+func extractAssignmentCastInputColAndTargetType(
+	e opt.ScalarExpr,
+) (_ opt.ColumnID, _ *types.T, ok bool) {
+	if ac, ok := e.(*memo.AssignmentCastExpr); ok {
+		if v, ok := ac.Input.(*memo.VariableExpr); ok {
+			return v.Col, ac.Typ, true
+		}
+	}
+	return 0, nil, false
 }
 
 // IsStaticTuple returns true if the given ScalarExpr is either a TupleExpr or a
