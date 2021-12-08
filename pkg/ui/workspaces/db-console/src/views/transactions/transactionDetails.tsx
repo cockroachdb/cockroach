@@ -19,9 +19,9 @@ import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
   selectData,
-  selectDateRange,
   selectLastError,
 } from "src/views/transactions/transactionsPage";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import {
   TransactionDetailsStateProps,
   TransactionDetailsDispatchProps,
@@ -64,7 +64,7 @@ export default withRouter(
       const transaction = selectTransaction(state, props);
       return {
         aggregatedTs: getMatchParamByName(props.match, aggregatedTsAttr),
-        dateRange: selectDateRange(state),
+        timeScale: statementsTimeScaleLocalSetting.selector(state),
         error: selectLastError(state),
         isTenant: false,
         nodeRegions: nodeRegionsByIDSelector(state),

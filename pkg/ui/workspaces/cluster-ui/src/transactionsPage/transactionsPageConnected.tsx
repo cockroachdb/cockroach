@@ -11,7 +11,6 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
@@ -30,11 +29,12 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
+import { TimeScale } from "../timeScaleDropdown";
 
 export const TransactionsPageConnected = withRouter(
   connect<
@@ -45,7 +45,7 @@ export const TransactionsPageConnected = withRouter(
     (state: AppState) => ({
       columns: selectTxnColumns(state),
       data: selectTransactionsData(state),
-      dateRange: selectDateRange(state),
+      timeScale: selectTimeScale(state),
       error: selectTransactionsLastError(state),
       filters: selectFilters(state),
       isTenant: selectIsTenant(state),
@@ -57,11 +57,10 @@ export const TransactionsPageConnected = withRouter(
       refreshData: (req?: StatementsRequest) =>
         dispatch(sqlStatsActions.refresh(req)),
       resetSQLStats: () => dispatch(sqlStatsActions.reset()),
-      onDateRangeChange: (start: Moment, end: Moment) => {
+      onTimeScaleChange: (ts: TimeScale) => {
         dispatch(
-          sqlStatsActions.updateDateRange({
-            start: start.unix(),
-            end: end.unix(),
+          sqlStatsActions.updateTimeScale({
+            ts: ts,
           }),
         );
       },

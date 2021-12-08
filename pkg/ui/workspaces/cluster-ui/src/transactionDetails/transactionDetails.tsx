@@ -55,8 +55,8 @@ import {
 } from "src/statementsTable/statementsTable";
 import { TransactionInfo } from "src/transactionsTable";
 import Long from "long";
-import { Moment } from "moment";
 import { StatementsRequest } from "../api";
+import { TimeScale, toDateRange } from "../timeScaleDropdown";
 
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
@@ -68,7 +68,7 @@ const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 
 export interface TransactionDetailsStateProps {
   aggregatedTs: string | null;
-  dateRange: [Moment, Moment];
+  timeScale: TimeScale;
   error?: Error | null;
   isTenant: UIConfigState["isTenant"];
   nodeRegions: { [nodeId: string]: string };
@@ -95,10 +95,11 @@ interface TState {
 function statementsRequestFromProps(
   props: TransactionDetailsProps,
 ): protos.cockroach.server.serverpb.StatementsRequest {
+  const [start, end] = toDateRange(props.timeScale);
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
-    start: Long.fromNumber(props.dateRange[0].unix()),
-    end: Long.fromNumber(props.dateRange[1].unix()),
+    start: Long.fromNumber(start.unix()),
+    end: Long.fromNumber(end.unix()),
   });
 }
 
