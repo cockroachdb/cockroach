@@ -68,6 +68,12 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     columnId: 2
     tableId: 59
     typeId: 57
+- DROP DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 59
+    typeId: 58
 - DROP DefaultExpression:{DescID: 55, ColumnID: 2}
   state: PUBLIC
   details:
