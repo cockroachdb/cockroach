@@ -278,7 +278,7 @@ func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata 
 			SubWorkID:       target.Metadata.SubWorkID,
 			StatementID:     target.Metadata.StatementID,
 		},
-		Statement: g.statements[target.Metadata.StatementID].Statement,
+		Statement: g.statements[target.Metadata.StatementID].RedactedStatement,
 		Username:  g.authorization.Username,
 		AppName:   g.authorization.AppName,
 	}

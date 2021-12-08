@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/redact"
 )
 
 // testPartitionInfo tracks partitioning information
@@ -243,4 +245,16 @@ func (s *TestState) JobRecord(jobID jobspb.JobID) *jobs.Record {
 		return nil
 	}
 	return &s.jobs[idx]
+}
+
+// FormatAstAsRedactableString implements scbuild.AstFormatter
+func (s *TestState) FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString {
+	// Return the SQL back non-redacted and not fully resolved for the purposes
+	// of testing.
+	return redact.RedactableString(statement.String())
+}
+
+// AstFormatter dummy formatter for AST nodes.
+func (s *TestState) AstFormatter() scbuild.AstFormatter {
+	return s
 }
