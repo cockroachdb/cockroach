@@ -69,6 +69,7 @@ go_test(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/roachpb:with-mocks",

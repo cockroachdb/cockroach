@@ -13,9 +13,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -205,6 +209,64 @@ func createReplicationStreamHook(
 	}
 	avoidBuffering := stream.SinkURI == nil
 	return fn, replicationStreamHeader, nil, avoidBuffering, nil
+}
+
+func getReplicationStreamSpec(
+	evalCtx *tree.EvalContext,
+	txn *kv.Txn,
+	streamID streaming.StreamID,
+	initialTimestamp hlc.Timestamp,
+) (*streampb.ReplicationStreamSpec, error) {
+	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
+	// Returns error if the replication stream is not active
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
+	if err != nil {
+		return nil, err
+	}
+	var status jobs.Status
+	if status, err = j.CurrentStatus(evalCtx.Ctx(), txn); err != nil {
+		return nil, err
+	}
+	if status != jobs.StatusRunning {
+		return nil, errors.Errorf("Replication stream %d is not running", streamID)
+	}
+
+	// Partition the spans with SQLPlanner
+	var noTxn *kv.Txn
+	dsp := jobExecCtx.DistSQLPlanner()
+	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(), nil /* planner */, noTxn,
+		jobExecCtx.ExecCfg().Codec.ForSystemTenant() /* distribute */)
+
+	replicatedSpans := j.Details().(jobspb.StreamReplicationDetails).Spans
+	spans := make([]roachpb.Span, 0, len(replicatedSpans))
+	for _, span := range replicatedSpans {
+		spans = append(spans, *span)
+	}
+	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &streampb.ReplicationStreamSpec{
+		Partitions: make([]*streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
+	}
+	for _, sp := range spanPartitions {
+		nodeInfo, err := dsp.GetNodeInfo(sp.Node)
+		if err != nil {
+			return nil, err
+		}
+		res.Partitions = append(res.Partitions, &streampb.ReplicationStreamSpec_Partition{
+			NodeID:     sp.Node,
+			SQLAddress: nodeInfo.SQLAddress,
+			Locality:   nodeInfo.Locality,
+			PartitionSpec: &streampb.StreamPartitionSpec{
+				Spans:     sp.Spans,
+				StartFrom: initialTimestamp,
+				// When absent, ExecutionConfig will be interpreted as default
+			},
+		})
+	}
+	return res, nil
 }
 
 func init() {

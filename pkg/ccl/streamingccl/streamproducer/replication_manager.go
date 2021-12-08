@@ -9,6 +9,7 @@
 package streamproducer
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,6 +50,17 @@ func (r replicationStreamManagerImpl) StreamPartition(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
 ) (tree.ValueGenerator, error) {
 	return streamPartition(evalCtx, streamID, opaqueSpec)
+}
+
+// GetReplicationStreamSpec returns a specification for a replication stream which consumer
+// uses to start the replication.
+func (r replicationStreamManagerImpl) GetReplicationStreamSpec(
+	evalCtx *tree.EvalContext,
+	txn *kv.Txn,
+	streamID streaming.StreamID,
+	initialTimestamp hlc.Timestamp,
+) (*streampb.ReplicationStreamSpec, error) {
+	return getReplicationStreamSpec(evalCtx, txn, streamID, initialTimestamp)
 }
 
 func init() {

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func initReplicationBuiltins() {
@@ -164,5 +165,44 @@ var replicationBuiltins = map[string]builtinDefinition{
 			"Stream partition data",
 			tree.VolatilityVolatile,
 		),
+	),
+
+	"crdb_internal.replication_stream_spec": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"stream_id", types.Int},
+				{"start_from", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				mgr, err := streaming.GetReplicationStreamManager()
+				if err != nil {
+					return nil, err
+				}
+
+				streamID := int64(tree.MustBeDInt(args[0]))
+				initialTime, err := hlc.ParseTimestamp(string(tree.MustBeDString(args[1])))
+				if err != nil {
+					return nil, err
+				}
+				spec, err := mgr.GetReplicationStreamSpec(evalCtx, evalCtx.Txn, streaming.StreamID(streamID), initialTime)
+				if err != nil {
+					return nil, err
+				}
+				rawSpec, err := protoutil.Marshal(spec)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawSpec)), err
+			},
+			Info: "This function can be used on the consumer side to get a replication stream specification " +
+				"for the specified stream starting from the specified 'start_from' timestamp. The consumer will " +
+				"later call 'stream_partition' to a partition with the spec to start streaming.",
+			Volatility: tree.VolatilityVolatile,
+		},
 	),
 }

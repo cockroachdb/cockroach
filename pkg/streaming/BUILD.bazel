@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/streaming",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/streamingccl/streampb:streampb_go_proto",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/sql/sem/tree",

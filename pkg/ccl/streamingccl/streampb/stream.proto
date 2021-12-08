@@ -15,7 +15,9 @@ option go_package = "streampb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
+import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 
@@ -42,6 +44,28 @@ message StreamPartitionSpec {
   }
 
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+}
+
+message ReplicationStreamSpec {
+  message Partition {
+    // ID of the node this partition resides
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    // The SQL address. If empty, indicates that the base address field
+    // is also used to accept SQL connections.
+    // sql_address should only be visible by the Admin role.
+    util.UnresolvedAddr sql_address = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "SQLAddress"];
+
+    // Locality of the node
+    roachpb.Locality locality = 3 [(gogoproto.nullable) = false];
+
+    // The spec of the processor responsible for streaming this partition
+    StreamPartitionSpec partition_spec = 4 [(gogoproto.customname) = "PartitionSpec"];
+  }
+
+  repeated Partition partitions = 1;
 }
 
 // StreamEvent describes a replication stream event

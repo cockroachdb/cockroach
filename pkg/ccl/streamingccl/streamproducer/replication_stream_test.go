@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -327,6 +328,22 @@ func TestReplicationStreamInitialization(t *testing.T) {
 				[][]string{{"running"}})
 			checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
+
+		// Get a replication stream spec
+		spec, rawSpec := &streampb.ReplicationStreamSpec{}, make([]byte, 0)
+		initialTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		row := h.SysDB.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1, $2)",
+			streamID, initialTime.String())
+		row.Scan(&rawSpec)
+		require.NoError(t, protoutil.Unmarshal(rawSpec, spec))
+
+		// Ensures the processor spec tracks the tenant span
+		require.Equal(t, 1, len(spec.Partitions))
+		require.Equal(t, initialTime, spec.Partitions[0].PartitionSpec.StartFrom)
+		require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
+		tenantPrefix := keys.MakeTenantPrefix(h.Tenant.ID)
+		require.Equal(t, roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
+			spec.Partitions[0].PartitionSpec.Spans[0])
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {

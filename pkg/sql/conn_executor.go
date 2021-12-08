@@ -2457,6 +2457,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Planner:                   p,
 			PrivilegedAccessor:        p,
 			SessionAccessor:           p,
+			JobExecContext:            p,
 			ClientNoticeSender:        p,
 			Sequence:                  p,
 			Tenant:                    p,
