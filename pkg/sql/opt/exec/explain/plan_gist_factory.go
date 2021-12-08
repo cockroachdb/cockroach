@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -39,11 +38,14 @@ func init() {
 	}
 }
 
-// version tracks major changes to how we encode plans or to the operator set.
-// It isn't necessary to increment it when adding a single operator but if we
-// remove an operator or change the operator set or decide to use a more
+// gistVersion tracks major changes to how we encode plans or to the operator
+// set. It isn't necessary to increment it when adding a single operator but if
+// we remove an operator or change the operator set or decide to use a more
 // efficient encoding version should be incremented.
-var version = 1
+//
+// Version history:
+//   1. Initial version.
+var gistVersion = 1
 
 // PlanGist is a compact representation of a logical plan meant to be used as
 // a key and log for different plans used to implement a particular query. A
@@ -78,18 +80,14 @@ func (fp PlanGist) Hash() uint64 {
 // PlanGistFactory is an exec.Factory that produces a gist by eaves
 // dropping on the exec builder phase of compilation.
 type PlanGistFactory struct {
-	// PlanGistFactory implements a writer interface in order to write to the
-	// gist buffer and maintain a hash. io.MultiWriter could work but this is more
-	// efficient.
-	io.Writer
-
 	wrappedFactory exec.Factory
-	// buffer is used for reading and writing (i.e. decoding and encoding) but on
-	// on the write path it is used via the writer field which is a multi-writer
-	// writing to the buffer and to the hash. The exception is when we're dealing
-	// with ids where we will write the id to the buffer and the "string" to the
-	// hash.  This allows the hash to be id agnostic (ie hash's will be stable
-	// across plans from different databases with different DDL history).
+
+	// buffer is used for reading and writing (i.e. decoding and encoding).
+	// Data that is written to the buffer is also added to the hash. The
+	// exception is when we're dealing with ids where we will write the id to the
+	// buffer and the "string" to the hash. This allows the hash to be id agnostic
+	// (ie hash's will be stable across plans from different databases with
+	// different DDL history).
 	buffer bytes.Buffer
 	hash   util.FNV64
 
@@ -98,15 +96,16 @@ type PlanGistFactory struct {
 }
 
 var _ exec.Factory = &PlanGistFactory{}
-var _ io.Writer = &PlanGistFactory{}
 
-func (f *PlanGistFactory) Write(data []byte) (int, error) {
-	i, err := f.buffer.Write(data)
-	f.writeHash(data)
-	return i, err
+// writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
+// byte.
+func (f *PlanGistFactory) writeAndHash(data []byte) int {
+	i, _ := f.buffer.Write(data)
+	f.updateHash(data)
+	return i
 }
 
-func (f *PlanGistFactory) writeHash(data []byte) {
+func (f *PlanGistFactory) updateHash(data []byte) {
 	for _, b := range data {
 		f.hash.Add(uint64(b))
 	}
@@ -117,7 +116,7 @@ func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
 	f := new(PlanGistFactory)
 	f.wrappedFactory = wrappedFactory
 	f.hash.Init()
-	f.encodeInt(version)
+	f.encodeInt(gistVersion)
 	return f
 }
 
@@ -186,8 +185,8 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, retErr error) 
 	}()
 
 	ver := f.decodeInt()
-	if ver != version {
-		return nil, errors.Errorf("unsupported old plan gist version %d", ver)
+	if ver != gistVersion {
+		return nil, errors.Errorf("unsupported gist version %d (expected %d)", ver, gistVersion)
 	}
 
 	for {
@@ -242,10 +241,7 @@ func (f *PlanGistFactory) encodeOperator(op execOperator) {
 func (f *PlanGistFactory) encodeInt(i int) {
 	var buf [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(buf[:], int64(i))
-	_, err := f.Write(buf[:n])
-	if err != nil {
-		panic(err)
-	}
+	f.writeAndHash(buf[:n])
 }
 
 func (f *PlanGistFactory) decodeInt() int {
@@ -266,7 +262,7 @@ func (f *PlanGistFactory) encodeDataSource(id cat.StableID, name tree.Name) {
 	if err != nil {
 		panic(err)
 	}
-	f.writeHash([]byte(string(name)))
+	f.updateHash([]byte(string(name)))
 }
 
 func (f *PlanGistFactory) encodeID(id cat.StableID) {
@@ -332,10 +328,8 @@ func (f *PlanGistFactory) decodeResultColumns() colinfo.ResultColumns {
 }
 
 func (f *PlanGistFactory) encodeByte(b byte) {
-	_, err := f.Write([]byte{b})
-	if err != nil {
-		panic(err)
-	}
+	f.buffer.WriteByte(b)
+	f.hash.Add(uint64(b))
 }
 
 func (f *PlanGistFactory) decodeByte() byte {
@@ -364,6 +358,14 @@ func (f *PlanGistFactory) decodeBool() bool {
 	return val != 0
 }
 
+func (f *PlanGistFactory) encodeFastIntSet(s util.FastIntSet) {
+	lenBefore := f.buffer.Len()
+	if err := s.Encode(&f.buffer); err != nil {
+		panic(err)
+	}
+	f.updateHash(f.buffer.Bytes()[lenBefore:])
+}
+
 // TODO: enable this or remove it...
 func (f *PlanGistFactory) encodeColumnOrdering(cols colinfo.ColumnOrdering) {
 }
@@ -373,10 +375,7 @@ func (f *PlanGistFactory) decodeColumnOrdering() colinfo.ColumnOrdering {
 }
 
 func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
-	err := params.NeededCols.Encode(f)
-	if err != nil {
-		panic(err)
-	}
+	f.encodeFastIntSet(params.NeededCols)
 
 	if params.IndexConstraint != nil {
 		f.encodeInt(params.IndexConstraint.Spans.Count())
