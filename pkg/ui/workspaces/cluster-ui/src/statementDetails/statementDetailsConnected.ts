@@ -35,7 +35,7 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
-import { selectDateRange } from "../statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -45,7 +45,7 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
   return {
     statement,
     statementsError: state.adminUI.sqlStats.lastError,
-    dateRange: selectDateRange(state),
+    timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
     diagnosticsReports: selectIsTenant(state)

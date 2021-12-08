@@ -73,6 +73,17 @@ export const defaultTimeScaleOptions: TimeScaleCollection = {
   },
 };
 
+export const defaultTimeScaleSelected: TimeScale = {
+  ...defaultTimeScaleOptions["Past 1 Hour"],
+  key: "Past 1 Hour",
+};
+
+export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
+  const end = ts.windowEnd ? moment.utc(ts.windowEnd) : moment().utc();
+  const start = moment.utc(end).subtract(ts.windowSize);
+  return [start, end];
+};
+
 export const findClosestTimeScale = (
   options: TimeScaleCollection,
   seconds: number,

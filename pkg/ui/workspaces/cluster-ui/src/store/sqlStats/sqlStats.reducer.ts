@@ -12,6 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
+import { TimeScale } from "../../timeScaleDropdown";
 
 type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
@@ -27,9 +28,8 @@ const initialState: SQLStatsState = {
   valid: true,
 };
 
-export type UpdateDateRangePayload = {
-  start: number;
-  end: number;
+export type UpdateTimeScalePayload = {
+  ts: TimeScale;
 };
 
 const sqlStatsSlice = createSlice({
@@ -50,7 +50,7 @@ const sqlStatsSlice = createSlice({
     },
     refresh: (_, action?: PayloadAction<StatementsRequest>) => {},
     request: (_, action?: PayloadAction<StatementsRequest>) => {},
-    updateDateRange: (_, action: PayloadAction<UpdateDateRangePayload>) => {},
+    updateTimeScale: (_, action: PayloadAction<UpdateTimeScalePayload>) => {},
     reset: _ => {},
   },
 });

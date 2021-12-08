@@ -134,12 +134,14 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   };
 
   const onOptionSelect = (rangeOption: RangeOption) => {
-    const newSettings = options[rangeOption.label];
-    newSettings.windowEnd = null;
-    let timeScale: TimeScale = { ...newSettings, key: rangeOption.label };
+    let timeScale: TimeScale = {
+      ...options[rangeOption.label],
+      key: rangeOption.label,
+      windowEnd: null,
+    };
     if (adjustTimeScaleOnChange) {
       const timeWindow: TimeWindow = {
-        start: moment.utc().subtract(newSettings.windowSize),
+        start: moment.utc().subtract(timeScale.windowSize),
         end: moment.utc(),
       };
       timeScale = adjustTimeScaleOnChange(timeScale, timeWindow);

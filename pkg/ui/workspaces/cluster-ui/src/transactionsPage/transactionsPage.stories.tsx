@@ -17,7 +17,7 @@ import {
   nodeRegions,
   columns,
   routeProps,
-  dateRange,
+  timeScale,
   sortSetting,
   filters,
 } from "./transactions.fixture";
@@ -38,7 +38,7 @@ storiesOf("Transactions Page", module)
       {...routeProps}
       columns={columns}
       data={data}
-      dateRange={dateRange}
+      timeScale={timeScale}
       filters={filters}
       nodeRegions={nodeRegions}
       onFilterChange={noop}
@@ -55,7 +55,7 @@ storiesOf("Transactions Page", module)
         {...routeProps}
         columns={columns}
         data={getEmptyData()}
-        dateRange={dateRange}
+        timeScale={timeScale}
         filters={filters}
         nodeRegions={nodeRegions}
         onFilterChange={noop}
@@ -79,7 +79,7 @@ storiesOf("Transactions Page", module)
         {...routeProps}
         columns={columns}
         data={getEmptyData()}
-        dateRange={dateRange}
+        timeScale={timeScale}
         filters={filters}
         history={history}
         nodeRegions={nodeRegions}
@@ -98,7 +98,7 @@ storiesOf("Transactions Page", module)
         {...routeProps}
         columns={columns}
         data={undefined}
-        dateRange={dateRange}
+        timeScale={timeScale}
         filters={filters}
         nodeRegions={nodeRegions}
         onFilterChange={noop}
@@ -116,7 +116,7 @@ storiesOf("Transactions Page", module)
         {...routeProps}
         columns={columns}
         data={undefined}
-        dateRange={dateRange}
+        timeScale={timeScale}
         error={
           new RequestError(
             "Forbidden",
