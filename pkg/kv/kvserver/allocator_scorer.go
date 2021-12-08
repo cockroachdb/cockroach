@@ -135,6 +135,9 @@ func (o rangeCountScorerOptions) deterministicForTesting() bool {
 func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	if len(sl.stores) == 0 {
+		return false
+	}
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(o, sl.candidateRanges.mean)))
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
@@ -221,6 +224,9 @@ func (o qpsScorerOptions) deterministicForTesting() bool {
 func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	if len(sl.stores) == 0 {
+		return false
+	}
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
 	overfullThreshold := overfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
@@ -866,6 +872,11 @@ func rankedCandidateListForRebalancing(
 		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
+			// Only process replacement candidates, not existing stores.
+			if store.StoreID == existing.store.StoreID {
+				continue
+			}
+
 			// Ignore any stores on dead nodes or stores that contain any of the
 			// replicas within `replicasOnExemptedStores`.
 			if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
@@ -951,22 +962,20 @@ func rankedCandidateListForRebalancing(
 	var shouldRebalanceCheck bool
 	if !needRebalance {
 		for _, existing := range existingStores {
-			var sl StoreList
+			var candidateSL StoreList
 		outer:
 			for _, comparable := range equivalenceClasses {
 				for _, existingCand := range comparable.existing {
 					if existing.store.StoreID == existingCand.StoreID {
-						sl = comparable.candidateSL
+						candidateSL = comparable.candidateSL
 						break outer
 					}
 				}
 			}
-			// NB: Due to step 2 from above, we're guaranteed to have a non-empty `sl`
-			// at this point.
-			//
-			// TODO(a-robinson): Some moderate refactoring could extract this logic
-			// out into the loop below, avoiding duplicate balanceScore calculations.
-			if options.shouldRebalanceBasedOnThresholds(ctx, existing.store, sl) {
+			// NB: If we have any candidates that are at least as good as the existing
+			// replicas in terms of diversity and disk fullness, check whether the
+			// existing replicas' stats are divergent enough to justify a rebalance.
+			if options.shouldRebalanceBasedOnThresholds(ctx, existing.store, candidateSL) {
 				shouldRebalanceCheck = true
 				break
 			}

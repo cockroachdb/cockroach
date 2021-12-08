@@ -738,17 +738,19 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 		// the same region.
 		{
 			// Within the hottest region, expect rebalance from the hottest node (n1)
-			// to the coolest node (n3).
+			// to the coolest node (n3). Within the lease hot region, expect movement
+			// from n8 to n9.
 			name:                "QPS balance without constraints",
 			voters:              []roachpb.StoreID{1, 5, 8},
-			expRebalancedVoters: []roachpb.StoreID{8, 5, 3},
+			expRebalancedVoters: []roachpb.StoreID{9, 5, 3},
 		},
 		{
 			// Within the second hottest region, expect rebalance from the hottest
-			// node (n4) to the coolest node (n6).
+			// node (n4) to the coolest node (n6). Within the lease hot region, expect
+			// movement from n8 to n9.
 			name:                "QPS balance without constraints",
 			voters:              []roachpb.StoreID{8, 4, 3},
-			expRebalancedVoters: []roachpb.StoreID{8, 6, 3},
+			expRebalancedVoters: []roachpb.StoreID{9, 6, 3},
 		},
 
 		// Multi-region database configurations.
