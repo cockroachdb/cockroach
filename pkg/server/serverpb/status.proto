@@ -1364,10 +1364,13 @@ message TableIndexStatsRequest {
 message TableIndexStatsResponse {
   message ExtendedCollectedIndexUsageStatistics {
     cockroach.sql.CollectedIndexUsageStatistics statistics = 1;
-    // IndexName is the name of the index.
+    // index_name is the name of the index.
     string index_name = 2;
-    // IndexType is the type of the index i.e. primary, secondary.
+    // index_type is the type of the index i.e. primary, secondary.
     string index_type = 3;
+    // create_statement is the SQL statement that would re-create the
+    // current index if executed.
+    string create_statement = 4;
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;

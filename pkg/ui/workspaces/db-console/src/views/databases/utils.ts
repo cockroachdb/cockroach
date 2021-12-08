@@ -11,6 +11,11 @@
 // createNodesByRegionMap creates a mapping of regions to nodes,
 // based on the nodes list provided and nodeRegions, which is a full
 // list of node id to the region it resides.
+import * as protos from "src/js/protos";
+import Long from "long";
+
+type Timestamp = protos.google.protobuf.ITimestamp;
+
 export function createNodesByRegionMap(
   nodes: number[],
   nodeRegions: Record<string, string>,
@@ -57,4 +62,11 @@ export function getNodesByRegionString(
   nodeRegions: Record<string, string>,
 ): string {
   return nodesByRegionMapToString(createNodesByRegionMap(nodes, nodeRegions));
+}
+
+// makeTimestamp converts a string to a google.protobuf.Timestamp object.
+export function makeTimestamp(date: string): Timestamp {
+  return new protos.google.protobuf.Timestamp({
+    seconds: new Long(Date.parse(date) * 1e-3),
+  });
 }

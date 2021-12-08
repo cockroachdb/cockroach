@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -251,4 +252,99 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 		}
 	}
 	require.True(t, statsEntries == 2, "expect to find two stats entries in RPC response, but found %d", statsEntries)
+}
+
+func TestGetTableID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create tables under public and user defined schemas.
+	db.Exec(t, `
+CREATE DATABASE test_db1;
+SET DATABASE=test_db1;
+CREATE TABLE test_table (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+);
+CREATE SCHEMA schema;
+CREATE TABLE schema.test_table (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+);
+`)
+
+	// Create tables under public and user defined schemas under a different database.
+	db.Exec(t, `
+CREATE DATABASE test_db2;
+SET DATABASE=test_db2;
+CREATE TABLE test_table (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+);
+CREATE SCHEMA schema;
+CREATE TABLE schema.test_table (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+);
+`)
+
+	// Get Table IDs.
+	userName, err := userFromContext(ctx)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		database string
+		schema   string
+		table    string
+	}{
+		{
+			database: "test_db1",
+			schema:   "public",
+			table:    "test_table",
+		},
+		{
+			database: "test_db1",
+			schema:   "schema",
+			table:    "test_table",
+		},
+		{
+			database: "test_db2",
+			schema:   "public",
+			table:    "test_table",
+		},
+		{
+			database: "test_db2",
+			schema:   "schema",
+			table:    "test_table",
+		},
+	}
+
+	for _, tc := range testCases {
+		tableName := fmt.Sprintf("%s.%s", tc.schema, tc.table)
+		tableID, err := getTableIDFromDatabaseAndTableName(ctx, tc.database, tableName, s.InternalExecutor().(*sql.InternalExecutor), userName)
+		require.NoError(t, err)
+
+		// Get actual Table ID.
+		actualTableID := db.QueryStr(t, `
+SELECT table_id 
+FROM crdb_internal.tables 
+WHERE database_name=$1 AND schema_name=$2 AND name=$3`,
+			tc.database, tc.schema, tc.table)
+
+		// Assert Table ID is correct.
+		require.Equal(t, fmt.Sprint(tableID), actualTableID[0][0])
+	}
 }
