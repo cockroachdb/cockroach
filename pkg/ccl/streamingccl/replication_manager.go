@@ -9,6 +9,7 @@
 package streamingccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,4 +61,21 @@ func (r replicationStreamManagerImpl) UpdateReplicationStreamProgress(
 			errors.New("UpdateReplicationStreamProgress is not registered")
 	}
 	return UpdateReplicationStreamProgressHook(evalCtx, streamID, frontier, txn)
+}
+
+// GetReplicationStreamSpecHook hooks an GetReplicationStreamSpec implementation inside streamingccl package.
+var GetReplicationStreamSpecHook func(evalCtx *tree.EvalContext,
+	txn *kv.Txn, streamID streaming.StreamID, initialTimestamp hlc.Timestamp) (*streampb.ReplicationStreamSpec, error)
+
+// GetReplicationStreamSpec implements ReplicationStreamManager interface.
+func (r replicationStreamManagerImpl) GetReplicationStreamSpec(
+	evalCtx *tree.EvalContext,
+	txn *kv.Txn,
+	streamID streaming.StreamID,
+	initialTimestamp hlc.Timestamp,
+) (*streampb.ReplicationStreamSpec, error) {
+	if GetReplicationStreamSpecHook == nil {
+		return nil, errors.New("GetReplicationStreamSpecHook is not registered")
+	}
+	return GetReplicationStreamSpecHook(evalCtx, txn, streamID, initialTimestamp)
 }

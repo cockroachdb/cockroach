@@ -1,0 +1,68 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "jobs/jobspb/jobs.proto";
+import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+import "util/unresolved_addr.proto";
+
+
+// StreamPartitionProcessorSpec is the specification for a processor that streams
+// changes for a partition of a stream replication.
+message StreamPartitionProcessorSpec {
+
+  // Initial resolved timestamp to start the replication from
+  optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false];
+
+  // Spans tracked by this stream processor
+  repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
+
+  // ID of the replication stream
+  optional int64 stream_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "StreamID"
+  ];
+
+}
+
+message ReplicationStreamSpec {
+  message PartitionSpec {
+    // ID of the node this partition resides
+    optional int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    // The SQL address. If empty, indicates that the base address field
+    // is also used to accept SQL connections.
+    // sql_address should only be visible by the Admin role.
+    optional util.UnresolvedAddr sql_address = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "SQLAddress"];
+
+    // Locality of the node
+    optional roachpb.Locality locality = 3 [(gogoproto.nullable) = false];
+
+    // The spec of the processor responsible for streaming this partition
+    optional StreamPartitionProcessorSpec processor_spec = 4 [(gogoproto.customname) = "StreamProcessorSpec"];
+  }
+
+  repeated PartitionSpec partition_specs = 1;
+}

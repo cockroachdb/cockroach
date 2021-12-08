@@ -3576,6 +3576,9 @@ type EvalContext struct {
 
 	Planner EvalPlanner
 
+	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
+	JobExecContext interface{}
+
 	PrivilegedAccessor PrivilegedAccessor
 
 	SessionAccessor EvalSessionAccessor
