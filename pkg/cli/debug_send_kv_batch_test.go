@@ -12,6 +12,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
@@ -27,6 +28,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
+
+// TestSendKVBatchExample is a simple example of generating Protobuf-compatible
+// JSON for a BatchRequest doing a Put and then Get of a key.
+func TestSendKVBatchExample(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ba roachpb.BatchRequest
+	ba.Add(roachpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
+	ba.Add(roachpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
+
+	// NOTE: This cannot be marshaled using the standard Go JSON marshaler,
+	// since it does not correctly (un)marshal the JSON as mandated by the
+	// Protobuf spec. Instead, use the JSON marshaler shipped with Protobuf.
+	jsonpb := protoutil.JSONPb{}
+	jsonProto, err := jsonpb.Marshal(&ba)
+	require.NoError(t, err)
+
+	fmt.Println(string(jsonProto))
+}
 
 func TestSendKVBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
