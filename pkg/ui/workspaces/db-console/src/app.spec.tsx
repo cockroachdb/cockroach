@@ -30,7 +30,12 @@ import { DatabasesPage } from "src/views/databases/databasesPage";
 import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
 import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
-import { StatementsPage, StatementDetails } from "@cockroachlabs/cluster-ui";
+import {
+  StatementsPage,
+  StatementDetails,
+  TransactionsPage,
+  TransactionDetails,
+} from "@cockroachlabs/cluster-ui";
 import Debug from "src/views/reports/containers/debug";
 import { ReduxDebug } from "src/views/reports/containers/redux";
 import { CustomChart } from "src/views/reports/containers/customChart";
@@ -353,6 +358,23 @@ describe("Routing to", () => {
     it("routes to <StatementDetails> component", () => {
       navigateToPath("/statement/implicit-attr/statement-attr/");
       assert.lengthOf(appWrapper.find(StatementDetails), 1);
+    });
+  });
+
+  {
+    /* transactions statistics */
+  }
+  describe("'/sql-activity?tab=Transactions' path", () => {
+    it("routes to <TransactionsPage> component", () => {
+      navigateToPath("/sql-activity?tab=Transactions");
+      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
+    });
+  });
+
+  describe("'/transaction/:aggregated_ts/:txn_fingerprint_id' path", () => {
+    it("routes to <TransactionDetails> component", () => {
+      navigateToPath("/transaction/1637877600/4948941983164833719");
+      assert.lengthOf(appWrapper.find(TransactionDetails), 1);
     });
   });
 

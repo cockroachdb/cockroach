@@ -20,6 +20,7 @@ import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 import {
+  aggregatedTsAttr,
   appAttr,
   dashboardNameAttr,
   databaseAttr,
@@ -32,6 +33,7 @@ import {
   statementAttr,
   tabAttr,
   tableNameAttr,
+  txnFingerprintIdAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
@@ -65,6 +67,7 @@ import Stores from "src/views/reports/containers/stores";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import SessionDetails from "src/views/sessions/sessionDetails";
+import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import "styl/app.styl";
@@ -255,6 +258,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   exact
                   from={`/transactions`}
                   to={`/sql-activity?${tabAttr}=Transactions`}
+                />
+                <Route
+                  exact
+                  path={`/transaction/:${aggregatedTsAttr}/:${txnFingerprintIdAttr}`}
+                  component={TransactionDetails}
                 />
 
                 {/* debug pages */}
