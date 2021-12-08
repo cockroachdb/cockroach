@@ -8,6 +8,7 @@ source build/shlib.sh
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
+FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
 
 cmd=${1-}
 if [[ "${cmd}" ]]; then
@@ -65,8 +66,12 @@ case "${cmd}" in
     ;;
     start)
     start_and_wait "${NAME}"
+    if ! gcloud compute config-ssh > /dev/null; then
+	echo "WARNING: Unable to invoke config-ssh, you may not be able to 'ssh ${FQNAME}'"
+    fi
+
     # SSH into the node, since that's probably why we started it.
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    $0 ssh
     ;;
     stop)
     read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -92,6 +97,11 @@ case "${cmd}" in
     exit ${status}
     ;;
     ssh)
+    echo "****************************************"
+    echo "Hint: you should also be able to directly invoke:"
+    echo "ssh ${FQNAME}"
+    echo "instead of '$0 ssh'."
+    echo "****************************************"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     mosh)
