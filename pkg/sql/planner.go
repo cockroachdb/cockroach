@@ -105,6 +105,28 @@ type extendedEvalContext struct {
 	SchemaChangeInternalExecutor *InternalExecutor
 }
 
+// copyFromExecCfg copies relevant fields from an ExecutorConfig.
+func (evalCtx extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) extendedEvalContext {
+	evalCtx.ExecCfg = execCfg
+	evalCtx.Settings = execCfg.Settings
+	evalCtx.Codec = execCfg.Codec
+	evalCtx.Tracer = execCfg.AmbientCtx.Tracer
+	evalCtx.DB = execCfg.DB
+	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
+	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
+	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
+	evalCtx.ClusterID = execCfg.ClusterID()
+	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
+	evalCtx.NodeID = execCfg.NodeID
+	evalCtx.Locality = execCfg.Locality
+	evalCtx.NodesStatusServer = execCfg.NodesStatusServer
+	evalCtx.RegionsServer = execCfg.RegionsServer
+	evalCtx.SQLStatusServer = execCfg.SQLStatusServer
+	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
+	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
+	return evalCtx
+}
+
 // copy returns a deep copy of ctx.
 func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *evalCtx
@@ -444,9 +466,6 @@ func internalExtendedEvalCtx(
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,
-			Settings:                  execCfg.Settings,
-			Codec:                     execCfg.Codec,
-			Tracer:                    execCfg.AmbientCtx.Tracer,
 			Context:                   ctx,
 			Mon:                       plannerMon,
 			TestingKnobs:              evalContextTestingKnobs,
@@ -455,15 +474,10 @@ func internalExtendedEvalCtx(
 			SQLStatsController:        sqlStatsController,
 			IndexUsageStatsController: indexUsageStatsController,
 		},
-		VirtualSchemas:    execCfg.VirtualSchemas,
-		Tracing:           &SessionTracing{},
-		NodesStatusServer: execCfg.NodesStatusServer,
-		RegionsServer:     execCfg.RegionsServer,
-		Descs:             tables,
-		ExecCfg:           execCfg,
-		DistSQLPlanner:    execCfg.DistSQLPlanner,
-		indexUsageStats:   indexUsageStats,
-	}
+		Tracing:         &SessionTracing{},
+		Descs:           tables,
+		indexUsageStats: indexUsageStats,
+	}.copyFromExecCfg(execCfg)
 }
 
 // LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
