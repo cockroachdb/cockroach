@@ -18,7 +18,14 @@
 
 package util
 
-import "golang.org/x/tools/container/intsets"
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
+
+	"github.com/cockroachdb/errors"
+	"golang.org/x/tools/container/intsets"
+)
 
 // FastIntSet keeps track of a set of integers. It does not perform any
 // allocations when the values are small. It is not thread-safe.
@@ -215,6 +222,80 @@ func (s *FastIntSet) Shift(delta int) FastIntSet {
 		n.Insert(i + delta)
 	})
 	return FastIntSet{s: n}
+}
+
+// Encode the set and write it to a bytes.Buffer using binary.varint byte
+// encoding.
+//
+// This method cannot be used if the set contains negative elements.
+//
+// If the set has only elements in the range [0, 63], we encode a 0 followed by
+// a 64-bit bitmap. Otherwise, we encode a length followed by each element.
+//
+// WARNING: this is used by plan gists, so if this encoding changes,
+// explain.gistVersion needs to be bumped.
+func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
+	if s.s != nil && s.s.Min() < 0 {
+		return errors.AssertionFailedf("Encode used with negative elements")
+	}
+
+	// This slice should stay on stack. We only need enough bytes to encode a 0
+	// and then an arbitrary 64-bit integer.
+	//gcassert:noescape
+	tmp := make([]byte, binary.MaxVarintLen64+1)
+
+	if s.s == nil || s.s.Max() < 64 {
+		n := binary.PutUvarint(tmp, 0)
+		var bitmap uint64
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			bitmap |= (1 << uint64(i))
+		}
+		n += binary.PutUvarint(tmp[n:], bitmap)
+		buf.Write(tmp[:n])
+	} else {
+		n := binary.PutUvarint(tmp, uint64(s.Len()))
+		buf.Write(tmp[:n])
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			n := binary.PutUvarint(tmp, uint64(i))
+			buf.Write(tmp[:n])
+		}
+	}
+	return nil
+}
+
+// Decode does the opposite of Encode. The contents of the receiver are
+// overwritten.
+func (s *FastIntSet) Decode(br io.ByteReader) error {
+	length, err := binary.ReadUvarint(br)
+	if err != nil {
+		return err
+	}
+	if s.s != nil {
+		s.s.Clear()
+	}
+
+	if length == 0 {
+		// Special case: the bitmap is encoded directly.
+		val, err := binary.ReadUvarint(br)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 64; i++ {
+			if val&(1<<uint64(i)) != 0 {
+				s.Add(i)
+			}
+		}
+	} else {
+		for i := 0; i < int(length); i++ {
+			elem, err := binary.ReadUvarint(br)
+			if err != nil {
+				*s = FastIntSet{}
+				return err
+			}
+			s.Add(int(elem))
+		}
+	}
+	return nil
 }
 
 // This is defined to allow the test to build.

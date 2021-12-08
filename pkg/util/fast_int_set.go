@@ -297,8 +297,11 @@ func (s FastIntSet) Equals(rhs FastIntSet) bool {
 		return false
 	}
 	if s.fitsInSmall() {
+		// We already know that the `small` fields are equal. We just have to make
+		// sure that the other set also has no large elements.
 		return rhs.fitsInSmall()
 	}
+	// We know that s has large elements.
 	return rhs.large != nil && s.large.Equals(rhs.large)
 }
 
