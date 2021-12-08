@@ -33,10 +33,12 @@ vectorized: true
         └── • insert
             │ into: t(x)
             │
-            └── • scan
-                  missing stats
-                  table: t2@t2_pkey
-                  spans: FULL SCAN
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: t2@t2_pkey
+                      spans: FULL SCAN
 
 query T
 EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
@@ -163,10 +165,12 @@ vectorized: true
         └── • insert
             │ into: t(x)
             │
-            └── • scan
-                  missing stats
-                  table: t2@t2_pkey
-                  spans: FULL SCAN
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: t2@t2_pkey
+                      spans: FULL SCAN
 
 query T
 EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
@@ -288,10 +292,12 @@ vectorized: true
         └── • insert
             │ into: t(x)
             │
-            └── • scan
-                  missing stats
-                  table: t2@t2_pkey
-                  spans: FULL SCAN
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: t2@t2_pkey
+                      spans: FULL SCAN
 
 query T
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
@@ -322,10 +328,12 @@ vectorized: true
         └── • insert
             │ into: t(x)
             │
-            └── • scan
-                  missing stats
-                  table: t2@t2_pkey
-                  spans: FULL SCAN
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: t2@t2_pkey
+                      spans: FULL SCAN
 
 # Check that if a spool is already added at some level, then it is not added
 # again at levels below.
@@ -357,10 +365,12 @@ vectorized: true
 │       └── • insert
 │           │ into: t(x)
 │           │
-│           └── • scan
-│                 missing stats
-│                 table: t2@t2_pkey
-│                 spans: FULL SCAN
+│           └── • render
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: t2@t2_pkey
+│                     spans: FULL SCAN
 │
 └── • subquery
     │ id: @S2
@@ -401,10 +411,12 @@ vectorized: true
         └── • insert
             │ into: t(x)
             │
-            └── • scan
-                  missing stats
-                  table: t2@t2_pkey
-                  spans: FULL SCAN
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: t2@t2_pkey
+                      spans: FULL SCAN
 
 # Check that no spool is used for a top-level INSERT, but
 # sub-INSERTs still get a spool.
@@ -435,10 +447,12 @@ vectorized: true
         └── • insert
             │ into: t(x)
             │
-            └── • scan
-                  missing stats
-                  table: t2@t2_pkey
-                  spans: FULL SCAN
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: t2@t2_pkey
+                      spans: FULL SCAN
 
 # Check that simple computations using RETURNING get their spool pulled up.
 query T
@@ -471,10 +485,12 @@ vectorized: true
             └── • insert
                 │ into: t(x)
                 │
-                └── • scan
-                      missing stats
-                      table: t2@t2_pkey
-                      spans: FULL SCAN
+                └── • render
+                    │
+                    └── • scan
+                          missing stats
+                          table: t2@t2_pkey
+                          spans: FULL SCAN
 
 # Check that a pulled up spool gets elided at the top level.
 query T
@@ -504,7 +520,9 @@ vectorized: true
             └── • insert
                 │ into: t(x)
                 │
-                └── • scan
-                      missing stats
-                      table: t2@t2_pkey
-                      spans: FULL SCAN
+                └── • render
+                    │
+                    └── • scan
+                          missing stats
+                          table: t2@t2_pkey
+                          spans: FULL SCAN

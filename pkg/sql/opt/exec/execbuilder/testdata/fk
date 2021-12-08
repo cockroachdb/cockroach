@@ -59,10 +59,12 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • scan
-│             missing stats
-│             table: xy@xy_pkey
-│             spans: FULL SCAN
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: xy@xy_pkey
+│                 spans: FULL SCAN
 │
 └── • constraint-check
     │
@@ -937,7 +939,7 @@ vectorized: true
   row 1, expr 1: 2
 
 # We shouldn't use the fast path if the VALUES columns are not in order.
-query B 
+query B
 SELECT count(*) > 0 FROM [
   EXPLAIN INSERT INTO child (SELECT b, a FROM (VALUES (1,2)) AS v(a,b))
 ] WHERE info LIKE '%insert-fast-path'

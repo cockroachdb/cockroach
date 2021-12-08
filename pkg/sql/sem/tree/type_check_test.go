@@ -123,8 +123,8 @@ func TestTypeCheck(t *testing.T) {
 		{`1 + $1`, `1:::INT8 + $1:::INT8`},
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
 		{`$1:::INT8`, `$1:::INT8`},
-		{`2::DECIMAL(10,2) + $1`, `2:::DECIMAL::DECIMAL(10,2) + $1:::DECIMAL`},
-		{`2::DECIMAL(10,0) + $1`, `2:::DECIMAL::DECIMAL(10) + $1:::DECIMAL`},
+		{`2::DECIMAL(10,2) + $1`, `2:::DECIMAL::DECIMAL(10,2) + $1:::DECIMAL(10,2)`},
+		{`2::DECIMAL(10,0) + $1`, `2:::DECIMAL::DECIMAL(10) + $1:::DECIMAL(10)`},
 
 		// Tuples with labels
 		{`(ROW (1) AS a)`, `((1:::INT8,) AS a)`},
