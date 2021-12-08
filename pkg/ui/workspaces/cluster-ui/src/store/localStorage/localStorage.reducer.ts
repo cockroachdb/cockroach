@@ -12,11 +12,7 @@ import moment from "moment";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "../../queryFilter";
-
-type StatementsDateRangeState = {
-  start: number;
-  end: number;
-};
+import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 
 type SortSetting = {
   ascending: boolean;
@@ -27,7 +23,7 @@ export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
-  "dateRange/StatementsPage": StatementsDateRangeState;
+  "timeScale/SQLActivity": TimeScale;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
@@ -40,14 +36,6 @@ export type LocalStorageState = {
 type Payload = {
   key: keyof LocalStorageState;
   value: any;
-};
-
-const defaultDateRange: StatementsDateRangeState = {
-  start: moment
-    .utc()
-    .subtract(1, "hours")
-    .unix(),
-  end: moment.utc().unix() + 60, // Add 1 minute to account for potential lag.
 };
 
 const defaultSortSetting: SortSetting = {
@@ -69,9 +57,9 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
   "showColumns/TransactionPage":
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
-  "dateRange/StatementsPage":
-    JSON.parse(localStorage.getItem("dateRange/StatementsPage")) ||
-    defaultDateRange,
+  "timeScale/SQLActivity":
+    JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
+    defaultTimeScaleSelected,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
     defaultSortSetting,
