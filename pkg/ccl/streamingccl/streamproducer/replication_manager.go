@@ -9,6 +9,7 @@
 package streamproducer
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -53,6 +54,16 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
 ) (tree.ValueGenerator, error) {
 	return streamPartition(evalCtx, streamID, opaqueSpec)
+}
+
+// GetReplicationStreamSpec implements ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
+	evalCtx *tree.EvalContext,
+	txn *kv.Txn,
+	streamID streaming.StreamID,
+	initialTimestamp hlc.Timestamp,
+) (*streampb.ReplicationStreamSpec, error) {
+	return getReplicationStreamSpec(evalCtx, txn, streamID, initialTimestamp)
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
