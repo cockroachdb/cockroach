@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // The code in this file deals with storing cluster metadata in the
@@ -123,6 +124,11 @@ func LoadClusters() error {
 	for _, name := range clusterNames {
 		c, err := loadCluster(name)
 		if err != nil {
+			if oserror.IsNotExist(err) {
+				// It is possible that another process is syncing the cache and just
+				// removed the file. Ignore the error.
+				continue
+			}
 			return errors.Wrapf(err, "could not load info for cluster %s", name)
 		}
 
@@ -157,6 +163,10 @@ func LoadClusters() error {
 // (across all providers, including any local cluster).
 //
 // A file in ClustersDir is created for each cluster; other files are removed.
+//
+// This function assumes the caller took a lock on a file to ensure that
+// multiple processes don't run through this code at the same time. However, it
+// is allowed for LoadClusters to run in another process at the same time.
 func syncClustersCache(cloud *cloud.Cloud) error {
 	// Write all cluster files.
 	for _, c := range cloud.Clusters {
