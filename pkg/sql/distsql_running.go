@@ -325,6 +325,8 @@ func (dsp *DistSQLPlanner) setupFlows(
 			}
 		}
 	}
+
+	var remoteNodes string
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
@@ -354,6 +356,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 		default:
 			runReq.run()
 		}
+		if remoteNodes != "" {
+			remoteNodes += " "
+		}
+		remoteNodes += "n" + nodeID.String()
 	}
 
 	var firstErr error
@@ -369,6 +375,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 	if firstErr != nil {
 		return nil, nil, firstErr
+	}
+
+	if remoteNodes != "" {
+		log.VEventf(
+			ctx, 1, "set up flow %s, gateway is n%s, remote nodes are %s",
+			flows[thisNodeID].FlowID, thisNodeID, remoteNodes,
+		)
 	}
 
 	// Set up the flow on this node.

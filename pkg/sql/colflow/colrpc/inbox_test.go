@@ -61,7 +61,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	typs := []*types.T{types.Int}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
-		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0), execinfrapb.FlowID{})
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 		// Cancel the context.
@@ -78,7 +78,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("DuringRecv", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0), execinfrapb.FlowID{})
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -111,7 +111,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("StreamHandlerWaitingForReader", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0), execinfrapb.FlowID{})
 		require.NoError(t, err)
 
 		ctx, cancelFn := context.WithCancel(context.Background())
@@ -129,7 +129,7 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox(context.Background(), testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(context.Background(), testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0), execinfrapb.FlowID{})
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
@@ -156,7 +156,7 @@ func TestInboxTimeout(t *testing.T) {
 
 	ctx := context.Background()
 
-	inbox, err := NewInbox(ctx, testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(ctx, testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0), execinfrapb.FlowID{})
 	require.NoError(t, err)
 
 	var (
@@ -259,7 +259,7 @@ func TestInboxShutdown(t *testing.T) {
 					inboxCtx, inboxCancel := context.WithCancel(context.Background())
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
-					inbox, err := NewInbox(context.Background(), colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+					inbox, err := NewInbox(context.Background(), colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0), execinfrapb.FlowID{})
 					require.NoError(t, err)
 					c, err := colserde.NewArrowBatchConverter(typs)
 					require.NoError(t, err)

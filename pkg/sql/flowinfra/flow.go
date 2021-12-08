@@ -314,7 +314,7 @@ func (f *FlowBase) startInternal(
 ) error {
 	f.doneFn = doneFn
 	log.VEventf(
-		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
+		ctx, 2, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
 	// Only register the flow if there will be inbound stream connections that
@@ -331,13 +331,11 @@ func (f *FlowBase) startInternal(
 		); err != nil {
 			return err
 		}
+		log.VEventf(ctx, 2, "registered flow %s", f.ID.Short())
 	}
 
 	f.status = FlowRunning
 
-	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.ID.Short())
-	}
 	for _, s := range f.startables {
 		s.Start(ctx, &f.waitGroup, f.ctxCancel)
 	}
@@ -398,7 +396,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
+	log.VEventf(ctx, 2, "running %T in the flow's goroutine", headProc)
 	headProc.Run(ctx)
 	return nil
 }
@@ -475,7 +473,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 			d.Release()
 		}
 	}
-	if log.V(1) {
+	if log.V(2) {
 		log.Infof(ctx, "cleaning up")
 	}
 	// Local flows do not get registered.
@@ -484,6 +482,9 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	f.status = FlowFinished
 	f.ctxCancel()
+	if !f.IsLocal() {
+		log.VEventf(ctx, 1, "flow %s is done", f.ID)
+	}
 	if f.onFlowCleanup != nil {
 		f.onFlowCleanup()
 	}

@@ -614,6 +614,7 @@ func (s *externalSorter) createMergerForPartitions(
 	}
 	return NewOrderedSynchronizer(
 		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs, s.inputTypes, s.columnOrdering,
+		execinfrapb.FlowID{},
 	)
 }
 

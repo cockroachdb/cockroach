@@ -642,9 +642,7 @@ func (ds *ServerImpl) flowStreamInt(
 	}
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
-	if log.V(1) {
-		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
-	}
+	log.VEventf(ctx, 1, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	f, streamStrategy, cleanup, err := ds.flowRegistry.ConnectInboundStream(
 		ctx, flowID, streamID, stream, flowinfra.SettingFlowStreamTimeout.Get(&ds.Settings.SV),
 	)

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,6 +37,8 @@ type OrderedSynchronizer struct {
 	ordering              colinfo.ColumnOrdering
 	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
+
+	flowID execinfrapb.FlowID
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
@@ -100,6 +103,7 @@ func NewOrderedSynchronizer(
 	inputs []SynchronizerInput,
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
+	flowID execinfrapb.FlowID,
 ) (*OrderedSynchronizer, error) {
 	return &OrderedSynchronizer{
 		allocator:             allocator,
@@ -108,12 +112,14 @@ func NewOrderedSynchronizer(
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
+		flowID:                flowID,
 	}, nil
 }
 
 // Next is part of the Operator interface.
 func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if o.inputBatches == nil {
+		log.VEventf(ctx, 1, "flow %s ordered sync with %d inputs is started", o.flowID, len(o.inputs))
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
@@ -131,6 +137,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		for outputIdx < o.output.Capacity() {
 			if o.Len() == 0 {
 				// All inputs exhausted.
+				log.VEventf(ctx, 1, "flow %s ordered sync is done", o.flowID)
 				break
 			}
 

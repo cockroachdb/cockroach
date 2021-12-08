@@ -165,9 +165,10 @@ func (o *Outbox) Run(
 		defer o.span.Finish()
 	}
 
-	o.runnerCtx = ctx
+	ctx = logtags.AddTag(ctx, "flowID", flowID)
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
+	o.runnerCtx = ctx
+	log.VEventf(ctx, 1, "Outbox with input %T Dialing %s", o.Input, nodeID)
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
@@ -227,7 +228,7 @@ func handleStreamErr(
 	flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
 	if err == io.EOF {
-		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
+		log.VEventf(ctx, 1, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
 	} else {
 		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
@@ -414,6 +415,7 @@ func (o *Outbox) runWithStream(
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
+			log.VEvent(ctx, 1, "Outbox is calling CloseSend on the stream")
 			if err := stream.CloseSend(); err != nil {
 				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
 			}
@@ -421,5 +423,6 @@ func (o *Outbox) runWithStream(
 	}
 
 	o.close(ctx)
+	log.VEvent(ctx, 1, "Outbox Send'ing goroutine is done, waiting for Recv'ing goroutine to exit")
 	<-waitCh
 }

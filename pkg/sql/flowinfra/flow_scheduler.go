@@ -129,7 +129,7 @@ func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
 // fs.mu is currently being held.
 func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) error {
 	log.VEventf(
-		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), atomic.LoadInt32(&fs.atomics.numRunning)-1,
+		ctx, 2, "flow scheduler running flow %s, currently running %d", f.GetID(), atomic.LoadInt32(&fs.atomics.numRunning)-1,
 	)
 	fs.metrics.FlowStart()
 	if !locked {
@@ -150,6 +150,7 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 	// refcount and automatically runs Cleanup() when the count reaches 0.
 	go func() {
 		f.Wait()
+		log.VEventf(ctx, 2, "flow %s is done (Wait() completed)", f.GetID())
 		fs.mu.Lock()
 		delete(fs.mu.runningFlows, f.GetID())
 		fs.mu.Unlock()
@@ -234,6 +235,7 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 		next = e.Next()
 		f := e.Value.(*flowWithCtx)
 		if _, shouldCancel := toCancel[f.flow.GetID().UUID]; shouldCancel {
+			log.VEventf(ctx, 1, "flow scheduler canceled dead flow %s", f.flow.GetID().UUID)
 			fs.mu.queue.Remove(e)
 			fs.metrics.FlowsQueued.Dec(1)
 			numCanceled++

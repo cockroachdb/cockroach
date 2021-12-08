@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -147,7 +148,7 @@ func TestOrderedSync(t *testing.T) {
 			typs[i] = types.Int
 		}
 		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
+			return NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering, execinfrapb.FlowID{})
 		})
 	}
 }
@@ -188,7 +189,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		inputs[i].Op = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering, execinfrapb.FlowID{})
 	require.NoError(t, err)
 	op.Init()
 	out := colexectestutils.NewOpTestOutput(op, expected)
@@ -219,7 +220,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
+	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering, execinfrapb.FlowID{})
 	require.NoError(b, err)
 	op.Init()
 

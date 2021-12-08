@@ -69,7 +69,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(inputs, &wg, execinfrapb.FlowID{})
 	s.Init()
 
 	type synchronizerTerminationScenario int
@@ -179,7 +179,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(inputs, &wg, execinfrapb.FlowID{})
 	s.Init()
 	for {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) }); err != nil {
@@ -207,7 +207,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(inputs, &wg, execinfrapb.FlowID{})
 	s.Init()
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()

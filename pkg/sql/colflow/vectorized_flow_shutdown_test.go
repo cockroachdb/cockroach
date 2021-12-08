@@ -214,6 +214,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory),
 						typs,
 						execinfrapb.StreamID(streamID),
+						execinfrapb.FlowID{},
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
@@ -225,7 +226,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						},
 					)
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg, execinfrapb.FlowID{})
 				materializerMetadataSource := execinfrapb.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
@@ -329,6 +330,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory),
 						typs,
 						execinfrapb.StreamID(streamID),
+						execinfrapb.FlowID{},
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)

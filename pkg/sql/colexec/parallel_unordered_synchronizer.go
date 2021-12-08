@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -77,6 +79,8 @@ type ParallelUnorderedSynchronizer struct {
 	// nextBatch is a slice of functions each of which obtains a next batch from
 	// the corresponding to it input.
 	nextBatch []func()
+
+	flowID execinfrapb.FlowID
 
 	state int32
 	// externalWaitGroup refers to the WaitGroup passed in externally. Since the
@@ -144,7 +148,7 @@ func operatorsToSynchronizerInputs(ops []colexecop.Operator) []SynchronizerInput
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	inputs []SynchronizerInput, wg *sync.WaitGroup,
+	inputs []SynchronizerInput, wg *sync.WaitGroup, flowID execinfrapb.FlowID,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -157,6 +161,7 @@ func NewParallelUnorderedSynchronizer(
 		readNextBatch:     readNextBatch,
 		batches:           make([]coldata.Batch, len(inputs)),
 		nextBatch:         make([]func(), len(inputs)),
+		flowID:            flowID,
 		externalWaitGroup: wg,
 		internalWaitGroup: &sync.WaitGroup{},
 		// batchCh is a buffered channel in order to offer non-blocking writes to
@@ -212,12 +217,18 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
 				}
+				log.VEventf(ctx, 1, "flow %s: parallel unordered sync input %d is done", s.flowID, inputIdx)
 				// We need to close all of the closers of this input before we
 				// notify the wait groups.
 				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 			}()
+			var extra string
+			if i, ok := input.Op.(*colrpc.Inbox); ok {
+				extra = i.GetIDs()
+			}
+			log.VEventf(ctx, 1, "flow %s: parallel unordered sync input %d is started\t%s", s.flowID, inputIdx, extra)
 			sendErr := func(err error) {
 				select {
 				// Non-blocking write to errCh, if an error is present the main

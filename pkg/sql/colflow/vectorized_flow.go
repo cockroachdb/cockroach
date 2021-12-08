@@ -405,7 +405,7 @@ type remoteComponentCreator interface {
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
-	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID, flowID execinfrapb.FlowID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -422,9 +422,13 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	ctx context.Context,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	flowID execinfrapb.FlowID,
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(ctx, allocator, typs, streamID)
+	return colrpc.NewInbox(ctx, allocator, typs, streamID, flowID)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -843,7 +847,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(
-				ctx, colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID,
+				ctx, colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				input.ColumnTypes, inputStream.StreamID, flowCtx.ID,
 			)
 
 			if err != nil {
@@ -887,6 +892,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
 				execinfra.GetWorkMemLimit(flowCtx.Cfg), inputStreamOps,
 				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				flowCtx.ID,
 			)
 			if err != nil {
 				return nil, nil, nil, nil, err
@@ -901,7 +907,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				metaSources = []execinfrapb.MetadataSource{sync}
 				toClose = []colexecop.Closer{sync}
 			} else {
-				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup, flowCtx.ID)
 				op = sync
 				metaSources = []execinfrapb.MetadataSource{sync}
 				// toClose is set to nil because the ParallelUnorderedSynchronizer takes
