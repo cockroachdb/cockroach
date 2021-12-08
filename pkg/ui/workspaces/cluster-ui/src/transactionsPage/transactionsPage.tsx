@@ -12,14 +12,12 @@ import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import styles from "../statementsPage/statementsPage.module.scss";
-import moment, { Moment } from "moment";
 import { RouteComponentProps } from "react-router-dom";
 import {
   makeTransactionsColumns,
   TransactionInfo,
   TransactionsTable,
 } from "../transactionsTable";
-import { DateRange } from "src/dateRange";
 import { TransactionDetails } from "../transactionDetails";
 import {
   ColumnDescriptor,
@@ -65,6 +63,12 @@ import {
 import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
+import {
+  TimeScaleDropdown,
+  defaultTimeScaleSelected,
+  TimeScale,
+  toDateRange,
+} from "../timeScaleDropdown";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -84,7 +88,7 @@ interface TState {
 export interface TransactionsPageStateProps {
   columns: string[];
   data: IStatementsResponse;
-  dateRange: [Moment, Moment];
+  timeScale: TimeScale;
   error?: Error | null;
   filters: Filters;
   isTenant?: UIConfigState["isTenant"];
@@ -97,7 +101,7 @@ export interface TransactionsPageStateProps {
 export interface TransactionsPageDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
   resetSQLStats: () => void;
-  onDateRangeChange?: (start: Moment, end: Moment) => void;
+  onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
   onFilterChange?: (value: Filters) => void;
   onSearchComplete?: (query: string) => void;
@@ -115,10 +119,11 @@ export type TransactionsPageProps = TransactionsPageStateProps &
 function statementsRequestFromProps(
   props: TransactionsPageProps,
 ): protos.cockroach.server.serverpb.StatementsRequest {
+  const [start, end] = toDateRange(props.timeScale);
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
-    start: Long.fromNumber(props.dateRange[0].unix()),
-    end: Long.fromNumber(props.dateRange[1].unix()),
+    start: Long.fromNumber(start.unix()),
+    end: Long.fromNumber(end.unix()),
   });
 }
 export class TransactionsPage extends React.Component<
@@ -338,18 +343,14 @@ export class TransactionsPage extends React.Component<
     return new Date(Number(this.props.data?.last_reset.seconds) * 1000);
   };
 
-  changeDateRange = (start: Moment, end: Moment): void => {
-    if (this.props.onDateRangeChange) {
-      this.props.onDateRangeChange(start, end);
+  changeTimeScale = (ts: TimeScale): void => {
+    if (this.props.onTimeScaleChange) {
+      this.props.onTimeScaleChange(ts);
     }
   };
 
   resetTime = (): void => {
-    // Default range to reset to is one hour ago.
-    this.changeDateRange(
-      moment.utc().subtract(1, "hours"),
-      moment.utc().add(1, "minute"),
-    );
+    this.changeTimeScale(defaultTimeScaleSelected);
   };
 
   renderTransactionsList(): React.ReactElement {
@@ -482,10 +483,9 @@ export class TransactionsPage extends React.Component<
                     />
                   </PageConfigItem>
                   <PageConfigItem>
-                    <DateRange
-                      start={this.props.dateRange[0]}
-                      end={this.props.dateRange[1]}
-                      onSubmit={this.changeDateRange}
+                    <TimeScaleDropdown
+                      currentScale={this.props.timeScale}
+                      setTimeScale={this.changeTimeScale}
                     />
                   </PageConfigItem>
                   <PageConfigItem>
