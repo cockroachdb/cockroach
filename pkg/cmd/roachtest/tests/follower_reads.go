@@ -244,10 +244,16 @@ func runFollowerReadsTest(
 
 	// Enable the slow query log so we have a shot at identifying why follower
 	// reads are not being served after the fact when this test fails. Use a
-	// latency threshold of 50ms, which should be well below the latency of a
+	// latency threshold of 25ms, which should be well below the latency of a
 	// cross-region hop to read from the leaseholder but well above the latency
 	// of a follower read.
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '50ms'")
+	const maxLatencyThreshold = 25 * time.Millisecond
+	_, err := db.ExecContext(
+		ctx, fmt.Sprintf(
+			"SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '%s'",
+			maxLatencyThreshold,
+		),
+	)
 	if err != nil {
 		// 20.2 doesn't have this setting.
 		if !strings.Contains(err.Error(), "unknown cluster setting") {
@@ -371,7 +377,7 @@ func runFollowerReadsTest(
 		//
 		// We don't do this for singleRegion since, in a single region, there's no
 		// low latency and high-latency regimes.
-		verifySQLLatency(ctx, t, c, liveNodes, start, end, 25*time.Millisecond)
+		verifySQLLatency(ctx, t, c, liveNodes, start, end, maxLatencyThreshold)
 	}
 
 	// Restart dead nodes, if necessary.
