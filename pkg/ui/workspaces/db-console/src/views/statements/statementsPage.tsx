@@ -11,7 +11,6 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
@@ -33,7 +32,7 @@ import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import { queryByName } from "src/util/query";
 
 import {
@@ -45,7 +44,7 @@ import {
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
-  setCombinedStatementsDateRangeAction,
+  setCombinedStatementsTimeScaleAction,
 } from "src/redux/statements";
 import {
   trackDownloadDiagnosticsBundleAction,
@@ -225,13 +224,6 @@ export const selectLastReset = createSelector(
   },
 );
 
-export const selectDateRange = createSelector(
-  statementsDateRangeLocalSetting.selector,
-  (state: { start: number; end: number }): [Moment, Moment] => {
-    return [moment.unix(state.start), moment.unix(state.end)];
-  },
-);
-
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
   (state: AdminUIState) => state.localSettings,
@@ -262,7 +254,7 @@ export default withRouter(
       apps: selectApps(state),
       columns: statementColumnsLocalSetting.selectorToArray(state),
       databases: selectDatabases(state),
-      dateRange: selectDateRange(state),
+      timeScale: statementsTimeScaleLocalSetting.selector(state),
       filters: filtersLocalSetting.selector(state),
       lastReset: selectLastReset(state),
       nodeRegions: nodeRegionsByIDSelector(state),
@@ -274,7 +266,7 @@ export default withRouter(
     }),
     {
       refreshStatements: refreshStatements,
-      onDateRangeChange: setCombinedStatementsDateRangeAction,
+      onTimeScaleChange: setCombinedStatementsTimeScaleAction,
       refreshStatementDiagnosticsRequests,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>
