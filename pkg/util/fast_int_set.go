@@ -14,6 +14,7 @@
 package util
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"math/bits"
@@ -313,42 +314,36 @@ func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 	return false
 }
 
-// Encode the set to a Writer using binary.varint byte encoding.
+// Encode the set and write it to a bytes.Buffer using binary.varint byte
+// encoding.
 //
 // This method cannot be used if the set contains negative elements.
 //
-// If the set fits in s.small, we encode a 0 followed by the bitmap values.
-// Otherwise, we encode a length followed by each element.
-func (s *FastIntSet) Encode(wr io.Writer) error {
+// If the set has only elements in the range [0, 63], we encode a 0 followed by
+// a 64-bit bitmap. Otherwise, we encode a length followed by each element.
+//
+// WARNING: this is used by plan gists, so if this encoding changes,
+// explain.gistVersion needs to be bumped.
+func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
 	if s.large != nil && s.large.Min() < 0 {
 		return errors.AssertionFailedf("Encode used with negative elements")
 	}
-	writeUint := func(u uint64) error {
-		var buf [binary.MaxVarintLen64]byte
-		n := binary.PutUvarint(buf[:], u)
-		_, err := wr.Write(buf[:n])
-		return err
-	}
+
+	// This slice should stay on stack. We only need enough bytes to encode a 0
+	// and then an arbitrary 64-bit integer.
+	//gcassert:noescape
+	tmp := make([]byte, binary.MaxVarintLen64+1)
 
 	if s.fitsInSmall() {
-		err := writeUint(0)
-		if err != nil {
-			return err
-		}
-		err = writeUint(s.small)
-		if err != nil {
-			return err
-		}
+		n := binary.PutUvarint(tmp, 0)
+		n += binary.PutUvarint(tmp[n:], s.small)
+		buf.Write(tmp[:n])
 	} else {
-		err := writeUint(uint64(s.Len()))
-		if err != nil {
-			return err
-		}
+		n := binary.PutUvarint(tmp, uint64(s.Len()))
+		buf.Write(tmp[:n])
 		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
-			err := writeUint(uint64(i))
-			if err != nil {
-				return err
-			}
+			n := binary.PutUvarint(tmp, uint64(i))
+			buf.Write(tmp[:n])
 		}
 	}
 	return nil
