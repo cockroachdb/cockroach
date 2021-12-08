@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cdctest",
     srcs = [
+        "mock_pubsub_sink.go",
         "mock_webhook_sink.go",
         "nemeses.go",
         "schema_registry.go",
@@ -19,6 +20,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
+        "//pkg/util/ctxgroup",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -27,6 +29,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_linkedin_goavro_v2//:goavro",
+        "@dev_gocloud//pubsub",
     ],
 )
 
