@@ -622,3 +622,9 @@ gen_by_default_as_id_seqopt_cache  CREATE TABLE public.gen_by_default_as_id_seqo
                                    UNIQUE INDEX gen_by_default_as_id_seqopt_cache_a_key (a ASC),
                                    FAMILY f1 (a, b, rowid)
 )
+
+statement error pgcode 42P07 duplicate index name: \"idx\"
+CREATE TABLE error (a INT, b INT, UNIQUE INDEX idx (a), UNIQUE INDEX idx (b))
+
+statement ok
+CREATE TABLE regression_73498 AS select * from [SHOW CLUSTER QUERIES]
