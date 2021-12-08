@@ -21,9 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/stretchr/testify/require"
 )
 
 type splitParams struct {
@@ -225,6 +229,14 @@ func bytesStr(size uint64) string {
 	return strings.Replace(humanize.IBytes(size), " ", "", -1)
 }
 
+func setRangeMaxBytes(t test.Test, db *gosql.DB, minBytes, maxBytes int) {
+	stmtZone := fmt.Sprintf(
+		"ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d, range_min_bytes = %d",
+		maxBytes, minBytes)
+	_, err := db.Exec(stmtZone)
+	require.NoError(t, err)
+}
+
 // This test generates a large Bank table all within a single range. It does
 // so by setting the max range size to a huge number before populating the
 // table. It then drops the range size back down to normal and watches as
@@ -242,95 +254,152 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	// rows is the number of rows we'll need to insert into the bank table
 	// to produce a range of roughly the right size.
 	rows := size / rowEstimate
+	const minBytes = 16 << 20 // 16 MB
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-	c.Start(ctx, c.All())
+	numNodes := c.Spec().NodeCount
+	c.Start(ctx, c.Node(1))
 
-	m := c.NewMonitor(ctx, c.All())
-	m.Go(func(ctx context.Context) error {
-		db := c.Conn(ctx, 1)
-		defer db.Close()
+	db := c.Conn(ctx, 1)
+	defer db.Close()
 
-		// We don't want load based splitting from splitting the range before
-		// it's ready to be split.
-		t.Status("disable load based splitting")
-		if err := disableLoadBasedSplitting(ctx, db); err != nil {
-			return err
+	rangeCount := func(t test.Test) (int, string) {
+		const q = "SHOW RANGES FROM TABLE bank.bank"
+		m, err := sqlutils.RowsToStrMatrix(sqlutils.MakeSQLRunner(db).Query(t, q))
+		if err != nil {
+			t.Fatal(err)
 		}
+		return len(m), sqlutils.MatrixToStr(m)
+	}
 
-		t.Status("increasing snapshot_rebalance rate")
-		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='512MiB'`); err != nil {
-			return err
-		}
+	retryOpts := func() (retry.Options, chan struct{}) {
+		// Use non-spammy retry options. We're using them mostly for heavy lifting
+		// so waiting up to a minute between reports is totally fine.
+		ch := make(chan struct{})
+		return retry.Options{
+			InitialBackoff:      10 * time.Second,
+			MaxBackoff:          time.Minute,
+			Multiplier:          2.0,
+			RandomizationFactor: 1.0,
+			Closer:              ch,
+		}, ch
+	}
 
-		t.Status("increasing snapshot_recovery rate")
-		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='512MiB'`); err != nil {
-			return err
-		}
+	// Phase 1: start single node, disable splits, make large range.
+	t.Status(fmt.Sprintf("creating large bank table range (%d rows at ~%s each)", rows, humanizeutil.IBytes(rowEstimate)))
+	{
+		m := c.NewMonitor(ctx, c.Node(1))
+		m.Go(func(ctx context.Context) error {
 
-		t.Status("increasing range_max_bytes")
-		minBytes := 16 << 20 // 16 MB
-		setRangeMaxBytes := func(maxBytes int) {
-			stmtZone := fmt.Sprintf(
-				"ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d, range_min_bytes = %d",
-				maxBytes, minBytes)
-			if _, err := db.Exec(stmtZone); err != nil {
-				t.Fatalf("failed to set range_max_bytes: %v", err)
+			// We don't want load based splitting from splitting the range before
+			// it's ready to be split.
+			if err := disableLoadBasedSplitting(ctx, db); err != nil {
+				return err
 			}
-		}
-		// Set the range size to double what we expect the size of the
-		// bank table to be. This should result in the table fitting
-		// inside a single range.
-		setRangeMaxBytes(2 * size)
-
-		t.Status("populating bank table")
-		// NB: workload init does not wait for upreplication after creating the
-		// schema but before populating it. This is ok because upreplication
-		// occurs much faster than we can actually create a large range.
-		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
-			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.Spec().NodeCount))
-
-		t.Status("checking for single range")
-		rangeCount := func() int {
-			var ranges int
-			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
-			if err := db.QueryRow(q).Scan(&ranges); err != nil {
-				t.Fatalf("failed to get range count: %v", err)
+			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='512MiB'`); err != nil {
+				return err
 			}
-			t.L().Printf("%d ranges in bank table", ranges)
-			return ranges
-		}
-		if rc := rangeCount(); rc != 1 {
-			return errors.Errorf("bank table split over multiple ranges")
-		}
+			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='512MiB'`); err != nil {
+				return err
+			}
+			// Set the range size to a multiple of what we expect the size of the
+			// bank table to be. This should result in the table fitting
+			// inside a single range.
+			setRangeMaxBytes(t, db, minBytes, 10*size)
 
-		t.Status("decreasing range_max_bytes")
-		rangeSize := 64 << 20 // 64 MB
-		setRangeMaxBytes(rangeSize)
+			// NB: would probably be faster to use --data-loader=IMPORT here, but IMPORT
+			// will disregard our preference to keep things in a single range.
+			c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
+				"--rows=%d --payload-bytes=%d --data-loader INSERT --ranges=1 {pgurl:1}", rows, payload))
 
-		expRC := size/rangeSize - 3 // -3 to tolerate a small inaccuracy in rowEstimate
-		expSplits := expRC - 1
-		t.Status(fmt.Sprintf("waiting for %d splits", expSplits))
-
-		// 1 second per split + a grace period.
-		waitDuration := time.Duration(expSplits)*time.Second + 100*time.Second
-		if err := retry.ForDuration(waitDuration, func() error {
-			if rc := rangeCount(); rc < expRC {
-				return errors.Errorf("bank table split over %d ranges, expected at least %d",
-					rc, expRC)
+			if rc, s := rangeCount(t); rc != 1 {
+				return errors.Errorf("bank table split over multiple ranges:\n%s", s)
 			}
 			return nil
-		}); err != nil {
-			return err
-		}
+		})
+		m.Wait()
+	}
 
-		t.Status("waiting for rebalancing")
-		return retry.ForDuration(1*time.Hour, func() error {
-			// Wait for the store with the smallest number of ranges to contain
-			// at least 80% as many ranges of the store with the largest number
-			// of ranges.
-			const q = `
+	// Phase 2: add other nodes, wait for full replication of bank table.
+	t.Status("waiting for full replication")
+	{
+		c.Start(ctx, c.Range(2, numNodes))
+		m := c.NewMonitor(ctx, c.All())
+		// NB: we do a round-about thing of making sure that there's at least one
+		// range that has 3 replicas (rather than waiting that there are no ranges
+		// with less than three replicas) because the `bank` table doesn't show
+		// up until it has been split off.
+		const query = `
+select concat('r', range_id::string) as range, voting_replicas
+from crdb_internal.ranges_no_leases
+where database_name = 'bank' and cardinality(voting_replicas) >= $1;`
+		tBegin := timeutil.Now()
+		m.Go(func(ctx context.Context) error {
+			opts, ch := retryOpts()
+			defer time.AfterFunc(time.Hour, func() { close(ch) }).Stop()
+
+			return opts.Do(ctx, func(ctx context.Context) error {
+				m, err := sqlutils.RowsToStrMatrix(sqlutils.MakeSQLRunner(db).Query(t, query, 3))
+				if err != nil {
+					return err
+				}
+				t.L().Printf("waiting for range with >= 3 replicas:\n%s", sqlutils.MatrixToStr(m))
+				if len(m) == 0 {
+					return errors.New("not replicated yet")
+				}
+				return nil
+			})
+		})
+		m.Wait()
+
+		mt, err := sqlutils.RowsToStrMatrix(sqlutils.MakeSQLRunner(db).Query(t, query, 0 /* list all */))
+		require.NoError(t, err)
+		t.L().Printf("bank table replicated after %s:\n%s", timeutil.Since(tBegin), sqlutils.MatrixToStr(mt))
+	}
+
+	// Phase 3: drop the max range size and observe splits as well as rebalancing.
+	rangeSize := 64 << 20       // 64 MB
+	expRC := size/rangeSize - 3 // -3 to tolerate a small inaccuracy in rowEstimate
+	expSplits := expRC - 1
+	t.Status(fmt.Sprintf("waiting for %d splits and rebalancing", expSplits))
+	{
+		m := c.NewMonitor(ctx, c.All())
+		m.Go(func(ctx context.Context) error {
+			setRangeMaxBytes(t, db, minBytes, rangeSize)
+			// Phase 3a: wait for splits.
+			{
+				// 1 second per split + a grace period. There really shouldn't be much of a delay
+				// in the splits since the range is already upreplicated and no more snapshots
+				// should be required, especially seeing how there isn't even traffic on the table.
+				waitDuration := time.Duration(expSplits)*time.Second + 100*time.Second
+
+				opts, timeoutCh := retryOpts()
+				defer time.AfterFunc(waitDuration, func() { close(timeoutCh) }).Stop()
+				if err := opts.Do(ctx, func(ctx context.Context) error {
+					if rc, _ := rangeCount(t); rc < expRC {
+						// NB: intentionally not printing the rows, it's a lot.
+						err := errors.Errorf("bank table split over %d ranges, expected at least %d", rc, expRC)
+						t.L().Printf("%v", err)
+						return err
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
+				t.L().Printf("splits complete")
+			}
+
+			// Wait up to an hour for rebalancing. This should be more than enough, moving
+			// 32GiB around isn't too onerous.
+			opts, timeoutCh := retryOpts()
+			defer time.AfterFunc(time.Hour, func() { close(timeoutCh) }).Stop()
+
+			return opts.Do(ctx, func(ctx context.Context) error {
+				// Wait for the store with the smallest number of ranges to contain
+				// at least 80% as many ranges of the store with the largest number
+				// of ranges.
+				const q = `
 			WITH ranges AS (
 				SELECT replicas FROM crdb_internal.ranges_no_leases
 			), store_ids AS (
@@ -340,19 +409,22 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 			)
 			SELECT min(num_replicas), max(num_replicas) FROM store_id_count;
 			`
-			var minRangeCount, maxRangeCount int
-			if err := db.QueryRow(q).Scan(&minRangeCount, &maxRangeCount); err != nil {
-				t.Fatalf("failed to get per-store range count: %v", err)
-			}
-			t.L().Printf("min_range_count=%d, max_range_count=%d", minRangeCount, maxRangeCount)
-			if float64(minRangeCount) < 0.8*float64(maxRangeCount) {
-				return errors.Errorf("rebalancing incomplete: min_range_count=%d, max_range_count=%d",
-					minRangeCount, minRangeCount)
-			}
-			return nil
+				var minRangeCount, maxRangeCount int
+				if err := db.QueryRow(q).Scan(&minRangeCount, &maxRangeCount); err != nil {
+					return err
+				}
+				if float64(minRangeCount) < 0.8*float64(maxRangeCount) {
+					err := errors.Errorf("rebalancing incomplete: min_range_count=%d, max_range_count=%d",
+						minRangeCount, maxRangeCount)
+					t.L().Printf("%v", err)
+					return err
+				}
+				t.L().Printf("rebalancing complete: min_range_count=%d, max_range_count=%d", minRangeCount, maxRangeCount)
+				return nil
+			})
 		})
-	})
-	m.Wait()
+		m.Wait()
+	}
 }
 
 func disableLoadBasedSplitting(ctx context.Context, db *gosql.DB) error {
