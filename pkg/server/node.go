@@ -1355,6 +1355,8 @@ func (n *Node) GossipSubscription(
 			}
 		case <-ctxDone:
 			return ctx.Err()
+		case <-n.stopper.ShouldQuiesce():
+			return stop.ErrUnavailable
 		}
 	}
 }
