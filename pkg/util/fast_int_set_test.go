@@ -100,8 +100,8 @@ func TestFastIntSet(t *testing.T) {
 					s3.CopyFrom(s)
 					assertSame(s, s3)
 					// Make sure CopyFrom into a non-empty set still works.
-					s.Shift(100)
-					s.CopyFrom(s3)
+					s3.Add(minVal + rng.Intn(maxVal-minVal))
+					s3.CopyFrom(s)
 					assertSame(s, s3)
 				}
 			})
@@ -147,19 +147,6 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 			for _, num1 := range []int{0, 1, 5, 10, 20} {
 				for _, removed1 := range []int{0, 1, 3, 8} {
 					s1, m1 := genSet(num1, removed1, minVal, num1+removed1+valRange)
-					for _, shift := range []int{-100, -10, -1, 1, 2, 10, 100} {
-						shifted := s1.Shift(shift)
-						failed := false
-						s1.ForEach(func(i int) {
-							failed = failed || !shifted.Contains(i+shift)
-						})
-						shifted.ForEach(func(i int) {
-							failed = failed || !s1.Contains(i-shift)
-						})
-						if failed {
-							t.Errorf("invalid shifted result: %s shifted by %d: %s", &s1, shift, &shifted)
-						}
-					}
 					for _, num2 := range []int{0, 1, 5, 10, 20} {
 						for _, removed2 := range []int{0, 1, 4, 10} {
 							s2, m2 := genSet(num2, removed2, minVal, num2+removed2+valRange)

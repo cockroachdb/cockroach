@@ -326,29 +326,6 @@ func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 	return (s.small & rhs.small) == s.small
 }
 
-// Shift generates a new set which contains elements i+delta for elements i in
-// the original set.
-func (s *FastIntSet) Shift(delta int) FastIntSet {
-	if s.large == nil {
-		// Fast path.
-		if delta > 0 {
-			if bits.LeadingZeros64(s.small)-(64-smallCutoff) >= delta {
-				return FastIntSet{small: s.small << uint32(delta)}
-			}
-		} else {
-			if bits.TrailingZeros64(s.small) >= -delta {
-				return FastIntSet{small: s.small >> uint32(-delta)}
-			}
-		}
-	}
-	// Do the slow thing.
-	var result FastIntSet
-	s.ForEach(func(i int) {
-		result.Add(i + delta)
-	})
-	return result
-}
-
 // Encode the set to a Writer using binary.varint byte encoding.  A zero
 // precedes a small int containing s.small.    A non-zero first value is a
 // length and each bit encoded separately follows.
