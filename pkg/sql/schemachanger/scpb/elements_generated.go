@@ -420,3 +420,16 @@ func ForEachDatabaseSchemaEntry (b NodeIterator, elementFunc func(status Status,
 	}
   })
 }
+func (e CheckConstraintTypeReference) element() {}
+
+// ForEachCheckConstraintTypeReference iterates over nodes of type CheckConstraintTypeReference.
+func ForEachCheckConstraintTypeReference (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *CheckConstraintTypeReference) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*CheckConstraintTypeReference)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}

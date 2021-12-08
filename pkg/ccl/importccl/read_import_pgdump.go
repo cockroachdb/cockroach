@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -307,7 +308,7 @@ func createPostgresSequences(
 ) ([]*tabledesc.Mutable, error) {
 	ret := make([]*tabledesc.Mutable, 0)
 	for schemaAndTableName, seq := range createSeq {
-		schema, err := getSchemaByNameFromMap(schemaAndTableName, schemaNameToDesc)
+		schema, err := getSchemaByNameFromMap(ctx, schemaAndTableName, schemaNameToDesc, execCfg.Settings.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -336,9 +337,16 @@ func createPostgresSequences(
 }
 
 func getSchemaByNameFromMap(
-	schemaAndTableName schemaAndTableName, schemaNameToDesc map[string]*schemadesc.Mutable,
+	ctx context.Context,
+	schemaAndTableName schemaAndTableName,
+	schemaNameToDesc map[string]*schemadesc.Mutable,
+	version clusterversion.Handle,
 ) (catalog.SchemaDescriptor, error) {
 	var schema catalog.SchemaDescriptor
+	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) &&
+		(schemaAndTableName.schema == "" || schemaAndTableName.schema == tree.PublicSchema) {
+		return schemadesc.GetPublicSchema(), nil
+	}
 	var ok bool
 	if schema, ok = schemaNameToDesc[schemaAndTableName.schema]; !ok {
 		return nil, errors.Newf("schema %q not found in the schemas created from the pgdump",
@@ -362,7 +370,7 @@ func createPostgresTables(
 		if create == nil {
 			continue
 		}
-		schema, err := getSchemaByNameFromMap(schemaAndTableName, schemaNameToDesc)
+		schema, err := getSchemaByNameFromMap(evalCtx.Ctx(), schemaAndTableName, schemaNameToDesc, evalCtx.Settings.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +404,7 @@ func resolvePostgresFKs(
 		if desc == nil {
 			continue
 		}
-		schema, err := getSchemaByNameFromMap(schemaAndTableName, schemaNameToDesc)
+		schema, err := getSchemaByNameFromMap(evalCtx.Ctx(), schemaAndTableName, schemaNameToDesc, evalCtx.Settings.Version)
 		if err != nil {
 			return err
 		}
@@ -499,14 +507,16 @@ func readPostgresCreateTable(
 		schemaNameToDesc[schemaDesc.GetName()] = schemaDesc
 	}
 
-	// The database should already have a public schema so we don't have to create
-	// it. However, we do have to add it to the naming map for name resolution.
-	publicSchema, err := getPublicSchemaDescForDatabase(ctx, p.ExecCfg(), parentDB)
-	if err != nil {
-		return nil, nil, err
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		// The database should already have a public schema so we don't have to create
+		// it. However, we do have to add it to the naming map for name resolution.
+		publicSchema, err := getPublicSchemaDescForDatabase(ctx, p.ExecCfg(), parentDB)
+		if err != nil {
+			return nil, nil, err
+		}
+		schemaNameToDesc[tree.PublicSchema] =
+			schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
 	}
-	schemaNameToDesc[tree.PublicSchema] =
-		schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
 
 	// Construct sequence descriptors.
 	seqs, err := createPostgresSequences(

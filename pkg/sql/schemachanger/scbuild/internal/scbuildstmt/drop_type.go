@@ -11,8 +11,6 @@
 package scbuildstmt
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -71,9 +69,9 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 			}
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"cannot drop type %q because other objects still depend on it: %s",
+				"cannot drop type %q because other objects (%v) still depend on it.",
 				desc.GetName(),
-				strings.Join(dependentNames, ", "),
+				dependentNames,
 			))
 		}
 	}

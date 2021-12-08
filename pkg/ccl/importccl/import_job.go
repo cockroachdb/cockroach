@@ -113,19 +113,21 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					curDetails = schemaMetadata.schemaPreparedDetails
 				}
 
-				// In 22.1, the Public schema should always be present in the database.
-				// Make sure it is part of schemaMetadata, it is not guaranteed to
-				// be added in prepareSchemasForIngestion if we're not importing any
-				// schemas.
-				// The Public schema will not change in the database so both the
-				// oldSchemaIDToName and newSchemaIDToName entries will be the
-				// same for the Public schema.
-				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, details.ParentID, tree.DatabaseLookupFlags{Required: true})
-				if err != nil {
-					return err
+				if r.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+					// In 22.1, the Public schema should always be present in the database.
+					// Make sure it is part of schemaMetadata, it is not guaranteed to
+					// be added in prepareSchemasForIngestion if we're not importing any
+					// schemas.
+					// The Public schema will not change in the database so both the
+					// oldSchemaIDToName and newSchemaIDToName entries will be the
+					// same for the Public schema.
+					_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, details.ParentID, tree.DatabaseLookupFlags{Required: true})
+					if err != nil {
+						return err
+					}
+					schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
+					schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
 				}
-				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
-				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
 
 				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn, descsCol,
 					schemaMetadata)
@@ -370,7 +372,7 @@ func (r *importResumer) prepareTablesForIngestion(
 			// account when constructing the newTablenameToIdx map.
 			// At this point the table descriptor's parent schema ID has not being
 			// remapped to the newly generated schema ID.
-			key, err := constructSchemaAndTableKey(table.Desc, schemaMetadata.oldSchemaIDToName)
+			key, err := constructSchemaAndTableKey(ctx, table.Desc, schemaMetadata.oldSchemaIDToName, p.ExecCfg().Settings.Version)
 			if err != nil {
 				return importDetails, err
 			}
@@ -398,7 +400,7 @@ func (r *importResumer) prepareTablesForIngestion(
 		}
 
 		for _, desc := range res {
-			key, err := constructSchemaAndTableKey(desc, schemaMetadata.newSchemaIDToName)
+			key, err := constructSchemaAndTableKey(ctx, desc, schemaMetadata.newSchemaIDToName, p.ExecCfg().Settings.Version)
 			if err != nil {
 				return importDetails, err
 			}
@@ -799,6 +801,9 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 func getPublicSchemaDescForDatabase(
 	ctx context.Context, execCfg *sql.ExecutorConfig, db catalog.DatabaseDescriptor,
 ) (scDesc catalog.SchemaDescriptor, err error) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		return schemadesc.GetPublicSchema(), err
+	}
 	if err := sql.DescsTxn(ctx, execCfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
@@ -1243,8 +1248,16 @@ func emitImportJobEvent(
 }
 
 func constructSchemaAndTableKey(
-	tableDesc *descpb.TableDescriptor, schemaIDToName map[descpb.ID]string,
+	ctx context.Context,
+	tableDesc *descpb.TableDescriptor,
+	schemaIDToName map[descpb.ID]string,
+	version clusterversion.Handle,
 ) (schemaAndTableName, error) {
+	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		if tableDesc.UnexposedParentSchemaID == keys.PublicSchemaIDForBackup {
+			return schemaAndTableName{schema: "", table: tableDesc.GetName()}, nil
+		}
+	}
 	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
 	if !ok && schemaName != tree.PublicSchema {
 		return schemaAndTableName{}, errors.Newf("invalid parent schema %s with ID %d for table %s",

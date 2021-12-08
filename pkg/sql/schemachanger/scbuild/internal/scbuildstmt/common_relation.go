@@ -109,16 +109,23 @@ const (
 	exprTypeDefault  exprType = 0
 	exprTypeOnUpdate exprType = 1
 	exprTypeComputed exprType = 2
+	exprTypeCheck    exprType = 3
 )
 
-// decomposeExprToTypeRef converts and inserts type references from
-// an expression.
+// decomposeExprToTypeRef takes table expressions for example default
+// expressions or check constraint expressions, parses them and generates
+// elements for tracking type references to user defined types within these
+// expressions. The type reference elements will be used to mutate descriptor
+// so that both forward and back references are added for user defined types
+// This function can be used for both  column based references or check
+// constraints, so the field expressionID will refer to either a column ID or
+// check constraint ordinal.
 func decomposeExprToElements(
 	b BuildCtx,
 	exprString string,
 	exprType exprType,
-	table catalog.TableDescriptor,
-	column catalog.Column,
+	tableID descpb.ID,
+	expressionID uint32,
 	dir scpb.Target_Direction,
 ) {
 	// Empty expressions don't have any type references.
@@ -137,33 +144,41 @@ func decomposeExprToElements(
 	}
 	tree.WalkExpr(visitor, expr)
 	for oid := range visitor.OIDs {
-		typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
-		if err != nil {
-			panic(err)
+		baseTypeID, err := typedesc.UserDefinedTypeOIDToID(oid)
+		onErrPanic(err)
+		baseTypeDesc := b.MustReadType(baseTypeID)
+		typeClosure, err := baseTypeDesc.GetIDClosure()
+		onErrPanic(err)
+		for typeID := range typeClosure {
+			var typeRef scpb.Element
+			switch exprType {
+			case exprTypeDefault:
+				typeRef = &scpb.DefaultExprTypeReference{
+					TableID:  tableID,
+					ColumnID: descpb.ColumnID(expressionID),
+					TypeID:   typeID,
+				}
+			case exprTypeComputed:
+				typeRef = &scpb.ComputedExprTypeReference{
+					TableID:  tableID,
+					ColumnID: descpb.ColumnID(expressionID),
+					TypeID:   typeID,
+				}
+			case exprTypeOnUpdate:
+				typeRef = &scpb.OnUpdateExprTypeReference{
+					TableID:  tableID,
+					ColumnID: descpb.ColumnID(expressionID),
+					TypeID:   typeID,
+				}
+			case exprTypeCheck:
+				typeRef = &scpb.CheckConstraintTypeReference{
+					TableID:           tableID,
+					ConstraintOrdinal: expressionID,
+					TypeID:            typeID,
+				}
+			}
+			addOrDropForDir(b, dir, typeRef)
 		}
-		var typeRef scpb.Element
-
-		switch exprType {
-		case exprTypeDefault:
-			typeRef = &scpb.DefaultExprTypeReference{
-				TableID:  table.GetID(),
-				ColumnID: column.GetID(),
-				TypeID:   typeID,
-			}
-		case exprTypeComputed:
-			typeRef = &scpb.ComputedExprTypeReference{
-				TableID:  table.GetID(),
-				ColumnID: column.GetID(),
-				TypeID:   typeID,
-			}
-		case exprTypeOnUpdate:
-			typeRef = &scpb.OnUpdateExprTypeReference{
-				TableID:  table.GetID(),
-				ColumnID: column.GetID(),
-				TypeID:   typeID,
-			}
-		}
-		addOrDropForDir(b, dir, typeRef)
 	}
 }
 
@@ -190,11 +205,7 @@ func decomposeDefaultExprToElements(
 		addOrDropForDir(b, dir, &expressionElem)
 		// Decompose any elements required for expressions.
 		decomposeExprToElements(b,
-			defaultExpr,
-			exprTypeDefault,
-			table,
-			column,
-			dir)
+			defaultExpr, exprTypeDefault, table.GetID(), uint32(column.GetID()), dir)
 	}
 }
 
@@ -234,20 +245,31 @@ func decomposeColumnIntoElements(
 	)
 	addOrDropForDir(b, dir,
 		columnDescToElement(tbl, column.ColumnDescDeepCopy(), nil, nil))
+	// Add references for the column types.
+	typeClosure, err := typedesc.GetTypeDescriptorClosure(column.GetType())
+	onErrPanic(err)
+	for typeID := range typeClosure {
+		addOrDropForDir(b, dir,
+			&scpb.ColumnTypeReference{
+				TableID:  tbl.GetID(),
+				ColumnID: column.GetID(),
+				TypeID:   typeID,
+			})
+	}
 	// Convert any default expressions.
 	decomposeDefaultExprToElements(b, tbl, column, dir)
 	// Deal with computed and on update expressions
 	decomposeExprToElements(b,
 		column.GetComputeExpr(),
 		exprTypeComputed,
-		tbl,
-		column,
+		tbl.GetID(),
+		uint32(column.GetID()),
 		dir)
 	decomposeExprToElements(b,
 		column.GetOnUpdateExpr(),
 		exprTypeOnUpdate,
-		tbl,
-		column,
+		tbl.GetID(),
+		uint32(column.GetID()),
 		dir)
 	// If there was a sequence owner dependency clean that up next.
 	if column.NumOwnsSequences() > 0 {
@@ -283,7 +305,12 @@ func decomposeViewDescToElements(
 ) {
 	dependIDs := catalog.DescriptorIDSet{}
 	for _, typeRef := range view.GetDependsOnTypes() {
-		dependIDs.Add(typeRef)
+		typeDesc := b.MustReadType(typeRef)
+		typeClosure, err := typeDesc.GetIDClosure()
+		onErrPanic(err)
+		for typeID := range typeClosure {
+			dependIDs.Add(typeID)
+		}
 	}
 	for _, typeRef := range dependIDs.Ordered() {
 		typeDep := &scpb.ViewDependsOnType{
@@ -441,7 +468,14 @@ func decomposeTableDescToElements(
 			Name:              constraint.Name,
 			Validated:         constraint.Validity == descpb.ConstraintValidity_Validated,
 			ColumnIDs:         constraint.ColumnIDs,
+			Expr:              constraint.Expr,
 		}
+		decomposeExprToElements(b,
+			constraint.Expr,
+			exprTypeCheck,
+			tbl.GetID(),
+			uint32(idx),
+			dir)
 		addOrDropForDir(b, dir, checkConstraint)
 		addOrDropForDir(b, dir, constraintName)
 	}

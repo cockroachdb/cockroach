@@ -153,12 +153,30 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 6
     name: val
     tableId: 59
+- DROP ColumnTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}
+  state: PUBLIC
+  details:
+    columnId: 6
+    tableId: 59
+    typeId: 57
+- DROP ColumnTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    columnId: 6
+    tableId: 59
+    typeId: 58
 - DROP ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}
   state: PUBLIC
   details:
     columnId: 6
     tableId: 59
     typeId: 57
+- DROP ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 58}
+  state: PUBLIC
+  details:
+    columnId: 6
+    tableId: 59
+    typeId: 58
 - DROP DefaultExpression:{DescID: 59, ColumnID: 1}
   state: PUBLIC
   details:

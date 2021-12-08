@@ -291,7 +291,7 @@ func init() {
 		[]interface{}{(*scpb.ForeignKeyBackReference)(nil), (*scpb.RelationDependedOnBy)(nil),
 			(*scpb.ViewDependsOnType)(nil), (*scpb.DefaultExprTypeReference)(nil),
 			(*scpb.OnUpdateExprTypeReference)(nil), (*scpb.ComputedExprTypeReference)(nil),
-			(*scpb.ColumnTypeReference)(nil)},
+			(*scpb.ColumnTypeReference)(nil), (*scpb.CheckConstraintTypeReference)(nil)},
 		screl.ReferencedDescID)
 }
 

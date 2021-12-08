@@ -220,6 +220,12 @@ object DatabaseSchemaEntry
 DatabaseSchemaEntry :  DatabaseID
 DatabaseSchemaEntry :  SchemaID
 
+object CheckConstraintTypeReference
+
+CheckConstraintTypeReference :  TableID
+CheckConstraintTypeReference :  ConstraintOrdinal
+CheckConstraintTypeReference :  TypeID
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -271,4 +277,6 @@ Column <|-- ColumnTypeReference
 Type <|-- ColumnTypeReference
 Database <|-- DatabaseSchemaEntry
 Schema <|-- DatabaseSchemaEntry
+Table <|-- CheckConstraintTypeReference
+Type <|-- CheckConstraintTypeReference
 @enduml
