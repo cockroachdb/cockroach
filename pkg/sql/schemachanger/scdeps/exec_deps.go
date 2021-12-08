@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -39,6 +39,9 @@ import (
 type JobRegistry interface {
 	MakeJobID() jobspb.JobID
 	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn) (*jobs.Job, error)
+	UpdateJobWithTxn(
+		ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+	) error
 }
 
 // NewExecutorDependencies returns an scexec.Dependencies implementation built
@@ -46,6 +49,7 @@ type JobRegistry interface {
 func NewExecutorDependencies(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
+	user security.SQLUsername,
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
 	indexBackfiller scexec.IndexBackfiller,
@@ -66,6 +70,7 @@ func NewExecutorDependencies(
 		},
 		indexBackfiller: indexBackfiller,
 		statements:      statements,
+		user:            user,
 	}
 }
 
@@ -78,6 +83,17 @@ type txnDeps struct {
 	partitioner        scexec.Partitioner
 	eventLogWriter     *eventLogWriter
 	deletedDescriptors catalog.DescriptorIDSet
+}
+
+func (d *txnDeps) UpdateSchemaChangeJob(
+	ctx context.Context, id jobspb.JobID, fn scexec.JobProgressUpdateFunc,
+) error {
+	const useReadLock = false
+	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
+		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		return fn(md, ju.UpdateProgress)
+	})
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
@@ -240,16 +256,14 @@ func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 
 var _ scexec.TransactionalJobCreator = (*txnDeps)(nil)
 
+func (d *txnDeps) MakeJobID() jobspb.JobID {
+	return d.jobRegistry.MakeJobID()
+}
+
 // CreateJob implements the scexec.TransactionalJobCreator interface.
-func (d *txnDeps) CreateJob(ctx context.Context, record jobs.Record) (jobspb.JobID, error) {
-	if record.JobID == jobspb.InvalidJobID {
-		record.JobID = d.jobRegistry.MakeJobID()
-	}
-	job, err := d.jobRegistry.CreateJobWithTxn(ctx, record, record.JobID, d.txn)
-	if err != nil {
-		return jobspb.InvalidJobID, err
-	}
-	return job.ID(), nil
+func (d *txnDeps) CreateJob(ctx context.Context, record jobs.Record) error {
+	_, err := d.jobRegistry.CreateJobWithTxn(ctx, record, record.JobID, d.txn)
+	return err
 }
 
 var _ scexec.IndexSpanSplitter = (*txnDeps)(nil)
@@ -298,6 +312,7 @@ type execDeps struct {
 	txnDeps
 	indexBackfiller scexec.IndexBackfiller
 	statements      []string
+	user            security.SQLUsername
 }
 
 var _ scexec.Dependencies = (*execDeps)(nil)
@@ -331,14 +346,14 @@ func (d *execDeps) TransactionalJobCreator() scexec.TransactionalJobCreator {
 	return d
 }
 
-// TestingKnobs implements the scexec.Dependencies interface.
-func (d *runDeps) TestingKnobs() *scrun.TestingKnobs {
-	return d.testingKnobs
-}
-
 // Statements implements the scexec.Dependencies interface.
 func (d *execDeps) Statements() []string {
 	return d.statements
+}
+
+// User implements the scexec.Dependencies interface.
+func (d *execDeps) User() security.SQLUsername {
+	return d.user
 }
 
 // LogEventCallback call back to allow the new schema changer

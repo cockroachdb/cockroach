@@ -11,7 +11,9 @@ begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+## PreCommitPhase stage 1 of 1 with 4 MutationType ops
+create job #1: "Schema change job"
+  descriptor IDs: [54]
 upsert descriptor #54
   ...
      id: 54
@@ -41,6 +43,7 @@ upsert descriptor #54
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
+  +  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
@@ -54,21 +57,12 @@ upsert descriptor #54
      unexposedParentSchemaId: 51
   -  version: "1"
   +  version: "2"
-create job #1: "Schema change job"
-  descriptor IDs: [54]
-upsert descriptor #54
-  ...
-       state: DELETE_ONLY
-     name: t
-  +  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextFamilyId: 1
-  ...
 # end PreCommitPhase
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitPhase stage 1 of 4 with 1 MutationType ops
+## PostCommitPhase stage 1 of 6 with 2 MutationType ops
+update progress of schema change job #1
 upsert descriptor #54
   ...
          version: 3
@@ -82,18 +76,23 @@ upsert descriptor #54
      unexposedParentSchemaId: 51
   -  version: "2"
   +  version: "3"
-update progress of schema change job #1
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
-update progress of schema change job #1
+## PostCommitPhase stage 2 of 6 with 1 BackfillType ops
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+## PostCommitPhase stage 3 of 6 with 1 MutationType ops
 update progress of schema change job #1
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 4 of 4 with 1 MutationType ops
+## PostCommitPhase stage 4 of 6 with 1 ValidationType ops
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 5 of 6 with 1 MutationType ops
+update progress of schema change job #1
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 6 of 6 with 2 MutationType ops
 upsert descriptor #54
   ...
      formatVersion: 3
@@ -144,20 +143,13 @@ upsert descriptor #54
   -    mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
      name: t
-     newSchemaChangeJobId: "1"
+  -  newSchemaChangeJobId: "1"
+     nextColumnId: 3
+     nextFamilyId: 1
   ...
        time: {}
      unexposedParentSchemaId: 51
   -  version: "3"
   +  version: "4"
-update progress of schema change job #1
-upsert descriptor #54
-  ...
-     modificationTime: {}
-     name: t
-  -  newSchemaChangeJobId: "1"
-     nextColumnId: 3
-     nextFamilyId: 1
-  ...
-commit transaction #5
+commit transaction #7
 # end PostCommitPhase

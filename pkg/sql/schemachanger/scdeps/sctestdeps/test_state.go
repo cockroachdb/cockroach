@@ -57,6 +57,7 @@ type TestState struct {
 	statements                        []string
 	testingKnobs                      *scrun.TestingKnobs
 	jobs                              []jobs.Record
+	jobCounter                        int
 	txnCounter                        int
 	sideEffectLogBuffer               strings.Builder
 }
