@@ -27,7 +27,7 @@ func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
 ) (_ scpb.State, err error) {
 	bs := newBuilderState(initial)
-	els := newEventLogState(dependencies, initial, n)
+	els := newEventLogState(dependencies, initial, n, dependencies.AstFormatter())
 	b := buildCtx{
 		Context:       ctx,
 		Dependencies:  dependencies,
@@ -64,6 +64,10 @@ type (
 	// AuthorizationAccessor contains all privilege checking operations required
 	// by the builder.
 	AuthorizationAccessor = scbuildstmt.AuthorizationAccessor
+
+	// AstFormatter contains operations for formatting out AST nodes into
+	// SQL statement text.
+	AstFormatter = scbuildstmt.AstFormatter
 )
 
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
@@ -94,11 +98,14 @@ type eventLogState struct {
 	// for any new elements added. This is used for detailed
 	// tracking during cascade operations.
 	sourceElementID *scpb.SourceElementID
+
+	// astFormatter used to format AST elements as redactable strings.
+	astFormatter AstFormatter
 }
 
 // newEventLogState constructs an eventLogState.
 func newEventLogState(
-	d scbuildstmt.Dependencies, initial scpb.State, n tree.Statement,
+	d scbuildstmt.Dependencies, initial scpb.State, n tree.Statement, astFormatter AstFormatter,
 ) *eventLogState {
 	stmts := initial.Clone().Statements
 	els := eventLogState{
@@ -115,6 +122,7 @@ func newEventLogState(
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
+		astFormatter: astFormatter,
 	}
 	*els.sourceElementID = 1
 	return &els

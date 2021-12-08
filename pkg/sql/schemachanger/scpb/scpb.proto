@@ -302,6 +302,7 @@ message Authorization {
 // Contains SQL statements for which a schema change is being executed.
 message Statement {
   string statement = 1;
+  string redactedStatement = 2;
 }
 
 // TargetMetaData refers to the metadata for individual elements, where
