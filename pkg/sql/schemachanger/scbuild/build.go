@@ -28,7 +28,7 @@ func Build(
 ) (_ scpb.CurrentState, err error) {
 	initial = initial.DeepCopy()
 	bs := newBuilderState(initial)
-	els := newEventLogState(dependencies, initial, n)
+	els := newEventLogState(dependencies, initial, n, dependencies.AstFormatter())
 	b := buildCtx{
 		Context:       ctx,
 		Dependencies:  dependencies,
@@ -45,6 +45,8 @@ func Build(
 		}
 	}()
 	scbuildstmt.Process(b, n)
+	els.statements[len(els.statements)-1].RedactedStatement =
+		string(els.astFormatter.FormatAstAsRedactableString(n))
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, len(bs.output)),
 		Statements:    els.statements,
@@ -71,6 +73,10 @@ type (
 	// AuthorizationAccessor contains all privilege checking operations required
 	// by the builder.
 	AuthorizationAccessor = scbuildstmt.AuthorizationAccessor
+
+	// AstFormatter contains operations for formatting out AST nodes into
+	// SQL statement text.
+	AstFormatter = scbuildstmt.AstFormatter
 )
 
 type elementState struct {
@@ -116,11 +122,17 @@ type eventLogState struct {
 	// for any new elements added. This is used for detailed
 	// tracking during cascade operations.
 	sourceElementID *scpb.SourceElementID
+
+	// astFormatter used to format AST elements as redactable strings.
+	astFormatter AstFormatter
 }
 
 // newEventLogState constructs an eventLogState.
 func newEventLogState(
-	d scbuildstmt.Dependencies, initial scpb.CurrentState, n tree.Statement,
+	d scbuildstmt.Dependencies,
+	initial scpb.CurrentState,
+	n tree.Statement,
+	astFormatter AstFormatter,
 ) *eventLogState {
 	stmts := initial.Statements
 	els := eventLogState{
@@ -137,6 +149,7 @@ func newEventLogState(
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
+		astFormatter: astFormatter,
 	}
 	*els.sourceElementID = 1
 	return &els

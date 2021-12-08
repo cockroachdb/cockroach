@@ -63,6 +63,7 @@ func WithBuilderDependenciesFromTestServer(
 		SessionData() *sessiondata.SessionData
 		resolver.SchemaResolver
 		scbuild.AuthorizationAccessor
+		scbuild.AstFormatter
 	})
 	// For setting up a builder inside tests we will ensure that the new schema
 	// changer will allow non-fully implemented operations.
@@ -71,6 +72,7 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Codec,
 		planner.Txn(),
 		planner.Descriptors(),
+		planner,
 		planner,
 		planner,
 		planner.SessionData(),
