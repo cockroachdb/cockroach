@@ -18,6 +18,7 @@ import (
 	"io"
 	"math/bits"
 
+	"github.com/cockroachdb/errors"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -57,13 +58,15 @@ func (s *FastIntSet) toLarge() *intsets.Sparse {
 	return large
 }
 
-// Returns the bit encoded set from 0 to 63, and a flag that indicates whether
-// there are elements outside this range.
-func (s *FastIntSet) largeToSmall() (small uint64, otherValues bool) {
+// fitsInSmall returns whether all elements in this set are between 0 and
+// smallCutoff.
+func (s *FastIntSet) fitsInSmall() bool {
 	if s.large == nil {
-		panic("set not large")
+		return true
 	}
-	return s.small, s.large.Min() < 0 || s.large.Max() >= smallCutoff
+	// It is possible that we have a large set allocated but all elements still
+	// fit the cutoff. This can happen if the set used to contain other elements.
+	return s.large.Min() >= 0 && s.large.Max() < smallCutoff
 }
 
 // Add adds a value to the set. No-op if the value is already in the set. If the
@@ -289,47 +292,37 @@ func (s FastIntSet) Difference(rhs FastIntSet) FastIntSet {
 
 // Equals returns true if the two sets are identical.
 func (s FastIntSet) Equals(rhs FastIntSet) bool {
-	if s.large == nil && rhs.large == nil {
-		return s.small == rhs.small
+	if s.small != rhs.small {
+		return false
 	}
-	if s.large != nil && rhs.large != nil {
-		return s.large.Equals(rhs.large)
+	if s.fitsInSmall() {
+		return rhs.fitsInSmall()
 	}
-	// One set is "large" and one is "small". They might still be equal (the large
-	// set could have had a large element added and then removed).
-	var extraVals bool
-	s1 := s.small
-	s2 := rhs.small
-	if s.large != nil {
-		s1, extraVals = s.largeToSmall()
-	} else {
-		s2, extraVals = rhs.largeToSmall()
-	}
-	return !extraVals && s1 == s2
+	return rhs.large != nil && s.large.Equals(rhs.large)
 }
 
 // SubsetOf returns true if rhs contains all the elements in s.
 func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
-	if s.large == nil {
+	if s.fitsInSmall() {
 		return (s.small & rhs.small) == s.small
 	}
-	if s.large != nil && rhs.large != nil {
+	if rhs.large != nil {
 		return s.large.SubsetOf(rhs.large)
 	}
-	// s is "large" and rhs is "small".
-	_, hasExtra := s.largeToSmall()
-	if hasExtra {
-		return false
-	}
-	// s is "large", but has no elements outside of the range [0, 63]. This can
-	// happen if elements outside of the range are removed.
-	return (s.small & rhs.small) == s.small
+	// s doesn't fit in small and rhs is "small".
+	return false
 }
 
-// Encode the set to a Writer using binary.varint byte encoding.  A zero
-// precedes a small int containing s.small.    A non-zero first value is a
-// length and each bit encoded separately follows.
+// Encode the set to a Writer using binary.varint byte encoding.
+//
+// This method cannot be used if the set contains negative elements.
+//
+// If the set fits in s.small, we encode a 0 followed by the bitmap values.
+// Otherwise, we encode a length followed by each element.
 func (s *FastIntSet) Encode(wr io.Writer) error {
+	if s.large != nil && s.large.Min() < 0 {
+		return errors.AssertionFailedf("Encode used with negative elements")
+	}
 	writeUint := func(u uint64) error {
 		var buf [binary.MaxVarintLen64]byte
 		n := binary.PutUvarint(buf[:], u)
@@ -337,7 +330,7 @@ func (s *FastIntSet) Encode(wr io.Writer) error {
 		return err
 	}
 
-	if s.large == nil {
+	if s.fitsInSmall() {
 		err := writeUint(0)
 		if err != nil {
 			return err
@@ -361,30 +354,34 @@ func (s *FastIntSet) Encode(wr io.Writer) error {
 	return nil
 }
 
-// Decode does the opposite of Encode.  Upon success the contents of s
-// are overwritten.
+// Decode does the opposite of Encode. The contents of the receiver are
+// overwritten.
 func (s *FastIntSet) Decode(br io.ByteReader) error {
-	val, err := binary.ReadUvarint(br)
+	length, err := binary.ReadUvarint(br)
 	if err != nil {
 		return err
 	}
-	if val == 0 {
-		val, err = binary.ReadUvarint(br)
+	s.small = 0
+	if s.large != nil {
+		s.large.Clear()
+	}
+
+	if length == 0 {
+		// Special case: the bitmap is encoded directly.
+		val, err := binary.ReadUvarint(br)
 		if err != nil {
 			return err
 		}
 		s.small = val
 	} else {
-		// Only mutate receiver if we read everything successfully.
-		temp := FastIntSet{}
-		for i, l := 0, int(val); i < l; i++ {
-			val, err = binary.ReadUvarint(br)
+		for i := 0; i < int(length); i++ {
+			elem, err := binary.ReadUvarint(br)
 			if err != nil {
+				*s = FastIntSet{}
 				return err
 			}
-			temp.Add(int(val))
+			s.Add(int(elem))
 		}
-		*s = temp
 	}
 	return nil
 }

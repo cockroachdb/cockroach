@@ -11,6 +11,7 @@
 package util
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"testing"
@@ -103,6 +104,27 @@ func TestFastIntSet(t *testing.T) {
 					s3.Add(minVal + rng.Intn(maxVal-minVal))
 					s3.CopyFrom(s)
 					assertSame(s, s3)
+
+					// Test Encode/Decode.
+					if minVal >= 0 {
+						var buf bytes.Buffer
+						if err := s.Encode(&buf); err != nil {
+							t.Fatalf("error during Encode: %v", err)
+						}
+						encoded := buf.String()
+						var s2 FastIntSet
+						if err := s2.Decode(bytes.NewReader([]byte(encoded))); err != nil {
+							t.Fatalf("error during Decode: %v", err)
+						}
+						assertSame(s, s2)
+						// Verify that decoding into a non-empty set still works.
+						var s3 FastIntSet
+						s3.Add(minVal + rng.Intn(maxVal-minVal))
+						if err := s3.Decode(bytes.NewReader([]byte(encoded))); err != nil {
+							t.Fatalf("error during Decode: %v", err)
+						}
+						assertSame(s, s3)
+					}
 				}
 			})
 		}
