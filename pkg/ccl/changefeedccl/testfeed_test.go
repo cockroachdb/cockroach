@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -1438,5 +1439,158 @@ func (f *webhookFeed) Close() error {
 		return err
 	}
 	f.mockSink.Close()
+	return nil
+}
+
+type pubsubFeedFactory struct {
+	enterpriseFeedFactory
+}
+
+var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
+
+// makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
+func makePubsubFeedFactory(
+	srv serverutils.TestServerInterface, db *gosql.DB,
+) cdctest.TestFeedFactory {
+	return &pubsubFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:  srv,
+			db: db,
+			di: newDepInjector(srv),
+		},
+	}
+}
+
+// Feed implements cdctest.TestFeedFactory
+func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+
+	// creates a uuid as the url so that each testfeed object has a unique sink
+	// tests like TestManyChangefeedsOneTable require testfeeds to receive their own messages
+	// regardless of what the topic is
+	memPubsubURL := fmt.Sprintf("%s://%s", memScheme, uuid.NewString())
+
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal(
+			memPubsubURL)
+	}
+
+	ctx := context.Background()
+	sinkDest, err := cdctest.MakeMockPubsubSink(ctx, memPubsubURL)
+	if err != nil {
+		return nil, err
+	}
+
+	ss := &sinkSynchronizer{}
+	wrapSink := func(s Sink) Sink {
+		return &notifyFlushSink{Sink: s, sync: ss}
+	}
+
+	c := &pubsubFeed{
+		jobFeed:        newJobFeed(p.db, wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		ss:             ss,
+		mockSink:       sinkDest,
+	}
+	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		sinkDest.Close()
+		return nil, err
+	}
+	err = c.mockSink.Dial()
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Server implements TestFeedFactory
+func (p *pubsubFeedFactory) Server() serverutils.TestServerInterface {
+	return p.s
+}
+
+type pubsubFeed struct {
+	*jobFeed
+	seenTrackerMap
+	ss       *sinkSynchronizer
+	mockSink *cdctest.MockPubsubSink
+}
+
+var _ cdctest.TestFeed = (*pubsubFeed)(nil)
+
+// Partitions implements TestFeed
+func (p *pubsubFeed) Partitions() []string {
+	return []string{``}
+}
+
+// extractJSONMessagePubsub extracts the value, key, and topic from a pubsub message
+func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error) {
+	parsed := payload{}
+	err = gojson.Unmarshal(wrapped, &parsed)
+	if err != nil {
+		return
+	}
+	valueParsed := parsed.Value
+	keyParsed := parsed.Key
+	topic = parsed.Topic
+
+	value, err = reformatJSON(valueParsed)
+	if err != nil {
+		return
+	}
+	key, err = reformatJSON(keyParsed)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// Next implements TestFeed
+func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
+	for {
+		err := p.mockSink.CheckSinkError()
+		if err != nil {
+			return nil, err
+		}
+		msg := p.mockSink.Pop()
+		if msg != nil {
+			m := &cdctest.TestFeedMessage{}
+			resolved, err := isResolvedTimestamp([]byte(*msg))
+			if err != nil {
+				return nil, err
+			}
+			msgBytes := []byte(*msg)
+			if resolved {
+				m.Resolved = msgBytes
+			} else {
+				m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
+				if err != nil {
+					return nil, err
+				}
+				if isNew := p.markSeen(m); !isNew {
+					continue
+				}
+			}
+			return m, nil
+		}
+
+		select {
+		case <-p.ss.eventReady():
+		case <-p.shutdown:
+			return nil, p.terminalJobError()
+		}
+	}
+}
+
+// Close implements TestFeed
+func (p *pubsubFeed) Close() error {
+	err := p.jobFeed.Close()
+	if err != nil {
+		return err
+	}
+	p.mockSink.Close()
 	return nil
 }
