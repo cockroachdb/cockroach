@@ -229,16 +229,19 @@ func getTableIndexUsageStats(
 			ti.index_name,
 			ti.index_type,
 			total_reads,
-			last_read
+			last_read,
+			indexdef
 		FROM crdb_internal.index_usage_statistics AS us
-		JOIN crdb_internal.table_indexes ti
-		ON us.index_id = ti.index_id
+  	JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id 
 		AND us.table_id = ti.descriptor_id
-		WHERE ti.descriptor_id = $`,
+  	JOIN pg_catalog.pg_index AS pgidx ON indrelid = us.table_id
+  	JOIN pg_catalog.pg_indexes AS pgidxs ON pgidxs.crdb_oid = indexrelid
+		AND indexname = ti.index_name
+ 		WHERE ti.descriptor_id = $::REGCLASS`,
 		tableID,
 	)
 
-	const expectedNumDatums = 5
+	const expectedNumDatums = 6
 
 	it, err := ie.QueryIteratorEx(ctx, "index-usage-stats", nil,
 		sessiondata.InternalExecutorOverride{
@@ -275,6 +278,7 @@ func getTableIndexUsageStats(
 		if row[4] != tree.DNull {
 			lastRead = tree.MustBeDTimestampTZ(row[4]).Time
 		}
+		createStmt := tree.MustBeDString(row[5])
 
 		if err != nil {
 			return nil, err
@@ -291,8 +295,9 @@ func getTableIndexUsageStats(
 					LastRead:       lastRead,
 				},
 			},
-			IndexName: string(indexName),
-			IndexType: string(indexType),
+			IndexName:       string(indexName),
+			IndexType:       string(indexType),
+			CreateStatement: string(createStmt),
 		}
 
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
@@ -308,6 +313,9 @@ func getTableIndexUsageStats(
 	return resp, nil
 }
 
+// getTableIDFromDatabaseAndTableName is a helper function that retrieves
+// the tableID given the database and table name. The tablename must be of
+// the form schema.table if a schema exists.
 func getTableIDFromDatabaseAndTableName(
 	ctx context.Context,
 	database string,
@@ -323,8 +331,7 @@ func getTableIDFromDatabaseAndTableName(
 	names := strings.Split(fqtName, ".")
 
 	q := makeSQLQuery()
-	q.Append(`SELECT * FROM crdb_internal.tables `)
-	q.Append(`WHERE database_name = $ `, names[0])
+	q.Append(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $ `, names[0])
 
 	if len(names) == 2 {
 		q.Append(`AND name = $`, names[1])

@@ -25,6 +25,7 @@ import {
   databaseAttr,
   databaseNameAttr,
   implicitTxnAttr,
+  indexNameAttr,
   nodeIDAttr,
   rangeIDAttr,
   sessionAttr,
@@ -42,6 +43,7 @@ import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import { DatabasesPage } from "src/views/databases/databasesPage";
 import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
 import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
+import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
@@ -167,6 +169,16 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   exact
                   path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                   component={DatabaseTablePage}
+                />
+                <Route
+                  exact
+                  path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}/index/:${indexNameAttr}`}
+                  component={IndexDetailsPage}
+                />
+                <Redirect
+                  exact
+                  from={`/database/:${databaseNameAttr}/table/:${tableNameAttr}/index`}
+                  to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                 />
 
                 {/* data distribution */}

@@ -29,6 +29,7 @@ import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses
 import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { formatDate } from "antd/es/date-picker/utils";
+import { Link } from "react-router-dom";
 const cx = classNames.bind(styles);
 
 const { TabPane } = Tabs;
@@ -194,10 +195,10 @@ export class DatabaseTablePage extends React.Component<
   private getLastResetString() {
     const lastReset = this.props.indexStats.lastReset;
     if (lastReset.isSame(this.minDate)) {
-      return "Last cleared: Never";
+      return "Last reset: Never";
     } else {
       return (
-        "Last cleared: " +
+        "Last reset: " +
         formatDate(lastReset, "MMM DD, YYYY [at] h:mm A [(UTC)]")
       );
     }
@@ -215,7 +216,7 @@ export class DatabaseTablePage extends React.Component<
       default:
         // TODO(lindseyjin): replace default case with create time after it's added to table_indexes
         if (lastReset.isSame(this.minDate)) {
-          return "Last reset: Never";
+          return "Never";
         } else {
           return formatDate(
             lastReset,
@@ -232,10 +233,13 @@ export class DatabaseTablePage extends React.Component<
       hideTitleUnderline: true,
       className: cx("index-stats-table__col-indexes"),
       cell: indexStat => (
-        <>
+        <Link
+          to={`${this.props.name}/index/${indexStat.indexName}`}
+          className={cx("icon__container")}
+        >
           <IndexIcon className={cx("icon--s", "icon--primary")} />
           {indexStat.indexName}
-        </>
+        </Link>
       ),
       sort: indexStat => indexStat.indexName,
     },
@@ -290,7 +294,7 @@ export class DatabaseTablePage extends React.Component<
               { link: `/database/${this.props.databaseName}`, name: "Tables" },
               {
                 link: `/database/${this.props.databaseName}/table/${this.props.name}`,
-                name: "Table Detail",
+                name: `Table: ${this.props.name}`,
               },
             ]}
             divider={
@@ -311,14 +315,14 @@ export class DatabaseTablePage extends React.Component<
         <section className={(baseHeadingClasses.wrapper, cx("tab-area"))}>
           <Tabs className={commonStyles("cockroach--tabs")}>
             <TabPane tab="Overview" key="overview">
-              <Row>
-                <Col>
+              <Row gutter={18}>
+                <Col className="gutter-row" span={18}>
                   <SqlBox value={this.props.details.createStatement} />
                 </Col>
               </Row>
 
-              <Row gutter={16}>
-                <Col span={10}>
+              <Row gutter={18}>
+                <Col className="gutter-row" span={8}>
                   <SummaryCard className={cx("summary-card")}>
                     <SummaryCardItem
                       label="Size"
@@ -335,7 +339,7 @@ export class DatabaseTablePage extends React.Component<
                   </SummaryCard>
                 </Col>
 
-                <Col span={14}>
+                <Col className="gutter-row" span={10}>
                   <SummaryCard className={cx("summary-card")}>
                     {this.props.showNodeRegionsSection && (
                       <SummaryCardItem
@@ -355,22 +359,19 @@ export class DatabaseTablePage extends React.Component<
                   </SummaryCard>
                 </Col>
               </Row>
-              <SummaryCard
-                className={cx("summary-card", "index-stats__summary-card")}
-              >
-                <Row>
+              <Row gutter={18}>
+                <SummaryCard
+                  className={cx("summary-card", "index-stats__summary-card")}
+                >
                   <div className={cx("index-stats__header")}>
                     <Heading type="h5">Index Stats</Heading>
-                    <div className={cx("index-stats__clear-info")}>
+                    <div className={cx("index-stats__reset-info")}>
                       <Tooltip
                         placement="bottom"
-                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Clear index stats’ will reset index stats for the entire cluster."
+                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset index stats’ will reset index stats for the entire cluster."
                       >
                         <div
-                          className={cx(
-                            "index-stats__last-cleared",
-                            "underline",
-                          )}
+                          className={cx("index-stats__last-reset", "underline")}
                         >
                           {this.getLastResetString()}
                         </div>
@@ -380,7 +381,7 @@ export class DatabaseTablePage extends React.Component<
                           className={cx(
                             "action",
                             "separator",
-                            "index-stats__clear-btn",
+                            "index-stats__reset-btn",
                           )}
                           onClick={() =>
                             this.props.resetIndexUsageStats(
@@ -389,7 +390,7 @@ export class DatabaseTablePage extends React.Component<
                             )
                           }
                         >
-                          Clear index stats
+                          Reset index stats
                         </a>
                       </div>
                     </div>
@@ -402,8 +403,8 @@ export class DatabaseTablePage extends React.Component<
                     onChangeSortSetting={this.changeSortSetting.bind(this)}
                     loading={this.props.indexStats.loading}
                   />
-                </Row>
-              </SummaryCard>
+                </SummaryCard>
+              </Row>
             </TabPane>
             <TabPane tab="Grants" key="grants">
               <DatabaseTableGrantsTable
