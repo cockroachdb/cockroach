@@ -1,0 +1,69 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+
+syntax = "proto3";
+package cockroach.ccl.streamingccl;
+option go_package = "streampb";
+
+
+import "jobs/jobspb/jobs.proto";
+import "roachpb/api.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// StreamPartitionSpec is the stream partition specification.
+message StreamPartitionSpec {
+  // start_from specifies the starting point for all spans.  If its empty,
+  // an initial scan is performed.
+  util.hlc.Timestamp start_from = 1 [(gogoproto.nullable) = false];
+  // List of spans to stream.
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+
+  // ExecutionConfig describes various knobs to control execution behavior
+  // of the stream.  If unspecified, reasonable defaults will be set.
+  message ExecutionConfig {
+    // Controls the number of concurrent scan requests issued during initial scan.
+    int32 initial_scan_parallelism = 1;
+
+    // Controls how often checkpoint records are published.
+    google.protobuf.Duration min_checkpoint_frequency = 2
+       [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+
+    // Controls batch size in bytes.
+    int64 batch_byte_size = 3;
+  }
+
+  ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+}
+
+// StreamEvent describes a replication stream event
+message StreamEvent {
+  message Batch {
+    repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
+    // TODO: Add RangeFeedSStable once that's available.
+  }
+
+  // SpanCheckpoint represents a checkpoint record for completed span.
+  // All events up to timestamp must already have been emitted.
+  message SpanCheckpoint {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+
+  // Checkpoint represents stream checkpoint.
+  message StreamCheckpoint {
+    repeated SpanCheckpoint spans = 1  [(gogoproto.nullable) = false];
+  }
+
+  // Only 1 field ought to be set.
+  Batch batch = 1;
+  StreamCheckpoint checkpoint = 2;
+}
