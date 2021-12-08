@@ -139,11 +139,10 @@ func (s FastIntSet) Len() int {
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
 func (s FastIntSet) Next(startVal int) (int, bool) {
-	if startVal < smallCutoff {
-		if startVal < 0 {
-			startVal = 0
-		}
-
+	if startVal < 0 && s.large == nil {
+		startVal = 0
+	}
+	if startVal >= 0 && startVal < smallCutoff {
 		if ntz := bits.TrailingZeros64(s.small >> uint64(startVal)); ntz < 64 {
 			return startVal + ntz, true
 		}
