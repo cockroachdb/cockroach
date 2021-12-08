@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -60,6 +61,7 @@ func (ti testInfra) newExecDeps(
 	return scdeps.NewExecutorDependencies(
 		ti.lm.Codec(),
 		txn,
+		security.RootUserName(),
 		descsCollection,
 		noopJobRegistry{},    /* jobRegistry */
 		noopBackfiller{},     /* indexBackfiller */
@@ -451,6 +453,12 @@ func TestSchemaChanger(t *testing.T) {
 }
 
 type noopJobRegistry struct{}
+
+func (n noopJobRegistry) UpdateJobWithTxn(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+) error {
+	return nil
+}
 
 var _ scdeps.JobRegistry = noopJobRegistry{}
 

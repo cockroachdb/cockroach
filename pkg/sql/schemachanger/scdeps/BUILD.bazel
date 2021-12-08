@@ -25,7 +25,6 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/sem/tree",

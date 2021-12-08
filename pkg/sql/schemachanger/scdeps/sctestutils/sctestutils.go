@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -159,7 +160,10 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs) string {
 
 // MakePlan is a convenient alternative to calling scplan.MakePlan in tests.
 func MakePlan(t *testing.T, state scpb.State, phase scop.Phase) scplan.Plan {
-	plan, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: phase})
+	plan, err := scplan.MakePlan(state, scplan.Params{
+		ExecutionPhase: phase,
+		JobIDGenerator: func() jobspb.JobID { return 0 },
+	})
 	require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(err, plan))
 	return plan
 }

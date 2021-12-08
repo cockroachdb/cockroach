@@ -38,9 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2939,30 +2937,23 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
 	deps := newSchemaChangerTxnRunDependencies(
+		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,
 		&ex.extraTxnState.descCollection,
 		ex.planner.EvalContext(),
-		scs,
-		scop.PreCommitPhase,
+		scs.stmts,
 	)
-	{
-		after, err := scrun.RunSchemaChangesInTxn(ctx, deps, scs.state)
-		if err != nil {
-			return err
-		}
-		scs.state = after
+	after, jobID, err := scrun.RunPreCommitPhase(
+		ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
+	)
+	if err != nil {
+		return err
 	}
-	{
-		jobDeps := scdeps.NewJobCreationDependencies(deps.ExecutorDependencies(), ex.planner.User())
-		jobID, err := scrun.CreateSchemaChangeJob(ctx, jobDeps, scs.state)
-		if jobID != jobspb.InvalidJobID {
-			ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)
-			log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
-		}
-		if err != nil {
-			return err
-		}
+	scs.state = after
+	if jobID != jobspb.InvalidJobID {
+		ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)
+		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil
 }
