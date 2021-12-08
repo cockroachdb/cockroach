@@ -842,21 +842,21 @@ func rankedCandidateListForRebalancing(
 	// also include node Attributes or store Attributes. We could try to group
 	// stores by attributes as well, but it's simplest to just run this for each
 	// store.
-	type comparableStoreList struct {
-		existing   []roachpb.StoreDescriptor
-		sl         StoreList
-		candidates candidateList
+	type equivalenceClass struct {
+		existing    []roachpb.StoreDescriptor
+		candidateSL StoreList
+		candidates  candidateList
 	}
-	var comparableStores []comparableStoreList
+	var equivalenceClasses []equivalenceClass
 	var needRebalanceTo bool
 	for _, existing := range existingStores {
 		// If this store is equivalent in both Locality and Node/Store Attributes to
 		// some other existing store, then we can treat them the same. We have to
 		// include Node/Store Attributes because they affect constraints.
 		var matchedOtherExisting bool
-		for i, stores := range comparableStores {
-			if sameLocalityAndAttrs(stores.existing[0], existing.store) {
-				comparableStores[i].existing = append(comparableStores[i].existing, existing.store)
+		for i, eqClass := range equivalenceClasses {
+			if sameLocalityAndAttrs(eqClass.existing[0], existing.store) {
+				equivalenceClasses[i].existing = append(equivalenceClasses[i].existing, existing.store)
 				matchedOtherExisting = true
 				break
 			}
@@ -935,27 +935,28 @@ func rankedCandidateListForRebalancing(
 		for i := range bestCands {
 			bestStores[i] = bestCands[i].store
 		}
-		comparableStores = append(comparableStores, comparableStoreList{
-			existing:   []roachpb.StoreDescriptor{existing.store},
-			sl:         makeStoreList(bestStores),
-			candidates: bestCands,
-		})
+		equivalenceClasses = append(
+			equivalenceClasses, equivalenceClass{
+				existing:    []roachpb.StoreDescriptor{existing.store},
+				candidateSL: makeStoreList(bestStores),
+				candidates:  bestCands,
+			})
 	}
 
 	// 3. Decide whether we should try to rebalance. Note that for each existing
-	// store, we only compare its fullness stats to the stats of "comparable"
-	// stores, i.e. those stores that are at least as valid, necessary, and
-	// diverse as the existing store.
+	// store, we only compare its fullness stats to the stats of stores within the
+	// same equivalence class i.e. those stores that are at least as valid,
+	// necessary, and diverse as the existing store.
 	needRebalance := needRebalanceFrom || needRebalanceTo
 	var shouldRebalanceCheck bool
 	if !needRebalance {
 		for _, existing := range existingStores {
 			var sl StoreList
 		outer:
-			for _, comparable := range comparableStores {
+			for _, comparable := range equivalenceClasses {
 				for _, existingCand := range comparable.existing {
 					if existing.store.StoreID == existingCand.StoreID {
-						sl = comparable.sl
+						sl = comparable.candidateSL
 						break outer
 					}
 				}
@@ -977,9 +978,9 @@ func rankedCandidateListForRebalancing(
 
 	// 4. Create sets of rebalance options, i.e. groups of candidate stores and
 	// the existing replicas that they could legally replace in the range.  We
-	// have to make a separate set of these for each group of comparableStores.
-	results := make([]rebalanceOptions, 0, len(comparableStores))
-	for _, comparable := range comparableStores {
+	// have to make a separate set of these for each group of equivalenceClasses.
+	results := make([]rebalanceOptions, 0, len(equivalenceClasses))
+	for _, comparable := range equivalenceClasses {
 		var existingCandidates candidateList
 		var candidates candidateList
 		for _, existingDesc := range comparable.existing {
@@ -997,8 +998,8 @@ func rankedCandidateListForRebalancing(
 			// Similarly to in candidateListForRemoval, any replica whose
 			// removal would not converge the range stats to their mean is given a
 			// constraint score boost of 1 to make it less attractive for removal.
-			convergesScore := options.rebalanceFromConvergesScore(comparable.sl, existing.store.Capacity)
-			balanceScore := options.balanceScore(comparable.sl, existing.store.Capacity)
+			convergesScore := options.rebalanceFromConvergesScore(comparable.candidateSL, existing.store.Capacity)
+			balanceScore := options.balanceScore(comparable.candidateSL, existing.store.Capacity)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
 			existing.rangeCount = int(existing.store.Capacity.RangeCount)
@@ -1016,8 +1017,8 @@ func rankedCandidateListForRebalancing(
 			// rebalance candidates.
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
-			cand.balanceScore = options.balanceScore(comparable.sl, s.Capacity)
-			cand.convergesScore = options.rebalanceToConvergesScore(comparable.sl, s.Capacity)
+			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
+			cand.convergesScore = options.rebalanceToConvergesScore(comparable.candidateSL, s.Capacity)
 			cand.rangeCount = int(s.Capacity.RangeCount)
 			candidates = append(candidates, cand)
 		}
