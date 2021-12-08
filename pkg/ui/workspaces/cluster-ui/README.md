@@ -6,7 +6,9 @@ and CockroachCloud Console to display cluster-level information.
 ## Overview of how this package interacts with CRDB and CockroachCloud
 
 The diagram below describes how this package is published
-and imported in the two application codebases it's used in:
+and imported in the two application codebases it's used in. Please note
+that the versions in this diagram are not current as provided as an example
+only.
 
 ![@startuml
 title "Cluster UI, Dependency Diagram"
@@ -102,7 +104,8 @@ versions of cluster-ui are published following the version scheme of CockroachDB
 |--------------|--------------------|--------------------|
 | v20.2.x      | 20.2.x             | release-20.2       |
 | v21.1.x      | 21.1.x             | release-21.1       |
-| v21.2.x      | 21.2.x             | master             |
+| v21.2.x      | 21.2.x             | release-21.2       |
+| v22.1.x      | 21.1.x             | master             |
 
 Note, that the patch versions of the CRDB version and the Cluster UI version will
 not align. The versioning schemes between CRDB and Cluster UI may vary slightly,
@@ -185,24 +188,8 @@ here: https://storybook.js.org/docs/react/api/csf in order to
 facilitate writing unit tests with the storybook components.
 
 ## Publishing Cluster UI package to npm
-WIP
 
-### 1. Change the version in package.json
-CockroachDB uses a form of [calver](https://calver.org/) versioning where the major part
-is a *Short Year* and the minor part is an iterative number.The micro part (in
-semver, this is called the "patch" part) is also an iterative number. The first
-two numbers comprise a major version of CockroachDB, and the third denotes a minor
-release of that major version. For example, `21.1.6` is a version released in 2021,
-is part of the first major release of that year, and the seventh release in that
-series (`21.1.0` being the first).
-
-npm package versions must be parseable by [semantic versioning](https://docs.npmjs.com/cli/v6/using-npm/semver). To denote what versions of the cluster-ui package are intended for use with specific major version of CockroachDB, cluster-ui mimicks the version of CockroachDB. For example `cluster-ui@21.1.4` is a version of cluster-ui compatible with the API of CockroachDB version `21.1` and is the fourth release in this major version. It's important to note that `cluster-ui@21.1.4` is **not** directly published from CockroachDB version `21.1.4`. Only that `cluster-ui@21.1.x` was published from CockroachDB branch `release-21.1`.
-
-So when incrementing (or "bumping") the version of cluster-ui the only number that should change will be the "patch"
-version (the third number). For example, if you're working on master and find the version to be `21.2.1` you would
-change the version to be `21.2.2`. The version change should accompany the pull-request with the changes to the code, and should be merged with them.
-
-### 2. Create a git tag
+### 1. Create a git tag
 
 Once a pull-request has been merged into respective branch, a git tag should be made against the commit that contains
 the changes to cluster-ui and the version change. The form of the tag should be `@cockroachlabs/cluster@[version]`
@@ -214,7 +201,7 @@ $ git tag [tag name] [SHA] # SHA can be omitted if desired commit is HEAD
 $ git push [remote] [tag name]
 ```
 
-### 3. Build Cluster UI prerequisites (protobufs, etc)
+### 2. Build Cluster UI prerequisites (protobufs, etc)
 To build the prerequisites for cluster-ui run the following commands from the root
 directory of CockroachDB.
 
@@ -224,7 +211,7 @@ $ make pkg/ui/yarn.protobuf.installed -B
 $ make pkg/ui/yarn.cluster-ui.installed -B
 ```
 
-### 4. Publish
+### 3. Publish
 If you have not done so already, request publishing permissions from the Cluster
 UI team at Cockroach Labs. You will be required to create an account on [npm](https://www.npmjs.com/)
 and configure two factor authentication. You will then be added to the `@cockroachlabs`
@@ -280,7 +267,32 @@ is delivered to the registry. `clean` will delete the contents of the `dist`
 directory and `build` will compile TypeScript and bundle the code using Webpack.
 The publish will create a tarball and send it to the registry.
 
-### 5. Add a distribution tag
+#### Set the version to publish
+During a `yarn publish` you will be prompted for a version number. Supply the appropriate version number for the package you are publishing.
+
+```shell
+> yarn publish --access public
+yarn publish v1.22.17
+[1/4] Bumping version...
+info Current version: 21.2.0-prerelease-7
+question New version: [ Enter your new version HERE ]
+```
+
+CockroachDB uses a form of [calver](https://calver.org/) versioning where the major part
+is a *Short Year* and the minor part is an iterative number.The micro part (in
+semver, this is called the "patch" part) is also an iterative number. The first
+two numbers comprise a major version of CockroachDB, and the third denotes a minor
+release of that major version. For example, `21.1.6` is a version released in 2021,
+is part of the first major release of that year, and the seventh release in that
+series (`21.1.0` being the first).
+
+npm package versions must be parseable by [semantic versioning](https://docs.npmjs.com/cli/v6/using-npm/semver). To denote what versions of the cluster-ui package are intended for use with specific major version of CockroachDB, cluster-ui mimicks the version of CockroachDB. For example `cluster-ui@21.1.4` is a version of cluster-ui compatible with the API of CockroachDB version `21.1` and is the fourth release in this major version. It's important to note that `cluster-ui@21.1.4` is **not** directly published from CockroachDB version `21.1.4`. Only that `cluster-ui@21.1.x` was published from CockroachDB branch `release-21.1`.
+
+So when incrementing (or "bumping") the version of cluster-ui the only number that should change will be the "patch"
+version (the third number). For example, if you're working on master and find the version to be `21.2.1` you would
+change the version to be `21.2.2`. The version change should accompany the pull-request with the changes to the code, and should be merged with them.
+
+### 4. Add a distribution tag
 We use [distribution tags](https://docs.npmjs.com/adding-dist-tags-to-packages) to organize the versions of `cluster-ui`. By default
 the most recent published version will be tagged as `latest`. Depending on the
 version you are publishing, you will most likely need to add distribution tags to
