@@ -83,7 +83,7 @@ export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   { sortKey: 3 /* creation time */, ascending: false },
 );
 
-interface JobsTableProps {
+export interface JobsTableProps {
   sort: SortSetting;
   status: string;
   show: string;

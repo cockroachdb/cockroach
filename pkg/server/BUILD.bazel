@@ -266,7 +266,7 @@ go_library(
 
 go_test(
     name = "server_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "addjoin_test.go",
         "admin_cluster_test.go",
