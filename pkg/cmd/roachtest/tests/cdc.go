@@ -63,6 +63,7 @@ type sinkType int32
 const (
 	cloudStorageSink sinkType = iota + 1
 	webhookSink
+	pubsubSink
 )
 
 type cdcTestArgs struct {
@@ -149,6 +150,8 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		sinkDestHost.RawQuery = params.Encode()
 
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
+	} else if args.whichSink == pubsubSink {
+		sinkURI = `gcppubsub://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest"
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
@@ -803,6 +806,23 @@ func registerCDC(r registry.Registry) {
 				workloadDuration:         "30m",
 				initialScan:              true,
 				whichSink:                cloudStorageSink,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/pubsub-sink",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       1,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				whichSink:                pubsubSink,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 			})
