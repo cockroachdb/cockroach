@@ -20,7 +20,6 @@ import {
   TransactionsTable,
 } from "../transactionsTable";
 import { DateRange } from "src/dateRange";
-import { TransactionDetails } from "../transactionDetails";
 import {
   ColumnDescriptor,
   handleSortSettingFromQueryString,
@@ -35,10 +34,8 @@ import {
   aggregateAcrossNodeIDs,
   generateRegionNode,
   getTrxAppFilterOptions,
-  statementFingerprintIdsToText,
   searchTransactionsData,
   filterTransactions,
-  getStatementsByFingerprintIdAndTime,
 } from "./utils";
 import Long from "long";
 import { merge } from "lodash";
@@ -67,18 +64,12 @@ import SQLActivityError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
-type Timestamp = protos.google.protobuf.ITimestamp;
 
 const cx = classNames.bind(styles);
 
 interface TState {
-  aggregatedTs: Timestamp | null;
   filters?: Filters;
   pagination: ISortedTablePagination;
-  statementFingerprintIds: Long[] | null;
-  transactionFingerprintId: Long | null;
-  transactionStats: TransactionStats | null;
 }
 
 export interface TransactionsPageStateProps {
@@ -132,10 +123,6 @@ export class TransactionsPage extends React.Component<
         pageSize: this.props.pageSize || 20,
         current: 1,
       },
-      aggregatedTs: null,
-      statementFingerprintIds: null,
-      transactionStats: null,
-      transactionFingerprintId: null,
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(this.state, stateFromHistory);
@@ -323,17 +310,6 @@ export class TransactionsPage extends React.Component<
     );
   };
 
-  handleDetails = (transaction?: TransactionInfo): void => {
-    this.setState({
-      statementFingerprintIds:
-        transaction?.stats_data?.statement_fingerprint_ids,
-      transactionStats: transaction?.stats_data?.stats,
-      aggregatedTs: transaction?.stats_data?.aggregated_ts,
-      transactionFingerprintId:
-        transaction?.stats_data?.transaction_fingerprint_id,
-    });
-  };
-
   lastReset = (): Date => {
     return new Date(Number(this.props.data?.last_reset.seconds) * 1000);
   };
@@ -352,7 +328,7 @@ export class TransactionsPage extends React.Component<
     );
   };
 
-  renderTransactionsList(): React.ReactElement {
+  render(): React.ReactElement {
     return (
       <div className={cx("table-area")}>
         <Loading
@@ -422,7 +398,6 @@ export class TransactionsPage extends React.Component<
               transactionsToDisplay,
               statements,
               isTenant,
-              this.handleDetails,
               search,
             )
               .filter(c => !(c.name === "regionNodes" && regions.length < 2))
@@ -546,48 +521,5 @@ export class TransactionsPage extends React.Component<
         />
       </div>
     );
-  }
-
-  renderTransactionDetails(): React.ReactElement {
-    const { statements } = this.props.data;
-    const {
-      aggregatedTs,
-      statementFingerprintIds,
-      transactionStats,
-      transactionFingerprintId,
-    } = this.state;
-    const transactionDetails =
-      statementFingerprintIds &&
-      getStatementsByFingerprintIdAndTime(
-        statementFingerprintIds,
-        aggregatedTs,
-        statements,
-      );
-    const transactionText =
-      statementFingerprintIds &&
-      statementFingerprintIdsToText(statementFingerprintIds, statements);
-
-    return (
-      <TransactionDetails
-        transactionText={transactionText}
-        statements={transactionDetails}
-        nodeRegions={this.props.nodeRegions}
-        transactionStats={transactionStats}
-        lastReset={this.lastReset()}
-        handleDetails={this.handleDetails}
-        error={this.props.error}
-        resetSQLStats={this.props.resetSQLStats}
-        isTenant={this.props.isTenant}
-        transactionFingerprintId={transactionFingerprintId}
-      />
-    );
-  }
-
-  render(): React.ReactElement {
-    const { statementFingerprintIds } = this.state;
-    const renderTxDetailsView = !!statementFingerprintIds;
-    return renderTxDetailsView
-      ? this.renderTransactionDetails()
-      : this.renderTransactionsList();
   }
 }

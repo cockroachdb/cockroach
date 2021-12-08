@@ -8,7 +8,36 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RequestError } from "../util";
+import { RequestError, TimestampToString } from "../util";
+import moment from "moment";
+import { createMemoryHistory } from "history";
+import Long from "long";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+
+const history = createMemoryHistory({ initialEntries: ["/transactions"] });
+const timestamp = new protos.google.protobuf.Timestamp({
+  seconds: new Long(Date.parse("Nov 26 2021 01:00:00 GMT") * 1e-3),
+});
+const timestampString = TimestampToString(timestamp);
+
+export const routeProps = {
+  history,
+  location: {
+    pathname: `/transaction/${timestampString}/3632089240731979669`,
+    search: "",
+    hash: "",
+    state: {},
+  },
+  match: {
+    path: "/transaction/:aggregated_ts/:txn_fingerprint_id",
+    url: `/transaction/${timestampString}/3632089240731979669`,
+    isExact: true,
+    params: {
+      aggregated_ts: timestampString,
+      txn_fingerprint_id: "3632089240731979669",
+    },
+  },
+};
 
 export const transactionDetails = {
   data: {
@@ -554,6 +583,33 @@ export const transactionDetails = {
         },
       },
     ],
+    aggregatedTs: timestampString,
+    transactionFingerprintId: "3632089240731979669",
+    transaction: {
+      stats_data: {
+        statement_fingerprint_ids: [
+          Long.fromString("673bf9d0055bbae332ad497072db9bbf"),
+        ],
+        app: "$ internal-select-running/get-claimed-jobs",
+        aggregated_ts: timestamp,
+        stats: {
+          count: Long.fromInt(93),
+          max_retries: Long.fromInt(0),
+          num_rows: { mean: 0, squared_diffs: 0 },
+          service_lat: {
+            mean: 0.05745331182795698,
+            squared_diffs: 14.213222686585958,
+          },
+          retry_lat: { mean: 0, squared_diffs: 0 },
+          commit_lat: {
+            mean: 0.000010258064516129034,
+            squared_diffs: 3.1277806451612896e-8,
+          },
+        },
+      },
+      node_id: 5,
+      regionNodes: ["gcp-us-east1"],
+    },
   },
   error: new RequestError(
     "Forbidden",
@@ -567,3 +623,8 @@ export const transactionDetails = {
     "4": "gcp-europe-west1",
   },
 };
+
+export const dateRange: [moment.Moment, moment.Moment] = [
+  moment.utc("2021.01.01"),
+  moment.utc("2021.12.31"),
+];
