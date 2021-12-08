@@ -165,16 +165,6 @@ func StartTenant(
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
-	// Also add the SQL instance tag to the tenant status server's
-	// ambient context.
-	//
-	// We use the tag "sqli" instead of just "sql" because the latter is
-	// too generic and would be hard to search if someone was looking at
-	// a log message and wondering what it stands for.
-	//
-	// TODO(knz): find a way to share common logging tags between
-	// multiple AmbientContext instances.
-	tenantStatusServer.AmbientContext.AddLogTag("sqli", s.sqlIDContainer)
 
 	if err != nil {
 		return nil, "", "", err
@@ -272,13 +262,6 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	// This is necessary so the grpc server doesn't error out on heartbeat
-	// ping when we make pod-to-pod calls, we pass the InstanceID with the
-	// request to ensure we're dialing the pod we think we are.
-	//
-	// The InstanceID subsystem is not available until `preStart`.
-	args.rpcContext.NodeID.Set(ctx, roachpb.NodeID(s.SQLInstanceID()))
-
 	if knobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); !ok || !knobs.DisableLogTags {
 		// Register the server's identifiers so that log events are
 		// decorated with the server's identity. This helps when gathering
@@ -369,11 +352,7 @@ func makeTenantSQLServerArgs(
 
 	// We want all log messages issued on behalf of this SQL instance to report
 	// the instance ID (once known) as a tag.
-	instanceIDContainer := base.NewSQLIDContainer(0, nil)
-	// We use the tag "sqli" instead of just "sql" because the latter is
-	// too generic and would be hard to search if someone was looking at
-	// a log message and wondering what it stands for.
-	baseCfg.AmbientCtx.AddLogTag("sqli", instanceIDContainer)
+	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
@@ -393,6 +372,7 @@ func makeTenantSQLServerArgs(
 	}
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   sqlCfg.TenantID,
+		NodeID:     baseCfg.IDContainer,
 		AmbientCtx: baseCfg.AmbientCtx,
 		Config:     baseCfg.Config,
 		Clock:      clock,

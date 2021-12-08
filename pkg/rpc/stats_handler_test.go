@@ -113,7 +113,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		settings:           serverCtx.Settings,
-		nodeID:             &serverCtx.NodeID,
+		nodeID:             serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
