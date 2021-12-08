@@ -82,7 +82,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	case *migration.SystemMigration:
 		err = m.Run(ctx, cv, mc.SystemDeps(), r.j)
 	case *migration.TenantMigration:
-		err = m.Run(ctx, cv, migration.TenantDeps{
+		tenantDeps := migration.TenantDeps{
 			DB:                execCtx.ExecCfg().DB,
 			Codec:             execCtx.ExecCfg().Codec,
 			Settings:          execCtx.ExecCfg().Settings,
@@ -90,7 +90,11 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			LeaseManager:      execCtx.ExecCfg().LeaseManager,
 			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
 			TestingKnobs:      execCtx.ExecCfg().MigrationTestingKnobs,
-		}, r.j)
+		}
+		tenantDeps.SpanConfig.KVAccessorWithTxn = execCtx.ExecCfg().SpanConfigKVAccessor
+		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
+
+		err = m.Run(ctx, cv, tenantDeps, r.j)
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)
 	}

@@ -124,6 +124,10 @@ func CreateTenantRecord(
 		}
 	}
 
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.SeedTenantSpanConfigs) {
+		return err
+	}
+
 	// Install a single key[1] span config at the start of tenant's keyspace;
 	// elsewhere this ensures that we split on the tenant boundary. The subset
 	// of entries with spans in the tenant keyspace are, henceforth, governed
@@ -131,11 +135,6 @@ func CreateTenantRecord(
 	// SQL pods reconcile their zone configs for the first time. When destroying
 	// the tenant for good, we'll clear out any left over entries as part of the
 	// GC-ing the tenant's record.
-	//
-	// TODO(irfansharif): We need a migration here for clusters with existing
-	// tenants that want to preserve hard splits on tenant boundaries. We cannot
-	// rely on the tenant pods running the reconciliation process when KV
-	// migrates over.
 	//
 	// [1]: It doesn't really matter what span is inserted here as long as it
 	// starts at the tenant prefix and is fully contained within the tenant
