@@ -441,5 +441,5 @@ subtest duplicate_index_name_unique_index
 statement error pgcode 42P07 duplicate index name: \"idx\"
 CREATE TABLE error (a INT, b INT, INDEX idx (a), UNIQUE INDEX idx (b))
 
-statement error pgcode 42P07 duplicate index name: \"idx\"
-CREATE TABLE error (a INT, b INT, UNIQUE INDEX idx (a), UNIQUE INDEX idx (b))
+statement ok
+CREATE TABLE regression_73498 AS select * from [SHOW CLUSTER QUERIES]

@@ -101,6 +101,24 @@ type extendedEvalContext struct {
 	SchemaChangerState *SchemaChangerState
 }
 
+// copyFromExecCfg copies relevant fields from an ExecutorConfig.
+func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
+	evalCtx.ExecCfg = execCfg
+	evalCtx.Settings = execCfg.Settings
+	evalCtx.Codec = execCfg.Codec
+	evalCtx.DB = execCfg.DB
+	evalCtx.SQLLivenessReader = execCfg.SQLLivenessReader
+	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
+	evalCtx.ClusterID = execCfg.ClusterID()
+	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
+	evalCtx.NodeID = execCfg.NodeID
+	evalCtx.Locality = execCfg.Locality
+	evalCtx.NodesStatusServer = execCfg.NodesStatusServer
+	evalCtx.SQLStatusServer = execCfg.SQLStatusServer
+	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
+	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
+}
+
 // copy returns a deep copy of ctx.
 func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *evalCtx
@@ -421,14 +439,12 @@ func internalExtendedEvalCtx(
 		sqlStatsResetter = execCfg.InternalExecutor.s
 	}
 
-	return extendedEvalContext{
+	ret := extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:              txn,
 			SessionData:      sd,
 			TxnReadOnly:      false,
 			TxnImplicit:      true,
-			Settings:         execCfg.Settings,
-			Codec:            execCfg.Codec,
 			Context:          ctx,
 			Mon:              plannerMon,
 			TestingKnobs:     evalContextTestingKnobs,
@@ -437,15 +453,13 @@ func internalExtendedEvalCtx(
 			InternalExecutor: execCfg.InternalExecutor,
 			SQLStatsResetter: sqlStatsResetter,
 		},
-		SessionMutator:    dataMutator,
-		VirtualSchemas:    execCfg.VirtualSchemas,
-		Tracing:           &SessionTracing{},
-		NodesStatusServer: execCfg.NodesStatusServer,
-		Descs:             tables,
-		ExecCfg:           execCfg,
-		schemaAccessors:   newSchemaInterface(tables, execCfg.VirtualSchemas),
-		DistSQLPlanner:    execCfg.DistSQLPlanner,
+		SessionMutator:  dataMutator,
+		Tracing:         &SessionTracing{},
+		Descs:           tables,
+		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
 	}
+	ret.copyFromExecCfg(execCfg)
+	return ret
 }
 
 // LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
