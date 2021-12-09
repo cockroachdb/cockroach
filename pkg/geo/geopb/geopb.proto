@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.geopb;
-option go_package = "./geopb";
+option go_package = "geopb";
 
 import "gogoproto/gogo.proto";
 

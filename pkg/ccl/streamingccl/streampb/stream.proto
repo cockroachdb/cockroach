@@ -9,7 +9,7 @@
 
 syntax = "proto3";
 package cockroach.ccl.streamingccl;
-option go_package = "./streampb";
+option go_package = "streampb";
 
 
 import "jobs/jobspb/jobs.proto";

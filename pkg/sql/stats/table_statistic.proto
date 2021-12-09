@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 package cockroach.sql.stats;
-option go_package = "./stats";
+option go_package = "stats";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";

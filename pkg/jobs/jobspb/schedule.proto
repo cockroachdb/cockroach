@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.jobs.jobspb;
-option go_package = "./jobspb";
+option go_package = "jobspb";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";

@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.protectedts;
-option go_package = "./ptstorage";
+option go_package = "ptstorage";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";

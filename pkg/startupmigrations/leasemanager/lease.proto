@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.client;
-option go_package = "./leasemanager";
+option go_package = "leasemanager";
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";

@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.storage; // HACK
-option go_package = "./kvserver";
+option go_package = "kvserver";
 
 import "kv/kvserver/raft.proto";
 import "kv/kvserver/api.proto";

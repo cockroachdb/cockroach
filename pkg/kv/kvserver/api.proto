@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver;
-option go_package = "./kvserver";
+option go_package = "kvserver";
 
 import "roachpb/data.proto";
 import "roachpb/internal_raft.proto";

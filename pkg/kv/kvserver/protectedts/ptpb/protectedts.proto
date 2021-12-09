@@ -11,7 +11,7 @@
 
 syntax = "proto3";
 package cockroach.protectedts;
-option go_package = "./ptpb";
+option go_package = "ptpb";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";

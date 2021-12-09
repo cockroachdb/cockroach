@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.ts.catalog;
-option go_package = "./catalog";
+option go_package = "catalog";
 
 import "ts/tspb/timeseries.proto";
 
