@@ -742,6 +742,15 @@ SELECT * FROM crdb_internal.create_type_statements
 
 # Test the virtual index as well.
 
+query ITTITTT
+SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = (('enum1'::regtype::oid::int) - 100000)::oid
+----
+54  test  public  66  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+
+query ITTITTT
+SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = 'foo'::regclass::oid
+----
+
 statement ok
 SET application_name = "test_txn_statistics"
 

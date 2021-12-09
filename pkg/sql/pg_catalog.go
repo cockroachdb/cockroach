@@ -2466,6 +2466,30 @@ func addPGTypeRow(
 	)
 }
 
+func getSchemaAndTypeByTypeID(
+	ctx context.Context, p *planner, id descpb.ID,
+) (string, *typedesc.Immutable, error) {
+	typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+	if err != nil {
+		// If the type was not found, it may be a table.
+		if !(errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject) {
+			return "", nil, err
+		}
+		return "", nil, nil
+	}
+
+	sc, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx,
+		p.txn,
+		typDesc.GetParentSchemaID(),
+		tree.SchemaLookupFlags{},
+	)
+	if err != nil {
+		return "", nil, err
+	}
+	return sc.Name, typDesc, nil
+}
+
 var pgCatalogTypeTable = virtualSchemaTable{
 	comment: `scalar types (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
@@ -2525,22 +2549,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Check if it is a user defined type.
 				id := typedesc.UserDefinedTypeOIDToID(ooid)
-				typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
-				if err != nil {
-					if errors.Is(err, catalog.ErrDescriptorNotFound) {
-						return false, nil
-					}
-					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-						return false, nil
-					}
+				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
+				if err != nil || typDesc == nil {
 					return false, err
 				}
-				sc, err := p.Descriptors().GetImmutableSchemaByID(
-					ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
-				if err != nil {
-					return false, err
-				}
-				nspOid = h.NamespaceOid(db.GetID(), sc.Name)
+				nspOid = h.NamespaceOid(db.GetID(), scName)
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 				if err != nil {
 					return false, err
