@@ -84,6 +84,7 @@ type gcpPubsubSink struct {
 
 type memPubsubSink struct {
 	pubsubSink *pubsubSink
+	isDialed   bool
 }
 
 type topicStruct struct {
@@ -182,10 +183,10 @@ func MakePubsubSink(
 		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
 	}
 	//creates a topic for each target
-	for id, topic := range targets {
+	for id, target := range targets {
 		var topicName string
 		if pubsubTopicName == "" {
-			topicName = topic.StatementTimeName
+			topicName = target.StatementTimeName
 		} else {
 			topicName = pubsubTopicName
 		}
@@ -207,7 +208,7 @@ func MakePubsubSink(
 		g := &gcpPubsubSink{creds: creds, pubsubSink: p}
 		return g, nil
 	case memScheme:
-		m := &memPubsubSink{pubsubSink: p}
+		m := &memPubsubSink{pubsubSink: p, isDialed: false}
 		return m, nil
 	default:
 		_ = p.close()
@@ -529,14 +530,15 @@ func (p *gcpPubsubSink) Close() error {
 	return nil
 }
 
-// Dial opens topic using url
+// Dial returns nil
 func (p *memPubsubSink) Dial() error {
-	//topic, err := pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.url.String())
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//p.pubsubSink.setTopic(topic)
+	// returns nil so that canary sink can Dial and Close without erroring out
+	// when the sink is reopened again with the same url
+	return nil
+}
+
+// lazyDial connects mempubsub with url
+func (p *memPubsubSink) lazyDial() error {
 	var err error
 	for _, topic := range p.pubsubSink.topics {
 		topic.topicClient, err = pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.url.String())
@@ -544,6 +546,7 @@ func (p *memPubsubSink) Dial() error {
 			return errors.Wrap(err, "opening topic")
 		}
 	}
+	p.isDialed = true
 	return nil
 }
 
@@ -556,6 +559,12 @@ func (p *memPubsubSink) EmitRow(
 	_ hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
+	if !p.isDialed {
+		err := p.lazyDial()
+		if err != nil {
+			return errors.Wrap(err, "lazy Dial")
+		}
+	}
 	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
 	if err != nil {
 		return err
@@ -567,22 +576,42 @@ func (p *memPubsubSink) EmitRow(
 func (p *memPubsubSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	if !p.isDialed {
+		err := p.lazyDial()
+		if err != nil {
+			return errors.Wrap(err, "lazy Dial")
+		}
+	}
 	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
 }
 
 // Flush calls the pubsubDesc Flush
 func (p *memPubsubSink) Flush(ctx context.Context) error {
+	if !p.isDialed {
+		err := p.lazyDial()
+		if err != nil {
+			return errors.Wrap(err, "lazy Dial")
+		}
+	}
 	return p.pubsubSink.flush(ctx)
 }
 
 // Close calls the pubsubDesc Close
 func (p *memPubsubSink) Close() error {
-	p.pubsubSink.exitWorkers()
-	_ = p.pubsubSink.workerGroup.Wait()
-	close(p.pubsubSink.errChan)
-	close(p.pubsubSink.flushDone)
+	if p.pubsubSink.exitWorkers != nil {
+		p.pubsubSink.exitWorkers()
+		_ = p.pubsubSink.workerGroup.Wait()
+	}
+	if p.pubsubSink.errChan != nil {
+		close(p.pubsubSink.errChan)
+	}
+	if p.pubsubSink.flushDone != nil {
+		close(p.pubsubSink.flushDone)
+	}
 	for i := 0; i < p.pubsubSink.numWorkers; i++ {
-		close(p.pubsubSink.eventsChans[i])
+		if p.pubsubSink.eventsChans[i] != nil {
+			close(p.pubsubSink.eventsChans[i])
+		}
 	}
 	return nil
 }
