@@ -11,15 +11,12 @@
 package idxusage
 
 import (
-	"context"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -49,17 +46,7 @@ type indexUse struct {
 
 // LocalIndexUsageStats is a node-local provider of index usage statistics.
 // It implements both the idxusage.Reader and idxusage.Writer interfaces.
-//
-// NOTE: The index usage statistics is collected asynchronously by running a
-// statistics ingestion goroutine in the background. This is to avoid lock
-// contention during the critical path of query execution. This struct has the
-// same lifetime as the sql.Server and the Start() method should be called as
-// soon as possible to start the background ingestion goroutine.
 type LocalIndexUsageStats struct {
-	// statsChan the channel which all index usage metadata are being passed
-	// through.
-	statsChan chan indexUse
-
 	st *cluster.Settings
 
 	mu struct {
@@ -71,10 +58,6 @@ type LocalIndexUsageStats struct {
 		// lastReset is the last time the index usage statistics were reset.
 		lastReset time.Time
 	}
-
-	// testingKnobs provide utilities for tests to hook into the internal states
-	// of the LocalIndexUsageStats.
-	testingKnobs *TestingKnobs
 }
 
 // tableIndexStats tracks index usage statistics per table.
@@ -101,9 +84,6 @@ type Config struct {
 
 	// Setting is used to read cluster settings.
 	Setting *cluster.Settings
-
-	// Knobs is the testing knobs used for tests.
-	Knobs *TestingKnobs
 }
 
 // IteratorOptions provides knobs to change the iterating behavior when
@@ -125,9 +105,7 @@ var emptyIndexUsageStats roachpb.IndexUsageStatistics
 // NewLocalIndexUsageStats returns a new instance of LocalIndexUsageStats.
 func NewLocalIndexUsageStats(cfg *Config) *LocalIndexUsageStats {
 	is := &LocalIndexUsageStats{
-		statsChan:    make(chan indexUse, cfg.ChannelSize),
-		st:           cfg.Setting,
-		testingKnobs: cfg.Knobs,
+		st: cfg.Setting,
 	}
 	is.mu.usageStats = make(map[roachpb.TableID]*tableIndexStats)
 
@@ -148,32 +126,9 @@ func NewLocalIndexUsageStatsFromExistingStats(
 	return s
 }
 
-// Start starts the background goroutine that is responsible for collecting
-// index usage statistics.
-func (s *LocalIndexUsageStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.startStatsIngestionLoop(ctx, stopper)
-}
-
 // RecordRead records a read operation on the specified index.
-func (s *LocalIndexUsageStats) RecordRead(ctx context.Context, key roachpb.IndexUsageKey) {
-	s.record(ctx, indexUse{
-		key:      key,
-		usageTyp: readOp,
-	})
-}
-
-func (s *LocalIndexUsageStats) record(ctx context.Context, payload indexUse) {
-	// If the index usage stats collection s disabled, we abort.
-	if !Enable.Get(&s.st.SV) {
-		return
-	}
-	select {
-	case s.statsChan <- payload:
-	default:
-		if log.V(1 /* level */) {
-			log.Infof(ctx, "index usage stats provider channel full, discarding new stats")
-		}
-	}
+func (s *LocalIndexUsageStats) RecordRead(key roachpb.IndexUsageKey) {
+	s.insertIndexUsage(key, readOp)
 }
 
 // Get returns the index usage statistics for a given key.
@@ -219,7 +174,6 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	for tableID := range s.mu.usageStats {
 		tableIDLists = append(tableIDLists, tableID)
 	}
-
 	if options.SortedTableID {
 		sort.Slice(tableIDLists, func(i, j int) bool {
 			return tableIDLists[i] < tableIDLists[j]
@@ -281,12 +235,17 @@ func (s *LocalIndexUsageStats) Reset() {
 	s.clear()
 }
 
-func (s *LocalIndexUsageStats) insertIndexUsage(idxUse *indexUse) {
-	tableStats := s.getStatsForTableID(idxUse.key.TableID, true /* createIfNotExists */, false /* unsafe */)
-	indexStats := tableStats.getStatsForIndexID(idxUse.key.IndexID, true /* createIfNotExists */, false /* unsafe */)
+func (s *LocalIndexUsageStats) insertIndexUsage(key roachpb.IndexUsageKey, usageTyp usageType) {
+	// If the index usage stats collection is disabled, we abort.
+	if !Enable.Get(&s.st.SV) {
+		return
+	}
+
+	tableStats := s.getStatsForTableID(key.TableID, true /* createIfNotExists */, false /* unsafe */)
+	indexStats := tableStats.getStatsForIndexID(key.IndexID, true /* createIfNotExists */, false /* unsafe */)
 	indexStats.Lock()
 	defer indexStats.Unlock()
-	switch idxUse.usageTyp {
+	switch usageTyp {
 	// TODO(azhng): include TotalRowsRead/TotalRowsWritten field once it s plumbed
 	//  into the SQL engine.
 	case readOp:
@@ -418,22 +377,4 @@ func (t *tableIndexStats) clear() {
 	defer t.Unlock()
 
 	t.stats = make(map[roachpb.IndexID]*indexStats, len(t.stats)/2)
-}
-
-func (s *LocalIndexUsageStats) startStatsIngestionLoop(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "index-usage-stats-ingest", func(ctx context.Context) {
-		for {
-			select {
-			case payload := <-s.statsChan:
-				s.insertIndexUsage(&payload)
-				if s.testingKnobs != nil && s.testingKnobs.OnIndexUsageStatsProcessedCallback != nil {
-					s.testingKnobs.OnIndexUsageStatsProcessedCallback(payload.key)
-				}
-			case <-stopper.ShouldQuiesce():
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	})
 }
