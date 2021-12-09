@@ -75,7 +75,8 @@ func init() {
 
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
-func Process(b BuildCtx, n tree.Statement) {
+func Process(b BuildCtx) {
+	n := b.GetStatement()
 	// Check if an entry exists for the statement type, in which
 	// case it is either fully or partially supported.
 	info, ok := supportedStatements[reflect.TypeOf(n)]
@@ -88,11 +89,8 @@ func Process(b BuildCtx, n tree.Statement) {
 	if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
 		panic(scerrors.NotImplementedError(n))
 	}
-
 	// Next invoke the callback function, with the concrete types.
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
 	fn.Call(in)
-	// Finalize, the event log state for the current statement.
-	b.FinalizeEventLogState(n)
 }

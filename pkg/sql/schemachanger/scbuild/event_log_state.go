@@ -13,7 +13,6 @@ package scbuild
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var _ scbuildstmt.EventLogState = (*eventLogState)(nil)
@@ -42,9 +41,4 @@ func (e *eventLogState) EventLogStateWithNewSourceElementID() scbuildstmt.EventL
 			SourceElementID: *e.sourceElementID,
 		},
 	}
-}
-
-func (e *eventLogState) FinalizeEventLogState(statement tree.Statement) {
-	e.statements[len(e.statements)-1].RedactedStatement =
-		string(e.astFormatter.FormatAstAsRedactableString(statement))
 }

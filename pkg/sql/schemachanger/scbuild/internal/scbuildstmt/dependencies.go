@@ -34,6 +34,7 @@ type BuildCtx interface {
 	Dependencies
 	BuilderState
 	EventLogState
+	TreeAnnotator
 
 	TreeContextBuilder
 	PrivilegeChecker
@@ -145,8 +146,6 @@ type EventLogState interface {
 	// EventLogStateWithNewSourceElementID returns an EventLogState with an
 	// incremented source element ID
 	EventLogStateWithNewSourceElementID() EventLogState
-
-	FinalizeEventLogState(statement tree.Statement)
 }
 
 // TreeContextBuilder exposes convenient tree-package context builder methods.
@@ -278,5 +277,20 @@ type TableElementIDGenerator interface {
 type AstFormatter interface {
 	// FormatAstAsRedactableString formats a tree.Statement into SQL with fully
 	// qualified names, where parts can be redacted.
-	FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString
+	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
+}
+
+// TreeAnnotator provides interfaces to be able to modify the AST safely,
+// by providing a copy and support for adding annotations.
+type TreeAnnotator interface {
+	// GetStatement returns the modifiable AST statement.
+	GetStatement() tree.Statement
+
+	// SetUnresolvedNameAnnotation sets an annotation on an unresolved object name.
+	SetUnresolvedNameAnnotation(unresolvedName *tree.UnresolvedObjectName, ann interface{})
+
+	// MarkNameAsNonExistent indicates that a table name is non-existent
+	// in the AST, which will cause it to skip full namespace resolution
+	// validation.
+	MarkNameAsNonExistent(name *tree.TableName)
 }

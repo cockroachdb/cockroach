@@ -27,12 +27,20 @@ func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
 ) (_ scpb.State, err error) {
 	bs := newBuilderState(initial)
-	els := newEventLogState(dependencies, initial, n, dependencies.AstFormatter())
+	els := newEventLogState(dependencies, initial, n)
+	// TODO(fqazi): The optimizer can end up already modifying the statement above
+	// to fully resolve names. We need to take this into account for CTAS/CREATE
+	// VIEW statements.
+	an, err := newAstAnnotator(n)
+	if err != nil {
+		return scpb.State{}, err
+	}
 	b := buildCtx{
 		Context:       ctx,
 		Dependencies:  dependencies,
 		BuilderState:  bs,
 		EventLogState: els,
+		TreeAnnotator: an,
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -43,7 +51,10 @@ func Build(
 			}
 		}
 	}()
-	scbuildstmt.Process(b, n)
+	scbuildstmt.Process(b)
+	an.ValidateAnnotations()
+	els.statements[len(els.statements)-1].RedactedStatement =
+		string(els.astFormatter.FormatAstAsRedactableString(b.GetStatement(), &an.annotation))
 	return scpb.State{
 		Nodes:         bs.output,
 		Statements:    els.statements,
@@ -105,7 +116,7 @@ type eventLogState struct {
 
 // newEventLogState constructs an eventLogState.
 func newEventLogState(
-	d scbuildstmt.Dependencies, initial scpb.State, n tree.Statement, astFormatter AstFormatter,
+	d scbuildstmt.Dependencies, initial scpb.State, n tree.Statement,
 ) *eventLogState {
 	stmts := initial.Clone().Statements
 	els := eventLogState{
@@ -122,7 +133,7 @@ func newEventLogState(
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
-		astFormatter: astFormatter,
+		astFormatter: d.AstFormatter(),
 	}
 	*els.sourceElementID = 1
 	return &els
@@ -136,6 +147,7 @@ type buildCtx struct {
 	scbuildstmt.Dependencies
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
+	scbuildstmt.TreeAnnotator
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
@@ -146,6 +158,7 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		Context:       b.Context,
 		Dependencies:  b.Dependencies,
 		BuilderState:  b.BuilderState,
+		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
 }
