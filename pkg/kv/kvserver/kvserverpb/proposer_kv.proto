@@ -125,6 +125,7 @@ message ReplicatedEvalResult {
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
+  bool is_probe = 23;
   // The timestamp at which this command is writing. Used to verify the validity
   // of the command against the GC threshold and to update the followers'
   // clocks. If the request that produced this command is not a write that cares

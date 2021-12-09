@@ -263,6 +263,7 @@ go_test(
         "replica_learner_test.go",
         "replica_lease_renewal_test.go",
         "replica_metrics_test.go",
+        "replica_probe_test.go",
         "replica_proposal_buf_test.go",
         "replica_protected_timestamp_test.go",
         "replica_raft_test.go",

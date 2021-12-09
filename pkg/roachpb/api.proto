@@ -170,6 +170,23 @@ message GetResponse {
   Value intent_value = 3;
 }
 
+// A ProbeRequest is an internal request type used to send a replicated
+// no-op through a Range as a means of probing write availability. The
+// request will be serialized like a regular write, i.e. will acquire
+// latches, and declare key access, but it will not check locks (i.e.
+// if an intent exists on the key that is being probed, the probe will
+// not observe it). ProbeRequest can be served by any Replica including
+// followers, i.e. it can be used to verify that a given Replica is able
+// to access the replication layer.
+message ProbeRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ProbeResponse is the response to a ProbeRequest.
+message ProbeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -2004,6 +2021,7 @@ message RequestUnion {
     QueryResolvedTimestampRequest query_resolved_timestamp = 51;
     ScanInterleavedIntentsRequest scan_interleaved_intents = 52;
     BarrierRequest barrier = 53;
+    ProbeRequest probe = 54;
   }
   reserved 8, 15, 23, 25, 27, 31, 34;
 }
@@ -2057,6 +2075,7 @@ message ResponseUnion {
     QueryResolvedTimestampResponse query_resolved_timestamp = 51;
     ScanInterleavedIntentsResponse scan_interleaved_intents = 52;
     BarrierResponse barrier = 53;
+    ProbeResponse probe = 54;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }
