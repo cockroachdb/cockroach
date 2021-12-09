@@ -17,6 +17,7 @@ import (
 )
 
 type DRPCNode struct {
+	roachpb.DRPCInternalUnimplementedServer
 	n *Node
 	// struct fields
 }
@@ -25,5 +26,5 @@ type DRPCNode struct {
 func (s *DRPCNode) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	return ba.CreateReply(), nil
+	return s.n.Batch(ctx, ba)
 }

@@ -1643,11 +1643,21 @@ func (s *Server) PreStart(ctx context.Context) error {
 	{
 		m := drpcmux.New()
 
-		// TODO register
+		if err := roachpb.DRPCRegisterInternal(m, &DRPCNode{n: s.node}); err != nil {
+			return err
+		}
 
 		srv := drpcserver.New(m)
 
-		lis, err := net.Listen("tcp", ":26262")
+		_, p, err := net.SplitHostPort(s.cfg.Addr)
+		if err != nil {
+			return err
+		}
+		pi, err := strconv.Atoi(p)
+		if err != nil {
+			return err
+		}
+		lis, err := net.Listen("tcp", ":"+strconv.Itoa(pi+100))
 		if err != nil {
 			return err
 		}
