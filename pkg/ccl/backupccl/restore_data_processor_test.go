@@ -371,7 +371,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			atomic.StoreInt64(&remainingAmbiguousSubReqs, initialAmbiguousSubReqs)
 
 			mockRestoreDataSpec := execinfrapb.RestoreDataSpec{
-				Rekeys: rekeys,
+				TableRekeys: rekeys,
 			}
 			restoreSpanEntry := execinfrapb.RestoreSpanEntry{
 				Span: roachpb.Span{Key: first, EndKey: last.PrefixEnd()},
@@ -392,7 +392,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			require.NoError(t, mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, ssts))
 			close(ssts)
 			sst := <-ssts
-			rewriter, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.Rekeys)
+			rewriter, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.TableRekeys, mockRestoreDataSpec.TenantRekeys)
 			require.NoError(t, err)
 			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(ctx, rewriter, sst)
 			require.NoError(t, err)
