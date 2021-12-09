@@ -119,11 +119,11 @@ func TestChangefeedBasics(t *testing.T) {
 		})
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
-	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	//t.Run(`sinkless`, sinklessTest(testFn))
+	//t.Run(`enterprise`, enterpriseTest(testFn))
+	//t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	//t.Run(`kafka`, kafkaTest(testFn))
+	//t.Run(`webhook`, webhookTest(testFn))
 	t.Run(`pubsub`, pubsubTest(testFn))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
