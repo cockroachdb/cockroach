@@ -760,13 +760,6 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		columnsByID[col.GetID()] = col
 	}
 
-	// Verify that the primary index columns are not virtual.
-	for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
-		if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
-			return errors.Newf("primary index column %q cannot be virtual", col.GetName())
-		}
-	}
-
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, idx := range desc.NonDropIndexes() {
@@ -866,12 +859,31 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), idx.GetPredicate())
 			}
 		}
-		// Ensure that indexes do not STORE virtual columns.
-		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
-				return errors.Newf("index %q cannot store virtual column %d", idx.GetName(), col)
+
+		// Ensure that indexes do not STORE virtual columns as suffix columns unless
+		// they are primary key columns or future primary key columns (when `ALTER
+		// PRIMARY KEY` is executed)
+		primaryKeyColIDs := catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...)
+		if desc.FutureNewPrimaryKey != nil {
+			primaryKeyColIDs.UnionWith(catalog.MakeTableColSet(desc.FutureNewPrimaryKey.KeyColumnIDs...))
+		}
+		for _, mut := range desc.Mutations {
+			if mut.GetPrimaryKeySwap() != nil {
+				newPKIdxID := mut.GetPrimaryKeySwap().NewPrimaryIndexId
+				newPK, err := desc.FindIndexWithID(newPKIdxID)
+				if err != nil {
+					return err
+				}
+				primaryKeyColIDs.UnionWith(newPK.CollectKeyColumnIDs())
 			}
 		}
+
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if col := columnsByID[colID]; col != nil && !primaryKeyColIDs.Contains(colID) && col.IsVirtual() {
+				return errors.Newf("index %q cannot store virtual column %q", idx.GetName(), col.GetName())
+			}
+		}
+		// Ensure that indexes do not STORE virtual columns
 		for i, colID := range idx.IndexDesc().StoreColumnIDs {
 			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
 				return errors.Newf("index %q cannot store virtual column %q",

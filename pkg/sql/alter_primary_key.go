@@ -167,6 +167,9 @@ func (p *planner) AlterPrimaryKey(
 		Type:              descpb.IndexDescriptor_FORWARD,
 		Version:           descpb.StrictIndexColumnIDGuaranteesVersion,
 	}
+	// `FutureNewPrimaryKey` is only utilized to help pass index validation.
+	tableDesc.FutureNewPrimaryKey = newPrimaryIndexDesc
+	defer func() { tableDesc.FutureNewPrimaryKey = nil }()
 
 	// If the new index is requested to be sharded, set up the index descriptor
 	// to be sharded, and add the new shard column if it is missing.
@@ -187,11 +190,10 @@ func (p *planner) AlterPrimaryKey(
 		}
 		alterPKNode.Columns = newColumns
 		if newColumn {
-			if err := p.setupFamilyAndConstraintForShard(
+			if err := p.setupConstraintForShard(
 				ctx,
 				tableDesc,
 				shardCol,
-				newPrimaryIndexDesc.Sharded.ColumnNames,
 				newPrimaryIndexDesc.Sharded.ShardBuckets,
 			); err != nil {
 				return err

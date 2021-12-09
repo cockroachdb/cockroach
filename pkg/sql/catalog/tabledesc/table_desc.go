@@ -40,6 +40,19 @@ type wrapper struct {
 	columnCache   *columnCache
 
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
+
+	// FutureNewPrimaryKey should only be used for validation purpose when alter a
+	// primary key. To allow virtual columns in primary key, we need to allow
+	// virtual primary key columns in an index's suffix columns so that index scan
+	// can still work as before. However, we have validations rejecting virtual
+	// columns from suffix columns. So we want to allow virtual columns only from
+	// primary key. The special case here is `ALTER PRIMARY KEY`, because it
+	// creates a bunch of intermediate indexes referencing columns from the future
+	// new primary key which is not recorded by the table descriptor before the
+	// primary key swap mutation is created. So we need to special field to hold
+	// the temporary future primary key so that we can pass index validations without
+	// plumbing through the validation interface.
+	FutureNewPrimaryKey *descpb.IndexDescriptor
 }
 
 // IsUncommittedVersion implements the catalog.Descriptor interface.

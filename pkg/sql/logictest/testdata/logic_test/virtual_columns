@@ -17,14 +17,6 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error primary index column "v" cannot be virtual
-CREATE TABLE t (
-  a INT,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  PRIMARY KEY (b,v)
-)
-
 statement error index "t_b_idx" cannot store virtual column "v"
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -1226,3 +1218,53 @@ INSERT INTO t67528 (s) VALUES ('')
 
 statement ok
 CREATE INDEX ON t67528 (v DESC)
+
+subtest virtual_column_in_primary_key
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t (
+  a INT,
+  b INT,
+  k INT AS (a+b) VIRTUAL,
+  PRIMARY KEY (k),
+  INDEX t_idx_a (a)
+)
+
+statement ok
+INSERT INTO t VALUES (1,2), (3,4)
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_a
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+UPDATE t SET a = 100 WHERE a = 1
+
+query III colnames,rowsort
+SELECT * FROM t
+----
+a    b  k
+3    4  7
+100  2  102
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_a
+----
+a    b  k
+3    4  7
+100  2  102
+
+statement ok
+DROP TABLE t
