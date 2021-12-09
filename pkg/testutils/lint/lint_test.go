@@ -1296,6 +1296,10 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestMisspell", func(t *testing.T) {
+		skip.IgnoreLint(t, `this lint causes extra rounds through CI for which the cost-
+benefit analysis is not favorable. We could re-instate this as a nightly lint
+instead.
+`)
 		t.Parallel()
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
