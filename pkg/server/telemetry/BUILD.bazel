@@ -24,6 +24,7 @@ go_test(
     srcs = ["features_test.go"],
     deps = [
         ":telemetry",
+        "//pkg/util/metric",
         "@com_github_stretchr_testify//require",
     ],
 )

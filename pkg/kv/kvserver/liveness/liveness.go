@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -125,8 +126,8 @@ type Metrics struct {
 	LiveNodes          *metric.Gauge
 	HeartbeatsInFlight *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
-	HeartbeatFailures  *metric.Counter
-	EpochIncrements    *metric.Counter
+	HeartbeatFailures  telemetry.CounterWithMetric
+	EpochIncrements    telemetry.CounterWithMetric
 	HeartbeatLatency   *metric.Histogram
 }
 
@@ -281,8 +282,8 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
 		HeartbeatsInFlight: metric.NewGauge(metaHeartbeatsInFlight),
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
-		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
-		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
+		HeartbeatFailures:  telemetry.NewCounterWithMetric(metaHeartbeatFailures),
+		EpochIncrements:    telemetry.NewCounterWithMetric(metaEpochIncrements),
 		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, opts.HistogramWindowInterval),
 	}
 	nl.mu.nodes = make(map[roachpb.NodeID]Record)
@@ -955,7 +956,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 			nl.metrics.HeartbeatSuccesses.Inc(1)
 			return nil
 		}
-		nl.metrics.HeartbeatFailures.Inc(1)
+		nl.metrics.HeartbeatFailures.Inc()
 		return err
 	}
 
@@ -1188,7 +1189,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 
 	log.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
 	nl.maybeUpdate(ctx, written)
-	nl.metrics.EpochIncrements.Inc(1)
+	nl.metrics.EpochIncrements.Inc()
 	return nil
 }
 

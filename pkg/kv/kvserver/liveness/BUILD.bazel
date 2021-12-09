@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
+        "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/contextutil",
