@@ -52,11 +52,10 @@ func (p *MockPubsubSink) Close() {
 
 // Dial opens a subscriber using the url of the MockPubsubSink
 func (p *MockPubsubSink) Dial() error {
-	var err error
-	p.sub, err = pubsub.OpenSubscription(p.ctx, p.url)
-	if err != nil {
-		return err
-	}
+	p.groupCtx.GoCtx(func(ctx context.Context) error {
+		p.lazyDial()
+		return nil
+	})
 	p.groupCtx.GoCtx(func(ctx context.Context) error {
 		p.receive()
 		return nil
@@ -64,9 +63,28 @@ func (p *MockPubsubSink) Dial() error {
 	return nil
 }
 
+func (p *MockPubsubSink) lazyDial() {
+	var err error
+	for {
+		select {
+		case <-p.ctx.Done():
+			break
+		default:
+		}
+		p.sub, err = pubsub.OpenSubscription(p.ctx, p.url)
+		if err == nil {
+			break
+		}
+	}
+	return
+}
+
 // receive loops to read in messages
 func (p *MockPubsubSink) receive() {
 	for {
+		if p.sub == nil {
+			continue
+		}
 		msg, err := p.sub.Receive(p.ctx)
 		if err != nil {
 			select {
