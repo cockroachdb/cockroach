@@ -11,7 +11,6 @@
 package rttanalysis
 
 import (
-	"context"
 	"encoding/csv"
 	"flag"
 	"os"
@@ -81,12 +80,9 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
 	isRewrite := *rewriteFlag
 	for b, cases := range r.r {
-		quota, err := limiter.Acquire(context.Background(), 1)
-		require.NoError(t, err)
 		wg.Add(1)
 		go func(b string, cases []RoundTripBenchTestCase) {
 			defer wg.Done()
-			defer quota.Release()
 			t.Run(b, func(t *testing.T) {
 				runs := 1
 				if isRewrite {
