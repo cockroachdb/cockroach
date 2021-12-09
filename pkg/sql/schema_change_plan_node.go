@@ -36,8 +36,12 @@ import (
 )
 
 // FormatAstAsRedactableString implements scbuild.AstFormatter
-func (p *planner) FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString {
-	return formatStmtKeyAsRedactableString(p.getVirtualTabler(), statement, p.EvalContext().Annotations)
+func (p *planner) FormatAstAsRedactableString(
+	statement tree.Statement, annotations *tree.Annotations,
+) redact.RedactableString {
+	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
+		statement,
+		annotations)
 }
 
 // SchemaChange provides the planNode for the new schema changer.

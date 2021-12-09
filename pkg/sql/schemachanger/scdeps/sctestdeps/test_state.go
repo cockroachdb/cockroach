@@ -248,10 +248,17 @@ func (s *TestState) JobRecord(jobID jobspb.JobID) *jobs.Record {
 }
 
 // FormatAstAsRedactableString implements scbuild.AstFormatter
-func (s *TestState) FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString {
+func (s *TestState) FormatAstAsRedactableString(
+	statement tree.Statement, ann *tree.Annotations,
+) redact.RedactableString {
 	// Return the SQL back non-redacted and not fully resolved for the purposes
 	// of testing.
-	return redact.RedactableString(statement.String())
+	f := tree.NewFmtCtx(
+		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode,
+		tree.FmtAnnotations(ann))
+	f.FormatNode(statement)
+	formattedRedactableStatementString := f.CloseAndGetString()
+	return redact.RedactableString(formattedRedactableStatementString)
 }
 
 // AstFormatter dummy formatter for AST nodes.

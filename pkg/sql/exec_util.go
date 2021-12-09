@@ -2999,6 +2999,8 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	return f.CloseAndGetString(), true
 }
 
+// formatStmtKeyAsRedactableString given an AST node this function will fully
+// qualify names using annotations to format it out into a redactable string.
 func formatStmtKeyAsRedactableString(
 	vt VirtualTabler, rootAST tree.Statement, ann *tree.Annotations,
 ) redact.RedactableString {

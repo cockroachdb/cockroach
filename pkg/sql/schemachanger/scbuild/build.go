@@ -28,11 +28,13 @@ func Build(
 ) (_ scpb.State, err error) {
 	bs := newBuilderState(initial)
 	els := newEventLogState(dependencies, initial, n, dependencies.AstFormatter())
+	an := newAstAnnotator()
 	b := buildCtx{
-		Context:       ctx,
-		Dependencies:  dependencies,
-		BuilderState:  bs,
-		EventLogState: els,
+		Context:            ctx,
+		Dependencies:       dependencies,
+		BuilderState:       bs,
+		EventLogState:      els,
+		AnnotationProvider: an,
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -136,6 +138,7 @@ type buildCtx struct {
 	scbuildstmt.Dependencies
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
+	scbuildstmt.AnnotationProvider
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
@@ -143,9 +146,10 @@ var _ scbuildstmt.BuildCtx = buildCtx{}
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 	return buildCtx{
-		Context:       b.Context,
-		Dependencies:  b.Dependencies,
-		BuilderState:  b.BuilderState,
-		EventLogState: b.EventLogStateWithNewSourceElementID(),
+		Context:            b.Context,
+		Dependencies:       b.Dependencies,
+		BuilderState:       b.BuilderState,
+		AnnotationProvider: b.AnnotationProvider,
+		EventLogState:      b.EventLogStateWithNewSourceElementID(),
 	}
 }

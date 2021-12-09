@@ -23,14 +23,17 @@ import (
 
 // DropSequence implements DROP SEQUENCE.
 func DropSequence(b BuildCtx, n *tree.DropSequence) {
-	for _, name := range n.Names {
-		_, seq := b.ResolveSequence(name.ToUnresolvedObjectName(), ResolveParams{
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		prefix, seq := b.ResolveSequence(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
 		if seq == nil {
+			b.MarkTableNameAsNonExistent(name)
 			continue
 		}
+		name.ObjectNamePrefix = prefix.NamePrefix()
 		dropSequence(b, seq, n.DropBehavior)
 		b.IncrementSubWorkID()
 	}
