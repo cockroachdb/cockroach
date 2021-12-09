@@ -55,12 +55,11 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 }
 
 func BenchmarkMVCCScan_Pebble(b *testing.B) {
-	skip.WithIssue(b, 51840, "TODO: fix benchmark")
-
+	skip.UnderShort(b)
 	ctx := context.Background()
-	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
+	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			for _, numVersions := range []int{1, 2, 10, 100} {
+			for _, numVersions := range []int{1, 2, 10, 100, 1000} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
@@ -81,12 +80,11 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 }
 
 func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
-	skip.WithIssue(b, 51840, "TODO: fix benchmark")
-
+	skip.UnderShort(b)
 	ctx := context.Background()
-	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
+	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			for _, numVersions := range []int{1, 2, 10, 100} {
+			for _, numVersions := range []int{1, 2, 10, 100, 1000} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
