@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -128,6 +129,8 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	case "apply-plan":
 		// Create a plan from listed replicas.
 		out, err = e.handleApplyPlan(t, d)
+	case "dump-events":
+		out, err = e.dumpRecoveryEvents(t, d)
 	default:
 		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
 	}
@@ -425,8 +428,9 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	nodes := e.groupStoresByNodeStore(t, stores)
+	updateTime := timeutil.Now()
 	for nodeID, stores := range nodes {
-		_, err := PrepareUpdateReplicas(ctx, e.plan, nodeID, stores)
+		_, err := PrepareUpdateReplicas(ctx, e.plan, uuid.DefaultGenerator, updateTime, nodeID, stores)
 		if err != nil {
 			return "", err
 		}
@@ -442,6 +446,28 @@ func (e *quorumRecoveryEnv) cleanupStores() {
 		store.engine.Close()
 	}
 	e.stores = nil
+}
+
+func (e *quorumRecoveryEnv) dumpRecoveryEvents(
+	t *testing.T, d datadriven.TestData,
+) (string, error) {
+	ctx := context.Background()
+
+	var events []string
+	logEvents := func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) error {
+		event := record.AsStructuredLog()
+		events = append(events, fmt.Sprintf("Updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
+			event.RangeID, event.StartKey, event.StoreID, event.UpdatedReplicaID))
+		return nil
+	}
+
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	for _, store := range stores {
+		if _, err := RegisterOfflineRecoveryEvents(ctx, e.stores[store].engine, logEvents, true); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(events, "\n"), nil
 }
 
 func descriptorView(desc roachpb.RangeDescriptor) storeDescriptorView {

@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -411,16 +413,16 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 	var localNodeID roachpb.NodeID
 	batches := make(map[roachpb.StoreID]storage.Batch)
 	for _, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
-		db, err := OpenExistingStore(storeSpec.Path, stopper, false /* readOnly */)
+		store, err := OpenExistingStore(storeSpec.Path, stopper, false /* readOnly */)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)
 		}
-		batch := db.NewBatch()
-		defer db.Close()
+		batch := store.NewBatch()
+		defer store.Close()
 		defer batch.Close()
 
-		storeIdent, err := kvserver.ReadStoreIdent(cmd.Context(), db)
+		storeIdent, err := kvserver.ReadStoreIdent(cmd.Context(), store)
 		if err != nil {
 			return err
 		}
@@ -434,8 +436,9 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 		batches[storeIdent.StoreID] = batch
 	}
 
+	updateTime := timeutil.Now()
 	prepReport, err := loqrecovery.PrepareUpdateReplicas(
-		cmd.Context(), nodeUpdates, localNodeID, batches)
+		cmd.Context(), nodeUpdates, uuid.DefaultGenerator, updateTime, localNodeID, batches)
 	if err != nil {
 		return err
 	}
