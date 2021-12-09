@@ -29,7 +29,7 @@ import (
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
-	_, rel, idx := b.ResolveIndex(n.Table.ToUnresolvedObjectName(), n.Name, ResolveParams{
+	prefix, rel, idx := b.ResolveIndex(n.Table.ToUnresolvedObjectName(), n.Name, ResolveParams{
 		IsExistenceOptional: true,
 		RequiredPrivilege:   privilege.CREATE,
 	})
@@ -37,6 +37,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		// Table must exist.
 		panic(sqlerrors.NewUndefinedRelationError(n.Table.ToUnresolvedObjectName()))
 	}
+	// Mutate the AST to have the fully resolved name from above, which will be
+	// used for both event logging and errors.
+	n.Table.ObjectNamePrefix = prefix.NamePrefix()
 	if idx != nil {
 		if n.IfNotExists {
 			return

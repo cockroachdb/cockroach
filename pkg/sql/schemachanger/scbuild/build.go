@@ -28,11 +28,19 @@ func Build(
 ) (_ scpb.State, err error) {
 	bs := newBuilderState(initial)
 	els := newEventLogState(dependencies, initial, n, dependencies.AstFormatter())
+	// TODO(fqazi): The optimizer can end up already modifying the statement above
+	// to fully resolve names. We need to take this into account for CTAS/CREATE
+	// VIEW statements.
+	an, err := newAstAnnotator(n)
+	if err != nil {
+		return scpb.State{}, err
+	}
 	b := buildCtx{
 		Context:       ctx,
 		Dependencies:  dependencies,
 		BuilderState:  bs,
 		EventLogState: els,
+		TreeAnnotator: an,
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -43,7 +51,11 @@ func Build(
 			}
 		}
 	}()
-	scbuildstmt.Process(b, n)
+	scbuildstmt.Process(b, an.GetStatement())
+	// Validate the annotations generated after processing the statement.
+	an.ValidateAnnotations()
+	// Finalize, the event log state for the current statement.
+	els.FinalizeEventLogState(an.GetStatement(), b.GetAnnotations())
 	return scpb.State{
 		Nodes:         bs.output,
 		Statements:    els.statements,
@@ -136,6 +148,7 @@ type buildCtx struct {
 	scbuildstmt.Dependencies
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
+	scbuildstmt.TreeAnnotator
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
@@ -146,6 +159,7 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		Context:       b.Context,
 		Dependencies:  b.Dependencies,
 		BuilderState:  b.BuilderState,
+		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
 }

@@ -982,7 +982,7 @@ query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog;
 ----
-1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW v1ev CASCADE", "User": "root", "ViewName": "test.public.v1ev"}
+1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "User": "root", "ViewName": "test.public.v1ev"}
 
 statement ok
 CREATE VIEW v1ev AS (SELECT name FROM T1EV);
@@ -1001,8 +1001,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t2ev", "User": "root"}
-1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t1ev", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t1ev", "User": "root"}
 
 statement ok
 CREATE TABLE fooev (i INT PRIMARY KEY);
