@@ -168,9 +168,11 @@ func NewMaterializer(
 	m.Init(
 		m,
 		flowCtx,
-		// Materializer doesn't modify the eval context, so it is safe to reuse
-		// the one from the flow context.
-		flowCtx.EvalCtx,
+		// When the materializer is created in the middle of the chain of
+		// operators, it will modify the eval context when it is done draining,
+		// so we have to give it a copy to preserve the "global" eval context
+		// from being mutated.
+		flowCtx.NewEvalCtx(),
 		processorID,
 		nil, /* output */
 		execinfra.ProcStateOpts{
