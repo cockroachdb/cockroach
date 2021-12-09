@@ -18,6 +18,7 @@ import (
 
 // MockPubsubSink is the Webhook sink used in tests.
 type MockPubsubSink struct {
+	subChan  chan *pubsub.Subscription
 	sub      *pubsub.Subscription
 	ctx      context.Context
 	groupCtx ctxgroup.Group
@@ -35,7 +36,8 @@ func MakeMockPubsubSink(ctx context.Context, url string) (*MockPubsubSink, error
 	ctx, shutdown := context.WithCancel(ctx)
 	groupCtx := ctxgroup.WithContext(ctx)
 	p := &MockPubsubSink{
-		ctx: ctx, errChan: make(chan error, 1), url: url, shutdown: shutdown, groupCtx: groupCtx,
+		ctx: ctx, errChan: make(chan error, 1), url: url, shutdown: shutdown,
+		groupCtx: groupCtx, subChan: make(chan *pubsub.Subscription, 1),
 	}
 	return p, nil
 }
@@ -48,6 +50,7 @@ func (p *MockPubsubSink) Close() {
 	p.shutdown()
 	_ = p.groupCtx.Wait()
 	close(p.errChan)
+	close(p.subChan)
 }
 
 // Dial opens a subscriber using the url of the MockPubsubSink
@@ -64,15 +67,15 @@ func (p *MockPubsubSink) Dial() error {
 }
 
 func (p *MockPubsubSink) lazyDial() {
-	var err error
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
 		default:
 		}
-		p.sub, err = pubsub.OpenSubscription(p.ctx, p.url)
+		sub, err := pubsub.OpenSubscription(p.ctx, p.url)
 		if err == nil {
+			p.subChan <- sub
 			return
 		}
 	}
@@ -80,14 +83,16 @@ func (p *MockPubsubSink) lazyDial() {
 
 // receive loops to read in messages
 func (p *MockPubsubSink) receive() {
+	select {
+	case <-p.ctx.Done():
+		return
+	case p.sub = <-p.subChan:
+	}
 	for {
-		if p.sub == nil {
-			select {
-			case <-p.ctx.Done():
-				return
-			default:
-				continue
-			}
+		select {
+		case <-p.ctx.Done():
+			return
+		default:
 		}
 		msg, err := p.sub.Receive(p.ctx)
 		if err != nil {
