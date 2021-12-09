@@ -462,7 +462,11 @@ func resolveCast(
 	case toFamily == types.TupleFamily && fromFamily == types.TupleFamily:
 		// Casts from tuple to tuple type succeed if the lengths of the tuples are
 		// the same, and if there are casts resolvable across all of the elements
-		// pointwise.
+		// pointwise. Casts to AnyTuple are always allowed since they are
+		// implemented as a no-op.
+		if castTo == types.AnyTuple {
+			return nil
+		}
 		fromTuple := castFrom.TupleContents()
 		toTuple := castTo.TupleContents()
 		if len(fromTuple) != len(toTuple) {
@@ -2465,10 +2469,6 @@ func typeCheckTupleComparison(
 func typeCheckSameTypedTupleExprs(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T, exprs ...Expr,
 ) ([]TypedExpr, *types.T, error) {
-	// Hold the resolved type expressions of the provided exprs, in order.
-	// TODO(nvanbenschoten): Look into reducing allocations here.
-	typedExprs := make([]TypedExpr, len(exprs))
-
 	// All other exprs must be tuples.
 	first := exprs[0].(*Tuple)
 	if err := checkAllExprsAreTuplesOrNulls(ctx, semaCtx, exprs[1:]); err != nil {
@@ -2491,7 +2491,9 @@ func typeCheckSameTypedTupleExprs(
 		sameTypeExprs = sameTypeExprs[:0]
 		sameTypeExprsIndices = sameTypeExprsIndices[:0]
 		for exprIdx, expr := range exprs {
-			if expr == DNull {
+			// Skip expressions that are not Tuple expressions (e.g. NULLs or CastExpr).
+			// They are checked at the end of this function.
+			if _, isTuple := expr.(*Tuple); !isTuple {
 				continue
 			}
 			sameTypeExprs = append(sameTypeExprs, expr.(*Tuple).Exprs[elemIdx])
@@ -2511,11 +2513,24 @@ func typeCheckSameTypedTupleExprs(
 		}
 		resTypes.TupleContents()[elemIdx] = resType
 	}
+	// Hold the resolved type expressions of the provided exprs, in order.
+	// TODO(nvanbenschoten): Look into reducing allocations here.
+	typedExprs := make([]TypedExpr, len(exprs))
 	for tupleIdx, expr := range exprs {
-		if expr != DNull {
-			expr.(*Tuple).typ = resTypes
+		if t, isTuple := expr.(*Tuple); isTuple {
+			// For Tuple exprs we can update the type with what we've inferred.
+			t.typ = resTypes
+			typedExprs[tupleIdx] = t
+		} else {
+			typedExpr, err := expr.TypeCheck(ctx, semaCtx, resTypes)
+			if err != nil {
+				return nil, nil, err
+			}
+			if !typedExpr.ResolvedType().EquivalentOrNull(resTypes, true /* allowNullTupleEquivalence */) {
+				return nil, nil, unexpectedTypeError(expr, resTypes, typedExpr.ResolvedType())
+			}
+			typedExprs[tupleIdx] = typedExpr
 		}
-		typedExprs[tupleIdx] = expr.(TypedExpr)
 	}
 	return typedExprs, resTypes, nil
 }
@@ -2527,25 +2542,29 @@ func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, ex
 		_, isTuple := expr.(*Tuple)
 		isNull := expr == DNull
 		if !(isTuple || isNull) {
+			// We avoid calling TypeCheck on Tuple exprs since that causes the
+			// types to be resolved, which we only want to do later in type-checking.
 			typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.Any)
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError(expr, types.AnyTuple, typedExpr.ResolvedType())
+			if typedExpr.ResolvedType().Family() != types.TupleFamily {
+				return unexpectedTypeError(expr, types.AnyTuple, typedExpr.ResolvedType())
+			}
 		}
 	}
 	return nil
 }
 
 // checkAllTuplesHaveLength checks that all tuples in exprs have the expected
-// length. Note that all nulls are skipped in this check.
+// length. We only need to check Tuple exprs, since other expressions like
+// CastExpr are handled later in type-checking
 func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 	for _, expr := range exprs {
-		if expr == DNull {
-			continue
-		}
-		if err := checkTupleHasLength(expr.(*Tuple), expectedLen); err != nil {
-			return err
+		if t, isTuple := expr.(*Tuple); isTuple {
+			if err := checkTupleHasLength(t, expectedLen); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -2572,14 +2572,6 @@ bool
 query error pq: more than one function named 'unnest'
 SELECT pg_get_function_result('unnest'::regproc);
 
-# Regression test for #40297.
-statement ok
-CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
-
-query I
-SELECT COALESCE((SELECT ()), NULL) FROM t40297
-----
-
 query T
 SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
 ----
