@@ -52,15 +52,21 @@ func main() {
 	})
 }
 
-const baseImportPath = "github.com/cockroachdb/cockroach/pkg/"
-
-var importPaths = gotool.ImportPaths([]string{baseImportPath + "..."})
+func getBaseImportPath() string {
+	if bazel.BuiltWithBazel() {
+		return "./"
+	}
+	return "github.com/cockroachdb/cockroach/pkg/"
+}
 
 func runTC(queueBuild func(string, map[string]string)) {
 	buildID := "Cockroach_Nightlies_Stress"
 	if bazel.BuiltWithBazel() {
 		buildID = "Cockroach_Nightlies_StressBazel"
 	}
+	baseImportPath := getBaseImportPath()
+	importPaths := gotool.ImportPaths([]string{baseImportPath + "..."})
+
 	// Queue stress builds. One per configuration per package.
 	for _, importPath := range importPaths {
 		// By default, run each package for up to 100 iterations.
