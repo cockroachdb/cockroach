@@ -1649,7 +1649,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 		srv := drpcserver.New(m)
 
-		_, p, err := net.SplitHostPort(s.cfg.Addr)
+		h, p, err := net.SplitHostPort(s.cfg.Addr)
 		if err != nil {
 			return err
 		}
@@ -1657,7 +1657,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		lis, err := net.Listen("tcp", ":"+strconv.Itoa(pi+100))
+		lis, err := net.Listen("tcp", h+":"+strconv.Itoa(pi+100))
 		if err != nil {
 			return err
 		}
