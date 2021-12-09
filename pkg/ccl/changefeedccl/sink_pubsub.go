@@ -46,7 +46,7 @@ const authDefault = "default"
 const gcpScheme = "gcppubsub"
 const memScheme = "mem"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
-const numOfWorkers = 1024
+const numOfWorkers = 128
 
 // isPubsubSInk returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
