@@ -39,15 +39,6 @@ func maybeRedactRecording(tenID roachpb.TenantID, rec tracing.Recording) {
 					field.Value = TraceRedactedMarker
 					continue
 				}
-				if !sp.RedactableLogs {
-					// If we're handling a span that originated from an (early patch
-					// release) 22.1 node, all the containing information will be
-					// stripped. Note that this is not the common path here, as most
-					// information in the trace will be from the local node, which
-					// always creates redactable logs.
-					field.Value = TraceRedactedMarker
-					continue
-				}
 				field.Value = field.Value.Redact()
 			}
 		}
