@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.blobs;
-option go_package = "blobspb";
+option go_package = "./blobspb";
 
 import "gogoproto/gogo.proto";
 

@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.roachpb;
-option go_package = "roachpb";
+option go_package = "./roachpb";
 
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";

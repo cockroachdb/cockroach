@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.util.log.eventpb;
-option go_package = "eventpb";
+option go_package = "./eventpb";
 
 import "gogoproto/gogo.proto";
 
