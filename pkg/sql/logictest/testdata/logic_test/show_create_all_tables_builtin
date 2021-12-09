@@ -55,15 +55,17 @@ CREATE TABLE public.parent (
     FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-                                                                                                                                                                          x INT8 NULL,
-                                                                                                                                                                          y INT8 NULL,
-                                                                                                                                                                          z INT8 NULL,
-                                                                                                                                                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                                                                                                                                          CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
-                                                                                                                                                                          UNIQUE INDEX full_test_x_key (x ASC),
-                                                                                                                                                                          FAMILY f1 (x, y, z, rowid)
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX full_test_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
 );
-CREATE VIEW public.vx ("?column?") AS SELECT 1;
+CREATE VIEW public.vx (
+                                                                                                                                                                          "?column?"
+) AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ALTER TABLE public.full_test ADD CONSTRAINT full_test_x_y_z_fkey FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
@@ -101,15 +103,17 @@ CREATE TABLE public.parent (
     FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-                                                                                                                                                                          x INT8 NULL,
-                                                                                                                                                                          y INT8 NULL,
-                                                                                                                                                                          z INT8 NULL,
-                                                                                                                                                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                                                                                                                                          CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
-                                                                                                                                                                          UNIQUE INDEX full_test_x_key (x ASC),
-                                                                                                                                                                          FAMILY f1 (x, y, z, rowid)
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT full_test_pkey PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX full_test_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
 );
-CREATE VIEW public.vx ("?column?") AS SELECT 1;
+CREATE VIEW public.vx (
+                                                                                                                                                                          "?column?"
+) AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ALTER TABLE public.full_test ADD CONSTRAINT full_test_x_y_z_fkey FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;

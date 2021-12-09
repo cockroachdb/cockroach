@@ -389,8 +389,10 @@ system.public.descriptor  CREATE TABLE public.descriptor (
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
-table_name  create_statement
-v           CREATE VIEW public.v (id) AS SELECT id FROM system.public.descriptor
+table_name                                    create_statement
+v                                             CREATE VIEW public.v (
+                                              id
+) AS SELECT id FROM system.public.descriptor
 
 
 query TTT colnames
