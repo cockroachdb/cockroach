@@ -1,6 +1,11 @@
 # Verify that the crdb_internal.node_inflight_trace_spans vtable populates
 # correctly.
 
+# This test wants tracing to be generally off across the cluster, otherwise it
+# picks up more spans than it wants.
+# TODO(andrei): Figure out a replacement for this test that is more robust.
+# cluster-opt: tracing-off
+
 statement ok
 GRANT ADMIN TO testuser
 

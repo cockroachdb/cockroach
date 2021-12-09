@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/lib/pq"
@@ -165,6 +166,9 @@ import (
 // The options are:
 // - enable-span-config: If specified, the span configs infrastructure will be
 //   enabled. This is equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+// - tracing-off: If specified, tracing defaults to being turned off. This is
+//   used to override the environment, which may ask for tracing to be on by
+//   default.
 //
 //
 // ###########################################
@@ -1540,6 +1544,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
 				Locality:          paramsPerNode[i].Locality,
 				Existing:          i > 0,
+				TracingDefault:    params.ServerArgs.TracingDefault,
 			}
 
 			// Prevent a logging assertion that the server ID is initialized multiple times.
@@ -1877,6 +1882,16 @@ func (c clusterOptSpanConfigs) apply(args *base.TestServerArgs) {
 	args.EnableSpanConfigs = true
 }
 
+// clusterOptTracingOff corresponds to the tracing-off directive.
+type clusterOptTracingOff struct{}
+
+var _ clusterOpt = clusterOptTracingOff{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptTracingOff) apply(args *base.TestServerArgs) {
+	args.TracingDefault = tracing.TracingModeOnDemand
+}
+
 // readClusterOptions looks around the beginning of the file for a line looking like:
 // # cluster-opt: opt1 opt2 ...
 // and parses that line into a set of clusterOpts that need to be applied to the
@@ -1915,6 +1930,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 				switch opt {
 				case "enable-span-configs":
 					res = append(res, clusterOptSpanConfigs{})
+				case "tracing-off":
+					res = append(res, clusterOptTracingOff{})
 				default:
 					t.Fatalf("unrecognized cluster option: %s", opt)
 				}
