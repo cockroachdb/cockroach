@@ -73,6 +73,11 @@ func (t TenantID) IsSet() bool {
 	return t.InternalValue != 0
 }
 
+// IsSystem returns whether this ID is that of the system tenant.
+func (t TenantID) IsSystem() bool {
+	return IsSystemTenantID(t.InternalValue)
+}
+
 // IsSystemTenantID returns whether the provided ID corresponds to that of the
 // system tenant.
 func IsSystemTenantID(id uint64) bool {

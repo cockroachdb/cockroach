@@ -371,7 +371,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			atomic.StoreInt64(&remainingAmbiguousSubReqs, initialAmbiguousSubReqs)
 
 			mockRestoreDataSpec := execinfrapb.RestoreDataSpec{
-				Rekeys: rekeys,
+				TableRekeys: rekeys,
 			}
 			restoreSpanEntry := execinfrapb.RestoreSpanEntry{
 				Span: roachpb.Span{Key: first, EndKey: last.PrefixEnd()},
@@ -436,7 +436,7 @@ func newTestingRestoreDataProcessor(
 		spec:    spec,
 	}
 	var err error
-	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
+	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys)
 	if err != nil {
 		return nil, err
 	}

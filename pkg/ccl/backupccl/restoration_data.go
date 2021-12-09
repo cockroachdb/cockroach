@@ -34,10 +34,11 @@ type restorationData interface {
 	// Peripheral data that is needed in the restoration flow relating to the data
 	// included in this bundle.
 	getRekeys() []execinfrapb.TableRekey
+	getTenantRekeys() []execinfrapb.TenantRekey
 	getPKIDs() map[uint64]bool
 
 	// addTenant extends the set of data needed to restore to include a new tenant.
-	addTenant(roachpb.TenantID)
+	addTenant(fromID, toID roachpb.TenantID)
 
 	// isEmpty returns true iff there is any data to be restored.
 	isEmpty() bool
@@ -63,7 +64,8 @@ type restorationDataBase struct {
 	// spans is the spans included in this bundle.
 	spans []roachpb.Span
 	// rekeys maps old table IDs to their new table descriptor.
-	rekeys []execinfrapb.TableRekey
+	rekeys       []execinfrapb.TableRekey
+	tenantRekeys []execinfrapb.TenantRekey
 	// pkIDs stores the ID of the primary keys for all of the tables that we're
 	// restoring for RowCount calculation.
 	pkIDs map[uint64]bool
@@ -79,6 +81,11 @@ var _ restorationData = &restorationDataBase{}
 // getRekeys implements restorationData.
 func (b *restorationDataBase) getRekeys() []execinfrapb.TableRekey {
 	return b.rekeys
+}
+
+// getRekeys implements restorationData.
+func (b *restorationDataBase) getTenantRekeys() []execinfrapb.TenantRekey {
+	return b.tenantRekeys
 }
 
 // getPKIDs implements restorationData.
@@ -97,9 +104,13 @@ func (b *restorationDataBase) getSystemTables() []catalog.TableDescriptor {
 }
 
 // addTenant implements restorationData.
-func (b *restorationDataBase) addTenant(tenantID roachpb.TenantID) {
-	prefix := keys.MakeTenantPrefix(tenantID)
+func (b *restorationDataBase) addTenant(fromTenantID, toTenantID roachpb.TenantID) {
+	prefix := keys.MakeTenantPrefix(fromTenantID)
 	b.spans = append(b.spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	b.tenantRekeys = append(b.tenantRekeys, execinfrapb.TenantRekey{
+		OldID: fromTenantID,
+		NewID: toTenantID,
+	})
 }
 
 // isEmpty implements restorationData.

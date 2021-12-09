@@ -74,7 +74,7 @@ func TestKeyRewriter(t *testing.T) {
 		},
 	}
 
-	kr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys)
+	kr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestKeyRewriter(t *testing.T) {
 		newKr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, []execinfrapb.TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
 			{OldID: uint32(desc.ID), NewDesc: mustMarshalDesc(t, desc2.TableDesc())},
-		})
+		}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,7 +153,7 @@ func TestKeyRewriter(t *testing.T) {
 			destCodec := keys.MakeSQLCodec(destTenant)
 			newKr, err := makeKeyRewriterFromRekeys(destCodec, []execinfrapb.TableRekey{
 				{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
-			})
+			}, nil)
 			require.NoError(t, err)
 
 			key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())

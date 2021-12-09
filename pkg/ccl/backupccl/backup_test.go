@@ -7019,8 +7019,8 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 			})
 			t.Run("into-system-tenant-id", func(t *testing.T) {
 				systemDB.Exec(t, `CREATE DATABASE foo2`)
-				systemDB.ExpectErr(t, `cannot restore tenant backups into system tenant`,
-					`RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+				systemDB.Exec(t, `RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+				systemDB.CheckQueryResults(t, `SELECT * FROM foo2.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 		})
 	})

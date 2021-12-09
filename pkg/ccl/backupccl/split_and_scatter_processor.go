@@ -213,7 +213,7 @@ func newSplitAndScatterProcessor(
 	}
 
 	db := flowCtx.Cfg.DB
-	kr, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
+	kr, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), spec.TableRekeys, spec.TenantRekeys)
 	if err != nil {
 		return nil, err
 	}

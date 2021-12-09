@@ -43,7 +43,8 @@ func distRestore(
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
-	rekeys []execinfrapb.TableRekey,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
@@ -81,16 +82,17 @@ func distRestore(
 		return err
 	}
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys)
+	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, tableRekeys, tenantRekeys)
 	if err != nil {
 		return err
 	}
 
 	restoreDataSpec := execinfrapb.RestoreDataSpec{
-		RestoreTime: restoreTime,
-		Encryption:  fileEncryption,
-		Rekeys:      rekeys,
-		PKIDs:       pkIDs,
+		RestoreTime:  restoreTime,
+		Encryption:   fileEncryption,
+		TableRekeys:  tableRekeys,
+		TenantRekeys: tenantRekeys,
+		PKIDs:        pkIDs,
 	}
 
 	if len(splitAndScatterSpecs) == 0 {
@@ -236,7 +238,10 @@ func distRestore(
 // spec that should be planned on that node. Given the chunks of ranges to
 // import it round-robin distributes the chunks amongst the given nodes.
 func makeSplitAndScatterSpecs(
-	nodes []roachpb.NodeID, chunks [][]execinfrapb.RestoreSpanEntry, rekeys []execinfrapb.TableRekey,
+	nodes []roachpb.NodeID,
+	chunks [][]execinfrapb.RestoreSpanEntry,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
 ) (map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsByNodes := make(map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
@@ -250,7 +255,8 @@ func makeSplitAndScatterSpecs(
 				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{{
 					Entries: chunk,
 				}},
-				Rekeys: rekeys,
+				TableRekeys:  tableRekeys,
+				TenantRekeys: tenantRekeys,
 			}
 		}
 	}

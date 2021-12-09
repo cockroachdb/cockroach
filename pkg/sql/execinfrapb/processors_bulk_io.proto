@@ -227,6 +227,13 @@ message TableRekey {
   optional bytes new_desc = 2;
 }
 
+message TenantRekey {
+  // OldID is a previous tenant ID.
+  optional roachpb.TenantID old_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "OldID"];
+  // NewID is the ID with which to replace OldID.
+  optional roachpb.TenantID new_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NewID"];;
+}
+
 // RestoreDataEntry will be specified at planning time to the SplitAndScatter
 // processors, then those processors will stream these, encoded as bytes in rows
 // to the RestoreDataProcessors.
@@ -240,11 +247,12 @@ message RestoreSpanEntry {
 message RestoreDataSpec {
   optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
   optional roachpb.FileEncryptionOptions encryption = 2;
-  repeated TableRekey rekeys = 3 [(gogoproto.nullable) = false];
-
+  repeated TableRekey table_rekeys = 3 [(gogoproto.nullable) = false];
+  repeated TenantRekey tenant_rekeys = 5[(gogoproto.nullable) = false];
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
+  // NEXT ID: 6.
 }
 
 message SplitAndScatterSpec {
@@ -253,7 +261,8 @@ message SplitAndScatterSpec {
   }
 
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
-  repeated TableRekey rekeys = 2 [(gogoproto.nullable) = false];
+  repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
+  repeated TenantRekey tenant_rekeys = 3[(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently

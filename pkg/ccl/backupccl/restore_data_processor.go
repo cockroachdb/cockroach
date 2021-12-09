@@ -132,7 +132,7 @@ func newRestoreDataProcessor(
 	}
 
 	var err error
-	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
+	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys)
 	if err != nil {
 		return nil, err
 	}
