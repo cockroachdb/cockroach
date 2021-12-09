@@ -61,3 +61,27 @@ message ReplicaUpdate {
 message ReplicaUpdatePlan {
   repeated ReplicaUpdate updates = 1 [(gogoproto.nullable) = false];
 }
+
+// ReplicaRecoveryRecord is a struct that loss of quorum recovery commands
+// write to the store locally when replicas are rewritten to preserve information
+// about changes. This records are then consumed on startup to post data to
+// appropriate destinations like log, rangelog etc.
+// This struct is a union of all necessary information that is needed by all
+// downstream destinations.
+message ReplicaRecoveryRecord {
+  // timestamp is unix time in nanos
+  int64 timestamp = 1;
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.moretags) = "yaml:\"RangeID\""];
+  bytes start_key = 3 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = "yaml:\"StartKey\""];
+  bytes end_key = 4 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = "yaml:\"StartKey\""];
+  int32 old_replica_id = 5 [(gogoproto.customname) = "OldReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = "yaml:\"OldReplicaID\""];
+  roachpb.ReplicaDescriptor new_replica = 6 [(gogoproto.moretags) = "yaml:\"NewReplica\""];
+}

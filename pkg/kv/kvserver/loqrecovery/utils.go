@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/errors"
 )
 
 type storeIDSet map[roachpb.StoreID]struct{}
@@ -48,13 +49,18 @@ func joinStoreIDs(storeIDs storeIDSet) string {
 // to lazily create batches and perform lifecycle management of the store
 // and the batch.
 type UpdatableStore struct {
-	storage storage.Engine
-	batch   storage.Batch
+	storage               storage.Engine
+	batch                 storage.Batch
+	nextUpdateRecordIndex uint64
 }
 
 // NewUpdatableStore creates new UpdatableStore from storage.Engine
-func NewUpdatableStore(storage storage.Engine) *UpdatableStore {
-	return &UpdatableStore{storage: storage}
+func NewUpdatableStore(storage storage.Engine) (*UpdatableStore, error) {
+	ind, err := findFirstAvailableRecoveryEventIndex(storage)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed accessing update evidence records in store")
+	}
+	return &UpdatableStore{storage: storage, nextUpdateRecordIndex: ind}, nil
 }
 
 // GetStoreID reads roachpb.StoreIdent from underlying storage.

@@ -69,3 +69,7 @@ dump-store stores=(1,2)
     - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
     - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
     - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+
+dump-events stores=(1,2)
+----
+Updated range r1, Key:/Min, Store:s1 ReplicaID:6

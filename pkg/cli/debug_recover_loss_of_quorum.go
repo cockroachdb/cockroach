@@ -410,7 +410,11 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)
 		}
-		store := loqrecovery.NewUpdatableStore(db)
+		store, err := loqrecovery.NewUpdatableStore(db)
+		if err != nil {
+			db.Close()
+			return errors.Wrapf(err, "failed to read store metadata from %q", storeSpec.Path)
+		}
 		defer store.Close()
 
 		storeIdent, err := store.GetStoreID(cmd.Context())

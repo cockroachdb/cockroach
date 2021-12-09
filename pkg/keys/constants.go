@@ -178,6 +178,15 @@ var (
 	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
 	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
 	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
+	// LocalStoreUnsafeReplicaRecoverySuffix suffix for record entries put
+	// when loss of quorum recovery operations are performed offline on the store.
+	localStoreUnsafeReplicaRecoverySuffix = []byte("loqr")
+	// LocalStoreUnsafeReplicaRecoveryKeyMin is the start of keyspace used to store
+	// replica LOQ recovery keys.
+	LocalStoreUnsafeReplicaRecoveryKeyMin = MakeStoreKey(localStoreUnsafeReplicaRecoverySuffix, nil)
+	// LocalStoreUnsafeReplicaRecoveryKeyMax is the end of keyspace used to store replica
+	// LOQ recovery keys.
+	LocalStoreUnsafeReplicaRecoveryKeyMax = LocalStoreUnsafeReplicaRecoveryKeyMin.PrefixEnd()
 
 	// 5. Lock table keys
 	//

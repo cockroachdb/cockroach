@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -75,7 +76,8 @@ func PrepareUpdateReplicas(
 	stores map[roachpb.StoreID]*UpdatableStore,
 ) (PrepareStoreReport, error) {
 	var report PrepareStoreReport
-	// TODO(oleg): #73281 Track attempts to apply changes and also fill into audit log
+	updateTs := timeutil.Now().UnixNano()
+
 	// Make a pre-check for all found stores, so we could confirm action.
 	// Map contains a set of store names that were found in plan for this node, but were not
 	// configured in this command invocation.
@@ -95,6 +97,11 @@ func PrepareUpdateReplicas(
 			}
 			if !replicaReport.AlreadyUpdated {
 				report.UpdatedReplicas = append(report.UpdatedReplicas, replicaReport)
+				if err := writeReplicaRecoveryStoreRecord(
+					updateTs, update, replicaReport, store.nextUpdateRecordIndex, store.Batch()); err != nil {
+					return PrepareStoreReport{}, errors.Wrap(err, "failed writing update evidence records")
+				}
+				store.nextUpdateRecordIndex++
 			} else {
 				report.SkippedReplicas = append(report.SkippedReplicas, replicaReport)
 			}

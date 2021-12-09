@@ -123,6 +123,29 @@ func DecodeStoreCachedSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err 
 	return
 }
 
+// StoreReplicaUnsafeRecoveryKey creates a key for replica LOQ recovery entry.
+func StoreReplicaUnsafeRecoveryKey(logIndex uint64) roachpb.Key {
+	return MakeStoreKey(localStoreUnsafeReplicaRecoverySuffix, encoding.EncodeUint64Ascending(nil, logIndex))
+}
+
+// DecodeStoreReplicaUnsafeRecoverKey decodes index out of replica LOQ recovery entry.
+func DecodeStoreReplicaUnsafeRecoverKey(key roachpb.Key) (uint64, error) {
+	suffix, detail, err := DecodeStoreKey(key)
+	if err != nil {
+		return 0, err
+	}
+	if !suffix.Equal(localStoreUnsafeReplicaRecoverySuffix) {
+		return 0, errors.Errorf("key with suffix %q != %q",
+			suffix,
+			localStoreUnsafeReplicaRecoverySuffix)
+	}
+	detail, indexKey, err := encoding.DecodeUint64Ascending(detail)
+	if len(detail) > 0 {
+		return 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return indexKey, err
+}
+
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)

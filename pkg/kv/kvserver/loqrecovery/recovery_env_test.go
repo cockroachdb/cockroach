@@ -12,8 +12,10 @@ package loqrecovery
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,8 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"gopkg.in/yaml.v2"
 )
@@ -125,6 +129,8 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	case "apply-plan":
 		// Create a plan from listed replicas.
 		out, err = e.handleApplyPlan(t, d)
+	case "dump-events":
+		out, err = e.dumpRecoveryEvents(t, d)
 	default:
 		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
 	}
@@ -332,7 +338,9 @@ func (e *quorumRecoveryEnv) groupStoresByNodeStore(
 			nodeStores = make(map[roachpb.StoreID]*UpdatableStore)
 			nodes[nodeID] = nodeStores
 		}
-		nodeStores[storeID] = NewUpdatableStore(store)
+		var err error
+		nodeStores[storeID], err = NewUpdatableStore(store)
+		require.NoError(t, err, "failed to initialize store for apply plan")
 	})
 	return nodes
 }
@@ -431,6 +439,26 @@ func (e *quorumRecoveryEnv) cleanupStores() {
 		store.engine.Close()
 	}
 	e.stores = nil
+}
+
+func (e *quorumRecoveryEnv) dumpRecoveryEvents(
+	t *testing.T, d datadriven.TestData,
+) (string, error) {
+	ctx := context.Background()
+
+	var events []string
+	logEvents := func(ctx context.Context, ev eventpb.DebugRecoverReplica) {
+		events = append(events, fmt.Sprintf("Updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
+			ev.RangeID, ev.StartKey, ev.StoreID, ev.UpdatedReplicaID))
+	}
+
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	for _, store := range stores {
+		if err := RegisterOfflineRecoveryEvents(ctx, e.stores[store].engine, logEvents); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(events, "\n"), nil
 }
 
 func descriptorView(desc roachpb.RangeDescriptor) storeDescriptorView {
