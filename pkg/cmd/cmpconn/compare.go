@@ -115,7 +115,11 @@ var (
 					v = strings.Replace(t, ":00+00:00", ":00+00", 1)
 				case pgtype.Numeric:
 					if t.Status == pgtype.Present {
-						v = apd.NewWithBigInt(t.Int, t.Exp)
+						if t.NaN {
+							v = &apd.Decimal{Form: apd.NaN}
+						} else {
+							v = apd.NewWithBigInt(t.Int, t.Exp)
+						}
 					}
 				case int64:
 					v = apd.New(t, 0)

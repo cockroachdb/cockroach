@@ -80,7 +80,7 @@ func HandleDebug(w http.ResponseWriter, r *http.Request) {
 	defer trackedStoppers.Unlock()
 	for _, ss := range trackedStoppers.stoppers {
 		s := ss.s
-		fmt.Fprintf(w, "%p: %d tasks", s, s.NumTasks())
+		fmt.Fprintf(w, "%p: %d tasks\n", s, s.NumTasks())
 	}
 }
 
