@@ -706,10 +706,15 @@ func (c *CustomFuncs) partitionValuesFilters(
 	tabID opt.TableID, index cat.Index,
 ) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
 
-	// Find all the partition values
+	// Find all the partition values.
 	partitionValues := make([]tree.Datums, 0, index.PartitionCount())
 	for i, n := 0, index.PartitionCount(); i < n; i++ {
-		partitionValues = append(partitionValues, index.Partition(i).PartitionByListPrefixes()...)
+		for _, datums := range index.Partition(i).PartitionByListPrefixes() {
+			// Ignore the DEFAULT case, where there is no value.
+			if len(datums) > 0 {
+				partitionValues = append(partitionValues, datums)
+			}
+		}
 	}
 	if len(partitionValues) == 0 {
 		return partitionFilter, inBetweenFilter
