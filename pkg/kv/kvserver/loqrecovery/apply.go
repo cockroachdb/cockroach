@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -63,6 +64,13 @@ type PrepareReplicaReport struct {
 	AbortedTransactionID uuid.UUID
 }
 
+// replicaPrepareBatch is a wrapper around ReadWriter that holds additional
+// information to write replicas with as any additional audit information.
+type replicaPrepareBatch struct {
+	readWriter            storage.ReadWriter
+	nextUpdateRecordIndex uint64
+}
+
 // PrepareUpdateReplicas prepares all changes to be committed to provided stores
 // as a first step of apply stage. This function would write changes to stores
 // using provided batches and return a summary of changes that were done together
@@ -71,12 +79,30 @@ type PrepareReplicaReport struct {
 func PrepareUpdateReplicas(
 	ctx context.Context,
 	plan loqrecoverypb.ReplicaUpdatePlan,
+	updateTime time.Time,
 	nodeID roachpb.NodeID,
 	batches map[roachpb.StoreID]storage.Batch,
 ) (PrepareStoreReport, error) {
 	var report PrepareStoreReport
-	// TODO(oleg): #73281 Track attempts to apply changes and also fill into audit log
-	// Make a pre-check for all found stores, so we could confirm action.
+
+	// For every store we need to find first key to start writing replica
+	// update event records from. Since this value is greater than any
+	// preexisting record key sequence number, we will cache those numbers
+	// and increment for every new record.
+	updaters := make(map[roachpb.StoreID]*replicaPrepareBatch)
+	for storeID, batch := range batches {
+		sequence, err := findNextAvailableRecoveryEventSequenceNumber(batch)
+		if err != nil {
+			return PrepareStoreReport{}, errors.Wrapf(
+				err,
+				"failed accessing replica update records in store s%s", storeID)
+		}
+		updaters[storeID] = &replicaPrepareBatch{
+			readWriter:            batch,
+			nextUpdateRecordIndex: sequence,
+		}
+	}
+
 	// Map contains a set of store names that were found in plan for this node, but were not
 	// configured in this command invocation.
 	missing := make(map[roachpb.StoreID]struct{})
@@ -84,17 +110,23 @@ func PrepareUpdateReplicas(
 		if nodeID != update.NodeID() {
 			continue
 		}
-		if batch, ok := batches[update.StoreID()]; !ok {
+		if updater, ok := updaters[update.StoreID()]; !ok {
 			missing[update.StoreID()] = struct{}{}
 			continue
 		} else {
-			replicaReport, err := applyReplicaUpdate(ctx, batch, update)
+			replicaReport, err := applyReplicaUpdate(ctx, updater.readWriter, update)
 			if err != nil {
-				return PrepareStoreReport{}, errors.Wrapf(err,
-					"failed to prepare update replica for range r%v on store s%d", update.RangeID, update.StoreID())
+				return PrepareStoreReport{}, errors.Wrapf(
+					err,
+					"failed to prepare update replica for range r%v on store s%d", update.RangeID,
+					update.StoreID())
 			}
 			if !replicaReport.AlreadyUpdated {
 				report.UpdatedReplicas = append(report.UpdatedReplicas, replicaReport)
+				if err := writeReplicaRecoveryStoreRecord(
+					updateTime.UnixNano(), update, replicaReport, updater); err != nil {
+					return PrepareStoreReport{}, errors.Wrap(err, "failed writing update evidence records")
+				}
 			} else {
 				report.SkippedReplicas = append(report.SkippedReplicas, replicaReport)
 			}
@@ -240,16 +272,19 @@ func applyReplicaUpdate(
 		report.AbortedTransactionID = intent.Txn.ID
 	}
 	newDesc := desc
-	replicas := []roachpb.ReplicaDescriptor{{
-		NodeID:    update.NewReplica.NodeID,
-		StoreID:   update.NewReplica.StoreID,
-		ReplicaID: update.NewReplica.ReplicaID,
-		Type:      update.NewReplica.Type,
-	}}
+	replicas := []roachpb.ReplicaDescriptor{
+		{
+			NodeID:    update.NewReplica.NodeID,
+			StoreID:   update.NewReplica.StoreID,
+			ReplicaID: update.NewReplica.ReplicaID,
+			Type:      update.NewReplica.Type,
+		},
+	}
 	newDesc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 	newDesc.NextReplicaID = update.NextReplicaID
 
-	if err := storage.MVCCPutProto(ctx, readWriter, &ms, key, clock.Now(),
+	if err := storage.MVCCPutProto(
+		ctx, readWriter, &ms, key, clock.Now(),
 		nil /* txn */, &newDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
@@ -281,18 +316,21 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 	// belonging to them, or have no changes if no replicas belong to it or if changes has been
 	// applied earlier, and we try to reapply the same plan twice.
 	for id, batch := range batches {
-		if !batch.Empty() {
-			if err := batch.Commit(true); err != nil {
-				// If we fail here, we can only try to run the whole process from scratch as this store is somehow broken.
-				updateErrors = append(updateErrors, fmt.Sprintf("failed to update store s%d: %v", id, err))
-				failed = true
-			} else {
-				report.UpdatedStores = append(report.UpdatedStores, id)
-			}
+		if batch.Empty() {
+			continue
+		}
+		if err := batch.Commit(true); err != nil {
+			// If we fail here, we can only try to run the whole process from scratch as this store is
+			// somehow broken.
+			updateErrors = append(updateErrors, fmt.Sprintf("failed to update store s%d: %v", id, err))
+			failed = true
+		} else {
+			report.UpdatedStores = append(report.UpdatedStores, id)
 		}
 	}
 	if failed {
-		return report, errors.Errorf("failed to commit update to one or more stores: %s", strings.Join(updateErrors, "; "))
+		return report, errors.Errorf(
+			"failed to commit update to one or more stores: %s", strings.Join(updateErrors, "; "))
 	}
 	return report, nil
 }
