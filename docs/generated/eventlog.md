@@ -148,6 +148,30 @@ e.g. directly access and mutate internal state, breaking system invariants.
 Events in this category are logged to the `OPS` channel.
 
 
+### `debug_recover_replica`
+
+An event of type `debug_recover_replica` is recorded when unsafe loss of quorum recovery is performed.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RangeID` |  | no |
+| `StoreID` |  | no |
+| `SurvivorReplicaID` |  | no |
+| `UpdatedReplicaID` |  | no |
+| `StartKey` |  | yes |
+| `EndKey` |  | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `NodeID` | The node ID where the event originated. | no |
+| `User` | The user which performed the operation. | yes |
+
 ### `debug_send_kv_batch`
 
 An event of type `debug_send_kv_batch` is recorded when an arbitrary KV BatchRequest is submitted
