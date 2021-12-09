@@ -44,7 +44,11 @@ func (e *eventLogState) EventLogStateWithNewSourceElementID() scbuildstmt.EventL
 	}
 }
 
-func (e *eventLogState) FinalizeEventLogState(statement tree.Statement) {
+// FinalizeEventLogState inserts statements with fully resolved object names
+// into the event log state.
+func (e *eventLogState) FinalizeEventLogState(
+	statement tree.Statement, annotations *tree.Annotations,
+) {
 	e.statements[len(e.statements)-1].RedactedStatement =
-		string(e.astFormatter.FormatAstAsRedactableString(statement))
+		string(e.astFormatter.FormatAstAsRedactableString(statement, annotations))
 }

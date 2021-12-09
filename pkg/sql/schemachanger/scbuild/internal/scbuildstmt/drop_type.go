@@ -29,13 +29,17 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		panic(unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported"))
 	}
 	for _, name := range n.Names {
-		_, typ := b.ResolveType(name, ResolveParams{
+		prefix, typ := b.ResolveType(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
 		if typ == nil {
 			continue
 		}
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		tn := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), typ.GetName())
+		name.SetAnnotation(b.GetAnnotations(), &tn)
 		// If the descriptor is already being dropped, nothing to do.
 		if checkIfDescOrElementAreDropped(b, typ.GetID()) {
 			return
