@@ -65,6 +65,14 @@ func (sp *Span) Tracer() *Tracer {
 	return sp.i.Tracer()
 }
 
+// Redactable returns true if this Span's tracer is marked redactable
+func (sp *Span) Redactable() bool {
+	if sp == nil || sp.i.isNoop() {
+		return false
+	}
+	return sp.Tracer().Redactable()
+}
+
 // SetOperationName sets the name of the operation.
 func (sp *Span) SetOperationName(operationName string) {
 	if sp.done() {
@@ -160,9 +168,7 @@ func (sp *Span) IsVerbose() bool {
 // Record provides a way to record free-form text into verbose spans. Recordings
 // may be dropped due to sizing constraints.
 //
-// TODO(irfansharif): We don't currently have redactability with trace
-// recordings (both here, and using RecordStructured above). We'll want to do this
-// soon.
+// TODO(tbg): make sure `msg` is lint-forced to be const.
 func (sp *Span) Record(msg string) {
 	if sp.done() {
 		return

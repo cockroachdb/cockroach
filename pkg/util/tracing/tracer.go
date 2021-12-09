@@ -70,6 +70,18 @@ const (
 	fieldNameShadowType = prefixTracerState + "shadowtype"
 )
 
+// TODO(davidh): Once performance issues around redaction are
+// resolved via #58610, this setting can be removed so that all traces
+// have redactability enabled.
+var enableTraceRedactable = settings.RegisterBoolSetting(
+	"trace.redactable.enabled",
+	"set to true to enable redactability for unstructured events "+
+		"in traces and to redact traces sent to tenants. "+
+		"Set to false to coarsely mark unstructured events as redactable "+
+		" and eliminate them from tenant traces.",
+	false,
+)
+
 var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
@@ -131,6 +143,13 @@ type Tracer struct {
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
+	// True if we would like spans created from this tracer to be marked
+	// as redactable. This will make unstructured events logged to those
+	// spans redactable.
+	// Currently, this is used to mark spans as redactable and to redact
+	// them at the network boundary from KV.
+	_redactable int32 // accessed atomically
+
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
 
@@ -159,6 +178,23 @@ type Tracer struct {
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
 	testing *testingKnob
+}
+
+// Redactable returns true if the tracer is configured to emit
+// redactable logs. This value will affect the redactability of messages
+// from already open Spans.
+func (t *Tracer) Redactable() bool {
+	return atomic.LoadInt32(&t._redactable) != 0
+}
+
+// SetRedactable changes the redactability of the Tracer. This
+// affects any future trace spans created.
+func (t *Tracer) SetRedactable(to bool) {
+	var n int32
+	if to {
+		n = 1
+	}
+	atomic.StoreInt32(&t._redactable, n)
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -192,6 +228,8 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
 	}
+	enableRedactable := enableTraceRedactable.Get(sv)
+	t.SetRedactable(enableRedactable)
 
 	reconfigure(ctx)
 
@@ -200,6 +238,7 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 	ZipkinCollector.SetOnChange(sv, reconfigure)
 	dataDogAgentAddr.SetOnChange(sv, reconfigure)
 	dataDogProjectName.SetOnChange(sv, reconfigure)
+	enableTraceRedactable.SetOnChange(sv, reconfigure)
 }
 
 // HasExternalSink returns whether the tracer is configured to report

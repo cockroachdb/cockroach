@@ -12,7 +12,9 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"github.com/petermattis/goid"
 )
 
@@ -83,6 +86,83 @@ type logEntry struct {
 
 	// The entry payload.
 	payload entryPayload
+}
+
+var _ redact.SafeFormatter = (*logEntry)(nil)
+var _ fmt.Stringer = (*logEntry)(nil)
+
+func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
+	if len(e.file) != 0 {
+		// TODO(knz): The "canonical" way to represent a file/line prefix
+		// is: <file>:<line>: msg
+		// with a colon between the line number and the message.
+		// However, some location filter deep inside SQL doesn't
+		// understand a colon after the line number.
+		w.SafeString(redact.SafeString(e.file))
+		w.SafeRune(':')
+		w.SafeInt(redact.SafeInt(e.line))
+		w.SafeRune(' ')
+	}
+	if e.tags != nil {
+		w.SafeString("[")
+		for i, tag := range e.tags.Get() {
+			if i > 0 {
+				w.SafeString(",")
+			}
+			// TODO(obs-inf/server): this assumes that log tag keys are safe, but this
+			// is not enforced. We could lint that it is true similar to how we lint
+			// that the format strings for `log.Infof` etc are const strings.
+			k := redact.SafeString(tag.Key())
+			v := tag.Value()
+			w.SafeString(k)
+			if v != nil {
+				w.SafeRune('=')
+				w.Print(tag.Value())
+			}
+		}
+		w.SafeString("] ")
+	}
+
+	if !e.payload.redactable {
+		w.Print(e.payload.message)
+	} else {
+		w.Print(redact.RedactableString(e.payload.message))
+	}
+}
+
+// String is a faster implementation than `SafeFormat` which is why we
+// don't follow the usual convention of implementing `String` via a call
+// to `redact.StringWithoutMarkers()`. This implementation is still
+// around because it sits in the hot path of verbose tracing.
+func (e *logEntry) String() string {
+	entry := e.convertToLegacy()
+	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
+		// Shortcut.
+		return entry.Message
+	}
+
+	var buf strings.Builder
+	if len(entry.File) != 0 {
+		buf.WriteString(entry.File)
+		buf.WriteByte(':')
+		buf.WriteString(strconv.FormatInt(entry.Line, 10))
+		buf.WriteByte(' ')
+	}
+	if len(entry.Tags) > 0 {
+		buf.WriteByte('[')
+		buf.WriteString(entry.Tags)
+		buf.WriteString("] ")
+	}
+	buf.WriteString(entry.Message)
+	msg := buf.String()
+
+	if entry.Redactable {
+		// This is true when eventInternal is called from logfDepth(),
+		// ie. a regular log call. In this case, the tags and message may contain
+		// redaction markers. We remove them here.
+		msg = redact.RedactableString(msg).StripMarkers()
+	}
+	return msg
 }
 
 type entryPayload struct {

@@ -290,14 +290,14 @@ func TestSpanRecordLimit(t *testing.T) {
 	msg := func(i int) string { return fmt.Sprintf("msg: %10d", i) }
 
 	// Determine the size of a log record by actually recording once.
-	sp.Record(msg(42))
+	sp.Recordf("%s", msg(42))
 	logSize := sp.GetRecording()[0].Logs[0].Size()
 	sp.ResetRecording()
 
 	numLogs := maxLogBytesPerSpan / logSize
 	const extra = 10
 	for i := 1; i <= numLogs+extra; i++ {
-		sp.Record(msg(i))
+		sp.Recordf("%s", msg(i))
 	}
 
 	rec := sp.GetRecording()
@@ -308,8 +308,8 @@ func TestSpanRecordLimit(t *testing.T) {
 	first := rec[0].Logs[0]
 	last := rec[0].Logs[len(rec[0].Logs)-1]
 
-	require.Equal(t, first.Fields[0].Value, msg(extra+1))
-	require.Equal(t, last.Fields[0].Value, msg(numLogs+extra))
+	require.Equal(t, first.Fields[0].Value.StripMarkers(), msg(extra+1))
+	require.Equal(t, last.Fields[0].Value.StripMarkers(), msg(numLogs+extra))
 }
 
 // testStructuredImpl is a testing implementation of Structured event.
@@ -345,7 +345,7 @@ func TestSpanReset(t *testing.T) {
 		if i%2 == 0 {
 			sp.RecordStructured(newTestStructured(i))
 		} else {
-			sp.Record(fmt.Sprintf("%d", i))
+			sp.Recordf("%d", i)
 		}
 	}
 

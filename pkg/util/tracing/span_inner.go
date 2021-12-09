@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
@@ -228,9 +229,22 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if !s.hasVerboseSink() {
 		return
 	}
-	str := fmt.Sprintf(format, args...)
+	var str redact.RedactableString
+	if s.Tracer().Redactable() {
+		str = redact.Sprintf(format, args...)
+	} else {
+		// `fmt.Sprintf` when called on a logEntry will use the faster
+		// `logEntry.String` method instead of `logEntry.SafeFormat`.
+		// The additional use of `redact.Sprintf("%s",...)` is necessary
+		// to wrap the result in redaction markers.
+		str = redact.Sprintf("%s", fmt.Sprintf(format, args...))
+	}
 	if s.ot.shadowSpan != nil {
-		s.ot.shadowSpan.LogFields(otlog.String(tracingpb.LogMessageField, str))
+		// TODO(obs-inf): depending on the situation it may be more appropriate to
+		// redact the string here.
+		// See:
+		// https://github.com/cockroachdb/cockroach/issues/58610#issuecomment-926093901
+		s.ot.shadowSpan.LogFields(otlog.String(tracingpb.LogMessageField, str.StripMarkers()))
 	}
 	if s.netTr != nil {
 		s.netTr.LazyPrintf(format, args)

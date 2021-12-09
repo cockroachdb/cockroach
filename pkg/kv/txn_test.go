@@ -69,7 +69,6 @@ func TestTxnVerboseTrace(t *testing.T) {
 		`(?s)`+
 			`.*event:[^:]*:\d+ inside txn\n`+
 			`.*event:[^:]*:\d+ client\.Txn did AutoCommit\. err: <nil>\n`+
-			`.*\n`+
 			`.*event:[^:]*:\d+ txn complete.*`,
 		dump)
 	if err != nil {

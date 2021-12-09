@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 )
@@ -284,7 +285,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 	s.mu.tags[key] = value
 }
 
-func (s *crdbSpan) record(msg string) {
+func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
 		return
 	}
