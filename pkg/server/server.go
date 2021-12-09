@@ -111,6 +111,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	yaml "gopkg.in/yaml.v2"
+	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcserver"
 )
 
 var (
@@ -1637,6 +1639,37 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+
+	{
+		m := drpcmux.New()
+
+		// TODO register
+
+		srv := drpcserver.New(m)
+
+		lis, err := net.Listen("tcp", ":26262")
+		if err != nil {
+			return err
+		}
+
+		ctx, _ := s.stopper.WithCancelOnQuiesce(context.Background())
+
+		if err := s.stopper.RunAsyncTask(ctx, "serve-drpc", func(ctx context.Context) {
+			err := srv.Serve(ctx, lis)
+			if ctx.Err() == nil && err != nil {
+				log.Warningf(ctx, "%v", err)
+			}
+		}); err != nil {
+			return err
+		}
+		if err := s.stopper.RunAsyncTask(ctx, "drpc-wait-quiesce", func(ctx context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			_ = lis.Close()
+		}); err != nil {
+			return err
+		}
+	}
+
 	if err := s.node.start(
 		ctx,
 		advAddrU,

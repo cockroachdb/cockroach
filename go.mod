@@ -178,6 +178,8 @@ require (
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
+require storj.io/drpc v0.0.26
+
 require (
 	cloud.google.com/go v0.93.3 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
@@ -305,6 +307,7 @@ require (
 	github.com/twitchtv/twirp v7.1.1+incompatible // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
+	github.com/zeebo/errs v1.2.2 // indirect
 	go.mongodb.org/mongo-driver v1.5.1 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.9.0 // indirect
