@@ -55,7 +55,7 @@ func registerFollowerReads(r registry.Registry) {
 			Owner: registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(
 				6, /* nodeCount */
-				spec.CPU(2),
+				spec.CPU(4),
 				spec.Geo(),
 				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
