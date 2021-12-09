@@ -31,7 +31,7 @@ import (
 )
 
 func TestStartSpan(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	sp := tr.StartSpan("test")
 	defer sp.Finish()
 	require.Equal(t, "noop", sp.OperationName())
@@ -393,9 +393,9 @@ func (tr *explodyNetTr) Finish() {
 //
 // https://github.com/cockroachdb/cockroach/issues/58489#issuecomment-781263005
 func TestSpan_UseAfterFinish(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 	tr._useNetTrace = 1
-	sp := tr.StartSpan("foo", WithForceRealSpan())
+	sp := tr.StartSpan("foo")
 	require.NotNil(t, sp.i.netTr)
 	// Set up netTr to reliably explode if Finish'ed twice. We
 	// expect `sp.Finish` to not let it come to that.
@@ -444,12 +444,11 @@ func (i *countingStringer) String() string {
 // TestSpanTagsInRecordings verifies that tags added before a recording started
 // are part of the recording.
 func TestSpanTagsInRecordings(t *testing.T) {
-	tr := NewTracer()
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 	var counter countingStringer
 	logTags := logtags.SingleTagBuffer("foo", "tagbar")
 	logTags = logTags.Add("foo1", &counter)
 	sp := tr.StartSpan("root",
-		WithForceRealSpan(),
 		WithLogTags(logTags),
 	)
 	defer sp.Finish()
@@ -487,7 +486,7 @@ func TestStructureRecording(t *testing.T) {
 		t.Run(fmt.Sprintf("finish1=%t", finishCh1), func(t *testing.T) {
 			for _, finishCh2 := range []bool{true, false} {
 				t.Run(fmt.Sprintf("finish2=%t", finishCh2), func(t *testing.T) {
-					tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{ForceRealSpans: true}))
+					tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 					sp := tr.StartSpan("root", WithRecording(RecordingStructured))
 					ch1 := tr.StartSpan("child", WithParent(sp))
 					ch2 := tr.StartSpan("grandchild", WithParent(ch1))

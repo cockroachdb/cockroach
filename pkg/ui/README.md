@@ -11,7 +11,9 @@ To start developing the UI, be sure you're able to build and run a CockroachDB
 node. Instructions for this are located in the top-level README. Every Cockroach
 node serves the UI, by default on port 8080, but you can customize the port with
 the `--http-port` flag. If you've started a node with the default options,
-you'll be able to access the UI at <http://localhost:8080>.
+you'll be able to access the UI at <http://localhost:8080>. If you've started 
+a node using `demo`, the default port is 8081 and you'll be able to access the UI
+at <http://localhost:8081>.
 
 Our UI is compiled using a collection of tools that depends on
 [Node.js](https://nodejs.org/) and are managed with

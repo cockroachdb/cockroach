@@ -20,6 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/iterutil",
         "//pkg/util/netutil/addr",
@@ -66,7 +67,6 @@ go_test(
     ],
     embed = [":tracing"],
     deps = [
-        "//pkg/settings",
         "//pkg/testutils",
         "//pkg/testutils/grpcutils",
         "//pkg/util",
