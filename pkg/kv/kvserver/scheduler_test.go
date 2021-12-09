@@ -232,11 +232,11 @@ func TestSchedulerLoop(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(m, p, 1)
+	s := newRaftScheduler(log.AmbientContext{}, m, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	s.Start(ctx, stopper)
+	s.Start(stopper)
 	s.EnqueueRaftTicks(1, 2, 3)
 
 	testutils.SucceedsSoon(t, func() error {
@@ -258,11 +258,11 @@ func TestSchedulerBuffering(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(m, p, 1)
+	s := newRaftScheduler(log.AmbientContext{}, m, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	s.Start(ctx, stopper)
+	s.Start(stopper)
 
 	testCases := []struct {
 		flag     raftScheduleFlags
