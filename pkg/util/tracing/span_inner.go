@@ -234,10 +234,15 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 		str = redact.Sprintf(format, args...)
 	} else {
 		// `fmt.Sprintf` when called on a logEntry will use the faster
-		// `logEntry.String` method instead of `logEntry.SafeFormat`.
-		// The additional use of `redact.Sprintf("%s",...)` is necessary
-		// to wrap the result in redaction markers.
-		str = redact.Sprintf("%s", fmt.Sprintf(format, args...))
+		// `logEntry.String` method instead of `logEntry.SafeFormat`. We are
+		// also avoiding using `redact.Sprintf("%s"...) to save on
+		// allocations.
+		s := fmt.Sprintf(format, args...)
+		strBytes := make([]byte, 0, len(s)+10)
+		strBytes = append(strBytes, redact.StartMarker()...)
+		strBytes = append(strBytes, redact.EscapeBytes([]byte(s))...)
+		strBytes = append(strBytes, redact.EndMarker()...)
+		str = redact.RedactableString(strBytes)
 	}
 	if s.ot.shadowSpan != nil {
 		// TODO(obs-inf): depending on the situation it may be more appropriate to
