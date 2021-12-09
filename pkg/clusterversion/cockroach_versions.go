@@ -304,6 +304,10 @@ const (
 	// for fine-grained time bound iteration. See
 	// https://github.com/cockroachdb/pebble/issues/1190 for details.
 	PebbleFormatBlockPropertyCollector
+	// ProbeRequest is the version at which roachpb.ProbeRequest was introduced.
+	// This version must be active before any ProbeRequest is issued on the
+	// cluster.
+	ProbeRequest
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -532,6 +536,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatBlockPropertyCollector,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 24},
+	},
+	{
+		Key:     ProbeRequest,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
 	},
 
 	// *************************************************

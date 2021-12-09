@@ -176,7 +176,20 @@ func (r *Replica) evalAndPropose(
 	// checks (for technical reasons, see `TransferLease.flags`) and uses the
 	// same mechanism.
 	if ba.IsSingleSkipsLeaseCheckRequest() {
-		proposal.command.ProposerLeaseSequence = ba.GetPrevLeaseForLeaseRequest().Sequence
+		// Lease-related commands have below-raft special casing and will carry the
+		// lease sequence of the lease they are intending to follow.
+		// The remaining requests that skip a lease check (at the time of writing
+		// ProbeRequest) will assign a zero lease sequence and thus won't be able
+		// to mutate state.
+		var seq roachpb.LeaseSequence
+		switch t := ba.Requests[0].GetInner().(type) {
+		case *roachpb.RequestLeaseRequest:
+			seq = t.PrevLease.Sequence
+		case *roachpb.TransferLeaseRequest:
+			seq = t.PrevLease.Sequence
+		default:
+		}
+		proposal.command.ProposerLeaseSequence = seq
 	} else if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Perform a sanity check that the lease is owned by this replica. This must
 		// have been ascertained by the callers in checkExecutionCanProceed.
