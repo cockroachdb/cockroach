@@ -13,12 +13,15 @@ package tests
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
+
+const envYCSBFlags = "ROACHTEST_YCSB_FLAGS"
 
 func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
@@ -59,12 +62,16 @@ func registerYCSB(r registry.Registry) {
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
-			ramp := " --ramp=" + ifLocal(c, "0s", "2m")
-			duration := " --duration=" + ifLocal(c, "10s", "10m")
+			var args string
+			args += fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
+			args += " --ramp=" + ifLocal(c, "0s", "2m")
+			args += " --duration=" + ifLocal(c, "10s", "30m")
+			if envFlags := os.Getenv(envYCSBFlags); envFlags != "" {
+				args += " " + envFlags
+			}
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+sfu+ramp+duration+
+					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
 					" {pgurl:1-%d}",
 				wl, conc, nodes, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
