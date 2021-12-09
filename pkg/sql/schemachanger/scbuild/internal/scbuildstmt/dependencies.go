@@ -34,6 +34,7 @@ type BuildCtx interface {
 	Dependencies
 	BuilderState
 	EventLogState
+	AnnotationProvider
 
 	TreeContextBuilder
 	PrivilegeChecker
@@ -146,7 +147,7 @@ type EventLogState interface {
 	// incremented source element ID
 	EventLogStateWithNewSourceElementID() EventLogState
 
-	FinalizeEventLogState(statement tree.Statement)
+	FinalizeEventLogState(statement tree.Statement, annotations *tree.Annotations)
 }
 
 // TreeContextBuilder exposes convenient tree-package context builder methods.
@@ -278,5 +279,27 @@ type TableElementIDGenerator interface {
 type AstFormatter interface {
 	// FormatAstAsRedactableString formats a tree.Statement into SQL with fully
 	// qualified names, where parts can be redacted.
-	FormatAstAsRedactableString(statement tree.Statement) redact.RedactableString
+	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
+}
+
+// AnnotationProvider provides interfaces to be able to modify the AST safely,
+// by providing a copy and support for adding annotations.
+type AnnotationProvider interface {
+	// SetStatementOnce sets the current AST, clone it and allocate space for
+	// annotation. This function returns a copy of the original AST that can be
+	// safely modified by the caller.
+	SetStatementOnce(original tree.Statement) tree.Statement
+
+	// GetAnnotations returns the set of annotations applied on the AST.
+	GetAnnotations() *tree.Annotations
+
+	// ValidateAnnotations validates if expected modifications have been applied
+	// on the AST. After the build phase all names should be fully resolved either
+	// by directly modifying the AST or through annotations.
+	ValidateAnnotations()
+
+	// MarkTableNameAsNonExistent indicates that a table name is non-existent
+	// in the AST, which will cause it to skip full namespace resolution
+	// validation.
+	MarkTableNameAsNonExistent(name *tree.TableName)
 }
