@@ -18,7 +18,8 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var sRedactedMarker = redact.RedactableString(redact.EscapeBytes(nil))
+// TraceRedactedMarker is used to replace logs that weren't redacted.
+const TraceRedactedMarker = redact.RedactableString("verbose trace message redacted")
 
 // redactRecordingForTenant redacts the sensitive parts of log messages in the
 // recording if the tenant to which this recording is intended is not the system
@@ -49,7 +50,7 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracing.Recording) err
 				if field.Key != tracingpb.LogMessageField {
 					// We don't have any of these fields, but let's not take any
 					// chances (our dependencies might slip them in).
-					field.Value = sRedactedMarker
+					field.Value = TraceRedactedMarker
 					continue
 				}
 				if !sp.RedactableLogs {
@@ -58,7 +59,7 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracing.Recording) err
 					// stripped. Note that this is not the common path here, as most
 					// information in the trace will be from the local node, which
 					// always creates redactable logs.
-					field.Value = sRedactedMarker
+					field.Value = TraceRedactedMarker
 					continue
 				}
 				field.Value = field.Value.Redact()

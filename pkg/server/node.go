@@ -1050,6 +1050,7 @@ func (n *Node) setupSpanForIncomingRPC(
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
 	tr := n.storeCfg.AmbientCtx.Tracer
+
 	// newSpan is set if we end up creating a new span.
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)

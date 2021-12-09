@@ -165,8 +165,8 @@ type RecordedSpan struct {
 	// recording.
 	Duration time.Duration `protobuf:"bytes,8,opt,name=duration,proto3,stdduration" json:"duration"`
 	// RedactableLogs determines whether the verbose log messages are redactable.
-	// This field was introduced in the 22.1 cycle. It can be removed in the 22.2
-	// cycle.
+	// This field was introduced in the 22.1 release. It can be removed in the 22.2
+	// release. On 22.1 this is always set to `true`.
 	RedactableLogs bool `protobuf:"varint,15,opt,name=redactable_logs,json=redactableLogs,proto3" json:"redactable_logs,omitempty"`
 	// Events logged in the span.
 	Logs []LogRecord `protobuf:"bytes,9,rep,name=logs,proto3" json:"logs"`
