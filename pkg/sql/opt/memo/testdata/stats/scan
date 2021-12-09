@@ -2092,3 +2092,71 @@ index-join t
       ├── stats: [rows=111.111111, distinct(4)=11.1111111, null(4)=0]
       ├── key: (1)
       └── fd: (1)-->(4)
+
+# Regression test for #73106. Ensure we don't get the error "estimated row count
+# must be non-zero".
+exec-ddl
+CREATE TABLE tab (
+  geom GEOMETRY NOT NULL,
+  INVERTED INDEX (geom ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE tab INJECT STATISTICS '[
+  {
+    "columns": ["geom"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 7673676,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 0,
+        "num_range": 0,
+        "upper_bound": "\\\\x42fdffffffffffffffff01c1f3f5e7590b574e41f15b57b0682314"
+      }
+    ],
+    "histo_col_type": "BYTES",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 20000000
+  }
+]'
+----
+
+opt
+SELECT * FROM tab
+WHERE st_coveredby(geom, 'POINT(1 1)':::GEOMETRY)
+----
+select
+ ├── columns: geom:1(geometry!null)
+ ├── immutable
+ ├── stats: [rows=2222222.22, distinct(1)=2222222.22, null(1)=0]
+ ├── index-join tab
+ │    ├── columns: geom:1(geometry!null)
+ │    ├── stats: [rows=1]
+ │    └── inverted-filter
+ │         ├── columns: rowid:2(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_covers('0101000000000000000000F03F000000000000F03F', geom:1) [type=bool]
+ │         ├── stats: [rows=1]
+ │         ├── key: (2)
+ │         └── scan tab@secondary
+ │              ├── columns: rowid:2(int!null) geom_inverted_key:4(geometry!null)
+ │              ├── inverted constraint: /4/2
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(4)=1, null(4)=0]
+ │              │   histogram(4)=
+ │              ├── key: (2)
+ │              └── fd: (2)-->(4)
+ └── filters
+      └── st_coveredby(geom:1, '0101000000000000000000F03F000000000000F03F') [type=bool, outer=(1), immutable, constraints=(/1: (/NULL - ])]

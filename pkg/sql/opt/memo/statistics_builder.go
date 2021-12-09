@@ -578,8 +578,10 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 							if invColStat, ok := stats.ColStats.Add(invCols); ok {
 								invColStat.Histogram = &props.Histogram{}
 								invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram())
-								// Set inverted entry counts from the histogram.
-								invColStat.DistinctCount = invColStat.Histogram.DistinctValuesCount()
+								// Set inverted entry counts from the histogram. Make sure the
+								// distinct count is at least 1, for the same reason as the row
+								// count above.
+								invColStat.DistinctCount = max(invColStat.Histogram.DistinctValuesCount(), 1)
 								// Inverted indexes don't have nulls.
 								invColStat.NullCount = 0
 							}
@@ -749,11 +751,13 @@ func (sb *statisticsBuilder) constrainScan(
 
 			inputStat, _ := sb.colStatFromInput(colSet, scan)
 			if inputHist := inputStat.Histogram; inputHist != nil {
-				// If we have a histogram, set the row count to its total,
-				// unfiltered count. This is needed because s.RowCount is
-				// currently the row count of the table, but should instead
-				// reflect the number of inverted index entries.
-				s.RowCount = inputHist.ValuesCount()
+				// If we have a histogram, set the row count to its total, unfiltered
+				// count. This is needed because s.RowCount is currently the row count
+				// of the table, but should instead reflect the number of inverted index
+				// entries. (Make sure the row count is at least 1. The stats may be
+				// stale, and we can end up with weird and inefficient plans if we
+				// estimate 0 rows.)
+				s.RowCount = max(inputHist.ValuesCount(), 1)
 				if colStat, ok := s.ColStats.Lookup(colSet); ok {
 					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
 					histCols.Add(invertedConstrainedCol)
