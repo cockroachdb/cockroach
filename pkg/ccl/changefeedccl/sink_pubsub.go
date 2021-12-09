@@ -313,12 +313,10 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 
 // Close closes all the channels and shutdowns the topic
 func (p *pubsubSink) close() error {
+	var err error
 	for _, topic := range p.topics {
 		if topic.topicClient != nil {
-			err := topic.topicClient.Shutdown(p.getWorkerCtx())
-			if err != nil {
-				return errors.Wrap(err, "closing pubsub topic")
-			}
+			err = topic.topicClient.Shutdown(p.getWorkerCtx())
 		}
 	}
 	p.exitWorkers()
@@ -333,6 +331,9 @@ func (p *pubsubSink) close() error {
 		if p.eventsChans[i] != nil {
 			close(p.eventsChans[i])
 		}
+	}
+	if err != nil {
+		return errors.Wrap(err, "closing pubsub topic")
 	}
 	return nil
 }
