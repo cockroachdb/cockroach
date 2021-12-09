@@ -83,7 +83,12 @@ func (p *MockPubsubSink) lazyDial() {
 func (p *MockPubsubSink) receive() {
 	for {
 		if p.sub == nil {
-			continue
+			select {
+			case <-p.ctx.Done():
+				return
+			default:
+				continue
+			}
 		}
 		msg, err := p.sub.Receive(p.ctx)
 		if err != nil {
