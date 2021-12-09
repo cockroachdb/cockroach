@@ -71,6 +71,10 @@ dump-store stores=(1,2)
     - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
     - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
 
+dump-events stores=(1,2)
+----
+Updated range r1, Key:/Min, Store:s1 ReplicaID:16
+
 
 # Second use case where stale replica which remained from before split
 # on store with higher ID will conflict with later one spanning smaller range.

@@ -502,6 +502,16 @@ var (
 		Measurement: "Leader Transfers",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeLossOfQuorumRecoveries = metric.Metadata{
+		Name: "range.recoveries",
+		Help: `Count of offline loss of quorum recovery operations performed on ranges.
+
+This count increments for every range recovered in offline loss of quorum
+recovery operation. Metric is updated when node on which survivor replica
+is located starts following the recovery.`,
+		Measurement: "Quorum Recoveries",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
@@ -1337,6 +1347,7 @@ type StoreMetrics struct {
 	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
 	RangeRaftLeaderTransfers                     *metric.Counter
+	RangeLossOfQuorumRecoveries                  *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1764,6 +1775,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
 		// Raft processing metrics.
 		RaftTicks:                 metric.NewCounter(metaRaftTicks),
