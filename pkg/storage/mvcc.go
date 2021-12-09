@@ -937,15 +937,15 @@ func MVCCGetAsTxn(
 // mvccGetMetadata returns or reconstructs the meta key for the given key.
 // A prefix scan using the iterator is performed, resulting in one of the
 // following successful outcomes:
-// 1) iterator finds nothing; returns (false, false, 0, 0, nil).
+// 1) iterator finds nothing; returns (false, 0, 0, nil).
 // 2) iterator finds an explicit meta key; unmarshals and returns its size.
-//    ok is set to true, and isSeparated represents whether the explicit
-//    meta was separated or not.
+//    ok is set to true.
 // 3) iterator finds a value, i.e. the meta key is implicit.
 //    In this case, it accounts for the size of the key with the portion
 //    of the user key found which is not the MVCC timestamp suffix (since
 //    that is the usual contribution of the meta key). The value size returned
-//    will be zero. isSeparated is false.
+//    will be zero, as there is no stored MVCCMetadata.
+//    ok is set to true.
 // The passed in MVCCMetadata must not be nil.
 //
 // If the supplied iterator is nil, no seek operation is performed. This is
