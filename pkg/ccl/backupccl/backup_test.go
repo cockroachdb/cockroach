@@ -5638,7 +5638,8 @@ func TestBackupRestoreSequencesInViews(t *testing.T) {
 		// Check that after renaming, the view is still fine, and reflects the rename.
 		sqlDB.CheckQueryResults(t, `SELECT * FROM d.v`, [][]string{{"2"}})
 		sqlDB.CheckQueryResults(t, `SHOW CREATE VIEW d.v`, [][]string{{
-			"d.public.v", `CREATE VIEW public.v (k) AS SELECT k FROM (SELECT nextval('public.s2'::REGCLASS) AS k)`,
+			"d.public.v", "CREATE VIEW public.v (\n\tk\n) AS " +
+				"SELECT\n\t\tk\n\tFROM\n\t\t(SELECT nextval('public.s2'::REGCLASS) AS k)",
 		}})
 
 		// Test that references are still tracked.
@@ -5663,7 +5664,8 @@ func TestBackupRestoreSequencesInViews(t *testing.T) {
 		// Restore v and s.
 		sqlDB.Exec(t, `RESTORE TABLE s, v FROM 'nodelocal://0/test/'`)
 		sqlDB.CheckQueryResults(t, `SHOW CREATE VIEW d.v`, [][]string{{
-			"d.public.v", `CREATE VIEW public.v (k) AS (SELECT k FROM (SELECT nextval('public.s'::REGCLASS) AS k))`,
+			"d.public.v", "CREATE VIEW public.v (\n\tk\n) AS " +
+				"(\n\t\tSELECT\n\t\t\tk\n\t\tFROM\n\t\t\t(SELECT nextval('public.s'::REGCLASS) AS k)\n\t)",
 		}})
 
 		// Check that v is not corrupted.
@@ -5672,7 +5674,8 @@ func TestBackupRestoreSequencesInViews(t *testing.T) {
 		// Check that s can be renamed and v reflects the change.
 		sqlDB.Exec(t, `ALTER SEQUENCE s RENAME TO s2`)
 		sqlDB.CheckQueryResults(t, `SHOW CREATE VIEW d.v`, [][]string{{
-			"d.public.v", `CREATE VIEW public.v (k) AS (SELECT k FROM (SELECT nextval('public.s2'::REGCLASS) AS k))`,
+			"d.public.v", "CREATE VIEW public.v (\n\tk\n) AS " +
+				"(\n\t\tSELECT\n\t\t\tk\n\t\tFROM\n\t\t\t(SELECT nextval('public.s2'::REGCLASS) AS k)\n\t)",
 		}})
 		sqlDB.CheckQueryResults(t, `SELECT * FROM v`, [][]string{{"2"}})
 

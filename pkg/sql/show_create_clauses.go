@@ -103,37 +103,69 @@ func ShowCreateView(
 	f.WriteString("VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
-	for i, col := range desc.PublicColumns() {
-		if i > 0 {
-			f.WriteString(", ")
-		}
+	cols := desc.PublicColumns()
+	for i, col := range cols {
+		f.WriteString("\n\t")
 		name := col.GetName()
 		f.FormatNameP(&name)
+		if i == len(cols)-1 {
+			f.WriteRune('\n')
+		} else {
+			f.WriteRune(',')
+		}
 	}
 	f.WriteString(") AS ")
 
-	// Deserialize user-defined types in the view query.
+	cfg := tree.DefaultPrettyCfg()
+	cfg.UseTabs = true
+	cfg.LineWidth = cfg.LineWidth - cfg.TabWidth
+	q := formatViewQueryForDisplay(ctx, semaCtx, sessionData, desc, cfg)
+	for i, line := range strings.Split(q, "\n") {
+		if i > 0 {
+			f.WriteString("\n\t")
+		}
+		f.WriteString(line)
+	}
+	return f.CloseAndGetString(), nil
+}
+
+// formatViewQueryForDisplay walks the view query and replaces references to
+// user-defined types and sequences with their names. It then round-trips the
+// string representation through the parser and the pretty renderer to return
+// a human-readable output with the correct level of indentation.
+func formatViewQueryForDisplay(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	desc catalog.TableDescriptor,
+	cfg tree.PrettyCfg,
+) (query string) {
+	defer func() {
+		parsed, err := parser.ParseOne(query)
+		if err != nil {
+			log.Warningf(ctx, "error parsing query for view %s (%v): %+v",
+				desc.GetName(), desc.GetID(), err)
+			return
+		}
+		query = cfg.Pretty(parsed.AST)
+	}()
+
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, sessionData, desc)
 	if err != nil {
-		log.Warningf(ctx,
-			"error deserializing user defined types for view %s (%v): %+v",
+		log.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
-		f.WriteString(desc.GetViewQuery())
-	} else {
-		// Convert sequences referenced by ID in the view back to their names.
-		sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(
-			ctx, semaCtx, typeReplacedViewQuery)
-		if err != nil {
-			log.Warningf(ctx,
-				"error converting sequence IDs to names for view %s (%v): %+v",
-				desc.GetName(), desc.GetID(), err)
-			f.WriteString(typeReplacedViewQuery)
-		} else {
-			f.WriteString(sequenceReplacedViewQuery)
-		}
+		return desc.GetViewQuery()
 	}
 
-	return f.CloseAndGetString(), nil
+	// Convert sequences referenced by ID in the view back to their names.
+	sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery)
+	if err != nil {
+		log.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
+			desc.GetName(), desc.GetID(), err)
+		return typeReplacedViewQuery
+	}
+
+	return sequenceReplacedViewQuery
 }
 
 // formatViewQuerySequencesForDisplay walks the view query and
