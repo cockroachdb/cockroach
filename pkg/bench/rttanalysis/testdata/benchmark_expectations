@@ -60,7 +60,7 @@ exp,benchmark
 2,ORMQueries/has_column_privilege_using_column_name
 2,ORMQueries/has_table_privilege_real_table
 2,ORMQueries/has_table_privilege_virtual_table
-3,ORMQueries/information_schema._pg_index_position
+15,ORMQueries/information_schema._pg_index_position
 2,ORMQueries/pg_attribute
 2,ORMQueries/pg_class
 13,ORMQueries/pg_is_other_temp_schema
