@@ -1560,6 +1560,10 @@ var charts = []sectionDescription{
 				Title:   "Raft Leader Transfers",
 				Metrics: []string{"range.raftleadertransfers"},
 			},
+			{
+				Title:   "Unsafe Loss Of Quorum Recoveries",
+				Metrics: []string{"range.loss.of.quorum.recoveries"},
+			},
 		},
 	},
 	{

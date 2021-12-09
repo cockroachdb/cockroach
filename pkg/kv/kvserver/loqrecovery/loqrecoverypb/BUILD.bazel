@@ -39,6 +39,7 @@ go_library(
     deps = [
         "//pkg/roachpb:with-mocks",
         "//pkg/util/keysutil",
+        "//pkg/util/log/eventpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
     ],

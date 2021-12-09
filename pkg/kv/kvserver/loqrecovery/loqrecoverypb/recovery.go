@@ -13,6 +13,7 @@ package loqrecoverypb
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -71,4 +72,22 @@ func (m *ReplicaInfo) Replica() (roachpb.ReplicaDescriptor, error) {
 	return roachpb.ReplicaDescriptor{}, errors.Errorf(
 		"invalid replica info: its own store s%d is not present in descriptor replicas %s",
 		m.StoreID, m.Desc)
+}
+
+// AsStructuredLog creates a structured log entry from the record.
+func (m *ReplicaRecoveryRecord) AsStructuredLog() eventpb.DebugRecoverReplica {
+	return eventpb.DebugRecoverReplica{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			Timestamp: m.Timestamp,
+		},
+		CommonDebugEventDetails: eventpb.CommonDebugEventDetails{
+			NodeID: int32(m.NewReplica.NodeID),
+		},
+		RangeID:           int64(m.RangeID),
+		StoreID:           int64(m.NewReplica.StoreID),
+		SurvivorReplicaID: int32(m.OldReplicaID),
+		UpdatedReplicaID:  int32(m.NewReplica.ReplicaID),
+		StartKey:          m.StartKey.AsRKey().String(),
+		EndKey:            m.EndKey.AsRKey().String(),
+	}
 }

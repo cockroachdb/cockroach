@@ -123,6 +123,19 @@ func DecodeStoreCachedSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err 
 	return
 }
 
+// StoreReplicaUnsafeRecoveryKey creates a key for loss of quorum replica recovery entry.
+// Those entries are written by `debug recover apply-plan` command on the store while
+// node is stopped. Once node boots up, entries are translated into structured log events
+// to leave audit trail of recovery operation.
+// The key uses a combination of UUID passed as detailPrefix and a sequenceNumber to ensure
+// there are no key clashes when creating records. Each run of apply will generate UUID and
+// write records with sequential keys under this UUID.
+func StoreReplicaUnsafeRecoveryKey(detailPrefix roachpb.Key, sequenceNumber uint64) roachpb.Key {
+	key := append([]byte(nil), detailPrefix...)
+	seq := encoding.EncodeUint64Ascending(key, sequenceNumber)
+	return MakeStoreKey(localStoreUnsafeReplicaRecoverySuffix, seq)
+}
+
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
