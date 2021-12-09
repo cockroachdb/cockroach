@@ -68,15 +68,14 @@ func (p *MockPubsubSink) lazyDial() {
 	for {
 		select {
 		case <-p.ctx.Done():
-			break
+			return
 		default:
 		}
 		p.sub, err = pubsub.OpenSubscription(p.ctx, p.url)
 		if err == nil {
-			break
+			return
 		}
 	}
-	return
 }
 
 // receive loops to read in messages
