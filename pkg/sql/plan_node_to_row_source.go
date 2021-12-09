@@ -87,6 +87,10 @@ func (p *planNodeToRowSource) InitWithOutput(
 		post,
 		p.outputTypes,
 		flowCtx,
+		// Note that we have already created a copy of the extendedEvalContext
+		// (which made a copy of the EvalContext) right before calling
+		// makePlanNodeToRowSource, so we can just use the eval context from the
+		// params.
 		p.params.EvalContext(),
 		0, /* processorID */
 		output,
