@@ -50,17 +50,16 @@ func init() {
 func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	// Hoist the constraints to separate clauses because other code assumes that
 	// that is how the commands will look.
-	//
-	// TODO(ajwerner): Clone the AST here because this mutates it in place and
-	// that is bad.
 	n.HoistAddColumnConstraints()
-
 	tn := n.Table.ToTableName()
-	_, tbl := b.ResolveTable(n.Table, ResolveParams{
+	prefix, tbl := b.ResolveTable(n.Table, ResolveParams{
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.CREATE,
 	})
+	tn.ObjectNamePrefix = prefix.NamePrefix()
+	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	if tbl == nil {
+		b.MarkNameAsNonExistent(&tn)
 		return
 	}
 	if catalog.HasConcurrentSchemaChanges(tbl) {

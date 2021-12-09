@@ -28,12 +28,20 @@ func Build(
 ) (_ scpb.CurrentState, err error) {
 	initial = initial.DeepCopy()
 	bs := newBuilderState(initial)
-	els := newEventLogState(dependencies, initial, n, dependencies.AstFormatter())
+	els := newEventLogState(dependencies, initial, n)
+	// TODO(fqazi): The optimizer can end up already modifying the statement above
+	// to fully resolve names. We need to take this into account for CTAS/CREATE
+	// VIEW statements.
+	an, err := newAstAnnotator(n)
+	if err != nil {
+		return scpb.CurrentState{}, err
+	}
 	b := buildCtx{
 		Context:       ctx,
 		Dependencies:  dependencies,
 		BuilderState:  bs,
 		EventLogState: els,
+		TreeAnnotator: an,
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -44,9 +52,10 @@ func Build(
 			}
 		}
 	}()
-	scbuildstmt.Process(b, n)
+	scbuildstmt.Process(b, an.GetStatement())
+	an.ValidateAnnotations()
 	els.statements[len(els.statements)-1].RedactedStatement =
-		string(els.astFormatter.FormatAstAsRedactableString(n))
+		string(els.astFormatter.FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, len(bs.output)),
 		Statements:    els.statements,
@@ -129,10 +138,7 @@ type eventLogState struct {
 
 // newEventLogState constructs an eventLogState.
 func newEventLogState(
-	d scbuildstmt.Dependencies,
-	initial scpb.CurrentState,
-	n tree.Statement,
-	astFormatter AstFormatter,
+	d scbuildstmt.Dependencies, initial scpb.CurrentState, n tree.Statement,
 ) *eventLogState {
 	stmts := initial.Statements
 	els := eventLogState{
@@ -149,7 +155,7 @@ func newEventLogState(
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
-		astFormatter: astFormatter,
+		astFormatter: d.AstFormatter(),
 	}
 	*els.sourceElementID = 1
 	return &els
@@ -163,6 +169,7 @@ type buildCtx struct {
 	scbuildstmt.Dependencies
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
+	scbuildstmt.TreeAnnotator
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
@@ -173,6 +180,7 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		Context:       b.Context,
 		Dependencies:  b.Dependencies,
 		BuilderState:  b.BuilderState,
+		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
 }
