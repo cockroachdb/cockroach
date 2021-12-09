@@ -392,14 +392,13 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 // optimization as stringifying the tag values can be expensive.
 func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
-		TraceID:        s.traceID,
-		SpanID:         s.spanID,
-		ParentSpanID:   s.parentSpanID,
-		GoroutineID:    s.goroutineID,
-		Operation:      s.mu.operation,
-		StartTime:      s.startTime,
-		Duration:       s.mu.duration,
-		RedactableLogs: true,
+		TraceID:      s.traceID,
+		SpanID:       s.spanID,
+		ParentSpanID: s.parentSpanID,
+		GoroutineID:  s.goroutineID,
+		Operation:    s.mu.operation,
+		StartTime:    s.startTime,
+		Duration:     s.mu.duration,
 	}
 
 	if rs.Duration == -1 {

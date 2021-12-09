@@ -104,7 +104,6 @@ func TestMaybeRedactRecording(t *testing.T) {
 			Tags                         map[string]string
 			StartTime                    time.Time
 			Duration                     time.Duration
-			RedactableLogs               bool
 			Logs                         []tracingpb.LogRecord
 			DeprecatedInternalStructured []*ptypes.Any
 			GoroutineID                  uint64
