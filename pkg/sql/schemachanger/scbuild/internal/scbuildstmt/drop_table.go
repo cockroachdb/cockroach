@@ -28,14 +28,19 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 	}
 	// Find the table first.
 	tables := make([]tblDropCtx, 0, len(n.Names))
-	for _, name := range n.Names {
-		_, tbl := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		prefix, tbl := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
 		if tbl == nil {
+			b.MarkNameAsNonExistent(name)
 			continue
 		}
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		name.ObjectNamePrefix = prefix.NamePrefix()
 		// Only decompose the tables first into elements, next we will check for
 		// dependent objects, in case they are all dropped *together*.
 		newCtx := dropTableBasic(b, tbl)
