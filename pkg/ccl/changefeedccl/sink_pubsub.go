@@ -323,10 +323,16 @@ func (p *pubsubSink) close() error {
 	}
 	p.exitWorkers()
 	_ = p.workerGroup.Wait()
-	close(p.errChan)
-	close(p.flushDone)
+	if p.errChan != nil {
+		close(p.errChan)
+	}
+	if p.flushDone != nil {
+		close(p.flushDone)
+	}
 	for i := 0; i < p.numWorkers; i++ {
-		close(p.eventsChans[i])
+		if p.eventsChans[i] != nil {
+			close(p.eventsChans[i])
+		}
 	}
 	return nil
 }
@@ -598,20 +604,6 @@ func (p *memPubsubSink) Flush(ctx context.Context) error {
 
 // Close calls the pubsubDesc Close
 func (p *memPubsubSink) Close() error {
-	if p.pubsubSink.exitWorkers != nil {
-		p.pubsubSink.exitWorkers()
-		_ = p.pubsubSink.workerGroup.Wait()
-	}
-	if p.pubsubSink.errChan != nil {
-		close(p.pubsubSink.errChan)
-	}
-	if p.pubsubSink.flushDone != nil {
-		close(p.pubsubSink.flushDone)
-	}
-	for i := 0; i < p.pubsubSink.numWorkers; i++ {
-		if p.pubsubSink.eventsChans[i] != nil {
-			close(p.pubsubSink.eventsChans[i])
-		}
-	}
-	return nil
+	err := p.pubsubSink.close()
+	return err
 }
