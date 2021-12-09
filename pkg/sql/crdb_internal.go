@@ -2222,6 +2222,54 @@ CREATE TABLE crdb_internal.builtin_functions (
 	},
 }
 
+func writeCreateTypeDescRow(
+	db catalog.DatabaseDescriptor,
+	sc string,
+	typeDesc catalog.TypeDescriptor,
+	addRow func(...tree.Datum) error,
+) (written bool, err error) {
+	switch typeDesc.GetKind() {
+	case descpb.TypeDescriptor_ENUM:
+		var enumLabels tree.EnumValueList
+		enumLabelsDatum := tree.NewDArray(types.String)
+		for i := 0; i < typeDesc.NumEnumMembers(); i++ {
+			rep := typeDesc.GetMemberLogicalRepresentation(i)
+			enumLabels = append(enumLabels, tree.EnumValue(rep))
+			if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
+				return false, err
+			}
+		}
+		name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc}, 0)
+		if err != nil {
+			return false, err
+		}
+		node := &tree.CreateType{
+			Variety:    tree.Enum,
+			TypeName:   name,
+			EnumLabels: enumLabels,
+		}
+		return true, addRow(
+			tree.NewDInt(tree.DInt(db.GetID())),       // database_id
+			tree.NewDString(db.GetName()),             // database_name
+			tree.NewDString(sc),                       // schema_name
+			tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
+			tree.NewDString(typeDesc.GetName()),       // descriptor_name
+			tree.NewDString(tree.AsString(node)),      // create_statement
+			enumLabelsDatum,
+		)
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		// Multi-region enums are created implicitly, so we don't have create
+		// statements for them.
+		return false, nil
+	case descpb.TypeDescriptor_ALIAS:
+		// Alias types are created implicitly, so we don't have create
+		// statements for them.
+		return false, nil
+	default:
+		return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind().String())
+	}
+}
+
 var crdbInternalCreateTypeStmtsTable = virtualSchemaTable{
 	comment: "CREATE statements for all user defined types accessible by the current user in current database (KV scan)",
 	schema: `
@@ -2238,48 +2286,31 @@ CREATE TABLE crdb_internal.create_type_statements (
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTypeDesc(ctx, p, db, func(db catalog.DatabaseDescriptor, sc string, typeDesc catalog.TypeDescriptor) error {
-			switch typeDesc.GetKind() {
-			case descpb.TypeDescriptor_ENUM:
-				var enumLabels tree.EnumValueList
-				enumLabelsDatum := tree.NewDArray(types.String)
-				for i := 0; i < typeDesc.NumEnumMembers(); i++ {
-					rep := typeDesc.GetMemberLogicalRepresentation(i)
-					enumLabels = append(enumLabels, tree.EnumValue(rep))
-					if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
-						return err
-					}
-				}
-				name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc}, 0)
-				if err != nil {
-					return err
-				}
-				node := &tree.CreateType{
-					Variety:    tree.Enum,
-					TypeName:   name,
-					EnumLabels: enumLabels,
-				}
-				if err := addRow(
-					tree.NewDInt(tree.DInt(db.GetID())),       // database_id
-					tree.NewDString(db.GetName()),             // database_name
-					tree.NewDString(sc),                       // schema_name
-					tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
-					tree.NewDString(typeDesc.GetName()),       // descriptor_name
-					tree.NewDString(tree.AsString(node)),      // create_statement
-					enumLabelsDatum,
-				); err != nil {
-					return err
-				}
-			case descpb.TypeDescriptor_MULTIREGION_ENUM:
-				// Multi-region enums are created implicitly, so we don't have create
-				// statements for them.
-			case descpb.TypeDescriptor_ALIAS:
-			// Alias types are created implicitly, so we don't have create
-			// statements for them.
-			default:
-				return errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind().String())
-			}
-			return nil
+			_, err := writeCreateTypeDescRow(db, sc, typeDesc, addRow)
+			return err
 		})
+	},
+	indexes: []virtualIndex{
+		{
+			populate: func(
+				ctx context.Context,
+				constraint tree.Datum,
+				p *planner,
+				db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (matched bool, err error) {
+				d := tree.UnwrapDatum(p.EvalContext(), constraint)
+				if d == tree.DNull {
+					return false, nil
+				}
+				id := descpb.ID(tree.MustBeDInt(d))
+				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
+				if err != nil || typDesc == nil {
+					return false, err
+				}
+				return writeCreateTypeDescRow(db, scName, typDesc, addRow)
+			},
+		},
 	},
 }
 
