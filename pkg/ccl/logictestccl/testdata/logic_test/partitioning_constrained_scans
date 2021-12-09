@@ -260,3 +260,60 @@ select
 query BB
 SELECT * FROM t0 WHERE t0.c0 AND (c1 OR (c0 > false AND c0 < false))
 ----
+
+# Regression test for #73629. A default partition should not cause SELECT
+# queries to fail with an internal error.
+statement ok
+CREATE TABLE abcd (
+  a STRING NOT NULL,
+  b STRING NOT NULL,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b)
+) PARTITION BY LIST (a) (
+  PARTITION p1 VALUES IN ('foo', 'bar'),
+  PARTITION p2 VALUES IN ('baz'),
+  PARTITION default VALUES IN (DEFAULT)
+)
+
+query T
+EXPLAIN SELECT * FROM abcd WHERE b = 'foobar'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b = 'foobar'
+│
+└── • scan
+      missing stats
+      table: abcd@abcd_pkey
+      spans: [ - /'bar') [/'bar'/'foobar' - /'bar'/'foobar'] [/e'bar\x00'/'foobar' - /'baz') [/'baz'/'foobar' - /'baz'/'foobar'] … (3 more)
+
+statement ok
+CREATE TABLE abcde (
+  a STRING NOT NULL,
+  b STRING NOT NULL,
+  c INT NOT NULL,
+  d INT,
+  e INT,
+  PRIMARY KEY (a, b, c)
+) PARTITION BY LIST (a, b) (
+  PARTITION p1 VALUES IN (('foo', 'bar')),
+  PARTITION p2 VALUES IN (('baz', DEFAULT)),
+  PARTITION DEFAULT VALUES IN ((DEFAULT, DEFAULT))
+)
+
+query T
+EXPLAIN SELECT * FROM abcde WHERE c = 5
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: c = 5
+│
+└── • scan
+      missing stats
+      table: abcde@abcde_pkey
+      spans: [ - /'foo'/'bar') [/'foo'/'bar'/5 - /'foo'/'bar'/5] [/'foo'/e'bar\x00'/5 - ]
