@@ -50,6 +50,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -1747,6 +1749,30 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   the hazard described in Node.start, around initializing additional
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
+
+	// Once all stores are initialized, check if offline storage recovery
+	// was done prior to start and record any actions appropriately.
+	if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+		eventCount, err := loqrecovery.RegisterOfflineRecoveryEvents(
+			ctx,
+			s.Engine(),
+			func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) bool {
+				event := record.AsStructuredLog()
+				log.StructuredEvent(ctx, &event)
+				s.Metrics().RangeLossOfQuorumRecoveries.Inc(1)
+				return true
+			})
+		if eventCount > 0 {
+			log.Infof(
+				ctx, "Registered %d loss of quorum replica recovery events for s%d",
+				eventCount, s.Ident.StoreID)
+		}
+		return err
+	}); err != nil {
+		// We don't want to abort server if we can't record recovery events
+		// as it is the last thing we need if cluster is already unhealthy.
+		log.Errorf(ctx, "failed to record loss of quorum recovery events: %v", err)
+	}
 
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)

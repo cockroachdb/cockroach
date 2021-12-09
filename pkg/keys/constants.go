@@ -160,9 +160,25 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// LocalStoreUnsafeReplicaRecoverySuffix is a suffix for temporary record entries put
+	// when loss of quorum recovery operations are performed offline on the store.
+	// See StoreReplicaUnsafeRecoveryKey for details.
+	localStoreUnsafeReplicaRecoverySuffix = []byte("loqr")
+	// LocalStoreUnsafeReplicaRecoveryKeyMin is the start of keyspace used to store
+	// loss of quorum recovery record entries.
+	LocalStoreUnsafeReplicaRecoveryKeyMin = MakeStoreKey(localStoreUnsafeReplicaRecoverySuffix, nil)
+	// LocalStoreUnsafeReplicaRecoveryKeyMax is the end of keyspace used to store
+	// loss of quorum recovery record entries.
+	LocalStoreUnsafeReplicaRecoveryKeyMax = LocalStoreUnsafeReplicaRecoveryKeyMin.PrefixEnd()
 	// localStoreNodeTombstoneSuffix stores key value pairs that map
 	// nodeIDs to time of removal from cluster.
 	localStoreNodeTombstoneSuffix = []byte("ntmb")
+	// localStoreCachedSettingsSuffix stores the cached settings for node.
+	localStoreCachedSettingsSuffix = []byte("stng")
+	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
+	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
@@ -172,12 +188,6 @@ var (
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
-	// localStoreCachedSettingsSuffix stores the cached settings for node.
-	localStoreCachedSettingsSuffix = []byte("stng")
-	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
-	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
-	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
-	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 
 	// 5. Lock table keys
 	//

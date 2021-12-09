@@ -82,6 +82,8 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/loqrecovery",
+        "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/kv/kvserver/protectedts/ptprovider",
