@@ -168,7 +168,7 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 		}
 	}()
 
-	unpartitioned, partitioned, args := smither.GenerateTLP()
+	unpartitioned, partitioned, distinct, args := smither.GenerateTLP()
 
 	return runWithTimeout(func() error {
 		rows1, err := conn.Query(unpartitioned)
@@ -198,7 +198,7 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 			return nil
 		}
 
-		if diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows); diff != "" {
+		if diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows, distinct); diff != "" {
 			logStmt(unpartitioned)
 			logStmt(partitioned)
 			return errors.Newf(
@@ -209,7 +209,7 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	})
 }
 
-func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
+func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string, distinct bool) string {
 	var rows1 []string
 	for _, row := range rowMatrix1 {
 		rows1 = append(rows1, strings.Join(row[:], ","))
@@ -220,6 +220,20 @@ func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
 	}
 	sort.Strings(rows1)
 	sort.Strings(rows2)
+	if distinct {
+		slices := [][]string{rows1, rows2}
+		for idx, slice := range slices {
+			n := 0
+			for i := 1; i < len(slice); i++ {
+				if slice[i] != slice[i-1] {
+					n++
+					slice[n] = slice[i]
+				}
+			}
+			slices[idx] = slice[:n]
+		}
+		rows1, rows2 = slices[0], slices[1]
+	}
 	return cmp.Diff(rows1, rows2)
 }
 

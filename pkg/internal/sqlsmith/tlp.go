@@ -33,7 +33,11 @@ import (
 // possible to use TLP to test other aggregations, GROUP BY, and HAVING, which
 // have all been implemented in SQLancer. See:
 // https://github.com/sqlancer/sqlancer/tree/1.1.0/src/sqlancer/cockroachdb/oracle/tlp.
-func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []interface{}) {
+func (s *Smither) GenerateTLP() (
+	unpartitioned, partitioned string,
+	distinct bool,
+	args []interface{},
+) {
 	// Set disableImpureFns to true so that generated predicates are immutable.
 	originalDisableImpureFns := s.disableImpureFns
 	s.disableImpureFns = true
@@ -41,17 +45,20 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []inter
 		s.disableImpureFns = originalDisableImpureFns
 	}()
 
-	switch tlpType := s.rnd.Intn(4); tlpType {
+	switch tlpType := s.rnd.Intn(5); tlpType {
 	case 0:
-		return s.generateWhereTLP()
+		partitioned, unpartitioned, args = s.generateWhereTLP()
 	case 1:
 		partitioned, unpartitioned = s.generateOuterJoinTLP()
 	case 2:
 		partitioned, unpartitioned = s.generateInnerJoinTLP()
+	case 3:
+		partitioned, unpartitioned = s.generateDistinctTLP()
+		distinct = true
 	default:
 		partitioned, unpartitioned = s.generateAggregationTLP()
 	}
-	return partitioned, unpartitioned, nil
+	return partitioned, unpartitioned, distinct, args
 }
 
 // generateWhereTLP returns two SQL queries as strings that can be used by the
@@ -366,6 +373,58 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	partitioned = fmt.Sprintf(
 		"SELECT %s(agg) FROM (%s UNION ALL %s UNION ALL %s)",
 		outerAgg, part1, part2, part3,
+	)
+
+	return unpartitioned, partitioned
+}
+
+// generateDistinctTLP returns two SQL queries as strings that can be used by the
+// GenerateTLP function. These queries DISTINCT on random columns and make use
+// of the WHERE clause to partition the original query into three.
+//
+// The first query returned is an unpartitioned query of the form:
+//
+//   SELECT DISTINCT {cols...} FROM table
+//
+// The second query returned is a partitioned query of the form:
+//
+//   SELECT DISTINCT {cols...} FROM table WHERE (p) UNION ALL
+//   SELECT DISTINCT {cols...} FROM table WHERE NOT (p) UNION ALL
+//   SELECT DISTINCT {cols...} FROM table WHERE (p) IS NULL
+//
+// If the resulting values of the two queries are not equal, there is a logical
+// bug.
+func (s *Smither) generateDistinctTLP() (unpartitioned, partitioned string) {
+	f := tree.NewFmtCtx(tree.FmtParsable)
+
+	table, _, _, cols, ok := s.getSchemaTable()
+	if !ok {
+		panic(errors.AssertionFailedf("failed to find random table"))
+	}
+	table.Format(f)
+	tableName := f.CloseAndGetString()
+	// Take a random subset of the columns to distinct on.
+	s.rnd.Shuffle(len(cols), func(i, j int) { cols[i], cols[j] = cols[j], cols[i] })
+	n := s.rnd.Intn(len(cols))
+	if n == 0 {
+		n = 1
+	}
+	colStrs := make([]string, n)
+	for i, ref := range cols[:n] {
+		colStrs[i] = tree.AsStringWithFlags(ref.typedExpr(), tree.FmtParsable)
+	}
+	distinctCols := strings.Join(colStrs, ",")
+	unpartitioned = fmt.Sprintf("SELECT DISTINCT %s FROM %s", distinctCols, tableName)
+
+	pred := makeBoolExpr(s, cols)
+	pred.Format(f)
+	predicate := f.CloseAndGetString()
+
+	part1 := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE %s", distinctCols, tableName, predicate)
+	part2 := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE NOT (%s)", distinctCols, tableName, predicate)
+	part3 := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE (%s) IS NULL", distinctCols, tableName, predicate)
+	partitioned = fmt.Sprintf(
+		"(%s) UNION ALL (%s) UNION ALL (%s)", part1, part2, part3,
 	)
 
 	return unpartitioned, partitioned
