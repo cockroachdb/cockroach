@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -62,6 +63,8 @@ well unless it can be verified using a trusted root certificate store. That is,
 }
 
 func runStartSQL(cmd *cobra.Command, args []string) error {
+	tBegin := timeutil.Now()
+
 	// First things first: if the user wants background processing,
 	// relinquish the terminal ASAP by forking and exiting.
 	//
@@ -108,7 +111,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	initGEOS(ctx)
 
-	sqlServer, addr, httpAddr, err := server.StartTenant(
+	sqlServer, _, _, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
@@ -145,7 +148,9 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		sqlServer.StartDiagnostics(ctx)
 	}
 
-	log.Infof(ctx, "SQL server for tenant %s listening at %s, http at %s", serverCfg.SQLConfig.TenantID, addr, httpAddr)
+	// Report the server identifiers and other server details
+	// in the same format as 'cockroach start'.
+	reportServerInfo(ctx, tBegin, &serverCfg, st, false /* isHostNode */, false /* initialStart */)
 
 	// TODO(tbg): make the other goodies in `./cockroach start` reusable, such as
 	// logging to files, periodic memory output, heap and goroutine dumps, debug
