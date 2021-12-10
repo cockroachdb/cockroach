@@ -27,6 +27,7 @@ import {
   flattenStatementStats,
   DurationToNumber,
   transactionScopedStatementKey,
+  computeOrUseStmtSummary,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -74,6 +75,21 @@ export const statementFingerprintIdsToText = (
     .join("\n");
 };
 
+// Combine all statement summaries into a string.
+export const statementFingerprintIdsToSummarizedText = (
+  statementFingerprintIds: Long[],
+  statements: Statement[],
+): string => {
+  return statementFingerprintIds
+    .map(s => {
+      const query = statements.find(stmt => stmt.id.eq(s))?.key.key_data.query;
+      const querySummary = statements.find(stmt => stmt.id.eq(s))?.key.key_data
+        .query_summary;
+      return computeOrUseStmtSummary(query, querySummary);
+    })
+    .join("\n");
+};
+
 // Aggregate transaction statements from different nodes.
 export const aggregateStatements = (
   statements: Statement[],
@@ -85,6 +101,7 @@ export const aggregateStatements = (
     if (!(key in statsKey)) {
       statsKey[key] = {
         label: s.statement,
+        summary: s.statement_summary,
         aggregatedTs: s.aggregated_ts,
         aggregationInterval: s.aggregation_interval,
         implicitTxn: s.implicit_txn,

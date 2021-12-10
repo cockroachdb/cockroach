@@ -281,6 +281,7 @@ func NewTempContainerFromExistingStmtStats(
 		stmtStats.mu.distSQLUsed = statistics[i].Key.KeyData.DistSQL
 		stmtStats.mu.fullScan = statistics[i].Key.KeyData.FullScan
 		stmtStats.mu.database = statistics[i].Key.KeyData.Database
+		stmtStats.mu.querySummary = statistics[i].Key.KeyData.QuerySummary
 	}
 
 	return container, nil /* remaining */, nil /* err */
@@ -408,8 +409,11 @@ type stmtStats struct {
 		fullScan bool
 
 		// database records the database from the session the statement
-		// was executed from
+		// was executed from.
 		database string
+
+		// querySummary records a summarized format of the query statement.
+		querySummary string
 
 		data roachpb.StatementStatistics
 	}

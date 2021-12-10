@@ -206,6 +206,9 @@ function makeCommonColumns(
 export interface AggregateStatistics {
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
+  // summary exists only for SELECT/INSERT/UPSERT/UPDATE statements, and is
+  // replaced with shortStatement otherwise.
+  summary: string;
   aggregatedTs: number;
   aggregationInterval: number;
   implicitTxn: boolean;

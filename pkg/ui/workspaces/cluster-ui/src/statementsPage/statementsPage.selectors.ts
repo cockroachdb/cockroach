@@ -34,6 +34,7 @@ import { SQLStatsState } from "../store/sqlStats";
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 export interface StatementsSummaryData {
   statement: string;
+  statementSummary: string;
   aggregatedTs: number;
   aggregationInterval: number;
   implicitTxn: boolean;
@@ -174,6 +175,7 @@ export const selectStatements = createSelector(
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
           statement: stmt.statement,
+          statementSummary: stmt.statement_summary,
           aggregatedTs: stmt.aggregated_ts,
           aggregationInterval: stmt.aggregation_interval,
           implicitTxn: stmt.implicit_txn,
@@ -189,6 +191,7 @@ export const selectStatements = createSelector(
       const stmt = statsByStatementKey[key];
       return {
         label: stmt.statement,
+        summary: stmt.statementSummary,
         aggregatedTs: stmt.aggregatedTs,
         aggregationInterval: stmt.aggregationInterval,
         implicitTxn: stmt.implicitTxn,

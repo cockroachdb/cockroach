@@ -20,6 +20,7 @@ type Statement struct {
 	parser.Statement
 
 	StmtNoConstants string
+	StmtSummary     string
 	QueryID         ClusterWideID
 
 	ExpectedTypes colinfo.ResultColumns
@@ -41,6 +42,7 @@ func makeStatement(parserStmt parser.Statement, queryID ClusterWideID) Statement
 	return Statement{
 		Statement:       parserStmt,
 		StmtNoConstants: formatStatementHideConstants(parserStmt.AST),
+		StmtSummary:     formatStatementSummary(parserStmt.AST),
 		QueryID:         queryID,
 	}
 }
@@ -51,6 +53,7 @@ func makeStatementFromPrepared(prepared *PreparedStatement, queryID ClusterWideI
 		Prepared:        prepared,
 		ExpectedTypes:   prepared.Columns,
 		StmtNoConstants: prepared.StatementNoConstants,
+		StmtSummary:     prepared.StatementSummary,
 		QueryID:         queryID,
 	}
 }

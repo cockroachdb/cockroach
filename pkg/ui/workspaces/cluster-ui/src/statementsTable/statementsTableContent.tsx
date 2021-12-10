@@ -27,11 +27,10 @@ import {
   databaseAttr,
   aggregatedTsAttr,
   propsToQueryString,
-  summarize,
   TimestampToMoment,
   aggregationIntervalAttr,
+  computeOrUseStmtSummary,
 } from "src/util";
-import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Download } from "@cockroachlabs/icons";
@@ -49,6 +48,7 @@ export const StatementTableCell = {
   ) => (stmt: AggregateStatistics): React.ReactElement => (
     <StatementLink
       statement={stmt.label}
+      statementSummary={stmt.summary}
       aggregatedTs={stmt.aggregatedTs}
       aggregationInterval={stmt.aggregationInterval}
       database={stmt.database}
@@ -165,6 +165,7 @@ interface StatementLinkProps {
   aggregatedTs?: number;
   aggregationInterval?: number;
   statement: string;
+  statementSummary: string;
   app: string;
   implicitTxn: boolean;
   search: string;
@@ -177,6 +178,7 @@ export const StatementLink = ({
   aggregatedTs,
   aggregationInterval,
   statement,
+  statementSummary,
   app,
   implicitTxn,
   search,
@@ -184,7 +186,6 @@ export const StatementLink = ({
   database,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
-  const summary = summarize(statement);
   const onStatementClick = React.useCallback(() => {
     if (onClick) {
       onClick(statement);
@@ -201,6 +202,8 @@ export const StatementLink = ({
     database,
   };
 
+  const summary = computeOrUseStmtSummary(statement, statementSummary);
+
   return (
     <Link to={StatementLinkTarget(linkProps)} onClick={onStatementClick}>
       <div>
@@ -213,12 +216,7 @@ export const StatementLink = ({
           }
         >
           <div className="cl-table-link__tooltip-hover-area">
-            {getHighlightedText(
-              shortStatement(summary, statement),
-              search,
-              false,
-              true,
-            )}
+            {getHighlightedText(summary, search, false, true)}
           </div>
         </Tooltip>
       </div>

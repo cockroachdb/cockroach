@@ -153,6 +153,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     byNode: [
       {
         label: "4",
+        summary: "SELECT city, id FROM vehicles",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,
@@ -162,6 +163,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "3",
+        summary: "SELECT city, id FROM vehicles",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,
@@ -171,6 +173,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "2",
+        summary: "SELECT city, id FROM vehicles",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,
@@ -180,6 +183,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
       },
       {
         label: "1",
+        summary: "SELECT city, id FROM vehicles",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,

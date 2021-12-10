@@ -13,6 +13,7 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -143,11 +144,37 @@ const (
 	// FmtMarkRedactionNode instructs the pretty printer to redact datums,
 	// constants, and simples names (i.e. Name, UnrestrictedName) from statements.
 	FmtMarkRedactionNode
+
+	// FmtSummary instructs the pretty printer to produced a summarized version
+	// of the query, to pass to the frontend.
+	//
+	// Here are the following formats we support:
+	// SELECT: SELECT {columns} FROM {tables}
+	// - Show columns up to 15 characters.
+	// - Show tables up to 30 characters.
+	// - Hide column names in nested select queries.
+	// INSERT/UPSERT: INSERT/UPSERT INTO {table} {columns}
+	// - Show table up to 30 characters.
+	// - Show columns up to 15 characters.
+	// INSERT SELECT: INSERT INTO {table} SELECT {columns} FROM {table}
+	// - Show table up to 30 characters.
+	// - Show columns up to 15 characters.
+	// UPDATE: UPDATE {table} SET {columns} WHERE {condition}
+	// - Show table up to 30 characters.
+	// - Show columns up to 15 characters.
+	// - Show condition up to 15 characters.
+	FmtSummary
 )
 
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.
 const PasswordSubstitution = "'*****'"
+
+// ColumnLimit is the max character limit for columns in summarized queries
+const ColumnLimit = 15
+
+// TableLimit is the max character limit for tables in summarized queries
+const TableLimit = 30
 
 // Composite/derived flag definitions follow.
 const (
@@ -460,11 +487,114 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	}
 }
 
+// formatLimitLength recurses into a node for pretty-printing, but limits the
+// number of characters to be printed.
+func (ctx *FmtCtx) formatLimitLength(n NodeFormatter, maxLength int) {
+	temp := NewFmtCtx(ctx.flags)
+	temp.FormatNodeSummary(n)
+	s := temp.CloseAndGetString()
+	if len(s) > maxLength {
+		truncated := s[:maxLength] + "..."
+		// close all open parentheses.
+		if strings.Count(truncated, "(") > strings.Count(truncated, ")") {
+			remaining := s[maxLength:]
+			for i, c := range remaining {
+				if c == ')' {
+					truncated += ")"
+					// add ellipses if there was more text after the parenthesis in
+					// the original string.
+					if i < len(remaining)-1 && string(remaining[i+1]) != ")" {
+						truncated += "..."
+					}
+					if strings.Count(truncated, "(") <= strings.Count(truncated, ")") {
+						break
+					}
+				}
+			}
+		}
+		s = truncated
+	}
+	ctx.WriteString(s)
+}
+
+// formatSummarySelect pretty-prints a summarized select statement.
+// See FmtSummary for supported formats.
+func (ctx *FmtCtx) formatSummarySelect(node *Select) {
+	if node.With == nil {
+		s := node.Select
+		if s, ok := s.(*SelectClause); ok {
+			ctx.WriteString("SELECT ")
+			ctx.formatLimitLength(&s.Exprs, ColumnLimit)
+			if len(s.From.Tables) > 0 {
+				ctx.WriteByte(' ')
+				ctx.formatLimitLength(&s.From, TableLimit+len("FROM "))
+			}
+		}
+	}
+}
+
+// formatSummaryInsert pretty-prints a summarized insert/upsert statement.
+// See FmtSummary for supported formats.
+func (ctx *FmtCtx) formatSummaryInsert(node *Insert) {
+	if node.OnConflict.IsUpsertAlias() {
+		ctx.WriteString("UPSERT")
+	} else {
+		ctx.WriteString("INSERT")
+	}
+	ctx.WriteString(" INTO ")
+	ctx.formatLimitLength(node.Table, TableLimit)
+	rows := node.Rows
+	expr := rows.Select
+	if _, ok := expr.(*SelectClause); ok {
+		ctx.WriteByte(' ')
+		ctx.FormatNodeSummary(rows)
+	} else if node.Columns != nil {
+		ctx.WriteByte('(')
+		ctx.formatLimitLength(&node.Columns, ColumnLimit)
+		ctx.WriteByte(')')
+	}
+}
+
+// formatSummaryUpdate pretty-prints a summarized update statement.
+// See FmtSummary for supported formats.
+func (ctx *FmtCtx) formatSummaryUpdate(node *Update) {
+	if node.With == nil {
+		ctx.WriteString("UPDATE ")
+		ctx.formatLimitLength(node.Table, TableLimit)
+		ctx.WriteString(" SET ")
+		ctx.formatLimitLength(&node.Exprs, ColumnLimit)
+		if node.Where != nil {
+			ctx.WriteByte(' ')
+			ctx.formatLimitLength(node.Where, ColumnLimit+len("WHERE "))
+		}
+	}
+}
+
+// FormatNodeSummary recurses into a node for pretty-printing a summarized version.
+func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
+	switch node := n.(type) {
+	case *Insert:
+		ctx.formatSummaryInsert(node)
+		return
+	case *Select:
+		ctx.formatSummarySelect(node)
+		return
+	case *Update:
+		ctx.formatSummaryUpdate(node)
+		return
+	}
+	ctx.FormatNode(n)
+}
+
 // AsStringWithFlags pretty prints a node to a string given specific flags; only
 // flags that don't require Annotations can be used.
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
 	ctx := NewFmtCtx(fl, opts...)
-	ctx.FormatNode(n)
+	if fl.HasFlags(FmtSummary) {
+		ctx.FormatNodeSummary(n)
+	} else {
+		ctx.FormatNode(n)
+	}
 	return ctx.CloseAndGetString()
 }
 

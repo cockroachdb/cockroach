@@ -623,19 +623,15 @@ export class StatementDetails extends React.Component<
                       )}
                       {unavailableTooltip}
                     </div>
-                    {showRowsWritten && (
-                      <div
-                        className={summaryCardStylesCx("summary--card__item")}
-                      >
-                        <Text>Mean rows written</Text>
-                        <Text>
-                          {formatNumberForDisplay(
-                            stats.rows_written?.mean,
-                            formatTwoPlaces,
-                          )}
-                        </Text>
-                      </div>
-                    )}
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Mean rows written</Text>
+                      <Text>
+                        {formatNumberForDisplay(
+                          stats.rows_written?.mean,
+                          formatTwoPlaces,
+                        )}
+                      </Text>
+                    </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Max memory usage</Text>
                       {statementSampled && (
@@ -915,10 +911,9 @@ export class StatementDetails extends React.Component<
                 },
               ].filter(function(r) {
                 if (
-                  (r.name === "Network Bytes Sent" &&
-                    r.value &&
-                    r.value.mean === 0) ||
-                  (r.name === "Rows Written" && !showRowsWritten)
+                  r.name === "Network Bytes Sent" &&
+                  r.value &&
+                  r.value.mean === 0
                 ) {
                   // Omit if empty.
                   return false;

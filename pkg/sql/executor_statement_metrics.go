@@ -152,13 +152,14 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	recordedStmtStatsKey := roachpb.StatementStatisticsKey{
-		Query:       stmt.StmtNoConstants,
-		DistSQL:     flags.IsDistributed(),
-		Vec:         flags.IsSet(planFlagVectorized),
-		ImplicitTxn: flags.IsSet(planFlagImplicitTxn),
-		FullScan:    flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
-		Failed:      stmtErr != nil,
-		Database:    planner.SessionData().Database,
+		Query:        stmt.StmtNoConstants,
+		QuerySummary: stmt.StmtSummary,
+		DistSQL:      flags.IsDistributed(),
+		Vec:          flags.IsSet(planFlagVectorized),
+		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
+		FullScan:     flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
+		Failed:       stmtErr != nil,
+		Database:     planner.SessionData().Database,
 	}
 
 	// We only populate the transaction fingerprint ID field if we are in an
