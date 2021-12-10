@@ -884,10 +884,27 @@ func rankedCandidateListForRebalancing(
 				)
 				continue
 			}
+
+			// `replsOnExemptedStores` is used during non-voting replica rebalancing
+			// to ignore stores that already have a voting replica for the same range.
+			// When rebalancing a voter, `replsOnExemptedStores` is empty since voters
+			// are allowed to "displace" non-voting replicas (we correctly turn such
+			// actions into non-voter promotions, see replicationChangesForRebalance()).
+			var exempted bool
 			for _, replOnExemptedStore := range replicasOnExemptedStores {
 				if store.StoreID == replOnExemptedStore.StoreID {
-					continue
+					log.VEventf(
+						ctx,
+						6,
+						"s%d is not a possible rebalance candidate for non-voters because it already has a voter of the range; ignoring",
+						store.StoreID,
+					)
+					exempted = true
+					break
 				}
+			}
+			if exempted {
+				continue
 			}
 
 			constraintsOK, necessary := rebalanceConstraintsChecker(store, existing.store)
