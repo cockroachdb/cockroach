@@ -12,7 +12,6 @@ package scgraph_test
 
 import (
 	"fmt"
-	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,11 +29,10 @@ func TestGraphRanks(t *testing.T) {
 	}
 
 	type testCase struct {
-		name            string
-		addNode         []bool
-		depEdges        []depEdge
-		expectedOrder   []int
-		expectedRankErr string
+		name     string
+		addNode  []bool
+		depEdges []depEdge
+		hasCycle bool
 	}
 
 	testCases := []testCase{
@@ -48,7 +46,6 @@ func TestGraphRanks(t *testing.T) {
 				{0, 1},
 				{3, 0},
 			},
-			expectedOrder: []int{3, 0, 1, 2},
 		},
 
 		// We will set up the dependency graph, so that its intentionally cyclic,
@@ -62,7 +59,7 @@ func TestGraphRanks(t *testing.T) {
 				{1, 3},
 				{3, 1},
 			},
-			expectedRankErr: "graph is not acyclical",
+			hasCycle: true,
 		},
 
 		// We will set up the dependency graph to have a swap, which won't affect
@@ -75,7 +72,7 @@ func TestGraphRanks(t *testing.T) {
 				{1, 0},
 				{2, 0},
 			},
-			expectedRankErr: "graph is not acyclical",
+			hasCycle: true,
 		},
 	}
 
@@ -139,32 +136,11 @@ func TestGraphRanks(t *testing.T) {
 				scpb.Status_PUBLIC,
 			))
 		}
-
-		// Validates the rank order for nodes.
-		validateNodeRanks := func(graph *scgraph.Graph, expectedOrder []int) {
-			rank, err := graph.GetNodeRanks()
-			if tc.expectedRankErr != "" {
-				require.Regexp(t, tc.expectedRankErr, err)
-				return // Nothing else to validate
-			} else {
-				require.NoError(t, err)
-			}
-			unsortedNodes := make([]*scpb.Node, 0, len(state.Nodes))
-			for _, node := range state.Nodes {
-				publicNode, ok := graph.GetNode(node.Target, scpb.Status_PUBLIC)
-				require.Truef(t, ok, "public node doesn't exist")
-				unsortedNodes = append(unsortedNodes, publicNode)
-			}
-			sort.SliceStable(unsortedNodes, func(i, j int) bool {
-				return rank[unsortedNodes[i]] > rank[unsortedNodes[j]]
-			})
-			sortedOrder := make([]int, 0, len(unsortedNodes))
-			for _, node := range unsortedNodes {
-				sortedOrder = append(sortedOrder, int(node.Table.TableID))
-			}
-			require.EqualValues(t, expectedOrder, sortedOrder, "ranks are not in expected order")
+		if err := graph.Validate(); err != nil {
+			require.True(t, tc.hasCycle)
+		} else {
+			require.False(t, tc.hasCycle)
 		}
-		validateNodeRanks(graph, tc.expectedOrder)
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) { run(t, tc) })

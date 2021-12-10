@@ -576,3 +576,154 @@ func PrimaryKeyString(desc catalog.TableDescriptor) string {
 	}
 	return f.CloseAndGetString()
 }
+
+// ColumnNamePlaceholder constructs a placeholder name for a column based on its
+// id.
+func ColumnNamePlaceholder(id descpb.ColumnID) string {
+	return fmt.Sprintf("crdb_internal_column_%d_name_placeholder", id)
+}
+
+// IndexNamePlaceholder constructs a placeholder name for an index based on its
+// id.
+func IndexNamePlaceholder(id descpb.IndexID) string {
+	return fmt.Sprintf("crdb_internal_index_%d_name_placeholder", id)
+}
+
+// RenameColumnInTable will rename the column in tableDesc from oldName to
+// newName, including in expressions as well as shard columns.
+// The function is recursive because of this, but there should only be one level
+// of recursion.
+func RenameColumnInTable(
+	tableDesc *Mutable,
+	col catalog.Column,
+	newName tree.Name,
+	isShardColumnRenameable func(shardCol catalog.Column, newShardColName tree.Name) (bool, error),
+) error {
+	renameInExpr := func(expr *string) error {
+		newExpr, renameErr := schemaexpr.RenameColumn(*expr, col.ColName(), newName)
+		if renameErr != nil {
+			return renameErr
+		}
+		*expr = newExpr
+		return nil
+	}
+
+	// Rename the column in CHECK constraints.
+	for i := range tableDesc.Checks {
+		if err := renameInExpr(&tableDesc.Checks[i].Expr); err != nil {
+			return err
+		}
+	}
+
+	// Rename the column in computed columns.
+	for i := range tableDesc.Columns {
+		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
+			if err := renameInExpr(otherCol.ComputeExpr); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Rename the column in partial idx predicates.
+	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
+		if idx.IsPartial() {
+			if err := renameInExpr(&idx.IndexDesc().Predicate); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Do all of the above renames inside check constraints, computed expressions,
+	// and idx predicates that are in mutations.
+	for i := range tableDesc.Mutations {
+		m := &tableDesc.Mutations[i]
+		if constraint := m.GetConstraint(); constraint != nil {
+			if constraint.ConstraintType == descpb.ConstraintToUpdate_CHECK ||
+				constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL {
+				if err := renameInExpr(&constraint.Check.Expr); err != nil {
+					return err
+				}
+			}
+		} else if otherCol := m.GetColumn(); otherCol != nil {
+			if otherCol.IsComputed() {
+				if err := renameInExpr(otherCol.ComputeExpr); err != nil {
+					return err
+				}
+			}
+		} else if idx := m.GetIndex(); idx != nil {
+			if idx.IsPartial() {
+				if err := renameInExpr(&idx.Predicate); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Rename the column in hash-sharded idx descriptors. Potentially rename the
+	// shard column too if we haven't already done it.
+	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
+	maybeUpdateShardedDesc := func(shardedDesc *descpb.ShardedDescriptor) {
+		if !shardedDesc.IsSharded {
+			return
+		}
+		oldShardColName := tree.Name(GetShardColumnName(
+			shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+		var changed bool
+		for i, c := range shardedDesc.ColumnNames {
+			if c == string(col.ColName()) {
+				changed = true
+				shardedDesc.ColumnNames[i] = string(newName)
+			}
+		}
+		if !changed {
+			return
+		}
+		newShardColName, alreadyRenamed := shardColumnsToRename[oldShardColName]
+		if !alreadyRenamed {
+			newShardColName = tree.Name(GetShardColumnName(shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+			shardColumnsToRename[oldShardColName] = newShardColName
+		}
+		// Keep the shardedDesc name in sync with the column name.
+		shardedDesc.Name = string(newShardColName)
+	}
+	for _, idx := range tableDesc.NonDropIndexes() {
+		maybeUpdateShardedDesc(&idx.IndexDesc().Sharded)
+	}
+
+	// Rename the column in the indexes.
+	tableDesc.RenameColumnDescriptor(col, string(newName))
+
+	// Rename any shard columns which need to be renamed because their name was
+	// based on this column.
+	for oldShardColName, newShardColName := range shardColumnsToRename {
+		shardCol, err := tableDesc.FindColumnWithName(oldShardColName)
+		if err != nil {
+			return err
+		}
+		var canBeRenamed bool
+		if isShardColumnRenameable == nil {
+			canBeRenamed = true
+		} else if canBeRenamed, err = isShardColumnRenameable(shardCol, newShardColName); err != nil {
+			return err
+		}
+		if !canBeRenamed {
+			return nil
+		}
+		// Recursively rename the shard column.
+		// We don't need to worry about deeper than one recursive call because
+		// shard columns cannot refer to each other.
+		return RenameColumnInTable(tableDesc, shardCol, newShardColName, nil /* isShardColumnRenameable */)
+	}
+
+	// Rename the REGIONAL BY ROW column reference.
+	if tableDesc.IsLocalityRegionalByRow() {
+		rbrColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return err
+		}
+		if rbrColName == col.ColName() {
+			tableDesc.SetTableLocalityRegionalByRow(newName)
+		}
+	}
+	return nil
+}

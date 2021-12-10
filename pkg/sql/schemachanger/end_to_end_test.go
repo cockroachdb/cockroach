@@ -103,7 +103,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 					})),
 					sctestdeps.WithTestingKnobs(&scrun.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
-							deps.LogSideEffectf("## %s", p.StagesForCurrentPhase()[stageIdx].String())
+							deps.LogSideEffectf("## %s", p.Stages[stageIdx].String())
 							return nil
 						},
 					}),
@@ -141,7 +141,7 @@ func execStatementWithTestDeps(
 		// Run statement phase.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		state, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
+		state, _, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
 		require.NoError(t, err, "error in %s", s.Phase())
 		deps.LogSideEffectf("# end %s", deps.Phase())
 		// Run pre-commit phase.
@@ -221,18 +221,14 @@ func TestRollback(t *testing.T) {
 					lines = append(lines, stmt.SQL)
 				}
 				t.Run(strings.Join(lines, "; "), func(t *testing.T) {
-					numStages, numRevertibleStages := countRevertiblePostCommitStages(ctx, t, setup, stmts)
-					if numStages == 0 {
-						t.Logf("test case has no post-commit stages, skipping...")
-						return
-					}
+					numRevertibleStages := countRevertiblePostCommitStages(ctx, t, setup, stmts)
 					if numRevertibleStages == 0 {
-						t.Logf("test case has %d post-commit stages but none are revertible, skipping...", numStages)
+						t.Logf("test case has no revertible post-commit stages, skipping...")
 						return
 					}
-					t.Logf("test case has %d post-commit stages of which %d are revertible", numStages, numRevertibleStages)
-					for i := 0; i < numRevertibleStages; i++ {
-						if !t.Run(fmt.Sprintf("rollback stage %d of %d", i+1, numStages), func(t *testing.T) {
+					t.Logf("test case has %d revertible post-commit stages", numRevertibleStages)
+					for i := 1; i <= numRevertibleStages; i++ {
+						if !t.Run(fmt.Sprintf("rollback stage %d of %d", i, numRevertibleStages), func(t *testing.T) {
 							testRollbackCase(ctx, t, setup, stmts, i)
 						}) {
 							return
@@ -254,13 +250,17 @@ func testRollbackCase(
 	t *testing.T,
 	setup []parser.Statement,
 	stmts []parser.Statement,
-	rollbackStageIdx int,
+	rollbackStageOrdinal int,
 ) {
 	var numInjectedFailures uint32
-	beforeRevertiblePostCommitStage := func(p scplan.Plan, stageIdx int) error {
-		if atomic.LoadUint32(&numInjectedFailures) == 0 && stageIdx == rollbackStageIdx {
+	beforeStage := func(p scplan.Plan, stageIdx int) error {
+		if atomic.LoadUint32(&numInjectedFailures) > 0 {
+			return nil
+		}
+		s := p.Stages[stageIdx]
+		if s.Phase == scop.PostCommitPhase && s.Ordinal == rollbackStageOrdinal {
 			atomic.AddUint32(&numInjectedFailures, 1)
-			return errors.Errorf("boom %d", rollbackStageIdx)
+			return errors.Errorf("boom %d", rollbackStageOrdinal)
 		}
 		return nil
 	}
@@ -268,34 +268,36 @@ func testRollbackCase(
 		// Reset the counter in case the transaction is retried for whatever reason.
 		atomic.StoreUint32(&numInjectedFailures, 0)
 	}
-	err := execRolledBackStatements(ctx, t, setup, stmts, beforeRevertiblePostCommitStage, resetTxnState)
+	err := execRolledBackStatements(ctx, t, setup, stmts, beforeStage, resetTxnState)
 	if atomic.LoadUint32(&numInjectedFailures) == 0 {
 		require.NoError(t, err)
 	} else {
-		require.Regexp(t, fmt.Sprintf("boom %d", rollbackStageIdx), err)
+		require.Regexp(t, fmt.Sprintf("boom %d", rollbackStageOrdinal), err)
 	}
 }
 
 // countRevertiblePostCommitStages runs the test statements to count the number
-// of stages in the post-commit phase which are marked as revertible.
+// of stages in the post-commit phase which are revertible.
 func countRevertiblePostCommitStages(
 	ctx context.Context, t *testing.T, setup []parser.Statement, stmt []parser.Statement,
-) (numTotalPostCommitStages int, numRevertiblePostCommitStages int) {
-	var nTotal, nRevertible uint32
-	beforeRevertiblePostCommitStage := func(p scplan.Plan, stageIdx int) error {
-		atomic.StoreUint32(&nTotal, uint32(len(p.StagesForCurrentPhase())))
-		n := uint32(0)
-		for _, stage := range p.StagesForCurrentPhase() {
-			if !stage.Revertible {
-				break
-			}
-			n++
+) (numRevertiblePostCommitStages int) {
+	var nRevertible uint32
+	beforeStage := func(p scplan.Plan, _ int) error {
+		if p.Params.ExecutionPhase != scop.PostCommitPhase {
+			return nil
 		}
-		atomic.StoreUint32(&nRevertible, n)
+		n := uint32(0)
+		for _, s := range p.Stages {
+			if s.Phase == scop.PostCommitPhase {
+				n++
+			}
+		}
+		// Only store this value once.
+		atomic.CompareAndSwapUint32(&nRevertible, 0, n)
 		return nil
 	}
-	require.NoError(t, execRolledBackStatements(ctx, t, setup, stmt, beforeRevertiblePostCommitStage, func() {}))
-	return int(atomic.LoadUint32(&nTotal)), int(atomic.LoadUint32(&nRevertible))
+	require.NoError(t, execRolledBackStatements(ctx, t, setup, stmt, beforeStage, func() {}))
+	return int(atomic.LoadUint32(&nRevertible))
 }
 
 // execRolledBackStatements spins up a test cluster, executes the setup
@@ -306,7 +308,7 @@ func execRolledBackStatements(
 	t *testing.T,
 	setup []parser.Statement,
 	stmts []parser.Statement,
-	beforeRevertiblePostCommitStageCallback func(p scplan.Plan, stageIdx int) error,
+	beforeStage func(p scplan.Plan, stageIdx int) error,
 	txnStartCallback func(),
 ) (err error) {
 	const fetchDescriptorStateQuery = `
@@ -325,12 +327,7 @@ func execRolledBackStatements(
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
-					BeforeStage: func(p scplan.Plan, stageIdx int) error {
-						if p.Params.ExecutionPhase != scop.PostCommitPhase || !p.StagesForCurrentPhase()[stageIdx].Revertible {
-							return nil
-						}
-						return beforeRevertiblePostCommitStageCallback(p, stageIdx)
-					},
+					BeforeStage: beforeStage,
 				},
 			},
 		},

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -93,17 +94,18 @@ func TestPlanDataDriven(t *testing.T) {
 				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
-					var outputNodes scpb.State
+					var state scpb.State
 					for i := range stmts {
-						outputNodes, err = scbuild.Build(ctx, deps, outputNodes, stmts[i].AST)
+						state, err = scbuild.Build(ctx, deps, state, stmts[i].AST)
 						require.NoError(t, err)
 					}
 
-					plan = sctestutils.MakePlan(t, outputNodes, scop.StatementPhase)
+					plan = sctestutils.MakePlan(t, state, scop.EarliestPhase)
+					validatePlan(t, &plan)
 				})
 
 				if d.Cmd == "ops" {
-					return marshalOps(t, &plan)
+					return marshalOps(t, plan.Stages)
 				}
 				return marshalDeps(t, &plan)
 			case "unimplemented":
@@ -126,6 +128,32 @@ func TestPlanDataDriven(t *testing.T) {
 		}
 		datadriven.RunTest(t, path, run)
 	})
+}
+
+// validatePlan takes an existing plan and re-plans using the starting state of
+// an arbitrary stage in the existing plan: the results should be the same as in
+// the original plan, minus the stages prior to the selected stage.
+// This guarantees the idempotency of the planning scheme, which is a useful
+// property to have. For instance it guarantees that the output of EXPLAIN (DDL)
+// represents the plan that actually gets executed in the various execution
+// phases.
+func validatePlan(t *testing.T, plan *scplan.Plan) {
+	stages := plan.Stages
+	for i, stage := range stages {
+		expected := make([]scstage.Stage, len(stages[i:]))
+		for j, s := range stages[i:] {
+			if s.Phase == stage.Phase {
+				offset := stage.Ordinal - 1
+				s.Ordinal = s.Ordinal - offset
+				s.StagesInPhase = s.StagesInPhase - offset
+			}
+			expected[j] = s
+		}
+		e := marshalOps(t, expected)
+		truncatedPlan := sctestutils.MakePlan(t, stage.Before, stage.Phase)
+		a := marshalOps(t, truncatedPlan.Stages)
+		require.Equalf(t, e, a, "plan mismatch when re-planning %d stage(s) later", i)
+	}
 }
 
 // indentText indents text for formatting out marshaled data.
@@ -172,11 +200,11 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 }
 
 // marshalOps marshals operations in scplan.Plan to a string.
-func marshalOps(t *testing.T, plan *scplan.Plan) string {
-	var stages strings.Builder
-	for _, stage := range plan.StagesForAllPhases() {
-		stages.WriteString(stage.String())
-		stages.WriteString("\n  transitions:\n")
+func marshalOps(t *testing.T, stages []scstage.Stage) string {
+	var sb strings.Builder
+	for _, stage := range stages {
+		sb.WriteString(stage.String())
+		sb.WriteString("\n  transitions:\n")
 		var transitionsBuf strings.Builder
 		for i := range stage.Before.Nodes {
 			before, after := stage.Before.Nodes[i], stage.After.Nodes[i]
@@ -186,24 +214,25 @@ func marshalOps(t *testing.T, plan *scplan.Plan) string {
 			_, _ = fmt.Fprintf(&transitionsBuf, "%s -> %s\n",
 				screl.NodeString(before), after.Status)
 		}
-		stages.WriteString(indentText(transitionsBuf.String(), "    "))
-		if stage.Ops == nil {
-			// Although unlikely, it's possible for a stage to have no operations. This
-			// requires them to have been optimized out, and also requires that the
-			// resulting empty stage could not be collapsed into another.
-			stages.WriteString("  no ops\n")
+		sb.WriteString(indentText(transitionsBuf.String(), "    "))
+		ops := stage.Ops()
+		if len(ops) == 0 {
+			// Although unlikely, it's possible for a stage to have no operations.
+			// This requires them to have been optimized out, and also requires that
+			// the resulting empty stage could not be collapsed into another.
+			sb.WriteString("  no ops\n")
 			continue
 		}
-		stages.WriteString("  ops:\n")
+		sb.WriteString("  ops:\n")
 		stageOps := ""
-		for _, op := range stage.Ops.Slice() {
+		for _, op := range ops {
 			opMap, err := scgraphviz.ToMap(op)
 			require.NoError(t, err)
 			data, err := yaml.Marshal(opMap)
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
-		stages.WriteString(indentText(stageOps, "    "))
+		sb.WriteString(indentText(stageOps, "    "))
 	}
-	return stages.String()
+	return sb.String()
 }

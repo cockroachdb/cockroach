@@ -45,6 +45,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",
