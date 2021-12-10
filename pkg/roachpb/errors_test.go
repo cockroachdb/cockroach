@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -158,27 +159,21 @@ func TestErrorRedaction(t *testing.T) {
 	})
 }
 
-func TestErrorDeprecatedFields(t *testing.T) {
-	// Verify that deprecated fields are populated and queried correctly.
+func TestErrorEncodingRoundTrip(t *testing.T) {
+	// Smoke check that encoding-decoding cycles don't lose or perturb information.
 
-	t.Run("unstructured", func(t *testing.T) {
+	t.Run("missing-encoded-error", func(t *testing.T) {
 		err := errors.New("I am an error")
 		pErr := NewError(err)
 		pErr.EncodedError.Reset()
-
-		require.Equal(t, err.Error(), pErr.String())
-		require.IsType(t, &internalError{}, pErr.GoError())
-		require.Equal(t, err.Error(), pErr.GoError().Error())
-		require.Equal(t, err.Error(), pErr.deprecatedMessage)
-		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
-		require.Nil(t, pErr.deprecatedDetail.Value)
+		err = pErr.GoError()
+		require.True(t, errors.IsAssertionFailure(err), "%+v", err)
 	})
 	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000)
 
 	t.Run("structured-wrapped", func(t *testing.T) {
-		// For extra spice, wrap the structured error. This ensures
-		// that we populate the deprecated fields even when
-		// the error detail is not the head of the error chain.
+		// Check that structured errors can be interpreted, even when they are
+		// wrapped.
 		err := NewReadWithinUncertaintyIntervalError(
 			hlc.Timestamp{WallTime: 1},
 			hlc.Timestamp{WallTime: 2},
@@ -189,15 +184,34 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		pErr := NewError(errors.Wrap(err, "foo"))
 		// Quick check that the detail round-trips when EncodedError is still there.
 		require.EqualValues(t, err, pErr.GetDetail())
+		// A ReadWithinUncertaintyIntervalError wants an immediate restart.
+		require.Equal(t, TransactionRestart_IMMEDIATE, pErr.TransactionRestart())
 
-		pErr.EncodedError.Reset()
-
+		// Txn retry errors are wrapped in an UnhandledRetryableError in Error.GoError,
+		// so this is more proof that the error round-tripped just fine.
 		var ure *UnhandledRetryableError
 		require.True(t, errors.As(pErr.GoError(), &ure))
 		require.Equal(t, &ure.PErr, pErr)
 		require.Contains(t, pErr.GoError().Error(), err.Error())
 		require.EqualValues(t, err, pErr.GetDetail())
-		require.Equal(t, TransactionRestart_IMMEDIATE, pErr.deprecatedTransactionRestart)
+	})
+
+	t.Run("roundtrip-loses-info", func(t *testing.T) {
+		// Documents that the pErr -> error -> pErr conversion is lossy. This is
+		// also documented on Error.GoError.
+		qErr := func() *Error {
+			pErr := NewErrorf("foo")
+			pErr.SetTxn(&txn)
+			pErr.SetErrorIndex(123)
+			pErr.OriginNode = 321
+			pErr.Now.WallTime++
+			return NewError(pErr.GoError())
+		}()
+
+		require.Zero(t, qErr.GetTxn())
+		require.Zero(t, qErr.Index)
+		require.Zero(t, qErr.OriginNode)
+		require.Zero(t, qErr.Now)
 	})
 }
 
@@ -214,4 +228,16 @@ func TestErrorGRPCStatus(t *testing.T) {
 	require.True(t, ok, "expected gRPC status error, got %T: %v", goErr, goErr)
 	require.Equal(t, s.Code(), decoded.Code())
 	require.Equal(t, s.Message(), decoded.Message())
+}
+
+func TestErrorToJsonPB(t *testing.T) {
+	// Verify that Error can marshal to JSON without blowing up.
+	jsonpb := protoutil.JSONPb{
+		Indent: "  ",
+	}
+	pErr := NewErrorf("foo")
+	require.NotPanics(t, func() {
+		_, err := jsonpb.Marshal(pErr)
+		require.NoError(t, err)
+	})
 }
