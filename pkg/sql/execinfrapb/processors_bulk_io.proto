@@ -305,6 +305,12 @@ message ParquetWriterSpec {
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+
+  // col_names specifies the logical column names for the exported parquet file.
+  repeated string col_names = 8 [(gogoproto.nullable) = false];
+
+  // col_nullability specifies which columns allow null values in the exported parquet file.
+  repeated bool col_nullability = 9 [(gogoproto.nullable) = false];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

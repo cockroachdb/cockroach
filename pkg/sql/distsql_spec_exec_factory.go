@@ -1128,7 +1128,11 @@ func (e *distSQLSpecExecFactory) ConstructCreateStatistics(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExport(
-	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
+	input exec.Node,
+	fileName tree.TypedExpr,
+	fileFormat string,
+	options []exec.KVOption,
+	notNullColsSet exec.NodeColumnOrdinalSet,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: export")
 }
