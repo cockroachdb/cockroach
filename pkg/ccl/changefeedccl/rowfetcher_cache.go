@@ -173,6 +173,10 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	); err != nil {
 		return nil, err
 	}
+
+	// Necessary because virtual columns are not populated.
+	rf.IgnoreUnexpectedNulls = true
+
 	// TODO(dan): Bound the size of the cache. Resolved notifications will let
 	// us evict anything for timestamps entirely before the notification. Then
 	// probably an LRU just in case?
