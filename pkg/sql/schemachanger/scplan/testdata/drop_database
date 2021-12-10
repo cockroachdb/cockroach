@@ -342,6 +342,8 @@ PreCommitPhase stage 1 of 1 with 56 MutationType ops
           UserName: root
         Statements:
         - statement: DROP DATABASE db1 CASCADE
+          redactedstatement: DROP DATABASE ‹db1› CASCADE
+          statementtag: DROP DATABASE
 PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
   transitions:
     [[Sequence:{DescID: 57}, ABSENT], DROPPED] -> ABSENT
@@ -373,7 +375,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Sequence:
           sequenceId: 57
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 3
         SubWorkID: 1
@@ -386,7 +389,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Table:
           tableId: 60
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 3
         SubWorkID: 1
@@ -404,7 +408,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
           - 57
           - 60
           schemaId: 55
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1
@@ -417,7 +422,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Sequence:
           sequenceId: 58
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 6
         SubWorkID: 1
@@ -430,7 +436,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Table:
           tableId: 59
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 6
         SubWorkID: 1
@@ -443,7 +450,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         View:
           tableId: 61
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 8
         SubWorkID: 1
@@ -456,7 +464,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         View:
           tableId: 62
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 9
         SubWorkID: 1
@@ -469,7 +478,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         View:
           tableId: 63
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 10
         SubWorkID: 1
@@ -482,7 +492,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         View:
           tableId: 64
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 10
         SubWorkID: 1
@@ -495,7 +506,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         View:
           tableId: 67
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 12
         SubWorkID: 1
@@ -508,7 +520,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Type:
           typeId: 65
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 6
         SubWorkID: 1
@@ -521,7 +534,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Type:
           typeId: 66
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 6
         SubWorkID: 1
@@ -546,7 +560,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
           - 66
           - 67
           schemaId: 56
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1
@@ -564,7 +579,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
           dependentObjects:
           - 55
           - 56
-      Statement: DROP DATABASE db1 CASCADE
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
