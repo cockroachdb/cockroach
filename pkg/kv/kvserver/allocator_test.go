@@ -4090,6 +4090,69 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 	}
 }
 
+// TestNonVotersCannotRebalanceToVoterStores ensures that non-voting replicas
+// cannot rebalance to stores that already have a voting replica for the range.
+func TestNonVotersCannotRebalanceToVoterStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		context.Background(), tracing.NewTracer(), "test",
+	)
+
+	stopper, g, _, a, _ := createTestAllocator(2, false /* deterministic */)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+
+	// Create 2 stores. Store 2 has a voting replica and store 1 has a non-voting
+	// replica. Make it such that store 1 has a full disk so the allocator will
+	// want to rebalance it away. However, the only possible candidate is store 2
+	// which already has a voting replica. Thus, this rebalance attempt should
+	// fail.
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Capacity: roachpb.StoreCapacity{
+				Capacity:  100,
+				Available: 0,
+			},
+		},
+		{
+			StoreID: 2,
+			Capacity: roachpb.StoreCapacity{
+				Capacity:  100,
+				Available: 100,
+			},
+		},
+	}
+	existingNonVoters := replicas(1)
+	existingVoters := replicas(2)
+
+	sg.GossipStores(stores, t)
+	var rangeUsageInfo RangeUsageInfo
+	add, remove, _, ok := a.RebalanceNonVoter(
+		ctx,
+		emptySpanConfig(),
+		nil,
+		existingVoters,
+		existingNonVoters,
+		rangeUsageInfo,
+		storeFilterThrottled,
+		a.scorerOptions(),
+	)
+
+	require.Falsef(
+		t, ok, "expected no action; got rebalance from s%d to s%d", remove.StoreID, add.StoreID,
+	)
+	trace := finishAndGetRecording().String()
+	require.Regexpf(
+		t,
+		"it already has a voter",
+		trace,
+		"expected the voter store to be explicitly ignored; got %s",
+		trace,
+	)
+}
+
 func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
