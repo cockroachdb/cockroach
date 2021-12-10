@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -158,8 +159,8 @@ func TestErrorRedaction(t *testing.T) {
 	})
 }
 
-func TestErrorDeprecatedFields(t *testing.T) {
-	// Verify that deprecated fields are populated and queried correctly.
+func TestErrorEncodingRoundTrip(t *testing.T) {
+	// Smoke check that encoding-decoding cycles don't lose or perturb information.
 
 	t.Run("unstructured", func(t *testing.T) {
 		err := errors.New("I am an error")
@@ -169,9 +170,6 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		require.Equal(t, err.Error(), pErr.String())
 		require.IsType(t, &internalError{}, pErr.GoError())
 		require.Equal(t, err.Error(), pErr.GoError().Error())
-		require.Equal(t, err.Error(), pErr.deprecatedMessage)
-		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
-		require.Nil(t, pErr.deprecatedDetail.Value)
 	})
 	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000)
 
@@ -197,7 +195,6 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		require.Equal(t, &ure.PErr, pErr)
 		require.Contains(t, pErr.GoError().Error(), err.Error())
 		require.EqualValues(t, err, pErr.GetDetail())
-		require.Equal(t, TransactionRestart_IMMEDIATE, pErr.deprecatedTransactionRestart)
 	})
 }
 
@@ -214,4 +211,16 @@ func TestErrorGRPCStatus(t *testing.T) {
 	require.True(t, ok, "expected gRPC status error, got %T: %v", goErr, goErr)
 	require.Equal(t, s.Code(), decoded.Code())
 	require.Equal(t, s.Message(), decoded.Message())
+}
+
+func TestErrorToJsonPB(t *testing.T) {
+	// Verify that Error can marshal to JSON without blowing up.
+	jsonpb := protoutil.JSONPb{
+		Indent: "  ",
+	}
+	pErr := NewErrorf("foo")
+	require.NotPanics(t, func() {
+		_, err := jsonpb.Marshal(pErr)
+		require.NoError(t, err)
+	})
 }
