@@ -61,3 +61,20 @@ func (r replicationStreamManagerImpl) UpdateReplicationStreamProgress(
 	}
 	return UpdateReplicationStreamProgressHook(evalCtx, streamID, frontier, txn)
 }
+
+// StreamPartitionHook hooks a StreamPartition implementation inside streamingccl package.
+var StreamPartitionHook func(
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
+) (tree.ValueGenerator, error)
+
+// StreamPartition returns a value generator which yields events for the specified partition.
+// opaqueSpec contains streampb.PartitionSpec protocol message.
+// streamID specifies the streaming job this partition belongs too.
+func (r replicationStreamManagerImpl) StreamPartition(
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
+) (tree.ValueGenerator, error) {
+	if StreamPartitionHook == nil {
+		return nil, errors.New("StreamPartitionHook is not registered")
+	}
+	return StreamPartitionHook(evalCtx, streamID, opaqueSpec)
+}

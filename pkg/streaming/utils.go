@@ -21,6 +21,9 @@ import (
 // StreamID is the ID of a replication stream.
 type StreamID int64
 
+// SafeValue implements the redact.SafeValue interface.
+func (j StreamID) SafeValue() {}
+
 // InvalidStreamID is the zero value for StreamID corresponding to no stream.
 const InvalidStreamID StreamID = 0
 
@@ -41,6 +44,10 @@ type ReplicationStreamManager interface {
 		streamID StreamID,
 		frontier hlc.Timestamp,
 		txn *kv.Txn) (jobspb.StreamReplicationStatus, error)
+
+	// StreamPartition starts streaming replication for the partition specified by opaqueSpec
+	// which contains serialized streampb.StreamPartitionSpec protocol message.
+	StreamPartition(evalCtx *tree.EvalContext, streamID StreamID, opaqueSpec []byte) (tree.ValueGenerator, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.
