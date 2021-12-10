@@ -449,3 +449,12 @@ SELECT pk, col0 FROM tab64784 WHERE (col0 IN (SELECT col3 FROM tab64784 WHERE co
 4  216
 1  213
 0  212
+
+# Regression test for crashing when intertwining GetRequests and
+# ReverseScanRequests (which is illegal at the moment).
+statement ok
+CREATE TABLE t73103(pk INT PRIMARY KEY, col0 INT, col1 INT, UNIQUE INDEX idx_storing (col0) STORING (col1));
+
+query II
+SELECT pk, col0 FROM t73103@idx_storing WHERE col0 <= 63 OR col0 IN (27,11,93,41) ORDER BY 2 DESC
+----

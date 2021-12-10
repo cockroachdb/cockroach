@@ -313,13 +313,13 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 // TODO (rohany): In future work, there should be a single API to generate spans
 //  from constraints, datums and encdatums.
 func (s *Builder) SpansFromConstraint(
-	c *constraint.Constraint, needed exec.TableColumnOrdinalSet, forDelete bool,
+	c *constraint.Constraint, needed exec.TableColumnOrdinalSet, forDelete bool, reverse bool,
 ) (roachpb.Spans, error) {
 	var spans roachpb.Spans
 	var err error
 	if c == nil || c.IsUnconstrained() {
 		// Encode a full span.
-		spans, err = s.appendSpansFromConstraintSpan(spans, &constraint.UnconstrainedSpan, needed, forDelete)
+		spans, err = s.appendSpansFromConstraintSpan(spans, &constraint.UnconstrainedSpan, needed, forDelete, reverse)
 		if err != nil {
 			return nil, err
 		}
@@ -328,7 +328,7 @@ func (s *Builder) SpansFromConstraint(
 
 	spans = make(roachpb.Spans, 0, c.Spans.Count())
 	for i := 0; i < c.Spans.Count(); i++ {
-		spans, err = s.appendSpansFromConstraintSpan(spans, c.Spans.Get(i), needed, forDelete)
+		spans, err = s.appendSpansFromConstraintSpan(spans, c.Spans.Get(i), needed, forDelete, reverse)
 		if err != nil {
 			return nil, err
 		}
@@ -339,16 +339,21 @@ func (s *Builder) SpansFromConstraint(
 // UnconstrainedSpans returns the full span corresponding to the Builder's
 // table and index.
 func (s *Builder) UnconstrainedSpans() (roachpb.Spans, error) {
-	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, false /* forDelete */)
+	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, false /* forDelete */, false /* reverse */)
 }
 
 // appendSpansFromConstraintSpan converts a constraint.Span to one or more
 // roachpb.Spans and appends them to the provided spans. It appends multiple
 // spans in the case that multiple, non-adjacent column families should be
 // scanned. The forDelete parameter indicates whether these spans will be used
-// for row deletion.
+// for row deletion. The reverse parameter indicates whether these spans will be
+// scanned in the reverse order.
 func (s *Builder) appendSpansFromConstraintSpan(
-	appendTo roachpb.Spans, cs *constraint.Span, needed exec.TableColumnOrdinalSet, forDelete bool,
+	appendTo roachpb.Spans,
+	cs *constraint.Span,
+	needed exec.TableColumnOrdinalSet,
+	forDelete bool,
+	reverse bool,
 ) (roachpb.Spans, error) {
 	var span roachpb.Span
 	var err error
@@ -375,9 +380,13 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	// families, only scan the relevant column families, and use GetRequests
 	// instead of ScanRequests when doing the column family fetches. This is
 	// disabled for deletions on tables with multiple column families to ensure
-	// that the entire row (all of its column families) is deleted.
-
-	if needed.Len() > 0 && span.Key.Equal(span.EndKey) && !forDelete {
+	// that the entire row (all of its column families) is deleted. It is also
+	// disabled when spans will be scanned in the reverse order because of the
+	// limitations of the DistSender (which cannot have multiple sub-batches
+	// when setting limits, and we'll get two sub-batches when combining Get and
+	// ReverseScan requests because these two types are considered to of
+	// different direction at the moment).
+	if needed.Len() > 0 && span.Key.Equal(span.EndKey) && !forDelete && !reverse {
 		neededFamilyIDs := rowenc.NeededColumnFamilyIDs(needed, s.table, s.index)
 		if s.CanSplitSpanIntoFamilySpans(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
 			return rowenc.SplitRowKeyIntoFamilySpans(appendTo, span.Key, neededFamilyIDs), nil
