@@ -1007,7 +1007,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 					s.numClosers--
 				}
 			} else {
-				input = colexec.NewMaterializer(
+				input = colexec.NewMaterializerNoEvalCtxCopy(
 					flowCtx,
 					pspec.ProcessorID,
 					opWithMetaInfo,
