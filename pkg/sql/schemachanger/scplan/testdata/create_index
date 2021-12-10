@@ -31,6 +31,9 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
           Username: root
         Statements:
         - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
+          redactedstatement: CREATE INDEX ‹id1› ON ‹defaultdb›.public.‹t1› (‹id›, ‹name›)
+            STORING (‹money›)
+          statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
@@ -117,6 +120,9 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         Statements:
         - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING
             (money)
+          redactedstatement: CREATE INVERTED INDEX CONCURRENTLY ‹id1› ON ‹defaultdb›.public.‹t1›
+            (‹id›, ‹name›) STORING (‹money›)
+          statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
@@ -212,6 +218,9 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
         Statements:
         - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
             BY LIST (id) (PARTITION p1 VALUES IN (1))
+          redactedstatement: CREATE INDEX ‹id1› ON ‹defaultdb›.public.‹t1› (‹id›, ‹name›)
+            STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
+          statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
