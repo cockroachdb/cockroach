@@ -157,11 +157,11 @@ func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.
 		switch {
 		case strings.HasPrefix(line, deletePrefix):
 			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			updates = append(updates, spanconfig.Update{Span: ParseSpan(t, line)})
+			updates = append(updates, spanconfig.Deletion(ParseSpan(t, line)))
 		case strings.HasPrefix(line, setPrefix):
 			line = strings.TrimPrefix(line, line[:len(setPrefix)])
 			entry := ParseSpanConfigEntry(t, line)
-			updates = append(updates, spanconfig.Update{Span: entry.Span, Config: entry.Config})
+			updates = append(updates, spanconfig.Update(entry))
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
 				line, setPrefix, deletePrefix)

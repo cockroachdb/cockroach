@@ -68,13 +68,13 @@ func (r *KVAccessorRecorder) UpdateSpanConfigEntries(
 
 	for _, d := range toDelete {
 		r.mu.mutations = append(r.mu.mutations, mutation{
-			update:   spanconfig.Update{Span: d},
+			update:   spanconfig.Deletion(d),
 			batchIdx: r.mu.batchCount,
 		})
 	}
 	for _, u := range toUpsert {
 		r.mu.mutations = append(r.mu.mutations, mutation{
-			update:   spanconfig.Update{Span: u.Span, Config: u.Config},
+			update:   spanconfig.Update(u),
 			batchIdx: r.mu.batchCount,
 		})
 	}

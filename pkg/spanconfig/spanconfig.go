@@ -232,8 +232,8 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
-// DescriptorUpdate captures the ID and type of a descriptor or zone that the
-// SQLWatcher has observed updated.
+// DescriptorUpdate captures the ID and the type of descriptor or zone that been
+// updated. It's the unit of what the SQLWatcher emits.
 type DescriptorUpdate struct {
 	// ID of the descriptor/zone that has been updated.
 	ID descpb.ID
@@ -244,14 +244,26 @@ type DescriptorUpdate struct {
 }
 
 // Update captures a span and the corresponding config change. It's the unit of
-// what can be applied to a StoreWriter.
-type Update struct {
-	// Span captures the key span being updated.
-	Span roachpb.Span
+// what can be applied to a StoreWriter. The embedded span captures what's being
+// updated; the config captures what it's being updated to. An empty config
+// indicates a deletion.
+type Update roachpb.SpanConfigEntry
 
-	// Config captures the span config the key span was updated to. An empty
-	// config indicates the span config being deleted.
-	Config roachpb.SpanConfig
+// Deletion constructs an update that represents a deletion over the given span.
+func Deletion(span roachpb.Span) Update {
+	return Update{
+		Span:   span,
+		Config: roachpb.SpanConfig{}, // delete
+	}
+}
+
+// Addition constructs an update that represents adding the given config over
+// the given span.
+func Addition(span roachpb.Span, conf roachpb.SpanConfig) Update {
+	return Update{
+		Span:   span,
+		Config: conf,
+	}
 }
 
 // Deletion returns true if the update corresponds to a span config being
