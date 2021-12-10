@@ -140,7 +140,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 
 	res := float64(roundTrips) / float64(b.N())
 	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
-		b.Fatalf(`got %v, expected %v. trace:
+		b.Errorf(`got %v, expected %v. trace:
 %v
 (above trace from test %s. got %v, expected %v)
 `, res, exp, r, b.Name(), res, exp)
