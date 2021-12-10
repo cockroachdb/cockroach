@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -193,42 +194,40 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
 
-	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
-		// Type check the input expression against the corresponding table column.
+	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		targetCol := mb.tab.Column(ord)
-		checkDatumTypeFitsColumnType(targetCol, sourceCol.typ)
 
-		for _, expr := range exprs {
-			// Compatibility check the input expression against the corresponding
-			// table column.
-			if len(expr.Names) == 1 && expr.Names[0] == targetCol.ColName() {
-				checkUpdateExpression(targetCol, expr)
-			}
-		}
-
-		// Add source column ID to the list of columns to update.
-		mb.updateColIDs[ord] = sourceCol.id
-	}
-
-	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
 		// Allow right side of SET to be DEFAULT.
 		if _, ok := expr.(tree.DefaultVal); ok {
 			expr = mb.parseDefaultExpr(targetColID)
+		} else {
+			// GENERATED ALWAYS AS IDENTITY columns are not allowed to be
+			// explicitly written to.
+			//
+			// TODO(janexing): Implement the OVERRIDING SYSTEM VALUE syntax for
+			// INSERT which allows a GENERATED ALWAYS AS IDENTITY column to be
+			// overwritten.
+			// See https://github.com/cockroachdb/cockroach/issues/68201.
+			if targetCol.IsGeneratedAlwaysAsIdentity() {
+				panic(sqlerrors.NewGeneratedAlwaysAsIdentityColumnUpdateError(string(targetCol.ColName())))
+			}
 		}
 
 		// Add new column to the projections scope.
 		// TODO(mgartner): Perform an assignment cast if necessary.
-		targetColMeta := mb.md.ColumnMeta(targetColID)
-		desiredType := targetColMeta.Type
-		texpr := inScope.resolveType(expr, desiredType)
-		colName := scopeColName(tree.Name(targetColMeta.Alias)).WithMetadataName(
-			targetColMeta.Alias + "_new",
-		)
+		texpr := inScope.resolveType(expr, targetCol.DatumType())
+		targetColName := targetCol.ColName()
+		colName := scopeColName(targetColName).WithMetadataName(string(targetColName) + "_new")
 		scopeCol := projectionsScope.addColumn(colName, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
-		checkCol(scopeCol, targetColID)
+		// Type check the input expression against the corresponding table
+		// column.
+		checkDatumTypeFitsColumnType(targetCol, scopeCol.typ)
+
+		// Add the column ID to the list of columns to update.
+		mb.updateColIDs[ord] = scopeCol.id
 	}
 
 	n := 0
@@ -243,9 +242,15 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 				// Type check and rename columns.
 				for i := range subqueryScope.cols {
-					checkCol(&subqueryScope.cols[i], mb.targetColList[n])
 					ord := mb.tabID.ColumnOrdinal(mb.targetColList[n])
+					targetCol := mb.tab.Column(ord)
 					subqueryScope.cols[i].name = scopeColName(mb.tab.Column(ord).ColName())
+					// Type check the input expression against the corresponding table
+					// column.
+					checkDatumTypeFitsColumnType(targetCol, subqueryScope.cols[i].typ)
+
+					// Add the column ID to the list of columns to update.
+					mb.updateColIDs[ord] = subqueryScope.cols[i].id
 					n++
 				}
 

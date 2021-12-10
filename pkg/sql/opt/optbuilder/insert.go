@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -627,11 +628,18 @@ func (mb *mutationBuilder) buildInputForInsert(
 			checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 		}
 
-		// Check if the input column is created with `GENERATED ALWAYS AS IDENTITY`
-		// syntax. If yes, and user does not specify the `OVERRIDING SYSTEM VALUE`
-		// syntax in the `INSERT` statement,
-		// checkColumnIsNotGeneratedAlwaysAsIdentity will raise an error.
-		checkColumnIsNotGeneratedAlwaysAsIdentity(mb.tab.Column(ord))
+		// Raise an error if the target column is a `GENERATED ALWAYS AS
+		// IDENTITY` column. Such a column is not allowed to be explicitly
+		// written to.
+		//
+		// TODO(janexing): Implement the OVERRIDING SYSTEM VALUE syntax for
+		// INSERT which allows a GENERATED ALWAYS AS IDENTITY column to be
+		// overwritten.
+		// See https://github.com/cockroachdb/cockroach/issues/68201.
+		if col := mb.tab.Column(ord); col.IsGeneratedAlwaysAsIdentity() {
+			colName := string(col.ColName())
+			panic(sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName))
+		}
 
 		// Assign name of input column.
 		inCol.name = scopeColName(tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias))
