@@ -62,6 +62,23 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"cannot define PARTITION BY on a new INDEX in a multi-region database",
 		))
 	}
+	columnRefs := map[string]struct{}{}
+	for _, columnNode := range n.Columns {
+		colName := columnNode.Column.String()
+		if _, found := columnRefs[colName]; found {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"index %q contains duplicate column %q", n.Name, colName))
+		}
+		columnRefs[colName] = struct{}{}
+	}
+	for _, storingNode := range n.Storing {
+		colName := storingNode.String()
+		if _, found := columnRefs[colName]; found {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"index %q contains duplicate column %q", n.Name, colName))
+		}
+		columnRefs[colName] = struct{}{}
+	}
 
 	// Setup an secondary index node.
 	secondaryIndex := &scpb.SecondaryIndex{TableID: rel.GetID(),

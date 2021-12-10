@@ -34,4 +34,13 @@ const (
 	// Note: Planning rules cannot ever be in this phase, since all those operations
 	// should be executed in pre-commit.
 	PostCommitPhase
+	// PostCommitNonRevertiblePhase is like PostCommitPhase but in which target
+	// status changes are non-revertible.
+	PostCommitNonRevertiblePhase
+
+	// EarliestPhase references the earliest possible execution phase.
+	EarliestPhase = StatementPhase
+
+	// LatestPhase references the latest possible execution phase.
+	LatestPhase = PostCommitNonRevertiblePhase
 )

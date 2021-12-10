@@ -713,14 +713,14 @@ func (s *TestState) SetResumeSpans(
 	panic("implement me")
 }
 
-// TransactionalJobCreator implements the scexec.Dependencies interface.
-func (s *TestState) TransactionalJobCreator() scexec.TransactionalJobCreator {
+// TransactionalJobRegistry implements the scexec.Dependencies interface.
+func (s *TestState) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	return s
 }
 
-var _ scexec.TransactionalJobCreator = (*TestState)(nil)
+var _ scexec.TransactionalJobRegistry = (*TestState)(nil)
 
-// CreateJob implements the scexec.TransactionalJobCreator interface.
+// CreateJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 	if record.JobID == 0 {
 		return errors.New("invalid 0 job ID")
@@ -735,9 +735,9 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 	return nil
 }
 
-// UpdateSchemaChangeJob implements the scexec.TransactionalJobCreator interface.
+// UpdateSchemaChangeJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) UpdateSchemaChangeJob(
-	ctx context.Context, id jobspb.JobID, fn scexec.JobProgressUpdateFunc,
+	ctx context.Context, id jobspb.JobID, fn scexec.JobUpdateCallback,
 ) error {
 	var scJob *jobs.Record
 	for i, job := range s.jobs {
@@ -766,27 +766,43 @@ func (s *TestState) UpdateSchemaChangeJob(
 		ResumeErrors:                 nil,
 		CleanupErrors:                nil,
 		FinalResumeError:             nil,
-		Noncancelable:                false,
+		Noncancelable:                scJob.NonCancelable,
 		Details:                      jobspb.WrapPayloadDetails(scJob.Details),
 		PauseReason:                  "",
 		RetriableExecutionFailureLog: nil,
 	}
-	return fn(jobs.JobMetadata{
+	updateProgress := func(progress *jobspb.Progress) {
+		scJob.Progress = *progress.GetNewSchemaChange()
+		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
+	}
+	setNonCancelable := func() {
+		scJob.NonCancelable = true
+		s.LogSideEffectf("set schema change job #%d to non-cancellable", scJob.JobID)
+	}
+	md := jobs.JobMetadata{
 		ID:       scJob.JobID,
 		Status:   jobs.StatusRunning,
 		Payload:  &payload,
 		Progress: &progress,
 		RunStats: nil,
-	}, func(progress *jobspb.Progress) {
-		scJob.Progress = *progress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
-	})
+	}
+	return fn(md, updateProgress, setNonCancelable)
 }
 
-// MakeJobID implements the scexec.TransactionalJobCreator interface.
+// MakeJobID implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) MakeJobID() jobspb.JobID {
+	if s.jobCounter == 0 {
+		// Reserve 1 for the schema changer job.
+		s.jobCounter = 1
+	}
 	s.jobCounter++
 	return jobspb.JobID(s.jobCounter)
+}
+
+// SchemaChangerJobID implements the scexec.TransactionalJobRegistry
+// interface.
+func (s *TestState) SchemaChangerJobID() jobspb.JobID {
+	return 1
 }
 
 // TestingKnobs exposes the testing knobs.
@@ -814,12 +830,12 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 
 // ValidateForwardIndexes implements the index validator interface.
 func (s *TestState) ValidateForwardIndexes(
-	ctx context.Context,
+	_ context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
-	override sessiondata.InternalExecutorOverride,
+	_ bool,
+	_ bool,
+	_ sessiondata.InternalExecutorOverride,
 ) error {
 	ids := make([]descpb.IndexID, len(indexes))
 	for i, idx := range indexes {
@@ -831,11 +847,11 @@ func (s *TestState) ValidateForwardIndexes(
 
 // ValidateInvertedIndexes implements the index validator interface.
 func (s *TestState) ValidateInvertedIndexes(
-	ctx context.Context,
+	_ context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	gatherAllInvalid bool,
-	override sessiondata.InternalExecutorOverride,
+	_ bool,
+	_ sessiondata.InternalExecutorOverride,
 ) error {
 	ids := make([]descpb.IndexID, len(indexes))
 	for i, idx := range indexes {
