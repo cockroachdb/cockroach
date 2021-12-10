@@ -213,6 +213,11 @@ message LocalOnlySessionData {
   // These session variables have at least one period in their name.
   map<string, string> custom_options = 57;
 
+  // AvoidBuffering indicates that the returned data should not be
+  // buffered by conn executor.  This is currently used by replication primitives
+  // to ensure the data is flushed to the consumer immediately.
+  bool avoid_buffering = 58;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
