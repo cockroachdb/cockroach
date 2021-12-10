@@ -255,9 +255,11 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			log.Infof(ctx, "received span configuration update for %s (deleted=%t)", entry.Span, deleted)
 		}
 
-		update := spanconfig.Update{Span: entry.Span}
-		if !deleted {
-			update.Config = entry.Config
+		var update spanconfig.Update
+		if deleted {
+			update = spanconfig.Deletion(entry.Span)
+		} else {
+			update = spanconfig.Update(entry)
 		}
 
 		if err := buffer.Add(&bufferEvent{update, ev.Value.Timestamp}); err != nil {
