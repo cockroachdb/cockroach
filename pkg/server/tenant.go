@@ -373,6 +373,7 @@ func makeTenantSQLServerArgs(
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   sqlCfg.TenantID,
 		NodeID:     baseCfg.IDContainer,
+		ClusterID:  baseCfg.ClusterIDContainer,
 		AmbientCtx: baseCfg.AmbientCtx,
 		Config:     baseCfg.Config,
 		Clock:      clock,
