@@ -148,6 +148,12 @@ statement ok
 INSERT INTO assn_cast(d) VALUES (11.22), (88.99)
 
 statement ok
+INSERT INTO assn_cast(d) VALUES (22.33::DECIMAL(10, 0)), (99.11::DECIMAL(10, 2))
+
+statement ok
+INSERT INTO assn_cast(d) VALUES (33.11::DECIMAL(10, 0)), (44.44::DECIMAL(10, 0))
+
+statement ok
 PREPARE insert_d AS INSERT INTO assn_cast(d) VALUES ($1)
 
 statement ok
@@ -164,8 +170,18 @@ SELECT d FROM assn_cast WHERE d IS NOT NULL
 ----
 11
 89
+22
+99
+33
+44
 123
 68
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[2.88, NULL, 15])
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[3.99, NULL, 16]::DECIMAL(10, 2)[])
 
 statement ok
 INSERT INTO assn_cast(a) VALUES (ARRAY[5.55, 6.66::DECIMAL(10, 2)])
@@ -179,6 +195,8 @@ EXECUTE insert_a(ARRAY[7.77, 8.88::DECIMAL(10, 2)])
 query T rowsort
 SELECT a FROM assn_cast WHERE a IS NOT NULL
 ----
+{3,NULL,15}
+{4,NULL,16}
 {6,7}
 {8,9}
 
