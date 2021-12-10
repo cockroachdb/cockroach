@@ -29,29 +29,19 @@ var debugSendKVBatchCmd = &cobra.Command{
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runSendKVBatch,
 	Long: `
-Submits a JSON-formatted roachpb.BatchRequest, given as a file or via stdin,
-to the specified node which will proxy it into KV. Outputs the JSON-formatted
-roachpb.BatchResponse, or an error on failure. The user must have the admin
-role, and the request will be logged to the system event log.
+Submits a JSON-encoded roachpb.BatchRequest (file or stdin) to a node which
+proxies it into the KV API, and outputs the JSON-encoded roachpb.BatchResponse.
+Requires the admin role. The request is logged to the system event log.
 
-This command can access and mutate internal system state. Incorrect use can
-cause severe irreversible damage including permanent data loss. Users must
-take extreme caution.
+This command can modify internal system state. Incorrect use can cause severe
+irreversible damage including permanent data loss.
 
-For more information on available requests and fields, see roachpb/api.proto.
-If an unknown or invalid field is specified, the command returns an error.
-Binary fields (i.e. []byte) are given and returned as base64. The request
-will be wrapped in a transaction if it spans multiple ranges.
+For more information on requests, see roachpb/api.proto. Unknown or invalid
+fields will error. Binary fields ([]byte) are base64-encoded. Requests spanning
+multiple ranges are wrapped in a transaction.
 
-For example, the following will submit the BatchRequest specified in
-batch.json to node01 using the root certificate from the certs/ directory, and
-pipe the JSON output to jq for better formatting:
-
-cockroach debug send-kv-batch --host node01 --certs-dir certs/ batch.json | jq
-
-The following is an example BatchRequest which sets the key "foo" to the value
-"bar", and then reads the value back (as a base64-encoded
-roachpb.Value.RawBytes including a checksum):
+The following BatchRequest example sets the key "foo" to the value "bar", and
+reads the value back (as a base64-encoded roachpb.Value.RawBytes with checksum):
 
 {"requests": [
 	{"put": {
@@ -65,20 +55,28 @@ roachpb.Value.RawBytes including a checksum):
 
 This would yield the following response:
 
-{
-	"header": {
-		"Timestamp": {"wallTime": "1636898055147324643"},
-		"now": {"wallTime": "1636898055149924844"}
-	},
-	"responses": [
-		{"put": {
-			"header": {}
-		}},
-		{"get": {
-			"header": {"numKeys": "1", "numBytes": "8"},
-			"value": {"rawBytes": "DMEB5ANiYXI=", "timestamp": {"wallTime": "1636898055143103168"}}
-		}}
-	]
+{"responses": [
+	{"put": {
+		"header": {}
+	}},
+	{"get": {
+		"header": {"numKeys": "1", "numBytes": "8"},
+		"value": {"rawBytes": "DMEB5ANiYXI=", "timestamp": {"wallTime": "1636898055143103168"}}
+	}}
+]}
+
+To generate JSON requests with Go (see also debug_send_kv_batch_test.go):
+
+func TestSendKVBatchExample(t *testing.T) {
+	var ba roachpb.BatchRequest
+	ba.Add(roachpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
+	ba.Add(roachpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
+
+	jsonpb := protoutil.JSONPb{}
+	jsonProto, err := jsonpb.Marshal(&ba)
+	require.NoError(t, err)
+
+	fmt.Println(string(jsonProto))
 }
 	`,
 }
