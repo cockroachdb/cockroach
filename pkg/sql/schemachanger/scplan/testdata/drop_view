@@ -46,6 +46,8 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
           Username: root
         Statements:
         - statement: DROP VIEW defaultdb.v1
+          redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
+          statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
@@ -56,7 +58,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
         view:
           tableId: 55
       Metadata:
-        Statement: DROP VIEW defaultdb.v1
+        Statement: DROP VIEW ‹defaultdb›.public.‹v1›
+        StatementTag: DROP VIEW
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -266,6 +269,8 @@ PreCommitPhase stage 1 of 1 with 25 MutationType ops
           Username: root
         Statements:
         - statement: DROP VIEW defaultdb.v1 CASCADE
+          redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+          statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
@@ -280,7 +285,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         view:
           tableId: 55
       Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
+        Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        StatementTag: DROP VIEW
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -294,7 +300,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         view:
           tableId: 56
       Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
+        Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        StatementTag: DROP VIEW
         TargetMetadata:
           SourceElementID: 2
           SubWorkID: 1
@@ -308,7 +315,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         view:
           tableId: 57
       Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
+        Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        StatementTag: DROP VIEW
         TargetMetadata:
           SourceElementID: 3
           SubWorkID: 1
@@ -322,7 +330,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         view:
           tableId: 58
       Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
+        Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        StatementTag: DROP VIEW
         TargetMetadata:
           SourceElementID: 3
           SubWorkID: 1
@@ -336,7 +345,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         view:
           tableId: 61
       Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
+        Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        StatementTag: DROP VIEW
         TargetMetadata:
           SourceElementID: 5
           SubWorkID: 1
