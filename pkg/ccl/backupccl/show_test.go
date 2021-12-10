@@ -219,7 +219,7 @@ ORDER BY object_type, object_name`, full)
 		INDEX tablea_b_idx (b ASC),
 		FAMILY "primary" (a, b)
 	)`
-		expectedCreateView := `CREATE VIEW viewa (a) AS SELECT a FROM data.public.tablea`
+		expectedCreateView := "CREATE VIEW viewa (\n\ta\n) AS SELECT a FROM data.public.tablea"
 		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
 
 		showBackupRows = sqlDBRestore.QueryStr(t,

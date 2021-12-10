@@ -106,7 +106,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 			`pq: cannot rename relation "s2" because view "v" depends on it`,
 			`ALTER SEQUENCE s2 RENAME TO s3`)
 		sqlDB.CheckQueryResults(t, `SET database = test; SHOW CREATE VIEW test.v`, [][]string{{
-			"test.public.v", `CREATE VIEW public.v (nextval) AS (SELECT nextval('s2':::STRING))`,
+			"test.public.v", "CREATE VIEW public.v (\n\tnextval\n) AS (SELECT nextval('s2':::STRING))",
 		}})
 	}
 }

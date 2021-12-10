@@ -176,7 +176,7 @@ func newTestProcessor() *testProcessor {
 	return p
 }
 
-func (p *testProcessor) processReady(_ context.Context, rangeID roachpb.RangeID) {
+func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 	p.mu.Lock()
 	p.mu.raftReady[rangeID]++
 	p.mu.Unlock()
