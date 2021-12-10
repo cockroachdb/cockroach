@@ -11,6 +11,7 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -40,10 +41,10 @@ type expander struct {
 }
 
 // expanderFunc is a function which may expand a string with a templated value.
-type expanderFunc func(*SyncedCluster, string) (expanded string, didExpand bool, err error)
+type expanderFunc func(context.Context, *SyncedCluster, string) (expanded string, didExpand bool, err error)
 
 // expand will expand arg if it contains an expander template.
-func (e *expander) expand(c *SyncedCluster, arg string) (string, error) {
+func (e *expander) expand(ctx context.Context, c *SyncedCluster, arg string) (string, error) {
 	var err error
 	s := parameterRe.ReplaceAllStringFunc(arg, func(s string) string {
 		if err != nil {
@@ -59,7 +60,7 @@ func (e *expander) expand(c *SyncedCluster, arg string) (string, error) {
 			e.maybeExpandCertsDir,
 		}
 		for _, f := range expanders {
-			v, expanded, fErr := f(c, s)
+			v, expanded, fErr := f(ctx, c, s)
 			if fErr != nil {
 				err = fErr
 				return ""
@@ -106,7 +107,9 @@ func (e *expander) maybeExpandMap(
 }
 
 // maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>}
-func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandPgURL(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	m := pgURLRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
@@ -114,7 +117,7 @@ func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool, e
 
 	if e.pgURLs == nil {
 		var err error
-		e.pgURLs, err = c.pgurls(allNodes(len(c.VMs)))
+		e.pgURLs, err = c.pgurls(ctx, allNodes(len(c.VMs)))
 		if err != nil {
 			return "", false, err
 		}
@@ -125,7 +128,9 @@ func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool, e
 }
 
 // maybeExpandPgHost is an expanderFunc for {pghost:<nodeSpec>}
-func (e *expander) maybeExpandPgHost(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandPgHost(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	m := pgHostRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
@@ -133,7 +138,7 @@ func (e *expander) maybeExpandPgHost(c *SyncedCluster, s string) (string, bool, 
 
 	if e.pgHosts == nil {
 		var err error
-		e.pgHosts, err = c.pghosts(allNodes(len(c.VMs)))
+		e.pgHosts, err = c.pghosts(ctx, allNodes(len(c.VMs)))
 		if err != nil {
 			return "", false, err
 		}
@@ -144,7 +149,9 @@ func (e *expander) maybeExpandPgHost(c *SyncedCluster, s string) (string, bool, 
 }
 
 // maybeExpandPgURL is an expanderFunc for {pgport:<nodeSpec>}
-func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandPgPort(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	m := pgPortRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
@@ -162,7 +169,9 @@ func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool, 
 }
 
 // maybeExpandPgURL is an expanderFunc for {uiport:<nodeSpec>}
-func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandUIPort(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	m := uiPortRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
@@ -180,7 +189,9 @@ func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool, 
 }
 
 // maybeExpandStoreDir is an expanderFunc for "{store-dir}"
-func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandStoreDir(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	if !storeDirRe.MatchString(s) {
 		return s, false, nil
 	}
@@ -188,7 +199,9 @@ func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool
 }
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"
-func (e *expander) maybeExpandLogDir(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandLogDir(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	if !logDirRe.MatchString(s) {
 		return s, false, nil
 	}
@@ -196,7 +209,9 @@ func (e *expander) maybeExpandLogDir(c *SyncedCluster, s string) (string, bool, 
 }
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"
-func (e *expander) maybeExpandCertsDir(c *SyncedCluster, s string) (string, bool, error) {
+func (e *expander) maybeExpandCertsDir(
+	ctx context.Context, c *SyncedCluster, s string,
+) (string, bool, error) {
 	if !certsDirRe.MatchString(s) {
 		return s, false, nil
 	}
