@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 	"golang.org/x/text/collate"
 )
 
@@ -617,6 +618,11 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 // string, or if the string's length is not bounded.
 func characterMaximumLength(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
+		// "char" columns have a width of 1, but should report a NULL maximum
+		// character length.
+		if colType.Oid() == oid.T_char {
+			return 0, false
+		}
 		switch colType.Family() {
 		case types.StringFamily, types.CollatedStringFamily, types.BitFamily:
 			if colType.Width() > 0 {
@@ -633,6 +639,11 @@ func characterMaximumLength(colType *types.T) tree.Datum {
 // string's length is not bounded.
 func characterOctetLength(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
+		// "char" columns have a width of 1, but should report a NULL octet
+		// length.
+		if colType.Oid() == oid.T_char {
+			return 0, false
+		}
 		switch colType.Family() {
 		case types.StringFamily, types.CollatedStringFamily:
 			if colType.Width() > 0 {
