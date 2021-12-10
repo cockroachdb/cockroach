@@ -61,7 +61,9 @@ type session struct {
 	id sqlliveness.SessionID
 	mu struct {
 		syncutil.RWMutex
-		exp                    hlc.Timestamp
+		exp hlc.Timestamp
+		// sessionExpiryCallbacks are invoked when the session expires. They're
+		// invoked under the session's lock, so keep them small.
 		sessionExpiryCallbacks []func(ctx context.Context)
 	}
 }
@@ -89,7 +91,7 @@ func (s *session) invokeSessionExpiryCallbacks(ctx context.Context) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, callback := range s.mu.sessionExpiryCallbacks {
-		go callback(ctx)
+		callback(ctx)
 	}
 }
 
