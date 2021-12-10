@@ -11,8 +11,6 @@
 package scgraph
 
 import (
-	"container/list"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -50,13 +48,13 @@ type Graph struct {
 	// reaching this node.
 	depEdgesFrom, depEdgesTo *depEdgeTree
 
-	// opToNode maps from an operation back to the
+	// opToOpEdge maps from an operation back to the
 	// opEdge that generated it as an index.
-	opToNode map[scop.Op]*scpb.Node
+	opToOpEdge map[scop.Op]*OpEdge
 
-	// optimizedOutOpEdges that are marked optimized out, and will not generate
+	// noOpOpEdges that are marked optimized out, and will not generate
 	// any operations.
-	optimizedOutOpEdges map[*OpEdge]bool
+	noOpOpEdges map[*OpEdge]bool
 
 	edges []Edge
 
@@ -82,13 +80,13 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:        map[*scpb.Target]int{},
-		opEdgesFrom:         map[*scpb.Node]*OpEdge{},
-		optimizedOutOpEdges: map[*OpEdge]bool{},
-		opToNode:            map[scop.Op]*scpb.Node{},
-		entities:            db,
-		statements:          initial.Statements,
-		authorization:       initial.Authorization,
+		targetIdxMap:  map[*scpb.Target]int{},
+		opEdgesFrom:   map[*scpb.Node]*OpEdge{},
+		noOpOpEdges:   map[*OpEdge]bool{},
+		opToOpEdge:    map[scop.Op]*OpEdge{},
+		entities:      db,
+		statements:    initial.Statements,
+		authorization: initial.Authorization,
 	}
 	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
 	g.depEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
@@ -106,7 +104,7 @@ func New(initial scpb.State) (*Graph, error) {
 			return nil, err
 		}
 	}
-	return &g, nil
+	return &g, g.Validate()
 }
 
 // ShallowClone shallow copies the main graph structure, and deep copies
@@ -114,22 +112,22 @@ func New(initial scpb.State) (*Graph, error) {
 func (g *Graph) ShallowClone() *Graph {
 	// Shallow copy the base structure.
 	clone := &Graph{
-		targets:             g.targets,
-		statements:          g.statements,
-		authorization:       g.authorization,
-		targetNodes:         g.targetNodes,
-		targetIdxMap:        g.targetIdxMap,
-		opEdgesFrom:         g.opEdgesFrom,
-		depEdgesFrom:        g.depEdgesFrom,
-		depEdgesTo:          g.depEdgesTo,
-		opToNode:            g.opToNode,
-		edges:               g.edges,
-		entities:            g.entities,
-		optimizedOutOpEdges: make(map[*OpEdge]bool),
+		targets:       g.targets,
+		statements:    g.statements,
+		authorization: g.authorization,
+		targetNodes:   g.targetNodes,
+		targetIdxMap:  g.targetIdxMap,
+		opEdgesFrom:   g.opEdgesFrom,
+		depEdgesFrom:  g.depEdgesFrom,
+		depEdgesTo:    g.depEdgesTo,
+		opToOpEdge:    g.opToOpEdge,
+		edges:         g.edges,
+		entities:      g.entities,
+		noOpOpEdges:   make(map[*OpEdge]bool),
 	}
 	// Any decorations for mutations will be copied.
-	for edge, noop := range g.optimizedOutOpEdges {
-		clone.optimizedOutOpEdges[edge] = noop
+	for edge, noop := range g.noOpOpEdges {
+		clone.noOpOpEdges[edge] = noop
 	}
 	return clone
 }
@@ -217,17 +215,15 @@ func (g *Graph) AddOpEdges(
 	g.opEdgesFrom[oe.from] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
-		g.opToNode[op] = oe.To()
+		g.opToOpEdge[op] = oe
 	}
 	return nil
 }
 
-// GetNodeFromOp Gets an Edge from a given op.
-func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
-	return g.opToNode[op]
+// GetOpEdgeFromOp Gets an OpEdge from a given op.
+func (g *Graph) GetOpEdgeFromOp(op scop.Op) *OpEdge {
+	return g.opToOpEdge[op]
 }
-
-var _ = (*Graph)(nil).GetNodeFromOp
 
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
@@ -252,16 +248,15 @@ func (g *Graph) AddDepEdge(
 	return nil
 }
 
-// MarkOpEdgeAsOptimizedOut marks an edge as no-op, so that no operations are emitted
-//during planning.
-func (g *Graph) MarkOpEdgeAsOptimizedOut(edge *OpEdge) {
-	g.optimizedOutOpEdges[edge] = true
+// MarkAsNoOp marks an edge as no-op, so that no operations are emitted from
+// this edge during planning.
+func (g *Graph) MarkAsNoOp(edge *OpEdge) {
+	g.noOpOpEdges[edge] = true
 }
 
-// IsOpEdgeOptimizedOut checks if an edge is marked as an edge that should emit no
-// operations.
-func (g *Graph) IsOpEdgeOptimizedOut(edge *OpEdge) bool {
-	return g.optimizedOutOpEdges[edge]
+// IsNoOp checks if an edge is marked as an edge that should emit no operations.
+func (g *Graph) IsNoOp(edge *OpEdge) bool {
+	return g.noOpOpEdges[edge]
 }
 
 // GetMetadataFromTarget returns the metadata for a given target node.
@@ -278,24 +273,27 @@ func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata 
 	}
 }
 
-// GetNodeRanks fetches ranks of nodes in topological order.
-func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			rAsErr, ok := r.(error)
-			if !ok {
-				rAsErr = errors.Errorf("panic during GetNodeRanks: %v", r)
-			}
-			err = rAsErr
-		}
-	}()
-	l := list.New()
-	marks := make(map[*scpb.Node]bool)
+// Order returns the number of nodes in this graph.
+func (g *Graph) Order() int {
+	n := 0
+	for _, m := range g.targetNodes {
+		n = n + len(m)
+	}
+	return n
+}
+
+// Validate returns an error if there's a cycle in the graph.
+func (g *Graph) Validate() (err error) {
+	marks := make(map[*scpb.Node]bool, g.Order())
 	var visit func(n *scpb.Node)
 	visit = func(n *scpb.Node) {
+		if err != nil {
+			return
+		}
 		permanent, marked := marks[n]
 		if marked && !permanent {
-			panic(errors.AssertionFailedf("graph is not acyclical"))
+			err = errors.AssertionFailedf("graph is not acyclical")
+			return
 		}
 		if marked && permanent {
 			return
@@ -306,18 +304,12 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 			return nil
 		})
 		marks[n] = true
-		l.PushFront(n)
 	}
 	_ = g.ForEachNode(func(n *scpb.Node) error {
 		visit(n)
 		return nil
 	})
-	rank := make(map[*scpb.Node]int, l.Len())
-	for i, cur := 0, l.Front(); i < l.Len(); i++ {
-		rank[cur.Value.(*scpb.Node)] = i
-		cur = cur.Next()
-	}
-	return rank, nil
+	return err
 }
 
 // compareNodes compares two nodes in a graph. A nil nodes is the minimum value.

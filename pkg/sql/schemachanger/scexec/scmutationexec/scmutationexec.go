@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -89,11 +88,11 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(record jobs.Record) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, state scpb.State) error
 
-	// UpdateSchemaChangerJobProgress will write the status of the job to the
-	// specified job progress.
-	UpdateSchemaChangerJobProgress(jobID jobspb.JobID, statuses []scpb.Status) error
+	// UpdateSchemaChangerJob will update the progress and payload of the
+	// schema changer job.
+	UpdateSchemaChangerJob(jobID jobspb.JobID, statuses []scpb.Status, isNonCancelable bool) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(id descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload) error
@@ -171,13 +170,13 @@ func (m *visitor) swapSchemaChangeJobID(
 func (m *visitor) CreateDeclarativeSchemaChangerJob(
 	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
 ) error {
-	return m.s.AddNewSchemaChangerJob(job.Record)
+	return m.s.AddNewSchemaChangerJob(job.JobID, job.State)
 }
 
-func (m *visitor) UpdateSchemaChangeJobProgress(
-	ctx context.Context, progress scop.UpdateSchemaChangeJobProgress,
+func (m *visitor) UpdateSchemaChangerJob(
+	ctx context.Context, progress scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJobProgress(progress.JobID, progress.Statuses)
+	return m.s.UpdateSchemaChangerJob(progress.JobID, progress.Statuses, progress.IsNonCancelable)
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
@@ -637,21 +636,13 @@ func (m *visitor) SetColumnName(ctx context.Context, op scop.SetColumnName) erro
 	if err != nil {
 		return errors.AssertionFailedf("column %d not found in table %q (%d)", op.ColumnID, tbl.GetName(), tbl.GetID())
 	}
-	col.ColumnDesc().Name = op.Name
-	return tbl.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-		for j, colID := range family.ColumnIDs {
-			if colID == op.ColumnID {
-				family.ColumnNames[j] = op.Name
-				break
-			}
-		}
-		return nil
-	})
+	return tabledesc.RenameColumnInTable(tbl, col, tree.Name(op.Name), nil /* isShardColumnRenameable */)
 }
 
 func (m *visitor) MakeAddedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
 ) error {
+	name := tabledesc.ColumnNamePlaceholder(op.ColumnID)
 	emptyStrToNil := func(v string) *string {
 		if v == "" {
 			return nil
@@ -670,7 +661,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 			fam := &tbl.Families[i]
 			if foundFamily = fam.ID == op.FamilyID; foundFamily {
 				fam.ColumnIDs = append(fam.ColumnIDs, op.ColumnID)
-				fam.ColumnNames = append(fam.ColumnNames, "")
+				fam.ColumnNames = append(fam.ColumnNames, name)
 				break
 			}
 		}
@@ -678,7 +669,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 			tbl.Families = append(tbl.Families, descpb.ColumnFamilyDescriptor{
 				Name:        op.FamilyName,
 				ID:          op.FamilyID,
-				ColumnNames: []string{""},
+				ColumnNames: []string{name},
 				ColumnIDs:   []descpb.ColumnID{op.ColumnID},
 			})
 			sort.Slice(tbl.Families, func(i, j int) bool {
@@ -698,6 +689,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 
 	tbl.AddColumnMutation(&descpb.ColumnDescriptor{
 		ID:                                op.ColumnID,
+		Name:                              name,
 		Type:                              op.ColumnType,
 		Nullable:                          op.Nullable,
 		DefaultExpr:                       emptyStrToNil(op.DefaultExpr),
@@ -780,8 +772,8 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
-		Name:                op.IndexName,
 		ID:                  op.IndexID,
+		Name:                tabledesc.IndexNamePlaceholder(op.IndexID),
 		Unique:              op.Unique,
 		Version:             indexVersion,
 		KeyColumnNames:      colNames,

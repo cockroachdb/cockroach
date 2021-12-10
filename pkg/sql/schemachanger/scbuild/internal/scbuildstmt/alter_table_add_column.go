@@ -276,18 +276,9 @@ func addOrUpdatePrimaryIndexTargetsForAddColumn(
 		}
 	}
 
-	// Create a new primary index, identical to the existing one except for its
-	// ID and name.
+	// Create a new primary index identical to the existing one except for its ID.
 	idxID = b.NextIndexID(table)
 	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
-	newIdx.Name = tabledesc.GenerateUniqueName(
-		"new_primary_key",
-		func(name string) bool {
-			// TODO (lucy): Also check the new indexes specified in the targets.
-			_, err := table.FindIndexWithName(name)
-			return err == nil
-		},
-	)
 	newIdx.ID = idxID
 
 	if !table.GetPrimaryIndex().CollectKeyColumnIDs().Contains(colID) &&

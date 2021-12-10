@@ -11,7 +11,7 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -25,7 +25,17 @@ PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
       DescID: 54
     *scop.DrainDescriptorName
       TableID: 54
-PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -43,6 +53,12 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         Username: root
     *scop.CreateGcJobForTable
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
@@ -61,7 +77,7 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
+PreCommitPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -95,7 +111,23 @@ PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
-PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -113,6 +145,18 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         Username: root
     *scop.CreateGcJobForTable
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 
 deps

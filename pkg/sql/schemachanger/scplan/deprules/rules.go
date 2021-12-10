@@ -36,12 +36,9 @@ func joinTargetNode(
 const (
 	add, drop = scpb.Target_ADD, scpb.Target_DROP
 
-	public, txnDropped, dropped, absent, deleteOnly, deleteAndWriteOnly, validated = scpb.Status_PUBLIC,
-		scpb.Status_TXN_DROPPED, scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
+	public, dropped, absent, deleteOnly, deleteAndWriteOnly, validated = scpb.Status_PUBLIC,
+		scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
 		scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_VALIDATED
-	// Make the linter happy
-	_ = txnDropped
-	_ = deleteOnly
 )
 
 func init() {
@@ -99,9 +96,35 @@ func init() {
 		}
 		return false
 	}
+	columnInPrimaryIndex := func(from *scpb.Column, to scpb.Element) bool {
+		switch to := to.(type) {
+		case *scpb.PrimaryIndex:
+			if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+				columnInList(from.ColumnID, to.StoringColumnIDs) ||
+				columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
+				return true
+			}
+		}
+		return false
+	}
+	columnInSecondaryIndex := func(from *scpb.Column, to scpb.Element) bool {
+		switch to := to.(type) {
+		case *scpb.SecondaryIndex:
+			if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+				columnInList(from.ColumnID, to.StoringColumnIDs) ||
+				columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
+				return true
+			}
+		}
+		return false
+	}
+	columnInIndex := func(from *scpb.Column, to scpb.Element) bool {
+		return columnInPrimaryIndex(from, to) || columnInSecondaryIndex(from, to)
+	}
+
 	column, columnTarget, columnNode := targetNodeVars("column")
 	index, indexTarget, indexNode := targetNodeVars("index")
-	var id, status, direction rel.Var = "id", "index-status", "direction"
+	var id, status, direction rel.Var = "id", "status", "direction"
 	register(
 		"column depends on indexes",
 		scgraph.Precedence,
@@ -115,27 +138,7 @@ func init() {
 
 			id.Entities(screl.DescID, column, index),
 
-			rel.Filter(
-				"columnInIndex", column, index,
-			)(func(from *scpb.Column, to scpb.Element) bool {
-				switch to := to.(type) {
-				case *scpb.PrimaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				case *scpb.SecondaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				default:
-					panic(errors.AssertionFailedf("unexpected type %T", to))
-				}
-				return false
-			}),
+			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
 			direction.Entities(screl.Direction, columnTarget, indexTarget),
 			status.Entities(screl.Status, columnNode, indexNode),
@@ -146,7 +149,7 @@ func init() {
 	)
 
 	register(
-		"index depends on column",
+		"index existence depends on column existence",
 		scgraph.Precedence,
 		columnNode, indexNode,
 		screl.MustQuery(
@@ -155,30 +158,27 @@ func init() {
 
 			id.Entities(screl.DescID, column, index),
 
-			rel.Filter(
-				"columnInIndex", column, index,
-			)(func(from *scpb.Column, to scpb.Element) bool {
-				switch to := to.(type) {
-				case *scpb.PrimaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				case *scpb.SecondaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				default:
-					panic(errors.AssertionFailedf("unexpected type %T", to))
-				}
-				return false
-			}),
+			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
 			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
 			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
+		),
+	)
+
+	register(
+		"secondary index depends on column",
+		scgraph.Precedence,
+		columnNode, indexNode,
+		screl.MustQuery(
+			column.Type((*scpb.Column)(nil)),
+			index.Type((*scpb.SecondaryIndex)(nil)),
+
+			id.Entities(screl.DescID, column, index),
+
+			rel.Filter("columnInIndex", column, index)(columnInIndex),
+
+			joinTargetNode(column, columnTarget, columnNode, add, public),
+			joinTargetNode(index, indexTarget, indexNode, add, validated),
 		),
 	)
 }
@@ -345,7 +345,7 @@ func init() {
 	columnID := rel.Var("column-id")
 
 	register(
-		"column name is assigned once the column is created",
+		"column named after column existence",
 		scgraph.Precedence,
 		columnNode, columnNameNode,
 		screl.MustQuery(
@@ -356,14 +356,14 @@ func init() {
 			tabID.Entities(screl.DescID, column, columnName),
 			columnID.Entities(screl.ColumnID, column, columnName),
 
-			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
 			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
 		),
 	)
 
 	register(
-		"column needs a name to be assigned",
-		scgraph.Precedence,
+		"column named right before column becomes public",
+		scgraph.SameStagePrecedence,
 		columnNameNode, columnNode,
 		screl.MustQuery(
 
@@ -374,7 +374,41 @@ func init() {
 			columnID.Entities(screl.ColumnID, column, columnName),
 
 			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
-			joinTargetNode(column, columnTarget, columnNode, add, deleteAndWriteOnly),
+			joinTargetNode(column, columnTarget, columnNode, add, public),
+		),
+	)
+
+	register(
+		"column unnamed after column no longer public",
+		scgraph.Precedence,
+		columnNode, columnNameNode,
+		screl.MustQuery(
+
+			columnName.Type((*scpb.ColumnName)(nil)),
+			column.Type((*scpb.Column)(nil)),
+
+			tabID.Entities(screl.DescID, column, columnName),
+			columnID.Entities(screl.ColumnID, column, columnName),
+
+			joinTargetNode(column, columnTarget, columnNode, drop, deleteAndWriteOnly),
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, drop, absent),
+		),
+	)
+
+	register(
+		"column unnamed before column no longer exists",
+		scgraph.Precedence,
+		columnNameNode, columnNode,
+		screl.MustQuery(
+
+			columnName.Type((*scpb.ColumnName)(nil)),
+			column.Type((*scpb.Column)(nil)),
+
+			tabID.Entities(screl.DescID, column, columnName),
+			columnID.Entities(screl.ColumnID, column, columnName),
+
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, drop, absent),
+			joinTargetNode(column, columnTarget, columnNode, drop, absent),
 		),
 	)
 }
@@ -383,10 +417,10 @@ func init() {
 	indexName, indexNameTarget, indexNameNode := targetNodeVars("index-name")
 	index, indexTarget, indexNode := targetNodeVars("index")
 	tabID := rel.Var("desc-id")
-	columnID := rel.Var("index-id")
+	indexID := rel.Var("index-id")
 
 	register(
-		"index name is assigned once the index is created",
+		"index named after index existence",
 		scgraph.Precedence,
 		indexNode, indexNameNode,
 		screl.MustQuery(
@@ -394,15 +428,49 @@ func init() {
 			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
 
 			tabID.Entities(screl.DescID, index, indexName),
-			columnID.Entities(screl.IndexID, index, indexName),
+			indexID.Entities(screl.IndexID, index, indexName),
 
-			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
 			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
 		),
 	)
 
 	register(
-		"index needs a name to be assigned",
+		"index named right before index becomes public",
+		scgraph.SameStagePrecedence,
+		indexNameNode, indexNode,
+		screl.MustQuery(
+			indexName.Type((*scpb.IndexName)(nil)),
+			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+
+			tabID.Entities(screl.DescID, index, indexName),
+			indexID.Entities(screl.IndexID, index, indexName),
+
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
+			joinTargetNode(index, indexTarget, indexNode, add, public),
+		),
+	)
+
+	register(
+		"index unnamed after index no longer public",
+		scgraph.Precedence,
+		indexNode, indexNameNode,
+		screl.MustQuery(
+			indexName.Type((*scpb.IndexName)(nil)),
+			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+
+			tabID.Entities(screl.DescID, index, indexName),
+			indexID.Entities(screl.IndexID, index, indexName),
+
+			screl.JoinTargetNode(index, indexTarget, indexNode),
+			indexTarget.AttrEq(screl.Direction, drop),
+			indexNode.AttrIn(screl.Status, validated, scpb.Status_BACKFILLED, deleteAndWriteOnly),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, drop, absent),
+		),
+	)
+
+	register(
+		"index unnamed before index no longer exists",
 		scgraph.Precedence,
 		indexNameNode, indexNode,
 		screl.MustQuery(
@@ -410,10 +478,10 @@ func init() {
 			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
 
 			tabID.Entities(screl.DescID, index, indexName),
-			columnID.Entities(screl.IndexID, index, indexName),
+			indexID.Entities(screl.IndexID, index, indexName),
 
-			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
-			joinTargetNode(index, indexTarget, indexNode, add, deleteAndWriteOnly),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, drop, absent),
+			joinTargetNode(index, indexTarget, indexNode, drop, absent),
 		),
 	)
 }

@@ -92,7 +92,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
-					if p.Params.ExecutionPhase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase < scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -172,7 +172,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			[][]string{
 				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded), `CREATE INDEX idx ON db.public.t (a)`},
 				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded), `CREATE INDEX idx2 ON db.public.t (a)`},
-				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded), `Schema change job`},
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded), `schema change job`},
 			},
 		)
 	})
@@ -201,7 +201,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
-					if p.Params.ExecutionPhase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase < scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -233,11 +233,11 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					}
 
 					// Block job 1 during the backfill.
-					s := p.StagesForCurrentPhase()[idx]
-					if stmt != stmt1 || s.Ops.Type() != scop.BackfillType {
+					s := p.Stages[idx]
+					if stmt != stmt1 || s.Type() != scop.BackfillType {
 						return nil
 					}
-					for _, op := range s.Ops.Slice() {
+					for _, op := range s.EdgeOps {
 						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
@@ -337,7 +337,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 			BeforeStage: func(p scplan.Plan, idx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if p.Params.ExecutionPhase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase < scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -345,11 +345,11 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-				s := p.StagesForCurrentPhase()[idx]
-				if s.Ops.Type() != scop.BackfillType {
+				s := p.Stages[idx]
+				if s.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range s.Ops.Slice() {
+				for _, op := range s.EdgeOps {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
@@ -443,7 +443,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if p.Params.ExecutionPhase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase < scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -451,11 +451,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-				s := p.StagesForCurrentPhase()[stageIdx]
-				if s.Ops.Type() != scop.BackfillType {
+				s := p.Stages[stageIdx]
+				if s.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range s.Ops.Slice() {
+				for _, op := range s.EdgeOps {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)

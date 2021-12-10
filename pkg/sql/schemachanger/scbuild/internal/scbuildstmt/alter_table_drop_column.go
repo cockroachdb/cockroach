@@ -13,7 +13,6 @@ package scbuildstmt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -127,18 +126,9 @@ func addOrUpdatePrimaryIndexTargetsForDropColumn(
 		}
 	}
 
-	// Create a new primary index, identical to the existing one except for its
-	// ID and name.
+	// Create a new primary index identical to the existing one except for its ID.
 	idxID = b.NextIndexID(table)
 	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
-	newIdx.Name = tabledesc.GenerateUniqueName(
-		"new_primary_key",
-		func(name string) bool {
-			// TODO (lucy): Also check the new indexes specified in the targets.
-			_, err := table.FindIndexWithName(name)
-			return err == nil
-		},
-	)
 	newIdx.ID = idxID
 	for j, id := range newIdx.KeyColumnIDs {
 		if id == colID {

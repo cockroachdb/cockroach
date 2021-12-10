@@ -29,7 +29,7 @@ var optRegistry registry
 
 // registerNoOpEdges adds a graph query that will label any
 // edges starting from this node a no-op.
-func registerNoOpEdges(query *rel.Query, edgeFromVar rel.Var) {
+func registerNoOpEdges(edgeFromVar rel.Var, query *rel.Query) {
 	optRegistry.deleteQueries = append(optRegistry.deleteQueries,
 		&deleteNodeOpt{
 			query:       query,
@@ -41,10 +41,10 @@ func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 	return el, el + "-target", el + "-node"
 }
 
-// OptimizePlan given a graph this code will optimize it to eliminate
+// OptimizeGraph given a graph this code will optimize it to eliminate
 // unnecessary nodes. A new mutated graph will be returned based on the
 // original with these any transformations / optimizations applied.
-func OptimizePlan(graph *scgraph.Graph) (*scgraph.Graph, error) {
+func OptimizeGraph(graph *scgraph.Graph) (*scgraph.Graph, error) {
 	db := graph.Database()
 	nodesToMark := make(map[*scpb.Node]struct{})
 	for _, delete := range optRegistry.deleteQueries {
@@ -60,7 +60,7 @@ func OptimizePlan(graph *scgraph.Graph) (*scgraph.Graph, error) {
 	mutatedGraph := graph.ShallowClone()
 	for node := range nodesToMark {
 		if edge, ok := graph.GetOpEdgeFrom(node); ok {
-			mutatedGraph.MarkOpEdgeAsOptimizedOut(edge)
+			mutatedGraph.MarkAsNoOp(edge)
 		}
 	}
 	return mutatedGraph, nil
