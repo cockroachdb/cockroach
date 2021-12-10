@@ -38,14 +38,13 @@
     padding-right .7em
     width 120px
 
+  &__running-status,
   &__duration
     font-family SourceSansPro-Regular
     font-size 12px
     line-height 1.67
     letter-spacing 0.3px
     color $colors--neutral-8
-    &--right
-      margin-left 48px
 
   &__status, &__running-status
     text-transform capitalize
@@ -53,6 +52,10 @@
     display flex
     align-items center
     justify-content flex-start
+  &__two-statuses
+    display flex
+    flex-wrap wrap
+    gap 5px
   &__status
     margin-bottom 8px
     font-family $font-family--semi-bold 
@@ -68,11 +71,9 @@
     &--percentage
       font-family SourceSansPro-Regular
       font-size 12px
-      margin 0 6px 0 0
       line-height 1.67
       letter-spacing 0.3px
       width 40px
-      text-align right
   .job-detail
     white-space pre-wrap
     padding 5px
