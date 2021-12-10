@@ -676,91 +676,15 @@ If problems persist, please see %s.`
 				return err
 			}
 
-			// Now inform the user that the server is running and tell the
-			// user about its run-time derived parameters.
-			var buf redact.StringBuilder
-			info := build.GetInfo()
-			buf.Printf("CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
-			buf.Printf("build:\t%s %s @ %s (%s)\n",
-				redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
-			buf.Printf("webui:\t%s\n", serverCfg.AdminURL())
-
-			// (Re-)compute the client connection URL. We cannot do this
-			// earlier (e.g. above, in the runStart function) because
-			// at this time the address and port have not been resolved yet.
-			sCtx := rpc.MakeSecurityContext(serverCfg.Config, security.ClusterTLSSettings(serverCfg.Settings), roachpb.SystemTenantID)
-			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
-			if err != nil {
-				log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
-				return err
-			}
-			buf.Printf("sql:\t%s\n", pgURL.ToPQ())
-			buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())
-
-			buf.Printf("RPC client flags:\t%s\n", clientFlagsRPC())
-			if len(serverCfg.SocketFile) != 0 {
-				buf.Printf("socket:\t%s\n", serverCfg.SocketFile)
-			}
-			logNum := 1
-			_ = cliCtx.logConfig.IterateDirectories(func(d string) error {
-				if logNum == 1 {
-					// Backward-compatibility.
-					buf.Printf("logs:\t%s\n", d)
-				} else {
-					buf.Printf("logs[%d]:\t%s\n", logNum, d)
-				}
-				logNum++
-				return nil
-			})
-			if serverCfg.Attrs != "" {
-				buf.Printf("attrs:\t%s\n", serverCfg.Attrs)
-			}
-			if len(serverCfg.Locality.Tiers) > 0 {
-				buf.Printf("locality:\t%s\n", serverCfg.Locality)
-			}
-			if s.TempDir() != "" {
-				buf.Printf("temp dir:\t%s\n", s.TempDir())
-			}
-			if ext := s.ClusterSettings().ExternalIODir; ext != "" {
-				buf.Printf("external I/O path: \t%s\n", ext)
-			} else {
-				buf.Printf("external I/O path: \t<disabled>\n")
-			}
-			for i, spec := range serverCfg.Stores.Specs {
-				buf.Printf("store[%d]:\t%s\n", i, spec)
-			}
-			buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
+			// Remember the server identifiers for logging.
+			// TODO(knz): Remove this.
 			nodeID := s.NodeID()
-			if initialStart {
-				if nodeID == kvserver.FirstNodeID {
-					buf.Printf("status:\tinitialized new cluster\n")
-				} else {
-					buf.Printf("status:\tinitialized new node, joined pre-existing cluster\n")
-				}
-			} else {
-				buf.Printf("status:\trestarted pre-existing node\n")
-			}
-
-			if baseCfg.ClusterName != "" {
-				buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
-			}
-
-			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
 			log.SetNodeIDs(clusterID, int32(nodeID))
-			buf.Printf("clusterID:\t%s\n", clusterID)
-			buf.Printf("nodeID:\t%d\n", nodeID)
 
-			// Collect the formatted string and show it to the user.
-			msg, err := expandTabsInRedactableBytes(buf.RedactableBytes())
-			if err != nil {
-				return err
-			}
-			msgS := msg.ToString()
-			log.Ops.Infof(ctx, "node startup completed:\n%s", msgS)
-			if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
-				fmt.Print(msgS.StripMarkers())
-			}
+			// Now inform the user that the server is running and tell the
+			// user about its run-time derived parameters.
+			reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(), true /* isHostNode */, initialStart)
 
 			return nil
 		}(); err != nil {
@@ -956,6 +880,124 @@ If problems persist, please see %s.`
 	}
 
 	return returnErr
+}
+
+// reportServerInfo prints out the server version and network details
+// in a standardized format.
+func reportServerInfo(
+	ctx context.Context,
+	startTime time.Time,
+	serverCfg *server.Config,
+	st *cluster.Settings,
+	isHostNode, initialStart bool,
+) error {
+	srvS := redact.SafeString("SQL server")
+	if isHostNode {
+		srvS = "node"
+	}
+
+	var buf redact.StringBuilder
+	info := build.GetInfo()
+	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", srvS, timeutil.Now(), timeutil.Since(startTime).Seconds())
+	buf.Printf("build:\t%s %s @ %s (%s)\n",
+		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
+	buf.Printf("webui:\t%s\n", serverCfg.AdminURL())
+
+	// (Re-)compute the client connection URL. We cannot do this
+	// earlier (e.g. above, in the runStart function) because
+	// at this time the address and port have not been resolved yet.
+	sCtx := rpc.MakeSecurityContext(serverCfg.Config, security.ClusterTLSSettings(serverCfg.Settings), roachpb.SystemTenantID)
+	pgURL, err := sCtx.PGURL(url.User(security.RootUser))
+	if err != nil {
+		log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
+		return err
+	}
+	buf.Printf("sql:\t%s\n", pgURL.ToPQ())
+	buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())
+
+	buf.Printf("RPC client flags:\t%s\n", clientFlagsRPC())
+	if len(serverCfg.SocketFile) != 0 {
+		buf.Printf("socket:\t%s\n", serverCfg.SocketFile)
+	}
+	logNum := 1
+	_ = cliCtx.logConfig.IterateDirectories(func(d string) error {
+		if logNum == 1 {
+			// Backward-compatibility.
+			buf.Printf("logs:\t%s\n", d)
+		} else {
+			buf.Printf("logs[%d]:\t%s\n", logNum, d)
+		}
+		logNum++
+		return nil
+	})
+	if serverCfg.Attrs != "" {
+		buf.Printf("attrs:\t%s\n", serverCfg.Attrs)
+	}
+	if len(serverCfg.Locality.Tiers) > 0 {
+		buf.Printf("locality:\t%s\n", serverCfg.Locality)
+	}
+	if tmpDir := serverCfg.SQLConfig.TempStorageConfig.Path; tmpDir != "" {
+		buf.Printf("temp dir:\t%s\n", tmpDir)
+	}
+	if ext := st.ExternalIODir; ext != "" {
+		buf.Printf("external I/O path: \t%s\n", ext)
+	} else {
+		buf.Printf("external I/O path: \t<disabled>\n")
+	}
+	for i, spec := range serverCfg.Stores.Specs {
+		buf.Printf("store[%d]:\t%s\n", i, spec)
+	}
+	buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
+
+	// Print the commong server identifiers.
+	if baseCfg.ClusterName != "" {
+		buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
+	}
+	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get().String()
+	buf.Printf("clusterID:\t%s\n", clusterID)
+
+	nodeID := serverCfg.BaseConfig.IDContainer.Get()
+	if isHostNode {
+		if initialStart {
+			if nodeID == kvserver.FirstNodeID {
+				buf.Printf("status:\tinitialized new cluster\n")
+			} else {
+				buf.Printf("status:\tinitialized new node, joined pre-existing cluster\n")
+			}
+		} else {
+			buf.Printf("status:\trestarted pre-existing node\n")
+		}
+		// Report the server identifiers.
+		buf.Printf("nodeID:\t%d\n", nodeID)
+	} else {
+		// Report the SQL server identifiers.
+		buf.Printf("tenantID:\t%s\n", serverCfg.SQLConfig.TenantID)
+		buf.Printf("instanceID:\t%d\n", nodeID)
+
+		if kvAddrs := serverCfg.SQLConfig.TenantKVAddrs; len(kvAddrs) > 0 {
+			// Report which KV servers are connected.
+			buf.Printf("KV addresses:\t")
+			comma := redact.SafeString("")
+			for _, addr := range serverCfg.SQLConfig.TenantKVAddrs {
+				buf.Printf("%s%s", comma, addr)
+				comma = ", "
+			}
+			buf.Printf("\n")
+		}
+	}
+
+	// Collect the formatted string and show it to the user.
+	msg, err := expandTabsInRedactableBytes(buf.RedactableBytes())
+	if err != nil {
+		return err
+	}
+	msgS := msg.ToString()
+	log.Ops.Infof(ctx, "%s startup completed:\n%s", srvS, msgS)
+	if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
+		fmt.Print(msgS.StripMarkers())
+	}
+
+	return nil
 }
 
 // expandTabsInRedactableBytes expands tabs in the redactable byte
