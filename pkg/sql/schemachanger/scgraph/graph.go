@@ -45,14 +45,10 @@ type Graph struct {
 	// from it. A Node may have at most one opEdge from it.
 	opEdgesFrom map[*scpb.Node]*OpEdge
 
-	// depEdgesFrom maps a Node from its dependencies.
+	// depEdgesFrom and depEdgesTo map a Node from and to its dependencies.
 	// A Node dependency is another target node which must be
 	// reached before or concurrently with this node.
-	depEdgesFrom *depEdgeTree
-
-	// sameStageDepEdgesTo maps a Node to the DepEdges with the
-	// SameStage kind incident upon the indexed node.
-	sameStageDepEdgesTo *depEdgeTree
+	depEdgesFrom, depEdgesTo *depEdgeTree
 
 	// opToNode maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -95,7 +91,7 @@ func New(initial scpb.State) (*Graph, error) {
 		authorization:       initial.Authorization,
 	}
 	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
-	g.sameStageDepEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
+	g.depEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
 	for _, n := range initial.Nodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
@@ -125,7 +121,7 @@ func (g *Graph) ShallowClone() *Graph {
 		targetIdxMap:        g.targetIdxMap,
 		opEdgesFrom:         g.opEdgesFrom,
 		depEdgesFrom:        g.depEdgesFrom,
-		sameStageDepEdgesTo: g.sameStageDepEdgesTo,
+		depEdgesTo:          g.depEdgesTo,
 		opToNode:            g.opToNode,
 		edges:               g.edges,
 		entities:            g.entities,
@@ -252,9 +248,7 @@ func (g *Graph) AddDepEdge(
 	}
 	g.edges = append(g.edges, de)
 	g.depEdgesFrom.insert(de)
-	if de.Kind() == SameStage {
-		g.sameStageDepEdgesTo.insert(de)
-	}
+	g.depEdgesTo.insert(de)
 	return nil
 }
 
