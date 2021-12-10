@@ -12,7 +12,7 @@ begin transaction #1
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
-create job #1: "Schema change job"
+create job #1: "schema change job"
   descriptor IDs: [54]
 upsert descriptor #54
   ...
@@ -61,7 +61,7 @@ upsert descriptor #54
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitPhase stage 1 of 6 with 2 MutationType ops
+## PostCommitPhase stage 1 of 4 with 2 MutationType ops
 update progress of schema change job #1
 upsert descriptor #54
   ...
@@ -78,23 +78,16 @@ upsert descriptor #54
   +  version: "3"
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 2 of 6 with 1 BackfillType ops
+## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
 backfill indexes [2] from index #1 in table #54
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 3 of 6 with 1 MutationType ops
-update progress of schema change job #1
+## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+validate forward indexes [2] in table #54
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 4 of 6 with 1 ValidationType ops
-validate forward indexes [2] in table #54
-commit transaction #5
-begin transaction #6
-## PostCommitPhase stage 5 of 6 with 1 MutationType ops
+## PostCommitPhase stage 4 of 4 with 3 MutationType ops
 update progress of schema change job #1
-commit transaction #6
-begin transaction #7
-## PostCommitPhase stage 6 of 6 with 2 MutationType ops
 upsert descriptor #54
   ...
      formatVersion: 3
@@ -153,5 +146,5 @@ upsert descriptor #54
      unexposedParentSchemaId: 51
   -  version: "3"
   +  version: "4"
-commit transaction #7
+commit transaction #5
 # end PostCommitPhase

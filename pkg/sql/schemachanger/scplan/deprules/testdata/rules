@@ -23,7 +23,7 @@ rules
   from: index-node
   to: column-node
   query:
-    - $index-status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
+    - $status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
     - $direction = ADD
     - $column[Type] = '*scpb.Column'
     - $index[Type] = '*scpb.PrimaryIndex'
@@ -32,8 +32,8 @@ rules
     - columnInIndex(*scpb.Column, scpb.Element)($column, $index)
     - $column-target[Direction] = $direction
     - $index-target[Direction] = $direction
-    - $column-node[Status] = $index-status
-    - $index-node[Status] = $index-status
+    - $column-node[Status] = $status
+    - $index-node[Status] = $status
     - $column-target[Type] = '*scpb.Target'
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
@@ -42,7 +42,7 @@ rules
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-- name: index depends on column
+- name: index existence depends on column existence
   from: column-node
   to: index-node
   query:
@@ -63,6 +63,27 @@ rules
     - $index-node[Target] = $index-target
     - $index-target[Direction] = ADD
     - $index-node[Status] = DELETE_ONLY
+- name: secondary index depends on column
+  from: column-node
+  to: index-node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $index[Type] = '*scpb.SecondaryIndex'
+    - $column[DescID] = $id
+    - $index[DescID] = $id
+    - columnInIndex(*scpb.Column, scpb.Element)($column, $index)
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*scpb.Node'
+    - $column-node[Target] = $column-target
+    - $column-target[Direction] = ADD
+    - $column-node[Status] = PUBLIC
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*scpb.Node'
+    - $index-node[Target] = $index-target
+    - $index-target[Direction] = ADD
+    - $index-node[Status] = VALIDATED
 - name: primary index add depends on drop
   from: drop-idx-node
   to: add-idx-node

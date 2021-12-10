@@ -32,13 +32,8 @@ func init() {
 		),
 		drop(
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.IndexName) scop.Op {
-					return &scop.SetIndexName{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
-						Name:    this.Name,
-					}
+					return notImplemented(this)
 				}),
 			),
 		),

@@ -36,12 +36,9 @@ func joinTargetNode(
 const (
 	add, drop = scpb.Target_ADD, scpb.Target_DROP
 
-	public, txnDropped, dropped, absent, deleteOnly, deleteAndWriteOnly, validated = scpb.Status_PUBLIC,
-		scpb.Status_TXN_DROPPED, scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
+	public, dropped, absent, deleteOnly, deleteAndWriteOnly, validated = scpb.Status_PUBLIC,
+		scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
 		scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_VALIDATED
-	// Make the linter happy
-	_ = txnDropped
-	_ = deleteOnly
 )
 
 func init() {
@@ -99,9 +96,35 @@ func init() {
 		}
 		return false
 	}
+	columnInPrimaryIndex := func(from *scpb.Column, to scpb.Element) bool {
+		switch to := to.(type) {
+		case *scpb.PrimaryIndex:
+			if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+				columnInList(from.ColumnID, to.StoringColumnIDs) ||
+				columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
+				return true
+			}
+		}
+		return false
+	}
+	columnInSecondaryIndex := func(from *scpb.Column, to scpb.Element) bool {
+		switch to := to.(type) {
+		case *scpb.SecondaryIndex:
+			if columnInList(from.ColumnID, to.KeyColumnIDs) ||
+				columnInList(from.ColumnID, to.StoringColumnIDs) ||
+				columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
+				return true
+			}
+		}
+		return false
+	}
+	columnInIndex := func(from *scpb.Column, to scpb.Element) bool {
+		return columnInPrimaryIndex(from, to) || columnInSecondaryIndex(from, to)
+	}
+
 	column, columnTarget, columnNode := targetNodeVars("column")
 	index, indexTarget, indexNode := targetNodeVars("index")
-	var id, status, direction rel.Var = "id", "index-status", "direction"
+	var id, status, direction rel.Var = "id", "status", "direction"
 	register(
 		"column depends on indexes",
 		scgraph.Precedence,
@@ -115,27 +138,7 @@ func init() {
 
 			id.Entities(screl.DescID, column, index),
 
-			rel.Filter(
-				"columnInIndex", column, index,
-			)(func(from *scpb.Column, to scpb.Element) bool {
-				switch to := to.(type) {
-				case *scpb.PrimaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				case *scpb.SecondaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				default:
-					panic(errors.AssertionFailedf("unexpected type %T", to))
-				}
-				return false
-			}),
+			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
 			direction.Entities(screl.Direction, columnTarget, indexTarget),
 			status.Entities(screl.Status, columnNode, indexNode),
@@ -146,7 +149,7 @@ func init() {
 	)
 
 	register(
-		"index depends on column",
+		"index existence depends on column existence",
 		scgraph.Precedence,
 		columnNode, indexNode,
 		screl.MustQuery(
@@ -155,30 +158,27 @@ func init() {
 
 			id.Entities(screl.DescID, column, index),
 
-			rel.Filter(
-				"columnInIndex", column, index,
-			)(func(from *scpb.Column, to scpb.Element) bool {
-				switch to := to.(type) {
-				case *scpb.PrimaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				case *scpb.SecondaryIndex:
-					if columnInList(from.ColumnID, to.KeyColumnIDs) ||
-						columnInList(from.ColumnID, to.StoringColumnIDs) ||
-						columnInList(from.ColumnID, to.KeySuffixColumnIDs) {
-						return true
-					}
-				default:
-					panic(errors.AssertionFailedf("unexpected type %T", to))
-				}
-				return false
-			}),
+			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
 			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
 			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
+		),
+	)
+
+	register(
+		"secondary index depends on column",
+		scgraph.Precedence,
+		columnNode, indexNode,
+		screl.MustQuery(
+			column.Type((*scpb.Column)(nil)),
+			index.Type((*scpb.SecondaryIndex)(nil)),
+
+			id.Entities(screl.DescID, column, index),
+
+			rel.Filter("columnInIndex", column, index)(columnInIndex),
+
+			joinTargetNode(column, columnTarget, columnNode, add, public),
+			joinTargetNode(index, indexTarget, indexNode, add, validated),
 		),
 	)
 }
@@ -346,7 +346,7 @@ func init() {
 
 	register(
 		"column name is assigned once the column is created",
-		scgraph.Precedence,
+		scgraph.SameStagePrecedence,
 		columnNode, columnNameNode,
 		screl.MustQuery(
 

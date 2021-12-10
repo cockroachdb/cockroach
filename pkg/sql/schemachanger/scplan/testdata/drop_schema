@@ -365,10 +365,14 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
     [Table:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
+    [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
@@ -398,7 +402,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       DescID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
+PreCommitPhase stage 1 of 1 with 43 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 55, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -472,6 +476,41 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
       TableID: 55
     *scop.MarkDescriptorAsDropped
       DescID: 56
+    *scop.DrainDescriptorName
+      TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 57
+    *scop.DrainDescriptorName
+      TableID: 57
+    *scop.MarkDescriptorAsDropped
+      DescID: 58
+    *scop.DrainDescriptorName
+      TableID: 58
+    *scop.MarkDescriptorAsDropped
+      DescID: 59
+    *scop.DrainDescriptorName
+      TableID: 59
+    *scop.MarkDescriptorAsDropped
+      DescID: 60
+    *scop.DrainDescriptorName
+      TableID: 60
+    *scop.MarkDescriptorAsDropped
+      DescID: 63
+    *scop.DrainDescriptorName
+      TableID: 63
+    *scop.MarkDescriptorAsDropped
+      DescID: 61
+    *scop.DrainDescriptorName
+      TableID: 61
+    *scop.MarkDescriptorAsDropped
+      DescID: 62
+    *scop.DrainDescriptorName
+      TableID: 62
+    *scop.MarkDescriptorAsDropped
+      DescID: 54
+    *scop.DeleteDatabaseSchemaEntry
+      DatabaseID: 50
+      SchemaID: 54
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 55
@@ -480,77 +519,78 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 56
-    *scop.MarkDescriptorAsDropped
-      DescID: 57
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 57
-    *scop.MarkDescriptorAsDropped
-      DescID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 58
       TableID: 57
-    *scop.MarkDescriptorAsDropped
-      DescID: 59
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 57
-    *scop.DrainDescriptorName
-      TableID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 58
-    *scop.MarkDescriptorAsDropped
-      DescID: 60
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 60
       TableID: 58
-    *scop.DrainDescriptorName
-      TableID: 59
-    *scop.DrainDescriptorName
-      TableID: 60
-    *scop.MarkDescriptorAsDropped
-      DescID: 63
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 63
       TableID: 60
-    *scop.DrainDescriptorName
-      TableID: 63
-    *scop.MarkDescriptorAsDropped
-      DescID: 61
     *scop.RemoveTypeBackRef
       DescID: 63
       TypeID: 61
-    *scop.MarkDescriptorAsDropped
-      DescID: 62
     *scop.RemoveTypeBackRef
       DescID: 63
       TypeID: 62
-    *scop.DrainDescriptorName
-      TableID: 61
-    *scop.DrainDescriptorName
-      TableID: 62
-    *scop.DeleteDatabaseSchemaEntry
-      DatabaseID: 50
-      SchemaID: 54
-    *scop.MarkDescriptorAsDropped
-      DescID: 54
-PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 50
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 57
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 58
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 59
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 60
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 61
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 62
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 63
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP SCHEMA defaultdb.sc1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
     [PrimaryIndex:{DescID: 56, IndexID: 1}, VALIDATED, DROP] -> ABSENT
-    [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
@@ -712,3 +752,39 @@ PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
         Username: root
     *scop.DeleteDescriptor
       DescriptorID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 50
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 57
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 58
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 59
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 60
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 61
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 62
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 63
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1

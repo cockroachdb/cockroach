@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -89,11 +88,11 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(record jobs.Record) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, state scpb.State) error
 
-	// UpdateSchemaChangerJobProgress will write the status of the job to the
-	// specified job progress.
-	UpdateSchemaChangerJobProgress(jobID jobspb.JobID, statuses []scpb.Status) error
+	// UpdateSchemaChangerJob will update the progress and payload of the
+	// schema changer job.
+	UpdateSchemaChangerJob(jobID jobspb.JobID, statuses []scpb.Status, isNonCancelable bool) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(id descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload) error
@@ -171,13 +170,13 @@ func (m *visitor) swapSchemaChangeJobID(
 func (m *visitor) CreateDeclarativeSchemaChangerJob(
 	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
 ) error {
-	return m.s.AddNewSchemaChangerJob(job.Record)
+	return m.s.AddNewSchemaChangerJob(job.JobID, job.State)
 }
 
-func (m *visitor) UpdateSchemaChangeJobProgress(
-	ctx context.Context, progress scop.UpdateSchemaChangeJobProgress,
+func (m *visitor) UpdateSchemaChangerJob(
+	ctx context.Context, progress scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJobProgress(progress.JobID, progress.Statuses)
+	return m.s.UpdateSchemaChangerJob(progress.JobID, progress.Statuses, progress.IsNonCancelable)
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {

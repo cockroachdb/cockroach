@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 ops
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
@@ -26,13 +26,25 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       IndexID: 2
       Name: id1
       TableID: 54
-PostCommitPhase stage 1 of 4 with 1 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
+PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 54
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
@@ -47,13 +59,18 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
-PostCommitPhase stage 4 of 4 with 1 MutationType ops
+PostCommitPhase stage 4 of 4 with 3 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
 
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
@@ -70,7 +87,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
     [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
@@ -93,13 +110,26 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       IndexID: 2
       Name: id1
       TableID: 54
-PostCommitPhase stage 1 of 4 with 1 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING
+            (money)
+PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 54
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
@@ -114,13 +144,18 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
-PostCommitPhase stage 4 of 4 with 1 MutationType ops
+PostCommitPhase stage 4 of 4 with 3 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
 
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
@@ -137,7 +172,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ops
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-PreCommitPhase stage 1 of 1 with 3 MutationType ops
+PreCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [Partitioning:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> PUBLIC
     [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
@@ -155,6 +190,10 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       StoreColumnIDs:
       - 3
       TableID: 54
+    *scop.SetIndexName
+      IndexID: 2
+      Name: id1
+      TableID: 54
     *scop.AddIndexPartitionInfo
       IndexID: 2
       ListPartitions:
@@ -165,17 +204,26 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       - id
       RangePartitions: []
       TableID: 54
-    *scop.SetIndexName
-      IndexID: 2
-      Name: id1
-      TableID: 54
-PostCommitPhase stage 1 of 4 with 1 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
+            BY LIST (id) (PARTITION p1 VALUES IN (1))
+PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
       TableID: 54
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
@@ -190,13 +238,18 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
-PostCommitPhase stage 4 of 4 with 1 MutationType ops
+PostCommitPhase stage 4 of 4 with 3 MutationType ops
   transitions:
     [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
   ops:
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      JobID: 1
 
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))

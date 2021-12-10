@@ -32,13 +32,8 @@ func init() {
 		),
 		drop(
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.ColumnName) scop.Op {
-					return &scop.SetColumnName{
-						TableID:  this.TableID,
-						ColumnID: this.ColumnID,
-						Name:     this.Name,
-					}
+					return notImplemented(this)
 				}),
 			),
 		),
