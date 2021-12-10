@@ -174,7 +174,7 @@ func createSchemaChangeJobAndAddDescriptorJobReferenceOps(
 		RunningStatus: "",
 		NonCancelable: !revertible,
 	}
-	opsToAdd = append(opsToAdd, scop.CreateDeclarativeSchemaChangerJob{
+	opsToAdd = append(opsToAdd, &scop.CreateDeclarativeSchemaChangerJob{
 		Record: record,
 	})
 	opsToAdd = append(opsToAdd, generateOpsToAddJobIDs(descIDs, jobID)...)
@@ -189,7 +189,7 @@ func statementStrings(statements []*scpb.Statement) (strs []string) {
 }
 
 func generateUpdateJobProgressOp(id jobspb.JobID, after scpb.State) scop.Op {
-	return scop.UpdateSchemaChangeJobProgress{
+	return &scop.UpdateSchemaChangeJobProgress{
 		JobID:    id,
 		Statuses: after.Statuses(),
 	}
@@ -197,13 +197,13 @@ func generateUpdateJobProgressOp(id jobspb.JobID, after scpb.State) scop.Op {
 
 func generateOpsToRemoveJobIDs(descIDs []descpb.ID, jobID jobspb.JobID) []scop.Op {
 	return generateOpsForJobIDs(descIDs, jobID, func(descID descpb.ID, id jobspb.JobID) scop.Op {
-		return scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
+		return &scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
 	})
 }
 
 func generateOpsToAddJobIDs(descIDs []descpb.ID, jobID jobspb.JobID) []scop.Op {
 	return generateOpsForJobIDs(descIDs, jobID, func(descID descpb.ID, id jobspb.JobID) scop.Op {
-		return scop.AddJobReference{DescriptorID: descID, JobID: jobID}
+		return &scop.AddJobReference{DescriptorID: descID, JobID: jobID}
 	})
 }
 
