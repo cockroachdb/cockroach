@@ -73,7 +73,9 @@ type TableStatisticsCache struct {
 	collectionFactory *descs.CollectionFactory
 
 	// Used when decoding KV from the range feed.
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc  rowenc.DatumAlloc
+	lastTableID descpb.ID
+	lastTS      hlc.Timestamp
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -171,11 +173,39 @@ func NewTableStatisticsCache(
 		"table-stats-cache",
 		statsTableSpan,
 		db.Clock().Now(),
-		handleEvent,
+		tableStatsCache,
 	)
 
 	return tableStatsCache
 }
+
+// OnValue implements rangefeed.EventHandler.
+func (sc *TableStatisticsCache) OnValue(ctx context.Context, kv *roachpb.RangeFeedValue) {
+	tableID, err := decodeTableStatisticsKV(sc.Codec, kv, &sc.datumAlloc)
+	if err != nil {
+		log.Warningf(ctx, "failed to decode table statistics row %v: %v", kv.Key, err)
+		return
+	}
+	ts := kv.Value.Timestamp
+	// A statistics collection inserts multiple rows in one transaction. We
+	// don't want to call refreshTableStats for each row since it has
+	// non-trivial overhead.
+	if tableID == sc.lastTableID && ts == sc.lastTS {
+		return
+	}
+	sc.lastTableID = tableID
+	sc.lastTS = ts
+	sc.refreshTableStats(ctx, tableID, ts)
+}
+
+// OnCheckpoint implements rangefeed.EventHandler.
+func (sc *TableStatisticsCache) OnCheckpoint(context.Context, *roachpb.RangeFeedCheckpoint) {}
+
+// OnFrontierAdvance implements rangefeed.EventHandler.
+func (sc *TableStatisticsCache) OnFrontierAdvance(context.Context, hlc.Timestamp) {}
+
+// OnUnrecoverableError implements rangefeed.EventHandler.
+func (sc *TableStatisticsCache) OnUnrecoverableError(context.Context, error) {}
 
 // decodeTableStatisticsKV decodes the table ID from a range feed event on
 // system.table_statistics.

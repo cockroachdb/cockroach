@@ -33,12 +33,14 @@ import (
 // SettingsWatcher is used to watch for cluster settings changes with a
 // rangefeed.
 type SettingsWatcher struct {
-	clock    *hlc.Clock
-	codec    keys.SQLCodec
-	settings *cluster.Settings
-	f        *rangefeed.Factory
-	stopper  *stop.Stopper
-	dec      RowDecoder
+	clock           *hlc.Clock
+	codec           keys.SQLCodec
+	settings        *cluster.Settings
+	f               *rangefeed.Factory
+	updater         settings.Updater
+	initialScanDone chan error
+	stopper         *stop.Stopper
+	dec             RowDecoder
 }
 
 // New constructs a new SettingsWatcher.
@@ -50,12 +52,14 @@ func New(
 	stopper *stop.Stopper,
 ) *SettingsWatcher {
 	return &SettingsWatcher{
-		clock:    clock,
-		codec:    codec,
-		settings: settingsToUpdate,
-		f:        f,
-		stopper:  stopper,
-		dec:      MakeRowDecoder(codec),
+		clock:           clock,
+		codec:           codec,
+		settings:        settingsToUpdate,
+		updater:         settingsToUpdate.MakeUpdater(),
+		initialScanDone: make(chan error),
+		f:               f,
+		stopper:         stopper,
+		dec:             MakeRowDecoder(codec),
 	}
 }
 
@@ -69,77 +73,15 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		EndKey: settingsTablePrefix.PrefixEnd(),
 	}
 	now := s.clock.Now()
-	u := s.settings.MakeUpdater()
-	initialScanDone := make(chan struct{})
-	var initialScanErr error
-	rf, err := s.f.RangeFeed(ctx, "settings", settingsTableSpan, now, func(
-		ctx context.Context, kv *roachpb.RangeFeedValue,
-	) {
-		k, val, valType, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
-			Key:   kv.Key,
-			Value: kv.Value,
-		})
-		if err != nil {
-			log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
-		}
-		// This event corresponds to a deletion.
-		if tombstone {
-			s, ok := settings.Lookup(k, settings.LookupForLocalAccess)
-			if !ok {
-				log.Warningf(ctx, "failed to find setting %s, skipping update",
-					log.Safe(k))
-				return
-			}
-			ws, ok := s.(settings.WritableSetting)
-			if !ok {
-				log.Fatalf(ctx, "expected writable setting, got %T", s)
-			}
-			val, valType = ws.EncodedDefault(), ws.Typ()
-		}
-
-		// The system tenant (i.e. the KV layer) does not use the SettingsWatcher
-		// to propagate cluster version changes (it uses the BumpClusterVersion
-		// RPC). However, non-system tenants (i.e. SQL pods) (asynchronously) get
-		// word of the new cluster version below.
-		const versionSettingKey = "version"
-		if k == versionSettingKey && !s.codec.ForSystemTenant() {
-			var v clusterversion.ClusterVersion
-			if err := protoutil.Unmarshal([]byte(val), &v); err != nil {
-				log.Warningf(ctx, "failed to set cluster version: %v", err)
-			} else if err := s.settings.Version.SetActiveVersion(ctx, v); err != nil {
-				log.Warningf(ctx, "failed to set cluster version: %v", err)
-			} else {
-				log.Infof(ctx, "set cluster version to: %v", v)
-			}
-		} else if err := u.Set(ctx, k, val, valType); err != nil {
-			log.Warningf(ctx, "failed to set setting %s to %s: %v",
-				log.Safe(k), val, err)
-		}
-	}, rangefeed.WithInitialScan(func(ctx context.Context) {
-		u.ResetRemaining(ctx)
-		close(initialScanDone)
-	}), rangefeed.WithOnInitialScanError(func(
-		ctx context.Context, err error,
-	) (shouldFail bool) {
-		// TODO(ajwerner): Consider if there are other errors which we want to
-		// treat as permanent.
-		if grpcutil.IsAuthError(err) ||
-			// This is a hack around the fact that we do not get properly structured
-			// errors out of gRPC. See #56208.
-			strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
-			initialScanErr = err
-			close(initialScanDone)
-			shouldFail = true
-		}
-		return shouldFail
-	}))
+	rf, err := s.f.RangeFeed(ctx, "settings", settingsTableSpan, now, s,
+		rangefeed.WithInitialScan(s))
 	if err != nil {
 		return err
 	}
 	select {
-	case <-initialScanDone:
-		if initialScanErr != nil {
-			return initialScanErr
+	case err := <-s.initialScanDone:
+		if err != nil {
+			return err
 		}
 		s.stopper.AddCloser(rf)
 		return nil
@@ -151,3 +93,77 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			"failed to retrieve initial cluster settings")
 	}
 }
+
+// OnInitialScanDone implements rangefeed.InitialScanHandler.
+func (s *SettingsWatcher) OnInitialScanDone(ctx context.Context) {
+	s.updater.ResetRemaining(ctx)
+	close(s.initialScanDone)
+}
+
+// OnInitialScanError implements rangefeed.InitialScanHandler.
+func (s *SettingsWatcher) OnInitialScanError(ctx context.Context, err error) (shouldFail bool) {
+	// TODO(ajwerner): Consider if there are other errors which we want to
+	// treat as permanent.
+	if grpcutil.IsAuthError(err) ||
+		// This is a hack around the fact that we do not get properly structured
+		// errors out of gRPC. See #56208.
+		strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
+		s.initialScanDone <- err
+		close(s.initialScanDone)
+		return true
+	}
+	return false
+}
+
+// OnValue implements rangefeed.EventHandler.
+func (s *SettingsWatcher) OnValue(ctx context.Context, kv *roachpb.RangeFeedValue) {
+	k, val, valType, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
+		Key:   kv.Key,
+		Value: kv.Value,
+	})
+	if err != nil {
+		log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
+	}
+	// This event corresponds to a deletion.
+	if tombstone {
+		s, ok := settings.Lookup(k, settings.LookupForLocalAccess)
+		if !ok {
+			log.Warningf(ctx, "failed to find setting %s, skipping update",
+				log.Safe(k))
+			return
+		}
+		ws, ok := s.(settings.WritableSetting)
+		if !ok {
+			log.Fatalf(ctx, "expected writable setting, got %T", s)
+		}
+		val, valType = ws.EncodedDefault(), ws.Typ()
+	}
+
+	// The system tenant (i.e. the KV layer) does not use the SettingsWatcher
+	// to propagate cluster version changes (it uses the BumpClusterVersion
+	// RPC). However, non-system tenants (i.e. SQL pods) (asynchronously) get
+	// word of the new cluster version below.
+	const versionSettingKey = "version"
+	if k == versionSettingKey && !s.codec.ForSystemTenant() {
+		var v clusterversion.ClusterVersion
+		if err := protoutil.Unmarshal([]byte(val), &v); err != nil {
+			log.Warningf(ctx, "failed to set cluster version: %v", err)
+		} else if err := s.settings.Version.SetActiveVersion(ctx, v); err != nil {
+			log.Warningf(ctx, "failed to set cluster version: %v", err)
+		} else {
+			log.Infof(ctx, "set cluster version to: %v", v)
+		}
+	} else if err := s.updater.Set(ctx, k, val, valType); err != nil {
+		log.Warningf(ctx, "failed to set setting %s to %s: %v",
+			log.Safe(k), val, err)
+	}
+}
+
+// OnCheckpoint implements rangefeed.EventHandler.
+func (s *SettingsWatcher) OnCheckpoint(context.Context, *roachpb.RangeFeedCheckpoint) {}
+
+// OnFrontierAdvance implements rangefeed.EventHandler.
+func (s *SettingsWatcher) OnFrontierAdvance(context.Context, hlc.Timestamp) {}
+
+// OnUnrecoverableError implements rangefeed.EventHandler.
+func (s *SettingsWatcher) OnUnrecoverableError(context.Context, error) {}

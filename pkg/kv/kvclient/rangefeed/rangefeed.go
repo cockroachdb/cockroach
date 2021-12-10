@@ -68,6 +68,41 @@ type Factory struct {
 	knobs   *TestingKnobs
 }
 
+// EventHandler is a rangefeed event handler. We use an interface such that
+// callers must explicitly handle each event type (if just to ignore them),
+// especially as new event types are added.
+type EventHandler interface {
+	// OnValue is called when the rangefeed emits a key/value write.
+	OnValue(context.Context, *roachpb.RangeFeedValue)
+
+	// OnCheckpoint is called when a rangefeed checkpoint occurs.
+	OnCheckpoint(context.Context, *roachpb.RangeFeedCheckpoint)
+
+	// OnFrontierAdvance is called when the rangefeed frontier is advanced with
+	// the new frontier timestamp.
+	OnFrontierAdvance(context.Context, hlc.Timestamp)
+
+	// OnUnrecoverableError is called when the rangefeed exits with an unrecoverable
+	// error (preventing internal retries). One example is when the rangefeed falls
+	// behind to a point where the frontier timestamp precedes the GC threshold, and
+	// thus will never work. The callback lets callers find out about such errors
+	// (possibly, in our example, to start a new rangefeed with an initial scan).
+	OnUnrecoverableError(context.Context, error)
+}
+
+// InitialScanHandler is a rangefeed initial scan handler. It is separate from
+// EventHandler such that only callers who need scans must implement it.
+type InitialScanHandler interface {
+	// OnInitialScanDone is called when an initial scan is finished, before any
+	// rows from the rangefeed are supplied. WithInitialScan() must be enabled.
+	OnInitialScanDone(context.Context)
+
+	// OnInitialScanError is called when an initial scan encounters an error. It
+	// allows the caller to tell the RangeFeed to stop as opposed to retrying
+	// endlessly.
+	OnInitialScanError(context.Context, error) (shouldFail bool)
+}
+
 // TestingKnobs is used to inject behavior into a rangefeed for testing.
 type TestingKnobs struct {
 
@@ -109,10 +144,10 @@ func (f *Factory) RangeFeed(
 	name string,
 	sp roachpb.Span,
 	initialTimestamp hlc.Timestamp,
-	onValue OnValue,
+	eventHandler EventHandler,
 	options ...Option,
 ) (_ *RangeFeed, err error) {
-	r := f.New(name, sp, initialTimestamp, onValue, options...)
+	r := f.New(name, sp, initialTimestamp, eventHandler, options...)
 	if err := r.Start(ctx); err != nil {
 		return nil, err
 	}
@@ -121,7 +156,11 @@ func (f *Factory) RangeFeed(
 
 // New constructs a new RangeFeed (without running it).
 func (f *Factory) New(
-	name string, sp roachpb.Span, initialTimestamp hlc.Timestamp, onValue OnValue, options ...Option,
+	name string,
+	sp roachpb.Span,
+	initialTimestamp hlc.Timestamp,
+	eventHandler EventHandler,
+	options ...Option,
 ) *RangeFeed {
 	r := RangeFeed{
 		client:  f.client,
@@ -131,7 +170,7 @@ func (f *Factory) New(
 		initialTimestamp: initialTimestamp,
 		name:             name,
 		span:             sp,
-		onValue:          onValue,
+		eventHandler:     eventHandler,
 
 		stopped: make(chan struct{}),
 	}
@@ -152,8 +191,8 @@ type RangeFeed struct {
 
 	initialTimestamp hlc.Timestamp
 
-	span    roachpb.Span
-	onValue OnValue
+	span         roachpb.Span
+	eventHandler EventHandler
 
 	closeOnce sync.Once
 	cancel    context.CancelFunc
@@ -249,10 +288,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 
 		err := f.processEvents(ctx, frontier, eventCh, errCh)
 		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) {
-			if errCallback := f.onUnrecoverableError; errCallback != nil {
-				errCallback(ctx, err)
-			}
-
+			f.eventHandler.OnUnrecoverableError(ctx, err)
 			log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
 			return
 		}
@@ -313,23 +349,19 @@ func (f *RangeFeed) maybeRunInitialScan(
 		// It's something of a bummer that we must allocate a new value for each
 		// of these but the contract doesn't indicate that the value cannot be
 		// retained so we have to assume that the callback may retain the value.
-		f.onValue(ctx, &v)
+		f.eventHandler.OnValue(ctx, &v)
 	}
 	for r.Next() {
 		if err := f.client.Scan(ctx, f.span, f.initialTimestamp, scan); err != nil {
-			if f.onInitialScanError != nil {
-				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
-					log.VEventf(ctx, 1, "stopping due to error: %v", err)
-					return true
-				}
+			if shouldStop := f.initialScanHandler.OnInitialScanError(ctx, err); shouldStop {
+				log.VEventf(ctx, 1, "stopping due to error: %v", err)
+				return true
 			}
 			if n.ShouldLog() {
 				log.Warningf(ctx, "failed to perform initial scan: %v", err)
 			}
 		} else /* err == nil */ {
-			if f.onInitialScanDone != nil {
-				f.onInitialScanDone(ctx)
-			}
+			f.initialScanHandler.OnInitialScanDone(ctx)
 			break
 		}
 	}
@@ -349,17 +381,15 @@ func (f *RangeFeed) processEvents(
 		case ev := <-eventCh:
 			switch {
 			case ev.Val != nil:
-				f.onValue(ctx, ev.Val)
+				f.eventHandler.OnValue(ctx, ev.Val)
 			case ev.Checkpoint != nil:
 				advanced, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS)
 				if err != nil {
 					return err
 				}
-				if f.onCheckpoint != nil {
-					f.onCheckpoint(ctx, ev.Checkpoint)
-				}
-				if advanced && f.onFrontierAdvance != nil {
-					f.onFrontierAdvance(ctx, frontier.Frontier())
+				f.eventHandler.OnCheckpoint(ctx, ev.Checkpoint)
+				if advanced {
+					f.eventHandler.OnFrontierAdvance(ctx, frontier.Frontier())
 				}
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
