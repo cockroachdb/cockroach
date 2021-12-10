@@ -167,7 +167,10 @@ func (b buildCtx) collectFailedEdges(
 	}
 	// Ensure that all SameStage DepEdges are met appropriately.
 	for _, e := range edges {
-		if err := b.g.ForEachSameStageDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
+		if err := b.g.ForEachDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
+			if de.Kind() != scgraph.SameStage {
+				return nil
+			}
 			if _, isFulfilled := b.fulfilled[de.From()]; isFulfilled {
 				// This is bad, we have a happens-after relationship, and it has
 				// already happened.
