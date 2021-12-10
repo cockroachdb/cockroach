@@ -183,13 +183,13 @@ func (dbc *dbAdapter) scanSpan(
 			}
 			if res.ResumeSpan == nil {
 				if onScanDone != nil {
-					onScanDone(sp)
+					onScanDone(ctx, sp)
 				}
 				return nil
 			}
 
 			if onScanDone != nil {
-				onScanDone(roachpb.Span{Key: sp.Key, EndKey: res.ResumeSpan.Key})
+				onScanDone(ctx, roachpb.Span{Key: sp.Key, EndKey: res.ResumeSpan.Key})
 			}
 
 			sp = res.ResumeSpanAsValue()

@@ -143,7 +143,7 @@ func TestDBClientScan(t *testing.T) {
 			return dba.ScanWithOptions(ctx, []roachpb.Span{fooSpan}, db.Clock().Now(),
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
-				rangefeed.WithOnSpanScanCompleted(func(sp roachpb.Span) {
+				rangefeed.WithOnSpanScanCompleted(func(ctx context.Context, sp roachpb.Span) {
 					atomic.AddInt32(&barrier, 1)
 					<-proceed
 				}),
