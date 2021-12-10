@@ -2080,7 +2080,18 @@ func (ds *DistSender) sendToReplicas(
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
 				// If we got some lease information, we use it. If not, we loop around
 				// and try the next replica.
-				if tErr.Lease != nil || tErr.LeaseHolder != nil {
+
+				// We cannot trust the lease information in the error if it is coming
+				// from a replica that has a stale view of the range (compared to what
+				// we've got in the cache).
+				withStaleRangeDesc := tErr.DescriptorGeneration > 0 && tErr.DescriptorGeneration < routing.Desc().Generation
+				if withStaleRangeDesc {
+					log.VErrEventf(
+						ctx, 1, "NotLeaseHolderError originated from a replica with a "+
+							"stale range descriptor generation; ignoring",
+					)
+				}
+				if (tErr.Lease != nil || tErr.LeaseHolder != nil) && !withStaleRangeDesc {
 					// Update the leaseholder in the range cache. Naively this would also
 					// happen when the next RPC comes back, but we don't want to wait out
 					// the additional RPC latency.

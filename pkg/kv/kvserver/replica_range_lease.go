@@ -903,8 +903,9 @@ func newNotLeaseHolderError(
 	l roachpb.Lease, proposerStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor, msg string,
 ) *roachpb.NotLeaseHolderError {
 	err := &roachpb.NotLeaseHolderError{
-		RangeID:   rangeDesc.RangeID,
-		CustomMsg: msg,
+		RangeID:              rangeDesc.RangeID,
+		CustomMsg:            msg,
+		DescriptorGeneration: rangeDesc.Generation,
 	}
 	if proposerStoreID != 0 {
 		err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
