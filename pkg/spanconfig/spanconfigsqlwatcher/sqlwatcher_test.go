@@ -345,7 +345,7 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
-	noopCheckpointDuration := 100 * time.Millisecond
+	noopCheckpointDuration := time.Hour // effectively disable no-op checkpoints
 	sqlWatcher := spanconfigsqlwatcher.New(
 		keys.SystemSQLCodec,
 		ts.ClusterSettings(),
