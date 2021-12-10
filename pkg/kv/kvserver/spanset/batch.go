@@ -534,12 +534,12 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
 }
 
 func (s spanSetWriter) ClearIntent(
-	key roachpb.Key, state storage.PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
+	return s.w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
@@ -653,10 +653,6 @@ func (s spanSetWriter) LogLogicalOp(
 	op storage.MVCCLogicalOpType, details storage.MVCCLogicalOpDetails,
 ) {
 	s.w.LogLogicalOp(op, details)
-}
-
-func (s spanSetWriter) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
-	return s.w.OverrideTxnDidNotUpdateMetaToFalse(ctx)
 }
 
 // ReadWriter is used outside of the spanset package internally, in ccl.
