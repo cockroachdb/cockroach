@@ -196,7 +196,53 @@ describe("Database Details Page", function() {
       ],
       // The actual contents below don't matter to us; we just count them.
       columns: [{}, {}, {}, {}, {}],
-      indexes: [{}, {}, {}],
+      indexes: [
+        {
+          name: "jobs_run_stats_idx",
+          unique: false,
+          seq: new Long(6),
+          column: "claim_instance_id",
+          direction: "N/A",
+          storing: true,
+          implicit: false,
+        },
+        {
+          name: "jobs_run_stats_idx",
+          unique: false,
+          seq: new Long(7),
+          column: "id",
+          direction: "ASC",
+          storing: false,
+          implicit: true,
+        },
+        {
+          name: "jobs_status_created_idx",
+          unique: false,
+          seq: new Long(2),
+          column: "created",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "jobs_status_created_idx",
+          unique: false,
+          seq: new Long(3),
+          column: "id",
+          direction: "ASC",
+          storing: false,
+          implicit: true,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(1),
+          column: "id",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+      ],
     });
 
     fakeApi.stubTableDetails("things", "bar", {
@@ -207,7 +253,44 @@ describe("Database Details Page", function() {
       ],
       // The actual contents below don't matter to us; we just count them.
       columns: [{}, {}, {}, {}],
-      indexes: [{}, {}],
+      indexes: [
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(1),
+          column: "type",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(2),
+          column: "object_id",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(3),
+          column: "sub_id",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(4),
+          column: "comment",
+          direction: "N/A",
+          storing: true,
+          implicit: false,
+        },
+      ],
     });
 
     await driver.refreshDatabaseDetails();
@@ -228,7 +311,7 @@ describe("Database Details Page", function() {
       loading: false,
       loaded: true,
       columnCount: 4,
-      indexCount: 2,
+      indexCount: 1,
       userCount: 3,
       roles: ["root", "app", "data"],
       grants: ["ALL", "SELECT", "INSERT"],
