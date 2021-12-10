@@ -2251,10 +2251,11 @@ message Header {
   // supported requests from max_span_request_keys apply to the target_bytes
   // option as well.
   int64 target_bytes = 15;
-  // If true, allow returning an empty result when the first result exceeds
-  // target_bytes. Only effective on 22.1 clusters with TargetBytesAvoidExcess
-  // cluster version enabled. Only supported by Get, Scan, and ReverseScan.
-  bool target_bytes_allow_empty = 23;
+  // If true, allow returning an empty result when the first result exceeds a
+  // limit (e.g. TargetBytes). Only effective on 22.1 clusters with
+  // TargetBytesAvoidExcess version gate enabled. Only supported by Get, Scan,
+  // and ReverseScan.
+  bool allow_empty = 23;
   // If true, DistSender returns partial non-empty results when encountering a
   // range boundary, with an appropriate resume span and reason
   // RESUME_RANGE_BOUNDARY. This will disable parallelism of DistSender

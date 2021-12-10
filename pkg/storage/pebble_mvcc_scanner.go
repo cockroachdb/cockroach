@@ -135,7 +135,7 @@ type pebbleMVCCScanner struct {
 	targetBytesAvoidExcess bool
 	// If true, return an empty result if the first result exceeds targetBytes
 	// and targetBytesAvoidExcess is true.
-	targetBytesAllowEmpty bool
+	allowEmpty bool
 	// Stop adding intents and abort scan once maxIntents threshold is reached.
 	// This limit is only applicable to consistent scans since they return
 	// intents as an error.
@@ -707,8 +707,8 @@ func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, va
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
 		// Check if we should apply the targetBytes limit at all. We do this either
-		// if this is not the first result or if targetBytesAllowEmpty is true.
-		if p.targetBytes > 0 && (p.results.count > 0 || p.targetBytesAllowEmpty) {
+		// if this is not the first result or if allowEmpty is true.
+		if p.targetBytes > 0 && (p.results.count > 0 || p.allowEmpty) {
 			size := p.results.bytes
 			nextSize := int64(p.results.sizeOf(len(rawKey), len(val)))
 			// Check if we actually exceeded the limit.
