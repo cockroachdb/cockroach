@@ -51,4 +51,5 @@ build:devdarwinx86_64 --config=dev
 build:dev --define cockroach_bazel_dev=y
 build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
 
+build:nonogo --define cockroach_nonogo=y
 # vi: ft=sh

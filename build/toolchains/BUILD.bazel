@@ -149,3 +149,10 @@ config_setting(
         "compilation_mode": "opt",
     },
 )
+
+config_setting(
+    name = "nonogo",
+    define_values = {
+        "cockroach_nonogo": "y",
+    },
+)
