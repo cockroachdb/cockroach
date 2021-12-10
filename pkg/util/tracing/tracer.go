@@ -799,13 +799,12 @@ func (t *Tracer) startSpanGeneric(
 	}{}
 
 	helper.crdbSpan = crdbSpan{
-		tracer:       t,
-		traceID:      traceID,
-		spanID:       spanID,
-		goroutineID:  goroutineID,
-		startTime:    startTime,
-		parentSpanID: opts.parentSpanID(),
-		logTags:      opts.LogTags,
+		tracer:      t,
+		traceID:     traceID,
+		spanID:      spanID,
+		goroutineID: goroutineID,
+		startTime:   startTime,
+		logTags:     opts.LogTags,
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 			tags:     helper.tagsAlloc[:0],
@@ -841,6 +840,7 @@ func (t *Tracer) startSpanGeneric(
 				added := parent.addChildLocked(s.i.crdb, !opts.ParentDoesNotCollectRecording)
 				if added {
 					s.i.crdb.mu.parent = opts.Parent.i.crdb
+					s.i.crdb.parentSpanID = opts.parentSpanID()
 				} else {
 					// The parent has already finished. Clear it so the would-be child
 					// looks like a root and gets added to the activeSpansRegistry below.
