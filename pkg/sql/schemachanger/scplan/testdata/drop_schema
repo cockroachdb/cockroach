@@ -615,6 +615,8 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
           Username: root
         Statements:
         - statement: DROP SCHEMA defaultdb.sc1 CASCADE
+          redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+          statementtag: DROP SCHEMA
 PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
@@ -639,7 +641,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         sequence:
           sequenceId: 55
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 2
           SubWorkID: 1
@@ -653,7 +656,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         table:
           tableId: 56
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 2
           SubWorkID: 1
@@ -667,7 +671,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         view:
           tableId: 57
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 4
           SubWorkID: 1
@@ -681,7 +686,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         view:
           tableId: 58
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 5
           SubWorkID: 1
@@ -695,7 +701,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         view:
           tableId: 59
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 6
           SubWorkID: 1
@@ -709,7 +716,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         view:
           tableId: 60
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 6
           SubWorkID: 1
@@ -723,7 +731,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         view:
           tableId: 63
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 8
           SubWorkID: 1
@@ -737,7 +746,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         type:
           typeId: 61
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 2
           SubWorkID: 1
@@ -751,7 +761,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
         type:
           typeId: 62
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 2
           SubWorkID: 1
@@ -777,7 +788,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
           - 63
           schemaId: 54
       Metadata:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        StatementTag: DROP SCHEMA
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1

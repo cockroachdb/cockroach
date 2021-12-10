@@ -35,7 +35,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -61,6 +62,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
           Username: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
+          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8
+          statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -183,7 +186,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -209,6 +213,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
           Username: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
+            ‹123›
+          statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -333,7 +340,6 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -365,7 +371,8 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           StatementID: 1
@@ -393,7 +400,12 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
           Username: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+          redactedstatement: ""
+          statementtag: ""
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT
+            ‹456›
+          statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 4 with 4 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -529,7 +541,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
+          STORED
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -555,6 +569,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
           Username: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS
+            (‹i› + ‹1›) STORED
+          statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
@@ -683,7 +700,6 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -724,7 +740,8 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           StatementID: 1
@@ -755,7 +772,11 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
           Username: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
+          redactedstatement: ""
+          statementtag: ""
         - statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+          redactedstatement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+          statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 4 with 5 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY

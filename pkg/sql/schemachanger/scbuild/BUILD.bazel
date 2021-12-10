@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scbuild",
     srcs = [
+        "ast_annotator.go",
         "build.go",
         "builder_state.go",
         "descriptor_reader.go",
@@ -20,6 +21,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/faketreeeval",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
