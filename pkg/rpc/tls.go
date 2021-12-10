@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,14 +51,53 @@ func wrapError(err error) error {
 	return err
 }
 
+type serverParameters struct {
+	disableTLSForHTTP bool
+
+	// Note: the advertised addresses are late bound, after the RPC
+	// security context is defined, when the listeners are activated.
+	advertiseAddr    *string
+	sqlAdvertiseAddr *string
+}
+
+// AdvertiseAddr retrieves the last computed advertised address for this server.
+func (sctx serverParameters) AdvertiseAddr() string {
+	if sctx.advertiseAddr == nil {
+		panic(errors.AssertionFailedf("programming error: cannot use server address in client command"))
+	}
+	if *sctx.advertiseAddr == "" {
+		panic(errors.AssertionFailedf("programming error: cannot use the advertised address before the server has started listening on the network"))
+	}
+	return *sctx.advertiseAddr
+}
+
+// SQLAdvertiseAddr retrieves the last computed advertised address for this server.
+func (sctx serverParameters) SQLAdvertiseAddr() string {
+	if sctx.sqlAdvertiseAddr == nil {
+		panic(errors.AssertionFailedf("programming error: cannot use SQL server address in client command"))
+	}
+	if *sctx.sqlAdvertiseAddr == "" {
+		panic(errors.AssertionFailedf("programming error: cannot use the SQL advertised address before the server has started listening on the network"))
+	}
+	return *sctx.sqlAdvertiseAddr
+}
+
 // SecurityContext is a wrapper providing transport security helpers such as
 // the certificate manager.
 type SecurityContext struct {
 	security.CertsLocator
 	security.TLSSettings
-	config *base.Config
-	tenID  roachpb.TenantID
-	lazy   struct {
+	cfg CommonConfig
+
+	// username is only used when connecting to another RPC instance.
+	// For CockroachDB node processes, this is security.NodeUser.
+	username security.SQLUsername
+
+	// serverCfg is only used on server processes.
+	serverCfg serverParameters
+
+	tenID roachpb.TenantID
+	lazy  struct {
 		// The certificate manager. Must be accessed through GetCertificateManager.
 		certificateManager lazyCertificateManager
 		// httpClient uses the client TLS config. It is initialized lazily.
@@ -68,18 +106,35 @@ type SecurityContext struct {
 }
 
 // MakeSecurityContext makes a SecurityContext.
-//
-// TODO(tbg): don't take a whole Config. This can be trimmed down significantly.
 func MakeSecurityContext(
-	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
+	cfg SecurityConfig, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
+) SecurityContext {
+	switch scfg := cfg.(type) {
+	case serverSecurityConfig:
+		return makeSecurityContextInternal(scfg.CommonConfig, security.NodeUserName(), scfg.serverParameters, tlsSettings, tenID)
+	case ClientSecurityConfig:
+		return makeSecurityContextInternal(scfg.CommonConfig, scfg.User, serverParameters{}, tlsSettings, tenID)
+	default:
+		panic(errors.AssertionFailedf("programming error: unknown config type %T", cfg))
+	}
+}
+
+func makeSecurityContextInternal(
+	cfg CommonConfig,
+	username security.SQLUsername,
+	serverCfg serverParameters,
+	tlsSettings security.TLSSettings,
+	tenID roachpb.TenantID,
 ) SecurityContext {
 	if tenID.ToUint64() == 0 {
 		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
 	}
 	return SecurityContext{
-		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
+		CertsLocator: security.MakeCertsLocator(cfg.CertsDir),
 		TLSSettings:  tlsSettings,
-		config:       cfg,
+		cfg:          cfg,
+		username:     username,
+		serverCfg:    serverCfg,
 		tenID:        tenID,
 	}
 }
@@ -94,9 +149,9 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 			opts = append(opts, security.ForTenant(ctx.tenID.ToUint64()))
 		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
-			security.NewCertificateManager(ctx.config.SSLCertsDir, ctx, opts...)
+			security.NewCertificateManager(ctx.cfg.CertsDir, ctx, opts...)
 
-		if ctx.lazy.certificateManager.err == nil && !ctx.config.Insecure {
+		if ctx.lazy.certificateManager.err == nil && !ctx.cfg.Insecure {
 			infos, err := ctx.lazy.certificateManager.cm.ListCertificates()
 			if err != nil {
 				ctx.lazy.certificateManager.err = err
@@ -116,7 +171,7 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 // manager for a server TLS config.
 func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.config.Insecure {
+	if ctx.cfg.Insecure {
 		return nil, nil
 	}
 
@@ -138,7 +193,7 @@ func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 // This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
 func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.config.Insecure {
+	if ctx.cfg.Insecure {
 		return nil, nil
 	}
 
@@ -147,7 +202,7 @@ func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetClientTLSConfig(ctx.config.User)
+	tlsCfg, err := cm.GetClientTLSConfig(ctx.username)
 	if err != nil {
 		return nil, wrapError(err)
 	}
@@ -162,7 +217,7 @@ func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
 // certificate for the configured tenant from the cert manager.
 func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.config.Insecure {
+	if ctx.cfg.Insecure {
 		return nil, nil
 	}
 
@@ -184,7 +239,7 @@ func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
 // This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
 func (ctx *SecurityContext) getUIClientTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.config.Insecure {
+	if ctx.cfg.Insecure {
 		return nil, nil
 	}
 
@@ -208,7 +263,7 @@ func (ctx *SecurityContext) getUIClientTLSConfig() (*tls.Config, error) {
 // `Server.Start`. Move it.
 func (ctx *SecurityContext) GetUIServerTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.config.Insecure || ctx.config.DisableTLSForHTTP {
+	if ctx.cfg.Insecure || ctx.serverCfg.disableTLSForHTTP {
 		return nil, nil
 	}
 
@@ -244,7 +299,7 @@ func (ctx *SecurityContext) GetHTTPClient() (http.Client, error) {
 // This must also be called after ValidateAddrs() and after
 // the certificate manager was initialized.
 func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
-	if ctx.config.Insecure {
+	if ctx.cfg.Insecure {
 		return
 	}
 
@@ -267,14 +322,14 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 		var msg bytes.Buffer
 		// Verify the compatibility. This requires that ValidateAddrs() has
 		// been called already.
-		host, _, err := net.SplitHostPort(ctx.config.AdvertiseAddr)
+		host, _, err := net.SplitHostPort(ctx.serverCfg.AdvertiseAddr())
 		if err != nil {
 			panic(errors.AssertionFailedf("programming error: call ValidateAddrs() first"))
 		}
 		if err := cert.VerifyHostname(host); err != nil {
 			fmt.Fprintf(&msg, "advertise address %q not in node certificate (%s)\n", host, addrInfo)
 		}
-		host, _, err = net.SplitHostPort(ctx.config.SQLAdvertiseAddr)
+		host, _, err = net.SplitHostPort(ctx.serverCfg.SQLAdvertiseAddr())
 		if err != nil {
 			panic(errors.AssertionFailedf("programming error: call ValidateAddrs() first"))
 		}
@@ -318,7 +373,10 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 // HTTPRequestScheme returns "http" or "https" based on the value of
 // Insecure and DisableTLSForHTTP.
 func (ctx *SecurityContext) HTTPRequestScheme() string {
-	return ctx.config.HTTPRequestScheme()
+	if ctx.cfg.Insecure || ctx.serverCfg.disableTLSForHTTP {
+		return "http"
+	}
+	return "https"
 }
 
 // certAddrs formats the list of addresses included in a certificate for

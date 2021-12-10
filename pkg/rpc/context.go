@@ -448,8 +448,17 @@ func NewContext(opts ContextOptions) *Context {
 	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
 
 	ctx := &Context{
-		ContextOptions:  opts,
-		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
+		ContextOptions: opts,
+		SecurityContext: makeSecurityContextInternal(
+			CommonConfig{CertsDir: opts.Config.SSLCertsDir, Insecure: opts.Config.Insecure},
+			opts.Config.User,
+			serverParameters{
+				disableTLSForHTTP: opts.Config.DisableTLSForHTTP,
+				advertiseAddr:     &opts.Config.AdvertiseAddr,
+				sqlAdvertiseAddr:  &opts.Config.SQLAdvertiseAddr,
+			},
+			security.ClusterTLSSettings(opts.Settings),
+			opts.TenantID),
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},
