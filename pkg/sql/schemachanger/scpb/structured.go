@@ -24,9 +24,10 @@ type SourceElementID uint32
 // example.
 type ElementMetadata struct {
 	TargetMetadata
-	Username  string
-	AppName   string
-	Statement string
+	Username     string
+	AppName      string
+	Statement    string
+	StatementTag string
 }
 
 // Clone clones a State and any associated  metadata (i.e. statement and
