@@ -792,7 +792,7 @@ func cmdScan(e *evalCtx) error {
 		opts.TargetBytesAvoidExcess = true
 	}
 	if e.hasArg("allowEmpty") {
-		opts.TargetBytesAllowEmpty = true
+		opts.AllowEmpty = true
 	}
 	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
 	// NB: the error is returned below. This ensures the test can

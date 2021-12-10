@@ -93,9 +93,9 @@ func TestGetResumeSpan(t *testing.T) {
 			_, err := Get(ctx, db, CommandArgs{
 				EvalCtx: (&MockEvalCtx{ClusterSettings: settings}).EvalContext(),
 				Header: roachpb.Header{
-					MaxSpanRequestKeys:    tc.maxKeys,
-					TargetBytes:           tc.targetBytes,
-					TargetBytesAllowEmpty: tc.allowEmpty,
+					MaxSpanRequestKeys: tc.maxKeys,
+					TargetBytes:        tc.targetBytes,
+					AllowEmpty:         tc.allowEmpty,
 				},
 				Args: &roachpb.GetRequest{
 					RequestHeader: roachpb.RequestHeader{Key: key},

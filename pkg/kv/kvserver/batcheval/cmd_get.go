@@ -66,7 +66,7 @@ func Get(
 		// NB: This calculation is different from Scan, since Scan responses include
 		// the key/value pair while Get only includes the value.
 		numBytes := int64(len(val.RawBytes))
-		if h.TargetBytes > 0 && h.TargetBytesAllowEmpty && numBytes > h.TargetBytes {
+		if h.TargetBytes > 0 && h.AllowEmpty && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
 			reply.ResumeNextBytes = numBytes

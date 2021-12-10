@@ -117,9 +117,9 @@ func testScanReverseScanInner(
 	cArgs := CommandArgs{
 		Args: req,
 		Header: roachpb.Header{
-			Timestamp:             ts,
-			TargetBytes:           tb,
-			TargetBytesAllowEmpty: allowEmpty,
+			Timestamp:   ts,
+			TargetBytes: tb,
+			AllowEmpty:  allowEmpty,
 		},
 		EvalCtx: (&MockEvalCtx{ClusterSettings: settings}).EvalContext(),
 	}
