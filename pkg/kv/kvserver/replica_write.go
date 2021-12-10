@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -176,7 +175,7 @@ func (r *Replica) executeWriteBatch(
 	startPropTime := timeutil.Now()
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
-	slowTimer.Reset(base.SlowRequestThreshold)
+	slowTimer.Reset(r.store.cfg.SlowReplicationThreshold)
 	// NOTE: this defer was moved from a case in the select statement to here
 	// because escape analysis does a better job avoiding allocations to the
 	// heap when defers are unconditional. When this was in the slowTimer select
