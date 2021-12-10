@@ -126,7 +126,7 @@ func generateMVCCScan(
 	maxKeys := int64(m.floatGenerator.parse(args[3]) * 32)
 	targetBytes := int64(m.floatGenerator.parse(args[4]) * (1 << 20))
 	targetBytesAvoidExcess := m.boolGenerator.parse(args[5])
-	targetBytesAllowEmpty := m.boolGenerator.parse(args[6])
+	allowEmpty := m.boolGenerator.parse(args[6])
 	return &mvccScanOp{
 		m:                      m,
 		key:                    key.Key,
@@ -138,7 +138,7 @@ func generateMVCCScan(
 		maxKeys:                maxKeys,
 		targetBytes:            targetBytes,
 		targetBytesAvoidExcess: targetBytesAvoidExcess,
-		targetBytesAllowEmpty:  targetBytesAllowEmpty,
+		allowEmpty:             allowEmpty,
 	}
 }
 
@@ -368,7 +368,7 @@ type mvccScanOp struct {
 	maxKeys                int64
 	targetBytes            int64
 	targetBytesAvoidExcess bool
-	targetBytesAllowEmpty  bool
+	allowEmpty             bool
 }
 
 func (m mvccScanOp) run(ctx context.Context) string {
@@ -390,7 +390,7 @@ func (m mvccScanOp) run(ctx context.Context) string {
 		MaxKeys:                m.maxKeys,
 		TargetBytes:            m.targetBytes,
 		TargetBytesAvoidExcess: m.targetBytesAvoidExcess,
-		TargetBytesAllowEmpty:  m.targetBytesAllowEmpty,
+		AllowEmpty:             m.allowEmpty,
 	})
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
