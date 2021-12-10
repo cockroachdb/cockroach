@@ -41,7 +41,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
         type:
           typeId: 54
       Metadata:
-        Statement: DROP TYPE defaultdb.typ
+        Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        StatementTag: DROP TYPE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -55,7 +56,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
         type:
           typeId: 55
       Metadata:
-        Statement: DROP TYPE defaultdb.typ
+        Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        StatementTag: DROP TYPE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1

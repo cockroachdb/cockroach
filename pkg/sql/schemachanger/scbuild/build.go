@@ -112,7 +112,8 @@ func newEventLogState(
 	stmts := initial.Clone().Statements
 	els := eventLogState{
 		statements: append(stmts, &scpb.Statement{
-			Statement: n.String(),
+			Statement:    n.String(),
+			StatementTag: n.StatementTag(),
 		}),
 		authorization: scpb.Authorization{
 			AppName:  d.SessionData().ApplicationName,

@@ -150,7 +150,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
         table:
           tableId: 57
       Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -164,7 +165,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
         view:
           tableId: 59
       Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
         TargetMetadata:
           SourceElementID: 3
           SubWorkID: 1
@@ -178,7 +180,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
         sequence:
           sequenceId: 58
       Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
         TargetMetadata:
           SourceElementID: 2
           SubWorkID: 1

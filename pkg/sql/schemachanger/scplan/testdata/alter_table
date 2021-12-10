@@ -37,7 +37,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -161,7 +162,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -288,7 +290,6 @@ PreCommitPhase stage 1 of 1 with 8 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -324,7 +325,8 @@ PreCommitPhase stage 1 of 1 with 8 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           StatementID: 1
@@ -458,7 +460,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
+          STORED
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -590,7 +594,6 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -639,7 +642,8 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
             oid: 20
             width: 64
       Metadata:
-        Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
           StatementID: 1

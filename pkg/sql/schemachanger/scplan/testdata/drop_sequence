@@ -36,7 +36,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         sequence:
           sequenceId: 54
       Metadata:
-        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+        StatementTag: DROP SEQUENCE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
@@ -106,7 +107,8 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         sequence:
           sequenceId: 54
       Metadata:
-        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+        StatementTag: DROP SEQUENCE
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1

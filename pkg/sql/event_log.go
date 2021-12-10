@@ -241,12 +241,15 @@ func logEventInternalForSchemaChanges(
 // makeCommonSQLEventDetails creates a common exec event
 // payload.
 func makeCommonSQLEventDetails(
-	userName string, stmt string, appName string,
+	userName string, stmt string, tag string, appName string,
 ) *eventpb.CommonSQLEventDetails {
 
-	return &eventpb.CommonSQLEventDetails{ApplicationName: appName,
-		User:      userName,
-		Statement: redact.RedactableString(stmt)}
+	return &eventpb.CommonSQLEventDetails{
+		ApplicationName: appName,
+		User:            userName,
+		Statement:       redact.RedactableString(stmt),
+		Tag:             tag,
+	}
 }
 
 // logEventInternalForSQLStatements emits a cluster event on behalf of
@@ -308,7 +311,12 @@ func LogEventForSchemaChanger(
 	event eventpb.EventPayload,
 ) error {
 	entry := eventLogEntry{targetID: int32(descID), event: event}
-	commonPayload := makeCommonSQLEventDetails(metadata.Username, metadata.Statement, metadata.AppName)
+	commonPayload := makeCommonSQLEventDetails(
+		metadata.Username,
+		metadata.Statement,
+		metadata.StatementTag,
+		metadata.AppName,
+	)
 	return logEventInternalForSQLStatements(ctx,
 		execCfg.(*ExecutorConfig),
 		txn,

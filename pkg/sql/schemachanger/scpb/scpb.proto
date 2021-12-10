@@ -295,6 +295,7 @@ message Authorization {
 message Statement {
   string statement = 1;
   string redactedStatement = 2;
+  string statement_tag = 3;
 }
 
 // TargetMetaData refers to the metadata for individual elements, where
