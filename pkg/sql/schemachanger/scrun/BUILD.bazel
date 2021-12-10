@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
+        "//pkg/sql/schemachanger/scplan/scstage",
         "//pkg/util/log/logcrash",
         "@com_github_cockroachdb_errors//:errors",
     ],
