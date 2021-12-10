@@ -4566,7 +4566,8 @@ type AddSSTableRequest struct {
 	// resumption or retry. The equal value requirement is to avoid unique
 	// constraint violations.
 	//
-	// This parameter cannot be used together with DisallowShadowing.
+	// If this parameter is used, the value of DisallowShadowing is ignored, so
+	// callers may pass both for forward and backwards compatibility.
 	//
 	// Added in 22.1, so check the MVCCAddSSTable version gate before using.
 	DisallowShadowingBelow hlc.Timestamp `protobuf:"bytes,8,opt,name=disallow_shadowing_below,json=disallowShadowingBelow,proto3" json:"disallow_shadowing_below"`

@@ -55,9 +55,13 @@ type BulkAdderOptions struct {
 	// detection does not apply.
 	SkipDuplicates bool
 
-	// DisallowShadowing controls whether shadowing of existing keys is permitted
-	// when the SSTables produced by this adder are ingested.
-	DisallowShadowing bool
+	// DisallowShadowingBelow controls whether shadowing of existing keys is
+	// permitted when the SSTables produced by this adder are ingested. See the
+	// comment on roachpb.AddSSTableRequest for more details. Note that if this is
+	// set to a non-empty timestamp, the older flag DisallowShadowing will be set
+	// on all requests as well, so callers should expect older nodes to handle any
+	// requests accordingly or check the MVCCAddSSTable version gate.
+	DisallowShadowingBelow hlc.Timestamp
 
 	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
 	// different from the timestamp used to construct the adder which is what is

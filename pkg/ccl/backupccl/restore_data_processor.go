@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -375,8 +376,16 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
+	// "disallowing" shadowing of anything older than logical=1 is i.e. allow all
+	// shadowing. We must allow shadowing in case the RESTORE has to retry any
+	// ingestions, but setting a (permissive) disallow like this serves to force
+	// evaluation of AddSSTable to check for overlapping keys. That in turn will
+	// result in it maintaining exact MVCC stats rather than estimates. Of course
+	// this comes at the cost of said overlap check, but in the common case of
+	// non-overlapping ingestion into empty spans, that is just one seek.
+	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return rd.flushBytes })
+		func() int64 { return rd.flushBytes }, disallowShadowingBelow)
 	if err != nil {
 		return summary, err
 	}
