@@ -884,10 +884,22 @@ func rankedCandidateListForRebalancing(
 				)
 				continue
 			}
+
+			var exempted bool
 			for _, replOnExemptedStore := range replicasOnExemptedStores {
 				if store.StoreID == replOnExemptedStore.StoreID {
-					continue
+					log.VEventf(
+						ctx,
+						6,
+						"s%d is not a possible rebalance candidate for non-voters because it already has a voter of the range; ignoring",
+						store.StoreID,
+					)
+					exempted = true
+					break
 				}
+			}
+			if exempted {
+				continue
 			}
 
 			constraintsOK, necessary := rebalanceConstraintsChecker(store, existing.store)
