@@ -147,48 +147,74 @@ func (b buildCtx) collectFailedEdges(
 		}
 	}
 	for _, e := range edges {
-		if err := b.g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
-			_, isFulfilled := b.fulfilled[de.To()]
-			_, isCandidate := candidates[de.To()]
-			if de.Kind() == scgraph.SameStage && isFulfilled {
-				// This is bad, we have a happens-after relationship, and it has
-				// already happened.
-				return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
-					screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
-			}
-			if isFulfilled || isCandidate {
+		if err := b.g.ForEachDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
+			if _, isFulfilled := b.fulfilled[de.From()]; isFulfilled {
+				// Dependency source node has already been fulfilled in an earlier
+				// stage.
+				if de.Kind() == scgraph.SameStagePrecedence {
+					// This is bad, the dependency requires the destination node to be
+					// fulfilled in the same stage, which is impossible in this case.
+					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
+						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+				}
 				return nil
 			}
+			if _, isCandidate := candidates[de.From()]; isCandidate {
+				// Dependency source and destination nodes will both be fulfilled in the
+				// same stage.
+				return nil
+			}
+			// The candidate op edge must be rejected.
 			failed[e] = struct{}{}
 			return iterutil.StopIteration()
 		}); err != nil {
 			panic(err)
 		}
 	}
-	// Ensure that all SameStage DepEdges are met appropriately.
+	// Ensure that all SameStagePrecedence DepEdges are met appropriately.
 	for _, e := range edges {
-		if err := b.g.ForEachDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
-			if de.Kind() != scgraph.SameStage {
+		if err := b.g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
+			if de.Kind() != scgraph.SameStagePrecedence {
+				// Only look at same-stage dependency edges.
 				return nil
 			}
-			if _, isFulfilled := b.fulfilled[de.From()]; isFulfilled {
-				// This is bad, we have a happens-after relationship, and it has
-				// already happened.
+			if _, isFulfilled := b.fulfilled[de.To()]; isFulfilled {
+				// This is bad, the dependency requires the source node to be
+				// fulfilled in the same stage as the destination, which is impossible
+				// in this case because the destination has already been fulfilled.
 				return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
 					screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
 			}
-			fromCandidate, fromIsCandidate := candidates[de.From()]
-			if !fromIsCandidate {
+			toCandidate, toIsCandidate := candidates[de.To()]
+			if !toIsCandidate {
+				// The candidate op edge is rejected because the dependency destination
+				// node will not be fulfilled in this stage, due to the op edge leading
+				// to it not being in the set of candidate op edges for this stage.
+				//
+				// As a result the dependency source node, which is also the candidate
+				// edge destination node, cannot possibly be fulfilled in this stage
+				// either.
 				failed[e] = struct{}{}
 				return iterutil.StopIteration()
 			}
-			_, fromIsFailed := failed[fromCandidate]
-			if fromIsFailed {
+			_, toIsFailed := failed[toCandidate]
+			if toIsFailed {
+				// The candidate op edge is rejected because the dependency destination
+				// node will not be fulfilled in this stage, due to the op edge leading
+				// to it being a candidate op edge which has been rejected.
+				//
+				// As a result the dependency source node, which is also the candidate
+				// edge destination node, cannot possibly be fulfilled in this stage
+				// either.
 				failed[e] = struct{}{}
 				return iterutil.StopIteration()
 			}
 			if _, eIsFailed := failed[e]; eIsFailed {
-				failed[fromCandidate] = struct{}{}
+				// If the candidate op edge has already been rejected due to unmet phase
+				// or precedence requirements, then the op edge leading to the
+				// dependency destination node must also be rejected because the
+				// same-stage constraint cannot possibly be satisfied.
+				failed[toCandidate] = struct{}{}
 			}
 			return nil
 		}); err != nil {

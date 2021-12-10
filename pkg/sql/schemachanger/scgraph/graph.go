@@ -46,8 +46,8 @@ type Graph struct {
 	opEdgesFrom map[*scpb.Node]*OpEdge
 
 	// depEdgesFrom and depEdgesTo map a Node from and to its dependencies.
-	// A Node dependency is another target node which must be
-	// reached before or concurrently with this node.
+	// A Node dependency is another target node which cannot be reached before
+	// reaching this node.
 	depEdgesFrom, depEdgesTo *depEdgeTree
 
 	// opToNode maps from an operation back to the
@@ -295,14 +295,14 @@ func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 	visit = func(n *scpb.Node) {
 		permanent, marked := marks[n]
 		if marked && !permanent {
-			panic(errors.AssertionFailedf("graph is not a dag"))
+			panic(errors.AssertionFailedf("graph is not acyclical"))
 		}
 		if marked && permanent {
 			return
 		}
 		marks[n] = false
-		_ = g.ForEachDepEdgeFrom(n, func(de *DepEdge) error {
-			visit(de.To())
+		_ = g.ForEachDepEdgeTo(n, func(de *DepEdge) error {
+			visit(de.From())
 			return nil
 		})
 		marks[n] = true
