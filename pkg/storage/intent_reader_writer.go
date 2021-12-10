@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 // This file defines wrappers for Reader and Writer, and functions to do the
@@ -40,27 +39,18 @@ func wrapIntentWriter(ctx context.Context, w Writer) intentDemuxWriter {
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to, and a possibly different buf returned.
 func (idw intentDemuxWriter) ClearIntent(
-	key roachpb.Key,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-	buf []byte,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, buf []byte,
 ) (_ []byte, _ error) {
-	switch state {
-	case ExistingIntentSeparated:
-		var engineKey EngineKey
-		engineKey, buf = LockTableKey{
-			Key:      key,
-			Strength: lock.Exclusive,
-			TxnUUID:  txnUUID[:],
-		}.ToEngineKey(buf)
-		if txnDidNotUpdateMeta {
-			return buf, idw.w.SingleClearEngineKey(engineKey)
-		}
-		return buf, idw.w.ClearEngineKey(engineKey)
-	default:
-		return buf, errors.AssertionFailedf("ClearIntent: invalid preceding state %d", state)
+	var engineKey EngineKey
+	engineKey, buf = LockTableKey{
+		Key:      key,
+		Strength: lock.Exclusive,
+		TxnUUID:  txnUUID[:],
+	}.ToEngineKey(buf)
+	if txnDidNotUpdateMeta {
+		return buf, idw.w.SingleClearEngineKey(engineKey)
 	}
+	return buf, idw.w.ClearEngineKey(engineKey)
 }
 
 // PutIntent has the same behavior as Writer.PutIntent. buf is used as
