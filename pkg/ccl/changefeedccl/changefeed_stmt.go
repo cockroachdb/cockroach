@@ -218,6 +218,9 @@ func changefeedPlanHook(
 				if err := changefeedbase.ValidateTable(targets, table); err != nil {
 					return err
 				}
+				for _, warning := range changefeedbase.WarningsForTable(targets, table) {
+					p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
+				}
 			}
 		}
 

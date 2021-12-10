@@ -56,3 +56,16 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 
 	return nil
 }
+
+// WarningsForTable returns any known nonfatal issues with running a changefeed on this kind of table.
+func WarningsForTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor) []error {
+	warnings := []error{}
+	for _, col := range tableDesc.AccessibleColumns() {
+		if col.IsVirtual() {
+			warnings = append(warnings,
+				errors.Errorf("Changefeeds will emit null values for virtual column %s in table %s", col.ColName(), tableDesc.GetName()),
+			)
+		}
+	}
+	return warnings
+}
