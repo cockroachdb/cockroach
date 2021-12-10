@@ -22,30 +22,42 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
+import * as H from "history";
 
 import { expectPopperTooltipActivated } from "src/test-utils/tooltip";
 
 import Job = cockroach.server.serverpb.IJobResponse;
 
-const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
-  sort: { sortKey: null, ascending: true },
-  status: "",
-  show: "50",
-  type: 0,
-  setSort: () => {},
-  setStatus: () => {},
-  setShow: () => {},
-  setType: () => {},
-  jobs: {
-    data: {
-      jobs: jobs,
-      toJSON: () => ({}),
+const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => {
+  const history = H.createHashHistory();
+  return {
+    sort: { columnTitle: null, ascending: true },
+    status: "",
+    show: "50",
+    type: 0,
+    setSort: () => {},
+    setStatus: () => {},
+    setShow: () => {},
+    setType: () => {},
+    jobs: {
+      data: {
+        jobs: jobs,
+        toJSON: () => ({}),
+      },
+      inFlight: false,
+      valid: true,
     },
-    inFlight: false,
-    valid: true,
-  },
-  refreshJobs,
-});
+    refreshJobs,
+    location: history.location,
+    history,
+    match: {
+      url: "",
+      path: history.location.pathname,
+      isExact: false,
+      params: {},
+    },
+  };
+};
 
 describe("Jobs", () => {
   it("format duration", () => {

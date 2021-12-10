@@ -21,7 +21,7 @@ describe("<JobTable>", () => {
       return [""];
     };
     const jobTableProps: JobTableProps = {
-      sort: { sortKey: null, ascending: true },
+      sort: { columnTitle: null, ascending: true },
       setSort: () => {},
       jobs: {
         data: { jobs: [{}, {}, {}, {}], toJSON },

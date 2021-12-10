@@ -25,11 +25,10 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
 import { Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
-import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
+import { ColumnsConfig, Table, SortSetting } from "@cockroachlabs/cluster-ui";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";

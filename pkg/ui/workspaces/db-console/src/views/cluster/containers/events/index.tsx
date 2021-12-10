@@ -26,10 +26,8 @@ import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import { getEventDescription } from "src/util/events";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
-import { SortSetting } from "src/views/shared/components/sortabletable";
-import { SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, SortSetting, SortedTable } from "@cockroachlabs/cluster-ui";
 import "./events.styl";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
@@ -161,10 +159,12 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
           columns={[
             {
               title: "Event",
+              name: "event",
               cell: e => e.content,
             },
             {
               title: "Timestamp",
+              name: "timestamp",
               cell: e => e.fromNowString,
               sort: e => e.sortableTimestamp,
             },
