@@ -27,9 +27,9 @@ type Params struct {
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
 	ExecutionPhase scop.Phase
 
-	// JobIDGenerator is used in the PreCommit phase to generate the JobID for a
-	// job if one should exist. In the PostCommit phase, the value retu
-	JobIDGenerator func() jobspb.JobID
+	// SchemaChangerJobIDSupplier is used to return the JobID for a
+	// job if one should exist.
+	SchemaChangerJobIDSupplier func() jobspb.JobID
 }
 
 // A Plan is a schema change plan, primarily containing ops to be executed that
@@ -39,29 +39,29 @@ type Plan struct {
 	Initial scpb.State
 	Graph   *scgraph.Graph
 	JobID   jobspb.JobID
-	stages  []scstage.Stage
+	Stages  []scstage.Stage
 }
 
 // StagesForCurrentPhase returns the stages in the execution phase specified in
 // the plan params.
 func (p Plan) StagesForCurrentPhase() []scstage.Stage {
-	for i, s := range p.stages {
+	for i, s := range p.Stages {
 		if s.Phase > p.Params.ExecutionPhase {
-			return p.stages[:i]
+			return p.Stages[:i]
 		}
 	}
-	return p.stages
-}
-
-// StagesForAllPhases returns the stages in the execution phase specified in
-// the plan params and also all subsequent stages.
-func (p Plan) StagesForAllPhases() []scstage.Stage {
-	return p.stages
+	return p.Stages
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
 // the initial state for a set of targets.
+// Returns an error when planning fails. It is up to the caller to wrap this
+// error as an assertion failure and with useful debug information details.
 func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
+	p = Plan{
+		Initial: initial,
+		Params:  params,
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			rAsErr, ok := r.(error)
@@ -72,32 +72,34 @@ func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 		}
 	}()
 
-	p = Plan{
-		Initial: initial,
-		Params:  params,
+	p.Graph = buildGraph(initial)
+	p.Stages = scstage.BuildStages(initial, params.ExecutionPhase, p.Graph, params.SchemaChangerJobIDSupplier)
+	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
+		// Only get the job ID if it's actually been assigned already.
+		p.JobID = params.SchemaChangerJobIDSupplier()
 	}
-	g, err := opgen.BuildGraph(initial)
-	if err != nil {
-		return p, err
-	}
-	p.Graph = g
-	if err := deprules.Apply(g); err != nil {
-		return p, err
-	}
-	optimizedGraph, err := scopt.OptimizePlan(g)
-	if err != nil {
-		return p, err
-	}
-	p.Graph = optimizedGraph
-
-	p.stages = scstage.BuildStages(initial, params.ExecutionPhase, optimizedGraph)
-	if err = scstage.ValidateStages(p.stages); err != nil {
-		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid basic execution plan"))
-	}
-	p.stages = scstage.CollapseStages(p.stages)
-	p.stages, p.JobID = scstage.AugmentStagesForJob(p.stages, params.ExecutionPhase, params.JobIDGenerator)
-	if err = scstage.ValidateStages(p.stages); err != nil {
-		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid improved execution plan"))
+	if err = scstage.ValidateStages(p.Stages, p.Graph); err != nil {
+		panic(errors.Wrapf(err, "invalid execution plan"))
 	}
 	return p, nil
+}
+
+func buildGraph(initial scpb.State) *scgraph.Graph {
+	g, err := opgen.BuildGraph(initial)
+	if err != nil {
+		panic(errors.Wrapf(err, "build graph op edges"))
+	}
+	err = deprules.Apply(g)
+	if err != nil {
+		panic(errors.Wrapf(err, "build graph dep edges"))
+	}
+	err = g.Validate()
+	if err != nil {
+		panic(errors.Wrapf(err, "validate graph"))
+	}
+	g, err = scopt.OptimizeGraph(g)
+	if err != nil {
+		panic(errors.Wrapf(err, "mark op edges as no-op"))
+	}
+	return g
 }

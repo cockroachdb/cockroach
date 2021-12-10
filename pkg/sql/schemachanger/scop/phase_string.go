@@ -11,11 +11,12 @@ func _() {
 	_ = x[StatementPhase-1]
 	_ = x[PreCommitPhase-2]
 	_ = x[PostCommitPhase-3]
+	_ = x[PostCommitNonRevertiblePhase-4]
 }
 
-const _Phase_name = "StatementPhasePreCommitPhasePostCommitPhase"
+const _Phase_name = "StatementPhasePreCommitPhasePostCommitPhasePostCommitNonRevertiblePhase"
 
-var _Phase_index = [...]uint8{0, 14, 28, 43}
+var _Phase_index = [...]uint8{0, 14, 28, 43, 71}
 
 func (i Phase) String() string {
 	i -= 1

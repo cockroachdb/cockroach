@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -135,15 +136,16 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.stmts,
+		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
 	)
-	after, err := scrun.RunStatementPhase(
+	after, jobID, err := scrun.RunStatementPhase(
 		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
 	)
 	if err != nil {
 		return err
 	}
 	scs.state = after
+	scs.jobID = jobID
 	return nil
 }
 
@@ -153,6 +155,7 @@ func newSchemaChangerTxnRunDependencies(
 	txn *kv.Txn,
 	descriptors *descs.Collection,
 	evalContext *tree.EvalContext,
+	schemaChangerJobID jobspb.JobID,
 	stmts []string,
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
@@ -165,6 +168,7 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.IndexValidator,
 		scsqldeps.NewPartitioner(execCfg.Settings, evalContext),
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
+		schemaChangerJobID,
 		stmts,
 	)
 }

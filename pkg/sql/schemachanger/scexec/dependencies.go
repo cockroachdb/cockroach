@@ -29,7 +29,7 @@ import (
 type Dependencies interface {
 	Catalog() Catalog
 	Partitioner() scmutationexec.Partitioner
-	TransactionalJobCreator() TransactionalJobCreator
+	TransactionalJobRegistry() TransactionalJobRegistry
 	IndexBackfiller() IndexBackfiller
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
@@ -81,23 +81,31 @@ type CatalogChangeBatcher interface {
 	ValidateAndRun(ctx context.Context) error
 }
 
-// TransactionalJobCreator creates a job in the current transaction.
-type TransactionalJobCreator interface {
+// TransactionalJobRegistry creates and updates jobs in the current transaction.
+type TransactionalJobRegistry interface {
 
 	// UpdateSchemaChangeJob triggers the update of the current schema change job
 	// via the supplied callback.
-	UpdateSchemaChangeJob(ctx context.Context, id jobspb.JobID, fn JobProgressUpdateFunc) error
+	UpdateSchemaChangeJob(ctx context.Context, id jobspb.JobID, fn JobUpdateCallback) error
 
 	// MakeJobID is used to make a JobID.
 	MakeJobID() jobspb.JobID
+
+	// SchemaChangerJobID returns the schema changer job ID, creating one if it
+	// doesn't yet exist.
+	SchemaChangerJobID() jobspb.JobID
 
 	// CreateJob creates a job in the current transaction and returns the
 	// id which was assigned to that job, or an error otherwise.
 	CreateJob(ctx context.Context, record jobs.Record) error
 }
 
-// JobProgressUpdateFunc is for updating the progress of a job.
-type JobProgressUpdateFunc = func(md jobs.JobMetadata, updateProgress func(*jobspb.Progress)) error
+// JobUpdateCallback is for updating a job.
+type JobUpdateCallback = func(
+	md jobs.JobMetadata,
+	updateProgress func(*jobspb.Progress),
+	setNonCancelable func(),
+) error
 
 // IndexBackfiller is an abstract index backfiller that performs index backfills
 // when provided with a specification of tables and indexes and a way to track
