@@ -368,7 +368,7 @@ export class DatabaseTablePage extends React.Component<
                     <div className={cx("index-stats__reset-info")}>
                       <Tooltip
                         placement="bottom"
-                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset index stats’ will reset index stats for the entire cluster."
+                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster."
                       >
                         <div
                           className={cx("index-stats__last-reset", "underline")}
@@ -390,7 +390,7 @@ export class DatabaseTablePage extends React.Component<
                             )
                           }
                         >
-                          Reset index stats
+                          Reset all index stats
                         </a>
                       </div>
                     </div>
