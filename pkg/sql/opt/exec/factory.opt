@@ -730,6 +730,7 @@ define Export {
     FileName tree.TypedExpr
     FileFormat string
     Options []exec.KVOption
+    NotNullCols exec.NodeColumnOrdinalSet
 }
 
 # AlterTableRelocate implements ALTER RANGE RELOCATE.
