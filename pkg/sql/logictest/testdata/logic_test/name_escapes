@@ -46,7 +46,14 @@ CREATE VIEW ";--alsoconcerning" AS SELECT @1 AS a, @2 AS b, @3 AS c FROM ";--not
 query TT
 SHOW CREATE VIEW ";--alsoconcerning"
 ----
-";--alsoconcerning"  CREATE VIEW public.";--alsoconcerning" (a, b, c) AS SELECT @1 AS a, @2 AS b, @3 AS c FROM test.public.";--notbetter"
+";--alsoconcerning"  CREATE VIEW public.";--alsoconcerning" (
+                     a,
+                     b,
+                     c
+) AS SELECT
+    @1 AS a, @2 AS b, @3 AS c
+  FROM
+    test.public.";--notbetter"
 
 # Check that "create table as" handles strange things properly.
 statement ok

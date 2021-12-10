@@ -81,19 +81,121 @@ CREATE TABLE crdb_internal.backward_dependencies (
    dependson_details STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.builtin_functions (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        function STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        signature STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        category STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        details STRING NOT NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       CREATE TABLE crdb_internal.builtin_functions (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        function STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        signature STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        category STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        details STRING NOT NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      {}
-CREATE VIEW crdb_internal.cluster_contended_indexes (database_name, schema_name, table_name, index_name, num_contention_events) AS SELECT DISTINCT database_name, schema_name, name, index_name, num_contention_events FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE ((crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.table_indexes.descriptor_id)) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) ORDER BY num_contention_events DESC  CREATE VIEW crdb_internal.cluster_contended_indexes (database_name, schema_name, table_name, index_name, num_contention_events) AS SELECT DISTINCT database_name, schema_name, name, index_name, num_contention_events FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE ((crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.table_indexes.descriptor_id)) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) ORDER BY num_contention_events DESC  {}  {}
-CREATE VIEW crdb_internal.cluster_contended_keys (database_name, schema_name, table_name, index_name, key, num_contention_events) AS SELECT database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count) FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name, index_name, key                                                                CREATE VIEW crdb_internal.cluster_contended_keys (database_name, schema_name, table_name, index_name, key, num_contention_events) AS SELECT database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count) FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name, index_name, key                                                                {}  {}
-CREATE VIEW crdb_internal.cluster_contended_tables (database_name, schema_name, table_name, num_contention_events) AS SELECT database_name, schema_name, name, sum(num_contention_events) FROM (SELECT DISTINCT database_name, schema_name, name, index_id, num_contention_events FROM crdb_internal.cluster_contention_events JOIN crdb_internal.tables ON crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name                                                                                                                                                                 CREATE VIEW crdb_internal.cluster_contended_tables (database_name, schema_name, table_name, num_contention_events) AS SELECT database_name, schema_name, name, sum(num_contention_events) FROM (SELECT DISTINCT database_name, schema_name, name, index_id, num_contention_events FROM crdb_internal.cluster_contention_events JOIN crdb_internal.tables ON crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name                                                                                                                                                                 {}  {}
+   function STRING NOT NULL,
+   signature STRING NOT NULL,
+   category STRING NOT NULL,
+   details STRING NOT NULL
+)  CREATE TABLE crdb_internal.builtin_functions (
+   function STRING NOT NULL,
+   signature STRING NOT NULL,
+   category STRING NOT NULL,
+   details STRING NOT NULL
+)  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS SELECT
+    DISTINCT database_name, schema_name, name, index_name, num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC  CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS SELECT
+    DISTINCT database_name, schema_name, name, index_name, num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key  CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    (
+      SELECT
+        DISTINCT database_name, schema_name, name, index_id, num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    )
+  GROUP BY
+    database_name, schema_name, name  CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    (
+      SELECT
+        DISTINCT database_name, schema_name, name, index_id, num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    )
+  GROUP BY
+    database_name, schema_name, name  {}  {}
 CREATE TABLE crdb_internal.cluster_contention_events (
    table_id INT8 NULL,
    index_id INT8 NULL,
@@ -979,17 +1081,99 @@ CREATE TABLE crdb_internal.partitions (
    subzone_id INT8 NULL
 )  {}  {}
 CREATE TABLE crdb_internal.predefined_comments (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            type INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            object_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            sub_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            comment STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           CREATE TABLE crdb_internal.predefined_comments (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            type INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            object_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            sub_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            comment STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          {}
-CREATE VIEW crdb_internal.ranges (range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, lease_holder, range_size) AS SELECT range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, crdb_internal.lease_holder(start_key) AS lease_holder, (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8 + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8 AS range_size FROM crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, lease_holder, range_size) AS SELECT range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, crdb_internal.lease_holder(start_key) AS lease_holder, (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8 + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8 AS range_size FROM crdb_internal.ranges_no_leases  {}  {}
+   type INT8 NULL,
+   object_id INT8 NULL,
+   sub_id INT8 NULL,
+   comment STRING NULL
+)  CREATE TABLE crdb_internal.predefined_comments (
+   type INT8 NULL,
+   object_id INT8 NULL,
+   sub_id INT8 NULL,
+   comment STRING NULL
+)  {}  {}
+CREATE VIEW crdb_internal.ranges (
+  range_id,
+  start_key,
+  start_pretty,
+  end_key,
+  end_pretty,
+  table_id,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  replicas,
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas,
+  learner_replicas,
+  split_enforced_until,
+  lease_holder,
+  range_size
+) AS SELECT
+    range_id,
+    start_key,
+    start_pretty,
+    end_key,
+    end_pretty,
+    table_id,
+    database_name,
+    schema_name,
+    table_name,
+    index_name,
+    replicas,
+    replica_localities,
+    voting_replicas,
+    non_voting_replicas,
+    learner_replicas,
+    split_enforced_until,
+    crdb_internal.lease_holder(start_key) AS lease_holder,
+    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
+    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+      AS range_size
+  FROM
+    crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (
+  range_id,
+  start_key,
+  start_pretty,
+  end_key,
+  end_pretty,
+  table_id,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  replicas,
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas,
+  learner_replicas,
+  split_enforced_until,
+  lease_holder,
+  range_size
+) AS SELECT
+    range_id,
+    start_key,
+    start_pretty,
+    end_key,
+    end_pretty,
+    table_id,
+    database_name,
+    schema_name,
+    table_name,
+    index_name,
+    replicas,
+    replica_localities,
+    voting_replicas,
+    non_voting_replicas,
+    learner_replicas,
+    split_enforced_until,
+    crdb_internal.lease_holder(start_key) AS lease_holder,
+    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
+    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+      AS range_size
+  FROM
+    crdb_internal.ranges_no_leases  {}  {}
 CREATE TABLE crdb_internal.ranges_no_leases (
    range_id INT8 NOT NULL,
    start_key BYTES NOT NULL,
@@ -1150,41 +1334,97 @@ CREATE TABLE crdb_internal.table_row_statistics (
    estimated_row_count INT8 NULL
 )  {}  {}
 CREATE TABLE crdb_internal.tables (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          table_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          database_name STRING NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          version INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time TIMESTAMP NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time_logical DECIMAL NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          format_version STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          state STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_node_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_expiration_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          drop_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          audit_mode STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          schema_name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_schema_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          locality STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         CREATE TABLE crdb_internal.tables (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          table_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          database_name STRING NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          version INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time TIMESTAMP NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time_logical DECIMAL NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          format_version STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          state STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_node_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_expiration_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          drop_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          audit_mode STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          schema_name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_schema_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          locality STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        {}
-CREATE VIEW crdb_internal.tenant_usage_details (tenant_id, total_ru, total_read_bytes, total_read_requests, total_write_bytes, total_write_requests, total_sql_pod_seconds, total_pgwire_egress_bytes) AS SELECT tenant_id, (j->>'rU')::FLOAT8 AS total_ru, (j->>'readBytes')::INT8 AS total_read_bytes, (j->>'readRequests')::INT8 AS total_read_requests, (j->>'writeBytes')::INT8 AS total_write_bytes, (j->>'writeRequests')::INT8 AS total_write_requests, (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds, (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes FROM (SELECT tenant_id, crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption) AS j FROM system.tenant_usage WHERE instance_id = 0)  CREATE VIEW crdb_internal.tenant_usage_details (tenant_id, total_ru, total_read_bytes, total_read_requests, total_write_bytes, total_write_requests, total_sql_pod_seconds, total_pgwire_egress_bytes) AS SELECT tenant_id, (j->>'rU')::FLOAT8 AS total_ru, (j->>'readBytes')::INT8 AS total_read_bytes, (j->>'readRequests')::INT8 AS total_read_requests, (j->>'writeBytes')::INT8 AS total_write_bytes, (j->>'writeRequests')::INT8 AS total_write_requests, (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds, (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes FROM (SELECT tenant_id, crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption) AS j FROM system.tenant_usage WHERE instance_id = 0)  {}  {}
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   database_name STRING NULL,
+   version INT8 NOT NULL,
+   mod_time TIMESTAMP NOT NULL,
+   mod_time_logical DECIMAL NOT NULL,
+   format_version STRING NOT NULL,
+   state STRING NOT NULL,
+   sc_lease_node_id INT8 NULL,
+   sc_lease_expiration_time TIMESTAMP NULL,
+   drop_time TIMESTAMP NULL,
+   audit_mode STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   parent_schema_id INT8 NOT NULL,
+   locality STRING NULL
+)  CREATE TABLE crdb_internal.tables (
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   database_name STRING NULL,
+   version INT8 NOT NULL,
+   mod_time TIMESTAMP NOT NULL,
+   mod_time_logical DECIMAL NOT NULL,
+   format_version STRING NOT NULL,
+   state STRING NOT NULL,
+   sc_lease_node_id INT8 NULL,
+   sc_lease_expiration_time TIMESTAMP NULL,
+   drop_time TIMESTAMP NULL,
+   audit_mode STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   parent_schema_id INT8 NOT NULL,
+   locality STRING NULL
+)  {}  {}
+CREATE VIEW crdb_internal.tenant_usage_details (
+  tenant_id,
+  total_ru,
+  total_read_bytes,
+  total_read_requests,
+  total_write_bytes,
+  total_write_requests,
+  total_sql_pod_seconds,
+  total_pgwire_egress_bytes
+) AS SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes
+  FROM
+    (
+       SELECT
+         tenant_id,
+         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
+           AS j
+       FROM
+         system.tenant_usage
+       WHERE
+         instance_id = 0
+    )  CREATE VIEW crdb_internal.tenant_usage_details (
+  tenant_id,
+  total_ru,
+  total_read_bytes,
+  total_read_requests,
+  total_write_bytes,
+  total_write_requests,
+  total_sql_pod_seconds,
+  total_pgwire_egress_bytes
+) AS SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes
+  FROM
+    (
+       SELECT
+         tenant_id,
+         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
+           AS j
+       FROM
+         system.tenant_usage
+       WHERE
+           instance_id = 0
+    )  {}  {}
 CREATE TABLE crdb_internal.transaction_statistics (
    aggregated_ts TIMESTAMPTZ NOT NULL,
    fingerprint_id BYTES NOT NULL,
