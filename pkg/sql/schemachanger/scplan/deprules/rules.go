@@ -41,7 +41,6 @@ const (
 		scpb.Status_DELETE_AND_WRITE_ONLY
 	// Make the linter happy
 	_ = txnDropped
-	_ = deleteOnly
 )
 
 func init() {
@@ -53,7 +52,7 @@ func init() {
 	// are dropped before any children are dealt with.
 	register(
 		"parent dependencies",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		otherNode, parentNode,
 		screl.MustQuery(
 			parent.Type((*scpb.Database)(nil), (*scpb.Schema)(nil)),
@@ -104,7 +103,7 @@ func init() {
 	var id, status, direction rel.Var = "id", "index-status", "direction"
 	register(
 		"column depends on indexes",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		indexNode, columnNode,
 		screl.MustQuery(
 			status.In(deleteAndWriteOnly, public),
@@ -147,7 +146,7 @@ func init() {
 
 	register(
 		"index depends on column",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		columnNode, indexNode,
 		screl.MustQuery(
 			column.Type((*scpb.Column)(nil)),
@@ -220,7 +219,7 @@ func init() {
 
 	register(
 		"partitioning information needs the basic index as created",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		addNode, partitioningNode,
 		screl.MustQuery(
 			addIdx.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
@@ -243,7 +242,7 @@ func init() {
 
 	register(
 		"index needs partitioning information to be filled",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		addNode, partitioningNode,
 		screl.MustQuery(
 			addIdx.Type((*scpb.PrimaryIndex)(nil)),
@@ -303,7 +302,7 @@ func init() {
 	tabID := rel.Var("desc-id")
 	register(
 		"namespace needs descriptor to be dropped",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		depNode, nsNode,
 		screl.MustQuery(
 			ns.Type((*scpb.Namespace)(nil)),
@@ -322,7 +321,7 @@ func init() {
 	// dropped.
 	register(
 		"descriptor can only be cleaned up once the name is drained",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		nsNode, depNode,
 		screl.MustQuery(
 			ns.Type((*scpb.Namespace)(nil)),
@@ -346,7 +345,7 @@ func init() {
 
 	register(
 		"column name is assigned once the column is created",
-		scgraph.Precedence,
+		scgraph.SameStagePrecedence,
 		columnNode, columnNameNode,
 		screl.MustQuery(
 
@@ -363,7 +362,7 @@ func init() {
 
 	register(
 		"column needs a name to be assigned",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		columnNameNode, columnNode,
 		screl.MustQuery(
 
@@ -387,7 +386,7 @@ func init() {
 
 	register(
 		"index name is assigned once the index is created",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		indexNode, indexNameNode,
 		screl.MustQuery(
 			indexName.Type((*scpb.IndexName)(nil)),
@@ -403,7 +402,7 @@ func init() {
 
 	register(
 		"index needs a name to be assigned",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		indexNameNode, indexNode,
 		screl.MustQuery(
 			indexName.Type((*scpb.IndexName)(nil)),
@@ -428,7 +427,7 @@ func init() {
 
 	register(
 		"type ref drop is no-op if ref is being added",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		typeRefDropNode, typeRefDropNode,
 		screl.MustQuery(
 			typeRefDrop.Type((*scpb.DefaultExprTypeReference)(nil), (*scpb.ColumnTypeReference)(nil),
@@ -455,7 +454,7 @@ func init() {
 
 	register(
 		"table deps removal happens after table marked as dropped",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		tblNode, depNode,
 		screl.MustQuery(
 			dep.Type((*scpb.Owner)(nil), (*scpb.UserPrivileges)(nil)),
@@ -476,7 +475,7 @@ func init() {
 
 	register(
 		"schema can be dropped after schema entry inside the database",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		scEntryNode, schemaNode,
 		screl.MustQuery(
 			schema.Type((*scpb.Schema)(nil)),
@@ -498,7 +497,7 @@ func init() {
 
 	register(
 		"schema entry can be dropped after the database has exited synth drop",
-		scgraph.Precedence,
+		scgraph.StrictPrecedence,
 		databaseNode, scEntryNode,
 		screl.MustQuery(
 			database.Type((*scpb.Database)(nil)),

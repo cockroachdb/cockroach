@@ -15,7 +15,8 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 1 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase non-revertible stage 1 of 2 with 2 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 1 with 5 MutationType ops
+delete schema namespace entry {54 0 sc} -> 56
 upsert descriptor #54
   ...
        public:
@@ -31,8 +32,6 @@ upsert descriptor #56
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## PreCommitPhase non-revertible stage 2 of 2 with 3 MutationType ops
-delete schema namespace entry {54 0 sc} -> 56
 deleted descriptor #56
 # end PreCommitPhase
 commit transaction #1
@@ -158,7 +157,11 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase non-revertible stage 1 of 2 with 3 MutationType ops
+## PreCommitPhase non-revertible stage 1 of 1 with 9 MutationType ops
+create job #1: "GC for dropping descriptors and parent database 54"
+  descriptor IDs: []
+delete database namespace entry {0 0 db} -> 54
+delete schema namespace entry {54 0 public} -> 55
 upsert descriptor #54
   ...
          userProto: root
@@ -177,17 +180,6 @@ upsert descriptor #55
   -  version: "1"
   +  state: DROP
   +  version: "2"
-## PreCommitPhase non-revertible stage 2 of 2 with 6 MutationType ops
-create job #1: "GC for dropping descriptors and parent database 54"
-  descriptor IDs: []
-delete database namespace entry {0 0 db} -> 54
-delete schema namespace entry {54 0 public} -> 55
-upsert descriptor #54
-  ...
-       version: 2
-     state: DROP
-  -  version: "6"
-  +  version: "7"
 deleted descriptor #55
 # end PreCommitPhase
 commit transaction #1

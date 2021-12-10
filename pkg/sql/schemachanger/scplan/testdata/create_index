@@ -60,11 +60,11 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 - from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: index needs a name to be assigned
 - from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: index name is assigned once the index is created
 
 ops
@@ -127,11 +127,11 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 - from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: index needs a name to be assigned
 - from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: index name is assigned once the index is created
 
 ops
@@ -203,13 +203,13 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (i
 ----
 - from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: index needs a name to be assigned
 - from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: index name is assigned once the index is created
 - from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
   to:   [Partitioning:{DescID: 54, IndexID: 2}, PUBLIC]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: partitioning information needs the basic index as created

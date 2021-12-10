@@ -10,6 +10,8 @@
 
 package scstage
 
+import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+
 // CollapseStages collapses stages with no ops together whenever possible.
 func CollapseStages(stages []Stage) (collapsedStages []Stage) {
 	if len(stages) <= 1 {
@@ -21,10 +23,13 @@ func CollapseStages(stages []Stage) (collapsedStages []Stage) {
 		if isCollapsible(accumulator, s) {
 			accumulator.After = s.After
 			accumulator.Revertible = s.Revertible
-			if s.Ops != nil {
+			if accumulator.Ops == nil {
+				if s.Ops == nil {
+					panic("missing ops")
+				}
 				accumulator.Ops = s.Ops
-			} else if accumulator.Ops == nil {
-				panic("missing ops")
+			} else if s.Ops != nil {
+				accumulator.Ops = scop.MakeOps(append(accumulator.Ops.Slice(), s.Ops.Slice()...)...)
 			}
 		} else {
 			collapsedStages = append(collapsedStages, accumulator)
@@ -49,6 +54,8 @@ func CollapseStages(stages []Stage) (collapsedStages []Stage) {
 // 3. If s doesn't have ops, then it can be collapsed into acc. However,
 //    unlike the previous case, assuming acc is revertible, we don't want to
 //    lose that property when s isn't revertible.
+// 4. If both states have ops, then we can collapse acc and s together if they
+//    share the same revertibility and the same op type.
 func isCollapsible(acc Stage, s Stage) bool {
 	if acc.Phase != s.Phase {
 		return false
@@ -57,17 +64,23 @@ func isCollapsible(acc Stage, s Stage) bool {
 	if acc.Ops == nil {
 		return true
 	}
-	if s.Ops != nil {
+	if s.Ops == nil {
+		// At this point, acc has ops, s has none, and they are in the same phase.
+		// From now on, collapsibility will be determined by revertibility.
+		if !acc.Revertible {
+			// If acc is not revertible, then nothing after can be anyway.
+			return true
+		}
+		// If acc is revertible, only collapse no-op stage s into it if it's also
+		// revertible, otherwise acc will be made non-revertible. We don't want that
+		// because it has ops and s doesn't.
+		return s.Revertible
+	}
+	if acc.Revertible != s.Revertible {
 		return false
 	}
-	// At this point, acc has ops, s has none, and they are in the same phase.
-	// From now on, collapsibility will be determined by revertibility.
-	if !acc.Revertible {
-		// If acc is not revertible, then nothing after can be anyway.
-		return true
-	}
-	// If acc is revertible, only collapse no-op stage s into it if it's also
-	// revertible, otherwise acc will be made non-revertible. We don't want that
-	// because it has ops and s doesn't.
-	return s.Revertible
+	// At this point, both acc and s have ops, and they are in the same phase.
+	// If they also share the same revertibility and the same type of operations,
+	// we can collapse.
+	return acc.Revertible == s.Revertible && acc.Ops.Type() == s.Ops.Type()
 }

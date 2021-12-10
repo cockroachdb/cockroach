@@ -77,8 +77,6 @@ PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
-    *scop.DrainDescriptorName
-      TableID: 54
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 55
       TableID: 54
@@ -95,6 +93,8 @@ PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
+    *scop.DrainDescriptorName
+      TableID: 54
 PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
@@ -120,15 +120,15 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 - from: [Namespace:{DescID: 54, Name: sq1}, ABSENT]
   to:   [Sequence:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [Namespace:{DescID: 54, Name: sq1}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [Owner:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
@@ -140,13 +140,13 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [UserPrivileges:{DescID: 54, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [UserPrivileges:{DescID: 54, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [UserPrivileges:{DescID: 54, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped

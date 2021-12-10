@@ -132,7 +132,7 @@ func TestGraphRanks(t *testing.T) {
 		for _, edge := range tc.depEdges {
 			require.NoError(t, graph.AddDepEdge(
 				fmt.Sprintf("%d to %d", edge.from, edge.to),
-				scgraph.Precedence,
+				scgraph.StrictPrecedence,
 				state.Nodes[edge.from].Target,
 				scpb.Status_PUBLIC,
 				state.Nodes[edge.to].Target,

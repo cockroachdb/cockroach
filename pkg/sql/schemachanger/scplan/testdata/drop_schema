@@ -39,55 +39,55 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ----
 - from: [DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: schema can be dropped after schema entry inside the database
 - from: [Namespace:{DescID: 55, Name: sq1}, ABSENT]
   to:   [Sequence:{DescID: 55}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 56, Name: t1}, ABSENT]
   to:   [Table:{DescID: 56}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 57, Name: v1}, ABSENT]
   to:   [View:{DescID: 57}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 58, Name: v2}, ABSENT]
   to:   [View:{DescID: 58}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 59, Name: v3}, ABSENT]
   to:   [View:{DescID: 59}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 60, Name: v4}, ABSENT]
   to:   [View:{DescID: 60}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 61, Name: typ}, ABSENT]
   to:   [Type:{DescID: 61}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 62, Name: _typ}, ABSENT]
   to:   [Type:{DescID: 62}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 63, Name: v5}, ABSENT]
   to:   [View:{DescID: 63}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Sequence:{DescID: 55}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [Namespace:{DescID: 55, Name: sq1}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [Owner:{DescID: 55}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
@@ -95,19 +95,19 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 56}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [DefaultExpression:{DescID: 56, ColumnID: 3}, ABSENT]
@@ -115,11 +115,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [Namespace:{DescID: 56, Name: t1}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [Owner:{DescID: 56}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
@@ -131,23 +131,23 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [UserPrivileges:{DescID: 56, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [UserPrivileges:{DescID: 56, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [UserPrivileges:{DescID: 56, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [Type:{DescID: 61}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [Type:{DescID: 61}, DROPPED]
   to:   [Namespace:{DescID: 61, Name: typ}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [Type:{DescID: 61}, DROPPED]
   to:   [ViewDependsOnType:{DescID: 63, ReferencedDescID: 61}, ABSENT]
@@ -155,11 +155,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Type:{DescID: 62}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [Type:{DescID: 62}, DROPPED]
   to:   [Namespace:{DescID: 62, Name: _typ}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [Type:{DescID: 62}, DROPPED]
   to:   [ViewDependsOnType:{DescID: 63, ReferencedDescID: 62}, ABSENT]
@@ -167,15 +167,15 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 57}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [View:{DescID: 57}, DROPPED]
   to:   [Namespace:{DescID: 57, Name: v1}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [View:{DescID: 57}, DROPPED]
   to:   [Owner:{DescID: 57}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 57}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
@@ -191,27 +191,27 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 57}, DROPPED]
   to:   [UserPrivileges:{DescID: 57, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 57}, DROPPED]
   to:   [UserPrivileges:{DescID: 57, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 57}, DROPPED]
   to:   [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 58}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [View:{DescID: 58}, DROPPED]
   to:   [Namespace:{DescID: 58, Name: v2}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [View:{DescID: 58}, DROPPED]
   to:   [Owner:{DescID: 58}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 58}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}, ABSENT]
@@ -227,27 +227,27 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 58}, DROPPED]
   to:   [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 58}, DROPPED]
   to:   [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 58}, DROPPED]
   to:   [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 59}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [View:{DescID: 59}, DROPPED]
   to:   [Namespace:{DescID: 59, Name: v3}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [View:{DescID: 59}, DROPPED]
   to:   [Owner:{DescID: 59}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 59}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, ABSENT]
@@ -259,27 +259,27 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 59}, DROPPED]
   to:   [UserPrivileges:{DescID: 59, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 59}, DROPPED]
   to:   [UserPrivileges:{DescID: 59, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 59}, DROPPED]
   to:   [UserPrivileges:{DescID: 59, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 60}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [View:{DescID: 60}, DROPPED]
   to:   [Namespace:{DescID: 60, Name: v4}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [View:{DescID: 60}, DROPPED]
   to:   [Owner:{DescID: 60}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 60}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, ABSENT]
@@ -291,27 +291,27 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 60}, DROPPED]
   to:   [UserPrivileges:{DescID: 60, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 60}, DROPPED]
   to:   [UserPrivileges:{DescID: 60, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 60}, DROPPED]
   to:   [UserPrivileges:{DescID: 60, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 63}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: parent dependencies
 - from: [View:{DescID: 63}, DROPPED]
   to:   [Namespace:{DescID: 63, Name: v5}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [View:{DescID: 63}, DROPPED]
   to:   [Owner:{DescID: 63}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 63}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 60, ReferencedDescID: 63}, ABSENT]
@@ -319,15 +319,15 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [View:{DescID: 63}, DROPPED]
   to:   [UserPrivileges:{DescID: 63, Username: admin}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 63}, DROPPED]
   to:   [UserPrivileges:{DescID: 63, Username: public}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 63}, DROPPED]
   to:   [UserPrivileges:{DescID: 63, Username: root}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: table deps removal happens after table marked as dropped
 
 ops
@@ -440,8 +440,6 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
-    *scop.DrainDescriptorName
-      TableID: 55
     *scop.MarkDescriptorAsDropped
       DescID: 56
     *scop.RemoveRelationDependedOnBy
@@ -452,15 +450,11 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 56
     *scop.MarkDescriptorAsDropped
       DescID: 57
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 57
     *scop.MarkDescriptorAsDropped
       DescID: 58
     *scop.RemoveRelationDependedOnBy
@@ -471,8 +465,6 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 57
-    *scop.DrainDescriptorName
-      TableID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 58
@@ -481,17 +473,11 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 60
       TableID: 58
-    *scop.DrainDescriptorName
-      TableID: 59
-    *scop.DrainDescriptorName
-      TableID: 60
     *scop.MarkDescriptorAsDropped
       DescID: 63
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 63
       TableID: 60
-    *scop.DrainDescriptorName
-      TableID: 63
     *scop.MarkDescriptorAsDropped
       DescID: 61
     *scop.RemoveTypeBackRef
@@ -502,15 +488,29 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     *scop.RemoveTypeBackRef
       DescID: 63
       TypeID: 62
-    *scop.DrainDescriptorName
-      TableID: 61
-    *scop.DrainDescriptorName
-      TableID: 62
     *scop.DeleteDatabaseSchemaEntry
       DatabaseID: 50
       SchemaID: 54
     *scop.MarkDescriptorAsDropped
       DescID: 54
+    *scop.DrainDescriptorName
+      TableID: 55
+    *scop.DrainDescriptorName
+      TableID: 56
+    *scop.DrainDescriptorName
+      TableID: 57
+    *scop.DrainDescriptorName
+      TableID: 58
+    *scop.DrainDescriptorName
+      TableID: 59
+    *scop.DrainDescriptorName
+      TableID: 60
+    *scop.DrainDescriptorName
+      TableID: 63
+    *scop.DrainDescriptorName
+      TableID: 61
+    *scop.DrainDescriptorName
+      TableID: 62
 PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT

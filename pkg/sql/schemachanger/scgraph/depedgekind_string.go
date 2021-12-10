@@ -8,13 +8,13 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[Precedence-1]
+	_ = x[StrictPrecedence-1]
 	_ = x[SameStagePrecedence-2]
 }
 
-const _DepEdgeKind_name = "PrecedenceSameStagePrecedence"
+const _DepEdgeKind_name = "StrictPrecedenceSameStagePrecedence"
 
-var _DepEdgeKind_index = [...]uint8{0, 10, 29}
+var _DepEdgeKind_index = [...]uint8{0, 16, 35}
 
 func (i DepEdgeKind) String() string {
 	i -= 1

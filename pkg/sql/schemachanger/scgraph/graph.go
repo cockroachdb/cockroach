@@ -227,8 +227,6 @@ func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
 	return g.opToNode[op]
 }
 
-var _ = (*Graph)(nil).GetNodeFromOp
-
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(

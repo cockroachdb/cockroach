@@ -87,7 +87,7 @@ upsert descriptor #56
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitPhase stage 1 of 8 with 4 MutationType ops
+## PostCommitPhase stage 1 of 7 with 4 MutationType ops
 update progress of schema change job #1
 upsert descriptor #56
   ...
@@ -111,21 +111,21 @@ upsert descriptor #56
   +  version: "3"
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 2 of 8 with 1 BackfillType ops
+## PostCommitPhase stage 2 of 7 with 1 BackfillType ops
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 3 of 8 with 1 MutationType ops
+## PostCommitPhase stage 3 of 7 with 1 MutationType ops
 update progress of schema change job #1
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 4 of 8 with 1 ValidationType ops
+## PostCommitPhase stage 4 of 7 with 1 ValidationType ops
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 5 of 8 with 1 MutationType ops
+## PostCommitPhase stage 5 of 7 with 1 MutationType ops
 update progress of schema change job #1
 commit transaction #6
 begin transaction #7
-## PostCommitPhase stage 6 of 8 with 4 MutationType ops
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 update progress of schema change job #1
 upsert descriptor #56
   ...
@@ -219,24 +219,7 @@ upsert descriptor #56
   +  version: "4"
 commit transaction #7
 begin transaction #8
-## PostCommitPhase non-revertible stage 7 of 8 with 2 MutationType ops
-update progress of schema change job #1
-upsert descriptor #56
-  ...
-         version: 4
-       mutationId: 2
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: tbl
-     newSchemaChangeJobId: "1"
-  ...
-       time: {}
-     unexposedParentSchemaId: 55
-  -  version: "4"
-  +  version: "5"
-commit transaction #8
-begin transaction #9
-## PostCommitPhase non-revertible stage 8 of 8 with 3 MutationType ops
+## PostCommitPhase non-revertible stage 7 of 7 with 4 MutationType ops
 create job #2: "GC for dropping table 56 index 1"
   descriptor IDs: [56]
 upsert descriptor #56
@@ -263,7 +246,7 @@ upsert descriptor #56
   -      unique: true
   -      version: 4
   -    mutationId: 2
-  -    state: DELETE_ONLY
+  -    state: DELETE_AND_WRITE_ONLY
   +  mutations: []
      name: tbl
   -  newSchemaChangeJobId: "1"
@@ -272,7 +255,7 @@ upsert descriptor #56
   ...
        time: {}
      unexposedParentSchemaId: 55
-  -  version: "5"
-  +  version: "6"
-commit transaction #9
+  -  version: "4"
+  +  version: "5"
+commit transaction #8
 # end PostCommitPhase

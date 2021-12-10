@@ -11,6 +11,7 @@
 package scstage
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
@@ -130,9 +131,9 @@ func (b buildCtx) filterUnsatisfiedEdges(edges []*scgraph.OpEdge) []*scgraph.OpE
 	return nil
 }
 
-func (b buildCtx) collectFailedEdges(
-	edges []*scgraph.OpEdge,
-) (failed map[*scgraph.OpEdge]struct{}) {
+// collectFailedEdges returns a map of op edges which cannot be satisfied in
+// this stage, with the reasons for them being rejected.
+func (b buildCtx) collectFailedEdges(edges []*scgraph.OpEdge) (failed map[*scgraph.OpEdge]string) {
 	candidates := make(map[*scpb.Node]*scgraph.OpEdge)
 	for _, e := range edges {
 		candidates[e.To()] = e
@@ -140,33 +141,57 @@ func (b buildCtx) collectFailedEdges(
 	// Check to see if the current set of edges will have their dependencies met
 	// if they are all run. Any which will not must be pruned. This greedy
 	// algorithm works, but a justification is in order.
-	failed = make(map[*scgraph.OpEdge]struct{}, len(edges))
+	failed = make(map[*scgraph.OpEdge]string, len(edges))
 	for _, e := range edges {
 		if !e.IsPhaseSatisfied(b.phase) {
-			failed[e] = struct{}{}
+			failed[e] = "unsatisfied op edge minimum phase requirement"
 		}
 	}
 	for _, e := range edges {
 		if err := b.g.ForEachDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
-			if _, isFulfilled := b.fulfilled[de.From()]; isFulfilled {
-				// Dependency source node has already been fulfilled in an earlier
-				// stage.
-				if de.Kind() == scgraph.SameStagePrecedence {
-					// This is bad, the dependency requires the destination node to be
-					// fulfilled in the same stage, which is impossible in this case.
-					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
-						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+			_, fromIsFulfilled := b.fulfilled[de.From()]
+			_, fromIsCandidate := candidates[de.From()]
+			switch de.Kind() {
+			case scgraph.StrictPrecedence:
+				if !fromIsFulfilled {
+					// The dependency source node has not yet been fulfilled in an earlier
+					// stage. The candidate op edge must be rejected.
+					failed[e] = fmt.Sprintf("unfulfilled %s, required by rule %q",
+						screl.NodeString(de.From()), de.Name())
+					return iterutil.StopIteration()
+				}
+				if fromIsCandidate {
+					// The dependency requires the source node to be fulfilled in an
+					// earlier stage than the destination, which is impossible at this
+					// point.
+					// This should never happen.
+					break
 				}
 				return nil
-			}
-			if _, isCandidate := candidates[de.From()]; isCandidate {
-				// Dependency source and destination nodes will both be fulfilled in the
-				// same stage.
+
+			case scgraph.SameStagePrecedence:
+				if fromIsFulfilled {
+					// The dependency requires the source node to be fulfilled in the same
+					// stage as the destination, which is impossible at this point because
+					// it has already been fulfilled in an earlier stage.
+					// This should never happen.
+					break
+				}
+				if !fromIsCandidate {
+					// The dependency source node will not be fulfilled in this stage.
+					// The candidate op edge must be rejected.
+					failed[e] = fmt.Sprintf("not fulfilling %s in this stage, required by rule %q",
+						screl.NodeString(de.To()), de.Name())
+					return iterutil.StopIteration()
+				}
 				return nil
+
+			default:
+				return errors.AssertionFailedf("unknown dep edge kind %q", de.Kind())
 			}
-			// The candidate op edge must be rejected.
-			failed[e] = struct{}{}
-			return iterutil.StopIteration()
+			// The dependency constraint is somehow unsatisfiable.
+			return errors.AssertionFailedf("failed to satisfy %s rule %q",
+				de.String(), de.Name())
 		}); err != nil {
 			panic(err)
 		}
@@ -174,16 +199,21 @@ func (b buildCtx) collectFailedEdges(
 	// Ensure that all SameStagePrecedence DepEdges are met appropriately.
 	for _, e := range edges {
 		if err := b.g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
-			if de.Kind() != scgraph.SameStagePrecedence {
-				// Only look at same-stage dependency edges.
+			switch de.Kind() {
+			case scgraph.StrictPrecedence:
 				return nil
+			case scgraph.SameStagePrecedence:
+				break
+			default:
+				return errors.AssertionFailedf("unknown dep edge kind %q", de.Kind())
 			}
-			if _, isFulfilled := b.fulfilled[de.To()]; isFulfilled {
+			// Only look at SameStagePrecedence DepEdges.
+			if _, toIsFulfilled := b.fulfilled[de.To()]; toIsFulfilled {
 				// This is bad, the dependency requires the source node to be
 				// fulfilled in the same stage as the destination, which is impossible
 				// in this case because the destination has already been fulfilled.
-				return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
-					screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
+				return errors.AssertionFailedf("failed to satisfy %s rule %q",
+					de.String(), de.Name())
 			}
 			toCandidate, toIsCandidate := candidates[de.To()]
 			if !toIsCandidate {
@@ -194,7 +224,8 @@ func (b buildCtx) collectFailedEdges(
 				// As a result the dependency source node, which is also the candidate
 				// edge destination node, cannot possibly be fulfilled in this stage
 				// either.
-				failed[e] = struct{}{}
+				failed[e] = fmt.Sprintf("unfulfilled %s, required by rule %q",
+					screl.NodeString(de.To()), de.Name())
 				return iterutil.StopIteration()
 			}
 			_, toIsFailed := failed[toCandidate]
@@ -206,7 +237,8 @@ func (b buildCtx) collectFailedEdges(
 				// As a result the dependency source node, which is also the candidate
 				// edge destination node, cannot possibly be fulfilled in this stage
 				// either.
-				failed[e] = struct{}{}
+				failed[e] = fmt.Sprintf("not fulfilling %s in this stage, required by rule %q",
+					screl.NodeString(de.To()), de.Name())
 				return iterutil.StopIteration()
 			}
 			if _, eIsFailed := failed[e]; eIsFailed {
@@ -214,7 +246,8 @@ func (b buildCtx) collectFailedEdges(
 				// or precedence requirements, then the op edge leading to the
 				// dependency destination node must also be rejected because the
 				// same-stage constraint cannot possibly be satisfied.
-				failed[toCandidate] = struct{}{}
+				failed[toCandidate] = fmt.Sprintf("not fulfilling %s in this stage, required by rule %q",
+					screl.NodeString(e.To()), de.Name())
 			}
 			return nil
 		}); err != nil {

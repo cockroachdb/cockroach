@@ -23,10 +23,10 @@ PreCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
-    *scop.DrainDescriptorName
-      TableID: 54
     *scop.MarkDescriptorAsDropped
       DescID: 55
+    *scop.DrainDescriptorName
+      TableID: 54
     *scop.DrainDescriptorName
       TableID: 55
 PostCommitPhase non-revertible stage 1 of 1 with 4 MutationType ops
@@ -68,17 +68,17 @@ DROP TYPE defaultdb.typ
 ----
 - from: [Namespace:{DescID: 54, Name: typ}, ABSENT]
   to:   [Type:{DescID: 54}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 55, Name: _typ}, ABSENT]
   to:   [Type:{DescID: 55}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Type:{DescID: 54}, DROPPED]
   to:   [Namespace:{DescID: 54, Name: typ}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
 - from: [Type:{DescID: 55}, DROPPED]
   to:   [Namespace:{DescID: 55, Name: _typ}, ABSENT]
-  kind: Precedence
+  kind: StrictPrecedence
   rule: namespace needs descriptor to be dropped
