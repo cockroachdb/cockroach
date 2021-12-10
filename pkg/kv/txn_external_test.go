@@ -446,3 +446,65 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 	atomic.StoreInt32(&done, 1)
 	require.NoError(t, g.Wait())
 }
+
+// TestRevScanAndGet tests that Get and ReverseScan requests in the same batch
+// can be executed correctly. See illustration below for the various
+// combinations tested.
+func TestRevScanAndGet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tci := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Servers[0].DB()
+
+	require.NoError(t, db.AdminSplit(ctx, "b", hlc.MaxTimestamp))
+	require.NoError(t, db.AdminSplit(ctx, "h", hlc.MaxTimestamp))
+
+	// Setup:
+	// Ranges:      [keyMin-------b) [b--------h) [h------keyMax)
+	// ReverseScan:                     [d-f)
+	// Gets:                     *  *  *  *   *  *   *
+	testCases := []struct {
+		getKey string
+	}{
+		{
+			// Get on a range to the left of the reverse scan.
+			getKey: "a",
+		},
+		{
+			// Get on the left split boundary.
+			getKey: "b",
+		},
+		{
+			// Get on the same range as the reverse scan but to the left.
+			getKey: "c",
+		},
+		{
+			// Get on the same range and enclosed by the reverse scan.
+			getKey: "e",
+		},
+		{
+			// Get on the same range as the reverse scan but to the right.
+			getKey: "g",
+		},
+		{
+			// Get on the right split boundary.
+			getKey: "h",
+		},
+		{
+			// Get on a range to the right of the reverse scan.
+			getKey: "i",
+		},
+	}
+
+	for _, tc := range testCases {
+		txn := db.NewTxn(ctx, "test")
+		b := txn.NewBatch()
+		b.Get(tc.getKey)
+		b.ReverseScan("d", "f")
+		require.NoError(t, txn.Run(ctx, b))
+	}
+}
