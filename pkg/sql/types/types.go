@@ -320,7 +320,7 @@ var (
 	//
 	// See https://www.postgresql.org/docs/9.1/static/datatype-character.html
 	QChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_char, Width: 1, Locale: &emptyLocale}}
+		Family: StringFamily, Width: 1, Oid: oid.T_char, Locale: &emptyLocale}}
 
 	// Name is a type-alias for String with a different OID (T_name). It is
 	// reported as NAME in SHOW CREATE and "name" in introspection for
@@ -605,16 +605,22 @@ var (
 	typeBit = &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Locale: &emptyLocale}}
 
-	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
-	// stands for "blank padded". It is not exported to avoid confusion with
-	// QChar, as well as confusion over its default width.
+	// typeBpChar is a CHAR type with an unspecified width. "bp" stands for
+	// "blank padded". It is not exported to avoid confusion with QChar, as well
+	// as confusion over CHAR's default width of 1.
 	//
 	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
 	// compatibility with PostgreSQL.
-	//
-	// Its default maximum with is 1. It always has a maximum width.
 	typeBpChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
+
+	// typeQChar is a "char" type with an unspecified width. It is not exported
+	// to avoid confusion with QChar. The "char" type should always have a width
+	// of one. A "char" type with an unspecified width is only used when the
+	// length of a "char" value cannot be determined, for example a placeholder
+	// typed as a "char" should have an unspecified width.
+	typeQChar = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_char, Locale: &emptyLocale}}
 )
 
 const (
@@ -812,10 +818,13 @@ func MakeVarChar(width int32) *T {
 }
 
 // MakeChar constructs a new instance of the CHAR type (oid = T_bpchar) having
-// the given max number of characters.
+// the given max # characters (0 = unspecified number).
 func MakeChar(width int32) *T {
-	if width <= 0 {
-		panic(errors.AssertionFailedf("width for type char must be at least 1"))
+	if width == 0 {
+		return typeBpChar
+	}
+	if width < 0 {
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
@@ -1220,6 +1229,48 @@ func (t *T) TypeModifier() int32 {
 		}
 	}
 	return int32(-1)
+}
+
+// WithoutTypeModifiers returns a copy of the given type with the type modifiers
+// reset, if the type has modifiers. The returned type has arbitrary width and
+// precision, or for some types, like timestamps, the maximum allowed width and
+// precision. If the given type already has no type modifiers, it is returned
+// unchanged and the function does not allocate a new type.
+func (t *T) WithoutTypeModifiers() *T {
+	switch t.Family() {
+	case ArrayFamily:
+		newContents := t.ArrayContents().WithoutTypeModifiers()
+		if newContents == t.ArrayContents() {
+			return t
+		}
+		return MakeArray(newContents)
+	case TupleFamily:
+		oldContents := t.TupleContents()
+		newContents := make([]*T, len(oldContents))
+		changed := false
+		for i := range newContents {
+			newContents[i] = oldContents[i].WithoutTypeModifiers()
+			if newContents[i] != oldContents[i] {
+				changed = true
+			}
+		}
+		if !changed {
+			return t
+		}
+		return MakeTuple(newContents)
+	case BitFamily, CollatedStringFamily, DecimalFamily, IntervalFamily, StringFamily,
+		TimestampFamily, TimestampTZFamily, TimeFamily, TimeTZFamily:
+		if t.Width() == 0 && t.Precision() == 0 && !t.InternalType.TimePrecisionIsSet {
+			return t
+		}
+		newT := *t
+		newT.InternalType.Width = 0
+		newT.InternalType.Precision = 0
+		newT.InternalType.TimePrecisionIsSet = false
+		return &newT
+	default:
+		return t
+	}
 }
 
 // Scale is an alias method for Width, used for clarity for types in

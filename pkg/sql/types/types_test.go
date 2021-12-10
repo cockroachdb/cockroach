@@ -979,3 +979,50 @@ func TestSQLStandardName(t *testing.T) {
 		})
 	}
 }
+
+func TestWithoutTypeModifiers(t *testing.T) {
+	testCases := []struct {
+		t        *T
+		expected *T
+	}{
+		// Types with modifiers.
+		{MakeBit(2), typeBit},
+		{MakeVarBit(2), VarBit},
+		{MakeString(2), String},
+		{MakeVarChar(2), VarChar},
+		{MakeChar(2), typeBpChar},
+		{QChar, typeQChar},
+		{MakeCollatedString(MakeString(2), "en"), MakeCollatedString(String, "en")},
+		{MakeDecimal(5, 1), Decimal},
+		{MakeTime(2), Time},
+		{MakeTimeTZ(2), TimeTZ},
+		{MakeTimestamp(2), Timestamp},
+		{MakeTimestampTZ(2), TimestampTZ},
+		{MakeInterval(IntervalTypeMetadata{Precision: 3, PrecisionIsSet: true}),
+			Interval},
+		{MakeArray(MakeDecimal(5, 1)), DecimalArray},
+		{MakeTuple([]*T{MakeString(2), Time, MakeDecimal(5, 1)}),
+			MakeTuple([]*T{String, Time, Decimal})},
+
+		// Types without modifiers.
+		{Bool, Bool},
+		{Bytes, Bytes},
+		{Date, Date},
+		{Float, Float},
+		{Float4, Float4},
+		{Geography, Geography},
+		{Geometry, Geometry},
+		{INet, INet},
+		{Int, Int},
+		{Int4, Int4},
+		{Int2, Int2},
+		{Jsonb, Jsonb},
+		{Uuid, Uuid},
+	}
+
+	for _, tc := range testCases {
+		if actual := tc.t.WithoutTypeModifiers(); !actual.Identical(tc.expected) {
+			t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), actual.DebugString())
+		}
+	}
+}
