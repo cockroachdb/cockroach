@@ -2651,7 +2651,11 @@ func (s *adminServer) SendKVBatch(
 	// Send the batch to KV.
 	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		// Return the error via the BatchResponse so that the caller can
+		// inspect its structure. Returning it through gRPC would mangle
+		// it into a grpc error which does not preserve structure.
+		br = &roachpb.BatchResponse{}
+		br.Error = pErr
 	}
 	return br, nil
 }

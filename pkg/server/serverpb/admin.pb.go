@@ -3360,6 +3360,9 @@ type AdminClient interface {
 	EnqueueRange(ctx context.Context, in *EnqueueRangeRequest, opts ...grpc.CallOption) (*EnqueueRangeResponse, error)
 	// SendKVBatch proxies the given BatchRequest into KV, returning the
 	// response. It is used by the CLI `debug send-kv-batch` command.
+	//
+	// Callers must check the BatchResponse's Error field before interpreting
+	// the response as a success.
 	SendKVBatch(ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error)
 }
 
@@ -3749,6 +3752,9 @@ type AdminServer interface {
 	EnqueueRange(context.Context, *EnqueueRangeRequest) (*EnqueueRangeResponse, error)
 	// SendKVBatch proxies the given BatchRequest into KV, returning the
 	// response. It is used by the CLI `debug send-kv-batch` command.
+	//
+	// Callers must check the BatchResponse's Error field before interpreting
+	// the response as a success.
 	SendKVBatch(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 }
 
