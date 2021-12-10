@@ -62,15 +62,15 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []inter
 //
 // The first query returned is an unpartitioned query of the form:
 //
-//   SELECT * FROM table
+//   SELECT *, p, NOT (p), (p) IS NULL, true, false, false FROM table
 //
 // The second query returned is a partitioned query of the form:
 //
-//   SELECT * FROM table WHERE (p)
+//   SELECT *, p, NOT (p), (p) IS NULL, p, NOT (p), (p) IS NULL FROM table WHERE (p)
 //   UNION ALL
-//   SELECT * FROM table WHERE NOT (p)
+//   SELECT *, p, NOT (p), (p) IS NULL, NOT(p), p, (p) IS NULL FROM table WHERE NOT (p)
 //   UNION ALL
-//   SELECT * FROM table WHERE (p) IS NULL
+//   SELECT *, p, NOT (p), (p) IS NULL, (p) IS NULL, (p) IS NOT NULL, (NOT(p)) IS NOT NULL FROM table WHERE (p) IS NULL
 //
 // If the resulting values of the two queries are not equal, there is a logical
 // bug.
@@ -84,8 +84,6 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	table.Format(f)
 	tableName := f.CloseAndGetString()
 
-	unpartitioned = fmt.Sprintf("SELECT * FROM %s", tableName)
-
 	var pred tree.Expr
 	if s.coin() {
 		pred = makeBoolExpr(s, cols)
@@ -95,12 +93,34 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
-	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
-	part2 := fmt.Sprintf("SELECT * FROM %s WHERE NOT (%s)", tableName, predicate)
-	part3 := fmt.Sprintf("SELECT * FROM %s WHERE (%s) IS NULL", tableName, predicate)
+	allPreds := fmt.Sprintf("%[1]s, NOT (%[1]s), (%[1]s) IS NULL", predicate)
+
+	unpartitioned = fmt.Sprintf("SELECT *, %s, true, false, false FROM %s", allPreds, tableName)
+
+	pred1 := predicate
+	pred2 := fmt.Sprintf("NOT (%s)", predicate)
+	pred3 := fmt.Sprintf("(%s) IS NULL", predicate)
+
+	part1 := fmt.Sprintf(`SELECT *,
+%s,
+%s, %s, %s
+FROM %s
+WHERE %s`, allPreds, pred1, pred2, pred3, tableName, pred1)
+	part2 := fmt.Sprintf(`SELECT *, 
+%s,
+%s, %s, %s
+FROM %s
+WHERE %s`, allPreds, pred2, pred1, pred3, tableName, pred2)
+	part3 := fmt.Sprintf(`SELECT *,
+%s,
+%s, (%s) IS NOT NULL, (%s) IS NOT NULL
+FROM %s
+WHERE %s`, allPreds, pred3, pred1, pred2, tableName, pred3)
 
 	partitioned = fmt.Sprintf(
-		"(%s) UNION ALL (%s) UNION ALL (%s)",
+		`(%s)
+UNION ALL (%s)
+UNION ALL (%s)`,
 		part1, part2, part3,
 	)
 
