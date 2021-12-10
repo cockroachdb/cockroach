@@ -934,7 +934,7 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		err = roachprod.Create(cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
+		err = roachprod.Create(ctx, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, err
@@ -1328,7 +1328,7 @@ func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t test.Test) {
 
 	// Don't hang forever.
 	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
-		err := roachprod.Monitor(c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
+		err := roachprod.Monitor(ctx, c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
 		// If there's an error, it means either that the monitor command failed
 		// completely, or that it found a dead node worth complaining about.
 		if err != nil {
@@ -1611,7 +1611,7 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 		} else {
 			l.PrintfCtx(ctx, "wiping cluster %s", c)
 			c.status("wiping cluster")
-			if err := roachprod.Wipe(c.name, false /* preserveCerts */); err != nil {
+			if err := roachprod.Wipe(ctx, c.name, false /* preserveCerts */); err != nil {
 				l.Errorf("%s", err)
 			}
 			if c.localCertsDir != "" {
@@ -1650,7 +1650,7 @@ func (c *clusterImpl) PutE(
 
 	c.status("uploading file")
 	defer c.status("")
-	return errors.Wrap(roachprod.Put(c.MakeNodes(nodes...), src, dest, false /* useTreeDist */), "cluster.PutE")
+	return errors.Wrap(roachprod.Put(ctx, c.MakeNodes(nodes...), src, dest, false /* useTreeDist */), "cluster.PutE")
 }
 
 // PutLibraries inserts all available library files into all nodes on the cluster
@@ -1692,7 +1692,7 @@ func (c *clusterImpl) Stage(
 	}
 	c.status("staging binary")
 	defer c.status("")
-	return errors.Wrap(roachprod.Stage(c.MakeNodes(opts...), "" /* stageOS */, dir, application, versionOrSHA), "cluster.Stage")
+	return errors.Wrap(roachprod.Stage(ctx, c.MakeNodes(opts...), "" /* stageOS */, dir, application, versionOrSHA), "cluster.Stage")
 }
 
 // Get gets files from remote hosts.
@@ -1959,7 +1959,7 @@ func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...opti
 	}
 	c.setStatusForClusterOpt("wiping", nodes...)
 	defer c.clearStatusForClusterOpt(nodes...)
-	return roachprod.Wipe(c.MakeNodes(nodes...), false /* preserveCerts */)
+	return roachprod.Wipe(ctx, c.MakeNodes(nodes...), false /* preserveCerts */)
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
@@ -1985,7 +1985,7 @@ func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args 
 func (c *clusterImpl) Reformat(
 	ctx context.Context, node option.NodeListOption, filesystem string,
 ) error {
-	return roachprod.Reformat(c.name, filesystem)
+	return roachprod.Reformat(ctx, c.name, filesystem)
 }
 
 // Silence unused warning.
@@ -2106,7 +2106,7 @@ func (c *clusterImpl) RunWithBuffer(
 func (c *clusterImpl) pgURLErr(
 	ctx context.Context, node option.NodeListOption, external bool,
 ) ([]string, error) {
-	urls, err := roachprod.PgURL(c.MakeNodes(node), c.localCertsDir, external, c.localCertsDir != "" /* secure */)
+	urls, err := roachprod.PgURL(ctx, c.MakeNodes(node), c.localCertsDir, external, c.localCertsDir != "" /* secure */)
 	if err != nil {
 		return nil, err
 	}
