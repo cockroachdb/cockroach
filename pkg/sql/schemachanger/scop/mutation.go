@@ -298,6 +298,7 @@ type LogEvent struct {
 	TargetMetadata scpb.TargetMetadata
 	Authorization  scpb.Authorization
 	Statement      string
+	StatementTag   string
 	Element        scpb.ElementProto
 	TargetStatus   scpb.Status
 }

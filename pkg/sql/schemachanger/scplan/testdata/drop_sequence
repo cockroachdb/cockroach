@@ -35,6 +35,8 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
           UserName: root
         Statements:
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+          redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+          statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
@@ -45,7 +47,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
       Element:
         Sequence:
           sequenceId: 54
-      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+      Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+      StatementTag: DROP SEQUENCE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
@@ -126,6 +129,8 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
           UserName: root
         Statements:
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+          redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+          statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
@@ -136,7 +141,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
       Element:
         Sequence:
           sequenceId: 54
-      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+      Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+      StatementTag: DROP SEQUENCE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1

@@ -156,6 +156,8 @@ PreCommitPhase stage 1 of 1 with 22 MutationType ops
           UserName: root
         Statements:
         - statement: DROP TABLE defaultdb.shipments CASCADE
+          redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+          statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Table:{DescID: 57}, ABSENT], DROPPED] -> ABSENT
@@ -174,7 +176,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
       Element:
         Table:
           tableId: 57
-      Statement: DROP TABLE defaultdb.shipments CASCADE
+      Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+      StatementTag: DROP TABLE
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1
@@ -187,7 +190,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
       Element:
         View:
           tableId: 59
-      Statement: DROP TABLE defaultdb.shipments CASCADE
+      Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+      StatementTag: DROP TABLE
       TargetMetadata:
         SourceElementID: 3
         SubWorkID: 1
@@ -200,7 +204,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
       Element:
         Sequence:
           sequenceId: 58
-      Statement: DROP TABLE defaultdb.shipments CASCADE
+      Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+      StatementTag: DROP TABLE
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1

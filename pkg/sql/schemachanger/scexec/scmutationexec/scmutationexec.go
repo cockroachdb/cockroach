@@ -903,6 +903,7 @@ func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
 		ApplicationName: op.Authorization.AppName,
 		User:            op.Authorization.UserName,
 		Statement:       redact.RedactableString(op.Statement),
+		Tag:             op.StatementTag,
 	}
 	return m.s.EnqueueEvent(descID, op.TargetMetadata, details, event)
 }
