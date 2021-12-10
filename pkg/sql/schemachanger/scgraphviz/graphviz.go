@@ -165,8 +165,9 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 		var extraOps []scop.Op
 		if st.Ops != nil {
 			for _, op := range st.Ops.Slice() {
-				if n := p.Graph.GetNodeFromOp(op); n != nil {
-					m[n.Element()] = append(m[n.Element()], op)
+				if oe := p.Graph.GetOpEdgeFromOp(op); oe != nil {
+					e := oe.To().Element()
+					m[e] = append(m[e], op)
 				} else {
 					extraOps = append(extraOps, op)
 				}

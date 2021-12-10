@@ -50,9 +50,9 @@ type Graph struct {
 	// reaching this node.
 	depEdgesFrom, depEdgesTo *depEdgeTree
 
-	// opToNode maps from an operation back to the
+	// opToOpEdge maps from an operation back to the
 	// opEdge that generated it as an index.
-	opToNode map[scop.Op]*scpb.Node
+	opToOpEdge map[scop.Op]*OpEdge
 
 	// optimizedOutOpEdges that are marked optimized out, and will not generate
 	// any operations.
@@ -85,7 +85,7 @@ func New(initial scpb.State) (*Graph, error) {
 		targetIdxMap:        map[*scpb.Target]int{},
 		opEdgesFrom:         map[*scpb.Node]*OpEdge{},
 		optimizedOutOpEdges: map[*OpEdge]bool{},
-		opToNode:            map[scop.Op]*scpb.Node{},
+		opToOpEdge:          map[scop.Op]*OpEdge{},
 		entities:            db,
 		statements:          initial.Statements,
 		authorization:       initial.Authorization,
@@ -122,7 +122,7 @@ func (g *Graph) ShallowClone() *Graph {
 		opEdgesFrom:         g.opEdgesFrom,
 		depEdgesFrom:        g.depEdgesFrom,
 		depEdgesTo:          g.depEdgesTo,
-		opToNode:            g.opToNode,
+		opToOpEdge:          g.opToOpEdge,
 		edges:               g.edges,
 		entities:            g.entities,
 		optimizedOutOpEdges: make(map[*OpEdge]bool),
@@ -217,14 +217,14 @@ func (g *Graph) AddOpEdges(
 	g.opEdgesFrom[oe.from] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
-		g.opToNode[op] = oe.To()
+		g.opToOpEdge[op] = oe
 	}
 	return nil
 }
 
-// GetNodeFromOp Gets an Edge from a given op.
-func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
-	return g.opToNode[op]
+// GetOpEdgeFromOp Gets an OpEdge from a given op.
+func (g *Graph) GetOpEdgeFromOp(op scop.Op) *OpEdge {
+	return g.opToOpEdge[op]
 }
 
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets

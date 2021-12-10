@@ -91,12 +91,12 @@ func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 	p.Graph = optimizedGraph
 
 	p.stages = scstage.BuildStages(initial, params.ExecutionPhase, optimizedGraph)
-	if err = scstage.ValidateStages(p.stages); err != nil {
+	if err = scstage.ValidateStages(p.stages, p.Graph); err != nil {
 		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid basic execution plan"))
 	}
 	p.stages = scstage.CollapseStages(p.stages)
 	p.stages, p.JobID = scstage.AugmentStagesForJob(p.stages, params.ExecutionPhase, params.JobIDGenerator)
-	if err = scstage.ValidateStages(p.stages); err != nil {
+	if err = scstage.ValidateStages(p.stages, p.Graph); err != nil {
 		return p, errors.WithAssertionFailure(errors.Wrapf(err, "invalid improved execution plan"))
 	}
 	return p, nil

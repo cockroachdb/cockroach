@@ -13,8 +13,10 @@ package scstage
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -65,7 +67,7 @@ func decorateStages(stages []Stage) []Stage {
 }
 
 // ValidateStages checks that the plan is valid.
-func ValidateStages(stages []Stage) error {
+func ValidateStages(stages []Stage, g *scgraph.Graph) error {
 	if len(stages) == 0 {
 		return nil
 	}
@@ -108,9 +110,9 @@ func ValidateStages(stages []Stage) error {
 		}
 	}
 
-	// Check that revertibility is monotonically decreasing.
 	revertibleAllowed := true
 	for _, stage := range stages {
+		// Check that revertibility is monotonically decreasing.
 		if !stage.Revertible {
 			revertibleAllowed = false
 		}
@@ -118,6 +120,86 @@ func ValidateStages(stages []Stage) error {
 			return errors.Errorf("%s: preceded by non-revertible stage",
 				stage.String())
 		}
+
+		// Check stage internal consistency.
+		if err := validateStage(stage, g); err != nil {
+			return errors.Wrapf(err, "%s", stage.String())
+		}
 	}
+	return nil
+}
+
+func validateStage(stage Stage, g *scgraph.Graph) error {
+	// Transform the ops in a non-repeating sequence of their original op edges.
+	var queue []*scgraph.OpEdge
+	if stage.Ops != nil {
+		for _, op := range stage.Ops.Slice() {
+			oe := g.GetOpEdgeFromOp(op)
+			if oe == nil {
+				continue
+			}
+			if len(queue) == 0 || queue[len(queue)-1] != oe {
+				queue = append(queue, oe)
+			}
+		}
+	}
+
+	// Check that the precedence constraints are satisfied by walking from the
+	// initial state towards the final state of the stage.
+	fulfilled := map[*scpb.Node]bool{}
+	current := append([]*scpb.Node{}, stage.Before.Nodes...)
+	for _, n := range current {
+		fulfilled[n] = true
+	}
+	// Outer loop of our state machine which attempts to progress towards the
+	// final state.
+	for hasProgressed := true; hasProgressed; {
+		hasProgressed = false
+		// Try to make progress for each target.
+		for i, n := range current {
+			if n.Status == stage.After.Nodes[i].Status {
+				// We're done for this target.
+				continue
+			}
+			oe, ok := g.GetOpEdgeFrom(n)
+			if !ok {
+				// This shouldn't happen.
+				return errors.Errorf("%s: cannot find op-edge path from %s to %s",
+					stage, screl.NodeString(stage.Before.Nodes[i]), screl.NodeString(stage.After.Nodes[i]))
+			}
+
+			// Prevent making progress on this target if there are unmet dependencies.
+			var hasUnmetDeps bool
+			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph.DepEdge) error {
+				hasUnmetDeps = hasUnmetDeps || !fulfilled[de.From()]
+				return nil
+			}); err != nil {
+				return err
+			}
+			if hasUnmetDeps {
+				continue
+			}
+
+			// Prevent making progress on this target unless this op edge has been
+			// optimized away or is the next in the queue.
+			if len(queue) > 0 && oe == queue[0] {
+				queue = queue[1:]
+			} else if !g.IsOpEdgeOptimizedOut(oe) {
+				continue
+			}
+
+			current[i] = oe.To()
+			fulfilled[oe.To()] = true
+			hasProgressed = true
+		}
+	}
+	// When we stop making progress we expect to have reached the After state.
+	for i, n := range current {
+		if n != stage.After.Nodes[i] {
+			return errors.Errorf("%s: internal inconsistency, expected %s after walking the graph in direction %s, ended in %s",
+				stage, screl.NodeString(stage.After.Nodes[i]), n.Direction.String(), n.Status)
+		}
+	}
+
 	return nil
 }
