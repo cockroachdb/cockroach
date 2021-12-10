@@ -1019,6 +1019,9 @@ service Admin {
 
   // SendKVBatch proxies the given BatchRequest into KV, returning the
   // response. It is used by the CLI `debug send-kv-batch` command.
+  //
+  // Callers must check the BatchResponse's Error field before interpreting
+  // the response as a success.
   rpc SendKVBatch(roachpb.BatchRequest) returns (roachpb.BatchResponse) {
   }
 }

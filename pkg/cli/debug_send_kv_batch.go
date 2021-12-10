@@ -124,6 +124,13 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(err, "failed to format BatchResponse as JSON")
 	}
 	fmt.Printf("%s\n", brJSON)
+	if br.Error != nil {
+		// If there's a KV-level error, it will be in br.Error. We made sure to
+		// marshal it above (so that we can get the structured error out if needed)
+		// but we still want to fail the invocation (which in particular renders
+		// the error).
+		return br.Error.GoError()
+	}
 
 	return nil
 }
