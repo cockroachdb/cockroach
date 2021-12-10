@@ -289,7 +289,8 @@ CREATE TABLE crdb_internal.create_type_statements (
    descriptor_id INT8 NULL,
    descriptor_name STRING NULL,
    create_statement STRING NULL,
-   enum_members STRING[] NULL
+   enum_members STRING[] NULL,
+   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
 )  CREATE TABLE crdb_internal.create_type_statements (
    database_id INT8 NULL,
    database_name STRING NULL,
@@ -297,7 +298,8 @@ CREATE TABLE crdb_internal.create_type_statements (
    descriptor_id INT8 NULL,
    descriptor_name STRING NULL,
    create_statement STRING NULL,
-   enum_members STRING[] NULL
+   enum_members STRING[] NULL,
+   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
 )  {}  {}
 CREATE TABLE crdb_internal.cross_db_references (
    object_database STRING NOT NULL,

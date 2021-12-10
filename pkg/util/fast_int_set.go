@@ -14,10 +14,12 @@
 package util
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"math/bits"
 
+	"github.com/cockroachdb/errors"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -57,13 +59,15 @@ func (s *FastIntSet) toLarge() *intsets.Sparse {
 	return large
 }
 
-// Returns the bit encoded set from 0 to 63, and a flag that indicates whether
-// there are elements outside this range.
-func (s *FastIntSet) largeToSmall() (small uint64, otherValues bool) {
+// fitsInSmall returns whether all elements in this set are between 0 and
+// smallCutoff.
+func (s *FastIntSet) fitsInSmall() bool {
 	if s.large == nil {
-		panic("set not large")
+		return true
 	}
-	return s.small, s.large.Min() < 0 || s.large.Max() >= smallCutoff
+	// It is possible that we have a large set allocated but all elements still
+	// fit the cutoff. This can happen if the set used to contain other elements.
+	return s.large.Min() >= 0 && s.large.Max() < smallCutoff
 }
 
 // Add adds a value to the set. No-op if the value is already in the set. If the
@@ -139,11 +143,10 @@ func (s FastIntSet) Len() int {
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
 func (s FastIntSet) Next(startVal int) (int, bool) {
-	if startVal < smallCutoff {
-		if startVal < 0 {
-			startVal = 0
-		}
-
+	if startVal < 0 && s.large == nil {
+		startVal = 0
+	}
+	if startVal >= 0 && startVal < smallCutoff {
 		if ntz := bits.TrailingZeros64(s.small >> uint64(startVal)); ntz < 64 {
 			return startVal + ntz, true
 		}
@@ -290,125 +293,93 @@ func (s FastIntSet) Difference(rhs FastIntSet) FastIntSet {
 
 // Equals returns true if the two sets are identical.
 func (s FastIntSet) Equals(rhs FastIntSet) bool {
-	if s.large == nil && rhs.large == nil {
-		return s.small == rhs.small
+	if s.small != rhs.small {
+		return false
 	}
-	if s.large != nil && rhs.large != nil {
-		return s.large.Equals(rhs.large)
+	if s.fitsInSmall() {
+		// We already know that the `small` fields are equal. We just have to make
+		// sure that the other set also has no large elements.
+		return rhs.fitsInSmall()
 	}
-	// One set is "large" and one is "small". They might still be equal (the large
-	// set could have had a large element added and then removed).
-	var extraVals bool
-	s1 := s.small
-	s2 := rhs.small
-	if s.large != nil {
-		s1, extraVals = s.largeToSmall()
-	} else {
-		s2, extraVals = rhs.largeToSmall()
-	}
-	return !extraVals && s1 == s2
+	// We know that s has large elements.
+	return rhs.large != nil && s.large.Equals(rhs.large)
 }
 
 // SubsetOf returns true if rhs contains all the elements in s.
 func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
-	if s.large == nil {
+	if s.fitsInSmall() {
 		return (s.small & rhs.small) == s.small
 	}
-	if s.large != nil && rhs.large != nil {
+	if rhs.large != nil {
 		return s.large.SubsetOf(rhs.large)
 	}
-	// s is "large" and rhs is "small".
-	_, hasExtra := s.largeToSmall()
-	if hasExtra {
-		return false
-	}
-	// s is "large", but has no elements outside of the range [0, 63]. This can
-	// happen if elements outside of the range are removed.
-	return (s.small & rhs.small) == s.small
+	// s doesn't fit in small and rhs is "small".
+	return false
 }
 
-// Shift generates a new set which contains elements i+delta for elements i in
-// the original set.
-func (s *FastIntSet) Shift(delta int) FastIntSet {
-	if s.large == nil {
-		// Fast path.
-		if delta > 0 {
-			if bits.LeadingZeros64(s.small)-(64-smallCutoff) >= delta {
-				return FastIntSet{small: s.small << uint32(delta)}
-			}
-		} else {
-			if bits.TrailingZeros64(s.small) >= -delta {
-				return FastIntSet{small: s.small >> uint32(-delta)}
-			}
-		}
-	}
-	// Do the slow thing.
-	var result FastIntSet
-	s.ForEach(func(i int) {
-		result.Add(i + delta)
-	})
-	return result
-}
-
-// Encode the set to a Writer using binary.varint byte encoding.  A zero
-// precedes a small int containing s.small.    A non-zero first value is a
-// length and each bit encoded separately follows.
-func (s *FastIntSet) Encode(wr io.Writer) error {
-	writeUint := func(u uint64) error {
-		var buf [binary.MaxVarintLen64]byte
-		n := binary.PutUvarint(buf[:], u)
-		_, err := wr.Write(buf[:n])
-		return err
+// Encode the set and write it to a bytes.Buffer using binary.varint byte
+// encoding.
+//
+// This method cannot be used if the set contains negative elements.
+//
+// If the set has only elements in the range [0, 63], we encode a 0 followed by
+// a 64-bit bitmap. Otherwise, we encode a length followed by each element.
+//
+// WARNING: this is used by plan gists, so if this encoding changes,
+// explain.gistVersion needs to be bumped.
+func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
+	if s.large != nil && s.large.Min() < 0 {
+		return errors.AssertionFailedf("Encode used with negative elements")
 	}
 
-	if s.large == nil {
-		err := writeUint(0)
-		if err != nil {
-			return err
-		}
-		err = writeUint(s.small)
-		if err != nil {
-			return err
-		}
+	// This slice should stay on stack. We only need enough bytes to encode a 0
+	// and then an arbitrary 64-bit integer.
+	//gcassert:noescape
+	tmp := make([]byte, binary.MaxVarintLen64+1)
+
+	if s.fitsInSmall() {
+		n := binary.PutUvarint(tmp, 0)
+		n += binary.PutUvarint(tmp[n:], s.small)
+		buf.Write(tmp[:n])
 	} else {
-		err := writeUint(uint64(s.Len()))
-		if err != nil {
-			return err
-		}
+		n := binary.PutUvarint(tmp, uint64(s.Len()))
+		buf.Write(tmp[:n])
 		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
-			err := writeUint(uint64(i))
-			if err != nil {
-				return err
-			}
+			n := binary.PutUvarint(tmp, uint64(i))
+			buf.Write(tmp[:n])
 		}
 	}
 	return nil
 }
 
-// Decode does the opposite of Encode.  Upon success the contents of s
-// are overwritten.
+// Decode does the opposite of Encode. The contents of the receiver are
+// overwritten.
 func (s *FastIntSet) Decode(br io.ByteReader) error {
-	val, err := binary.ReadUvarint(br)
+	length, err := binary.ReadUvarint(br)
 	if err != nil {
 		return err
 	}
-	if val == 0 {
-		val, err = binary.ReadUvarint(br)
+	s.small = 0
+	if s.large != nil {
+		s.large.Clear()
+	}
+
+	if length == 0 {
+		// Special case: the bitmap is encoded directly.
+		val, err := binary.ReadUvarint(br)
 		if err != nil {
 			return err
 		}
 		s.small = val
 	} else {
-		// Only mutate receiver if we read everything successfully.
-		temp := FastIntSet{}
-		for i, l := 0, int(val); i < l; i++ {
-			val, err = binary.ReadUvarint(br)
+		for i := 0; i < int(length); i++ {
+			elem, err := binary.ReadUvarint(br)
 			if err != nil {
+				*s = FastIntSet{}
 				return err
 			}
-			temp.Add(int(val))
+			s.Add(int(elem))
 		}
-		*s = temp
 	}
 	return nil
 }
