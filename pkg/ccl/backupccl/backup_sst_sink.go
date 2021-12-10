@@ -17,6 +17,8 @@ import (
 	"io"
 	"sort"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -84,7 +87,24 @@ func (s *sstSink) Close() error {
 		}
 	}
 	if s.out != nil {
-		return s.out.Close()
+		return s.closeSinkWriterWithRetry()
+	}
+	return nil
+}
+
+func (s *sstSink) closeSinkWriterWithRetry() error {
+	retryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+	for r := retry.StartWithCtx(s.ctx, retryOpts); r.Next(); {
+		if err := s.out.Close(); err != nil {
+			if strings.Contains(err.Error(), "got HTTP response code 503") {
+				log.Warningf(s.ctx, "retrying Close() on receiving error %v", err)
+				continue
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -149,7 +169,7 @@ func (s *sstSink) flushFile(ctx context.Context) error {
 	if err := s.sst.Finish(); err != nil {
 		return err
 	}
-	if err := s.out.Close(); err != nil {
+	if err := s.closeSinkWriterWithRetry(); err != nil {
 		return errors.Wrap(err, "writing SST")
 	}
 	s.outName = ""
