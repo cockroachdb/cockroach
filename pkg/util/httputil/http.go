@@ -113,6 +113,7 @@ func doJSONRequest(
 	defer resp.Body.Close()
 	if contentType := resp.Header.Get(ContentTypeHeader); !(resp.StatusCode == http.StatusOK && contentType == JSONContentType) {
 		b, err := ioutil.ReadAll(resp.Body)
+		// nolint:errwrap
 		return resp, errors.Errorf(
 			"status: %s, content-type: %s, body: %s, error: %v", resp.Status, contentType, b, err,
 		)

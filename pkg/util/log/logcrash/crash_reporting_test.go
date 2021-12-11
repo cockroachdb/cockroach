@@ -45,7 +45,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 	var errWrapped1 = errors.Wrap(errFundamental, "this is reportable")
 	var errWrapped2 = errors.Wrapf(errWrapped1, "this is reportable too")
 	var errWrapped3 = errors.Wrap(errWrapped2, "this is reportable as well")
-	var errFormatted = errors.Newf("this embed an error: %v", errWrapped2)
+	var errFormatted = errors.Newf("this embed an error: %v", errWrapped2) // nolint:errwrap
 	var errWrappedSentinel = errors.Wrap(
 		errors.Wrapf(errSentinel,
 			"this is reportable"),

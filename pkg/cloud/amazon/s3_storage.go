@@ -433,9 +433,9 @@ func (s *s3Storage) openStreamAt(
 			switch aerr.Code() {
 			// Relevant 404 errors reported by AWS.
 			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				return nil, errors.WithMessagef(
+				// nolint:errwrap
+				return nil, errors.WithMessage(
 					errors.Wrap(cloud.ErrFileDoesNotExist, "s3 object does not exist"),
-					"%s",
 					err.Error(),
 				)
 			}

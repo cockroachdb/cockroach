@@ -87,13 +87,15 @@ func MaybeDecorateError(
 		}
 
 		connInsecureHint := func() error {
-			return errors.Errorf("cannot establish secure connection to insecure server.\n"+
-				"Maybe use --insecure?\n\n%v", err)
+			const format = "cannot establish secure connection to insecure server.\n" +
+				"Maybe use --insecure?\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		connRefused := func() error {
-			return errors.Errorf("server closed the connection.\n"+
-				"Is this a CockroachDB node?\n%v", err)
+			const format = "server closed the connection.\n" +
+				"Is this a CockroachDB node?\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Is this an "unable to connect" type of error?
@@ -181,7 +183,8 @@ func MaybeDecorateError(
 		}
 
 		opTimeout := func() error {
-			return errors.Errorf("operation timed out.\n\n%v", err)
+			const format = "operation timed out.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Is it a plain context cancellation (i.e. timeout)?
@@ -201,7 +204,8 @@ func MaybeDecorateError(
 			return fmt.Errorf(
 				"incompatible client and server versions (likely server version: v1.0, required: >=v1.1)")
 		} else if grpcutil.IsClosedConnection(err) {
-			return errors.Errorf("connection lost.\n\n%v", err)
+			const format = "connection lost.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Does the server require GSSAPI authentication?
