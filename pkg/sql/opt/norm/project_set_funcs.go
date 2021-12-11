@@ -122,16 +122,16 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			}
 			generator, err := function.Overload.Generator(c.f.evalCtx, tree.Datums{t.Value})
 			if err != nil {
-				panic(errors.AssertionFailedf("generator retrieval failed: %v", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator retrieval failed"))
 			}
 			if err = generator.Start(c.f.evalCtx.Context, c.f.evalCtx.Txn); err != nil {
-				panic(errors.AssertionFailedf("generator.Start failed: %v", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator.Start failed"))
 			}
 
 			for j := 0; ; j++ {
 				hasNext, err := generator.Next(c.f.evalCtx.Context)
 				if err != nil {
-					panic(errors.AssertionFailedf("generator.Next failed: %v", err))
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator.Next failed"))
 				}
 				if !hasNext {
 					break
@@ -139,7 +139,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 
 				vals, err := generator.Values()
 				if err != nil {
-					panic(errors.AssertionFailedf("failed to retrieve values: %v", err))
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve values"))
 				}
 				if len(vals) != 1 {
 					panic(errors.AssertionFailedf(

@@ -284,7 +284,7 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	if err := catalog.ValidateSelf(tableDesc); err != nil {
-		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "table descriptor is not valid\n%v\n", tableDesc)
 	}
 
 	return p.Descriptors().WriteDescToBatch(

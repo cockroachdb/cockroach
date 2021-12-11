@@ -305,8 +305,8 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		for _, colIdx := range colIdxsToCheckForEquality {
 			match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.pspec.ResultTypes[colIdx])
 			if err != nil {
-				return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
-					expStrRow, retStrRow, err.Error())
+				return errors.Wrapf(err, "error while parsing datum in rows\n%v\n%v\n",
+					expStrRow, retStrRow)
 			}
 			if !match {
 				return errors.Errorf(
