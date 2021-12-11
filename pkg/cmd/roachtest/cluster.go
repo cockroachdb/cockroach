@@ -818,6 +818,15 @@ func createFlagsOverride(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 	}
 }
 
+// clusterMock creates a cluster to be used for (self) testing.
+func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
+	return &clusterImpl{
+		name:       f.genName(cfg),
+		expiration: timeutil.Now().Add(24 * time.Hour),
+		r:          f.r,
+	}
+}
+
 // newCluster creates a new roachprod cluster.
 //
 // setStatus is called with status messages indicating the stage of cluster
@@ -836,12 +845,8 @@ func (f *clusterFactory) newCluster(
 	}
 
 	if cfg.spec.NodeCount == 0 {
-		// For tests. Return the minimum that makes them happy.
-		c := &clusterImpl{
-			name:       f.genName(cfg),
-			expiration: timeutil.Now().Add(24 * time.Hour),
-			r:          f.r,
-		}
+		// For tests, use a mock cluster.
+		c := f.clusterMock(cfg)
 		if err := f.r.registerCluster(c); err != nil {
 			return nil, err
 		}
@@ -1362,7 +1367,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 // crdb_internal.check_consistency(true, '', '') indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
-func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t test.Test) {
+func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) {
 	if c.spec.NodeCount < 1 {
 		return // unit tests
 	}
