@@ -74,6 +74,7 @@ go_test(
         "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/logger",
         "//pkg/testutils",
+        "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/version",
