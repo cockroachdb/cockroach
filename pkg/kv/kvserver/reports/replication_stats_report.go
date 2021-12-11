@@ -366,7 +366,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 			return false
 		})
 	if err != nil {
-		return errors.AssertionFailedf("unexpected error visiting zones for range %s: %s", r, err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error visiting zones for range %s", r)
 	}
 	v.prevZoneKey = zKey
 	v.prevNumReplicas = numReplicas
