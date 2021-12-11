@@ -339,6 +339,23 @@ var aggregates = map[string]builtinDefinition{
 		),
 	)),
 
+	"final_var_pop": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalVarPopAggregate,
+			"Calculates the population variance from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalVarPopAggregate,
+			"Calculates the population variance from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
 	"final_stddev": makePrivate(makeBuiltin(aggProps(),
 		makeAggOverload(
 			[]*types.T{types.Decimal, types.Decimal, types.Int},
@@ -352,6 +369,23 @@ var aggregates = map[string]builtinDefinition{
 			types.Float,
 			newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_stddev_pop": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalStdDevPopAggregate,
+			"Calculates the population standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalStdDevPopAggregate,
+			"Calculates the population standard deviation from the selected locally-computed squared difference values.",
 			tree.VolatilityImmutable,
 		),
 	)),
@@ -3299,6 +3333,18 @@ func newDecimalVarPopAggregate(
 	return &decimalVarPopAggregate{agg: newDecimalSqrDiff(evalCtx)}
 }
 
+func newFloatFinalVarPopAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &floatVarPopAggregate{agg: newFloatSumSqrDiffs()}
+}
+
+func newDecimalFinalVarPopAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &decimalVarPopAggregate{agg: newDecimalSumSqrDiffs(evalCtx)}
+}
+
 // Add is part of the tree.AggregateFunc interface.
 //  Population Variance: VALUE(float)
 func (a *floatVarPopAggregate) Add(
@@ -3438,6 +3484,18 @@ func newDecimalStdDevPopAggregate(
 	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalVarPopAggregate(params, evalCtx, arguments)}
+}
+
+func newDecimalFinalStdDevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &decimalStdDevAggregate{agg: newDecimalFinalVarPopAggregate(params, evalCtx, arguments)}
+}
+
+func newFloatFinalStdDevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &floatStdDevAggregate{agg: newFloatFinalVarPopAggregate(params, evalCtx, arguments)}
 }
 
 // Add implements the tree.AggregateFunc interface.

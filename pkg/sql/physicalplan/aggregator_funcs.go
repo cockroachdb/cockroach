@@ -209,6 +209,20 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 		},
 	},
 
+	execinfrapb.StddevPop: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.Sqrdiff,
+			execinfrapb.Sum,
+			execinfrapb.Count,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalStddevPop,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
 	execinfrapb.Sum: {
 		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.Sum},
 		FinalStage: []FinalStageInfo{
@@ -256,6 +270,20 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 		FinalStage: []FinalStageInfo{
 			{
 				Fn:        execinfrapb.FinalVariance,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	execinfrapb.VarPop: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.Sqrdiff,
+			execinfrapb.Sum,
+			execinfrapb.Count,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalVarPop,
 				LocalIdxs: []uint32{0, 1, 2},
 			},
 		},

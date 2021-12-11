@@ -81,40 +81,40 @@ SELECT avg(a+b+c::INT+d) FROM data
 ----
 22
 
-query RR
-SELECT sum(a), round(stddev(b), 1) FROM data
+query RRR
+SELECT sum(a), round(stddev(b), 1), round(stddev_pop(b), 1) FROM data
 ----
-55000 2.9
+55000  2.9  2.9
+
+query RRR
+SELECT sum(a), round(variance(b), 1), round(var_pop(b), 1) FROM data
+----
+55000  8.3  8.3
 
 query RR
-SELECT sum(a), round(variance(b), 1) FROM data
+SELECT stddev(a+b+c::INT+d), stddev_pop(a+b+c::INT+d) FROM data
 ----
-55000 8.3
+5.7448498962142608187  5.7445626465380286599
 
-query R
-SELECT stddev(a+b+c::INT+d) FROM data
+query RR
+SELECT variance(a+b+c::INT+d), var_pop(a+b+c::INT+d) FROM data
 ----
-5.7448498962142608187
+33.0033003300330033  33
 
-query R
-SELECT variance(a+b+c::INT+d) FROM data
+query RIRRRRRRRR
+SELECT sum(a), sum_int(a), avg(b), sum(c), avg(d), stddev(a), stddev_pop(a), variance(b), var_pop(b), sum(a+b+c::INT+d) FROM data
 ----
-33.0033003300330033
+55000  55000  5.5  55000  5.5  2.8724249481071304094  2.8722813232690143299  8.2508250825082508251  8.25  220000
 
-query RIRRRRRR
-SELECT sum(a), sum_int(a), avg(b), sum(c), avg(d), stddev(a), variance(b), sum(a+b+c::INT+d) FROM data
+query RIRIRRRRR
+SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), stddev_pop(a+b), variance(c::INT+d), var_pop(c::INT+d) FROM data
 ----
-55000 55000 5.5 55000 5.5 2.8724249481071304094 8.2508250825082508251 220000
+55000  1  10  10000  22  4.0622223185119375800  4.0620192023179801802  16.50165016501650165  16.5
 
-query RIRIRRR
-SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), variance(c::INT+d) FROM data
+query RRRRIRRRRR
+SELECT sum(a), stddev(a), stddev_pop(a), avg(a) FILTER (WHERE a > 5), count(b), avg(b), variance(b), var_pop(b) FILTER (WHERE b < 8), sum(b) FILTER (WHERE b < 8), stddev(b) FILTER (WHERE b > 2) FROM data
 ----
-55000 1 10 10000 22 4.0622223185119375800 16.50165016501650165
-
-query RRRIRRRR
-SELECT sum(a), stddev(a), avg(a) FILTER (WHERE a > 5), count(b), avg(b), variance(b) FILTER (WHERE b < 8), sum(b) FILTER (WHERE b < 8), stddev(b) FILTER (WHERE b > 2) FROM data
-----
-55000 2.8724249481071304094 8 10000 5.5 4.0005715102157451064 28000 2.2914310663953007487
+55000  2.8724249481071304094  2.8722813232690143299  8  10000  5.5  8.2508250825082508251  4  28000  2.2914310663953007487
 
 query RRR
 SELECT sum(a), avg(DISTINCT a), variance(a) FILTER (WHERE a > 0) FROM data

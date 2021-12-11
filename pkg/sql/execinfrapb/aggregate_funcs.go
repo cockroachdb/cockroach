@@ -12,25 +12,27 @@ package execinfrapb
 
 // Prettier aliases for AggregatorSpec_Func values.
 const (
-	AnyNotNull    = AggregatorSpec_ANY_NOT_NULL
-	Avg           = AggregatorSpec_AVG
-	BoolAnd       = AggregatorSpec_BOOL_AND
-	BoolOr        = AggregatorSpec_BOOL_OR
-	ConcatAgg     = AggregatorSpec_CONCAT_AGG
-	Count         = AggregatorSpec_COUNT
-	Max           = AggregatorSpec_MAX
-	Min           = AggregatorSpec_MIN
-	Stddev        = AggregatorSpec_STDDEV
-	Sum           = AggregatorSpec_SUM
-	SumInt        = AggregatorSpec_SUM_INT
-	Variance      = AggregatorSpec_VARIANCE
-	XorAgg        = AggregatorSpec_XOR_AGG
-	CountRows     = AggregatorSpec_COUNT_ROWS
-	Sqrdiff       = AggregatorSpec_SQRDIFF
-	FinalVariance = AggregatorSpec_FINAL_VARIANCE
-	FinalStddev   = AggregatorSpec_FINAL_STDDEV
-	ArrayAgg      = AggregatorSpec_ARRAY_AGG
-	JSONAgg       = AggregatorSpec_JSON_AGG
+	AnyNotNull     = AggregatorSpec_ANY_NOT_NULL
+	Avg            = AggregatorSpec_AVG
+	BoolAnd        = AggregatorSpec_BOOL_AND
+	BoolOr         = AggregatorSpec_BOOL_OR
+	ConcatAgg      = AggregatorSpec_CONCAT_AGG
+	Count          = AggregatorSpec_COUNT
+	Max            = AggregatorSpec_MAX
+	Min            = AggregatorSpec_MIN
+	Stddev         = AggregatorSpec_STDDEV
+	Sum            = AggregatorSpec_SUM
+	SumInt         = AggregatorSpec_SUM_INT
+	Variance       = AggregatorSpec_VARIANCE
+	XorAgg         = AggregatorSpec_XOR_AGG
+	CountRows      = AggregatorSpec_COUNT_ROWS
+	Sqrdiff        = AggregatorSpec_SQRDIFF
+	FinalVariance  = AggregatorSpec_FINAL_VARIANCE
+	FinalVarPop    = AggregatorSpec_FINAL_VAR_POP
+	FinalStddev    = AggregatorSpec_FINAL_STDDEV
+	FinalStddevPop = AggregatorSpec_FINAL_STDDEV_POP
+	ArrayAgg       = AggregatorSpec_ARRAY_AGG
+	JSONAgg        = AggregatorSpec_JSON_AGG
 	// JSONBAgg is an alias for JSONAgg, they do the same thing.
 	JSONBAgg           = AggregatorSpec_JSONB_AGG
 	StringAgg          = AggregatorSpec_STRING_AGG
