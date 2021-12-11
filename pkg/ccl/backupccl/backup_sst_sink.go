@@ -36,6 +36,26 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 )
 
+var (
+	targetFileSize = settings.RegisterByteSizeSetting(
+		"bulkio.backup.file_size",
+		"target file size",
+		128<<20,
+	)
+	smallFileBuffer = settings.RegisterByteSizeSetting(
+		"bulkio.backup.merge_file_buffer_size",
+		"size limit used when buffering backup files before merging them",
+		16<<20,
+		settings.NonNegativeInt,
+	)
+	smallFileMaxQueueSize = settings.RegisterIntSetting(
+		"bulkio.backup.merge_file_max_queue_size",
+		"max size of the queue when buffering backup files before merging them",
+		24,
+		settings.NonNegativeInt,
+	)
+)
+
 type sstSinkConf struct {
 	progCh   chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	enc      *roachpb.FileEncryptionOptions
@@ -69,6 +89,9 @@ type sstSink struct {
 		oooFlushes  int
 		sizeFlushes int
 		spanGrows   int
+
+		flushesBecauseOfMaxQueueSize int
+		numberOfOtherTableIDs        int
 	}
 }
 
@@ -127,6 +150,11 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 
 	s.queue = append(s.queue, resp)
 	s.queueSize += len(resp.sst)
+
+	maxSinkQueueFiles := int(smallFileMaxQueueSize.Get(s.conf.settings))
+	if len(s.queue) >= maxSinkQueueFiles {
+		s.stats.flushesBecauseOfMaxQueueSize++
+	}
 
 	if len(s.queue) >= maxSinkQueueFiles || s.queueSize >= int(smallFileBuffer.Get(s.conf.settings)) {
 		sort.Slice(s.queue, func(i, j int) bool { return s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key) < 0 })
@@ -234,6 +262,17 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 			log.VEventf(ctx, 1, "flushing backup file %s of size %d because span %s cannot append before %s",
 				s.outName, s.flushedSize, span, last,
 			)
+			_, lastTableID, _, err := keys.DecodeTableIDIndexID(last)
+			if err != nil {
+				return err
+			}
+			_, spanTableID, _, err := keys.DecodeTableIDIndexID(span.Key)
+			if err != nil {
+				return err
+			}
+			if lastTableID != spanTableID {
+				s.stats.numberOfOtherTableIDs++
+			}
 			s.stats.oooFlushes++
 			if err := s.flushFile(ctx); err != nil {
 				return err

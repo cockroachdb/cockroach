@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,14 +33,10 @@ import (
 )
 
 func generateMockSSTs(
-	t *testing.T,
-	ctx context.Context,
-	storage cloud.ExternalStorage,
-	filename string,
-	returnedSSTs chan returnedSST,
+	t *testing.T, ctx context.Context, storage cloud.ExternalStorage, returnedSSTs chan returnedSST,
 ) {
 	t.Helper()
-	reader, err := storage.ReadFile(ctx, filename)
+	reader, err := storage.ReadFile(ctx, "")
 	require.NoError(t, err)
 
 	cr := csv.NewReader(reader)
@@ -77,7 +74,6 @@ func generateMockSSTs(
 			atKeyBoundary:  false,
 			skipWrite:      true,
 		}
-		fmt.Println(retSST.f.Span.String())
 		returnedSSTs <- retSST
 	}
 }
@@ -93,47 +89,90 @@ func TestBackupSSTSinkFlushBehavior(t *testing.T) {
 	ctx, tc, sqlDB, cleanupFn := backupRestoreTestSetupEmptyWithParams(t, singleNode, baseDir, InitManualReplication, params)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SELECT crdb_internal.set_vmodule('backup_sst_sink=2');`)
+	runTest := func() {
+		server := tc.Server(0)
+		storageFactory := server.DistSQLServer().(*distsql.ServerImpl).ExternalStorageFromURI
+		storage, err := storageFactory(ctx, "nodelocal://1/csvs/default/inc", security.RootUserName())
+		require.NoError(t, err)
+		var files []string
+		require.NoError(t, storage.List(ctx, "/", "", func(f string) error {
+			files = append(files, f)
+			return nil
+		}))
 
-	server := tc.Server(0)
-	sinkConf := sstSinkConf{
-		id:       base.SQLInstanceID(1),
-		enc:      &roachpb.FileEncryptionOptions{},
-		progCh:   nil,
-		settings: &server.ClusterSettings().SV,
-	}
+		sinks := make([]*sstSink, len(files))
+		sinksCh := make([]chan returnedSST, len(files))
+		sinksStore := make([]cloud.ExternalStorage, len(files))
+		for i := range files {
+			sinkConf := sstSinkConf{
+				id:       base.SQLInstanceID(i),
+				enc:      &roachpb.FileEncryptionOptions{},
+				progCh:   nil,
+				settings: &server.ClusterSettings().SV,
+			}
 
-	storageFactory := server.DistSQLServer().(*distsql.ServerImpl).ExternalStorageFromURI
-	storage, err := storageFactory(ctx, "nodelocal://1/mocksst", security.RootUserName())
-	require.NoError(t, err)
+			storage, err := storageFactory(ctx, fmt.Sprintf("nodelocal://1/mocksst%d", i),
+				security.RootUserName())
+			require.NoError(t, err)
 
-	sink := &sstSink{conf: sinkConf, dest: storage}
-
-	defer func() {
-		err := sink.Close()
-		err = errors.CombineErrors(storage.Close(), err)
-		if err != nil {
-			log.Warningf(ctx, "failed to close backup sink(s): %+v", err)
+			sink := &sstSink{conf: sinkConf, dest: storage}
+			sinks[i] = sink
+			sinksCh[i] = make(chan returnedSST, 1)
+			sinksStore[i], err = storageFactory(ctx, fmt.Sprintf("nodelocal://1/csvs/default/inc/%s", files[i]),
+				security.RootUserName())
+			require.NoError(t, err)
 		}
-	}()
 
-	ssts := make(chan returnedSST, 1)
+		// Start generating mock SSTs.
+		grp := ctxgroup.WithContext(ctx)
+		for i := range files {
+			index := i
+			grp.GoCtx(func(ctx context.Context) error {
+				sstChan := sinksCh[index]
+				defer close(sstChan)
+				generateMockSSTs(t, ctx, sinksStore[index], sstChan)
+				return nil
+			})
+		}
 
-	// Start generating mock SSTs.
-	go func() {
-		defer close(ssts)
-		storage, err := storageFactory(ctx, "nodelocal://1/", security.RootUserName())
-		require.NoError(t, err)
-		// TODO(adityamaru): add CSV filename to read keys from.
-		generateMockSSTs(t, ctx, storage, "backuplog.csv", ssts)
-	}()
+		for i := range sinks {
+			index := i
+			grp.GoCtx(func(ctx context.Context) error {
+				sinkCh := sinksCh[index]
+				for sst := range sinkCh {
+					err := sinks[index].push(ctx, sst)
+					require.NoError(t, err)
+				}
+				require.NoError(t, sinks[index].flush(ctx))
+				err := sinks[index].Close()
+				err = errors.CombineErrors(sinksStore[index].Close(), err)
+				require.NoError(t, err)
+				return nil
+			})
+		}
 
-	for sst := range ssts {
-		err := sink.push(ctx, sst)
-		require.NoError(t, err)
+		require.NoError(t, grp.Wait())
+
+		// Print sstSink stats.
+		for _, sink := range sinks {
+			log.Info(ctx, "****NODE****\n\n")
+			log.Infof(ctx, "sink stats: %+v\n\n", sink.stats)
+		}
 	}
-	require.NoError(t, sink.flush(ctx))
 
-	// Print sstSink stats.
-	log.Infof(ctx, "sink stats: %+v", sink.stats)
+	//sqlDB.Exec(t, `SELECT crdb_internal.set_vmodule('backup_sst_sink=2');`)
+	// Try 16, 64, 256, 1024
+	for _, bufferSize := range []string{"16", "64", "256", "1024"} {
+		for _, disableMaxQueueSize := range []bool{true, false} {
+			if disableMaxQueueSize {
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_max_queue_size = '240'`)
+			} else {
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_max_queue_size = '24'`)
+			}
+
+			log.Infof(ctx, "merge_file_buffer_size  = %s MiB; max queue size disabled %t\n\n", bufferSize, disableMaxQueueSize)
+			sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '%sMiB'`, bufferSize))
+			runTest()
+		}
+	}
 }

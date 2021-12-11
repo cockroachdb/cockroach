@@ -1,0 +1,141 @@
+I211211 22:37:56.584893 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 51  merge_file_buffer_size  = 16 MiB; max queue size disabled true
+
+   [-] 55  ****NODE****
+   [-] 56  sink stats: {files:4915 flushes:0 oooFlushes:1226 sizeFlushes:0 spanGrows:6 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:222}
+   [-] 57  ****NODE****
+   [-] 58  sink stats: {files:5066 flushes:0 oooFlushes:1194 sizeFlushes:0 spanGrows:5 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:281}
+   [-] 59  ****NODE****
+   [-] 60  sink stats: {files:4777 flushes:0 oooFlushes:1175 sizeFlushes:0 spanGrows:17 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:225}
+   [-] 61  ****NODE****
+   [-] 62  sink stats: {files:4990 flushes:0 oooFlushes:1137 sizeFlushes:0 spanGrows:60 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:272}
+   [-] 63  ****NODE****
+   [-] 64  sink stats: {files:5892 flushes:0 oooFlushes:1193 sizeFlushes:0 spanGrows:5 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:230}
+   [-] 65  ****NODE****
+   [-] 66  sink stats: {files:4961 flushes:0 oooFlushes:1138 sizeFlushes:0 spanGrows:11 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:209}
+
+
+
+
+I211211 22:38:04.789301 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 68  merge_file_buffer_size  = 16 MiB; max queue size disabled false
+
+   [-] 71  ****NODE****
+   [-] 72  sink stats: {files:4915 flushes:0 oooFlushes:1226 sizeFlushes:0 spanGrows:6 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:222}
+   [-] 73  ****NODE****
+   [-] 74  sink stats: {files:5066 flushes:0 oooFlushes:1194 sizeFlushes:0 spanGrows:5 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:281}
+   [-] 75  ****NODE****
+   [-] 76  sink stats: {files:4777 flushes:0 oooFlushes:1175 sizeFlushes:0 spanGrows:17 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:225}
+   [-] 77  ****NODE****
+   [-] 78  sink stats: {files:4990 flushes:0 oooFlushes:1137 sizeFlushes:0 spanGrows:60 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:272}
+   [-] 79  ****NODE****
+   [-] 80  sink stats: {files:5892 flushes:0 oooFlushes:1193 sizeFlushes:0 spanGrows:5 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:230}
+   [-] 81  ****NODE****
+   [-] 82  sink stats: {files:4961 flushes:0 oooFlushes:1138 sizeFlushes:0 spanGrows:11 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:209}
+
+
+
+
+I211211 22:38:13.004810 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 84  merge_file_buffer_size  = 64 MiB; max queue size disabled true
+
+   [-] 87  ****NODE****
+   [-] 88  sink stats: {files:4915 flushes:0 oooFlushes:231 sizeFlushes:0 spanGrows:39 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:158}
+   [-] 89  ****NODE****
+   [-] 90  sink stats: {files:5066 flushes:0 oooFlushes:250 sizeFlushes:0 spanGrows:27 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:200}
+   [-] 91  ****NODE****
+   [-] 92  sink stats: {files:4777 flushes:0 oooFlushes:211 sizeFlushes:0 spanGrows:35 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:152}
+   [-] 93  ****NODE****
+   [-] 94  sink stats: {files:4990 flushes:0 oooFlushes:214 sizeFlushes:0 spanGrows:101 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:170}
+   [-] 95  ****NODE****
+   [-] 96  sink stats: {files:5892 flushes:0 oooFlushes:230 sizeFlushes:0 spanGrows:47 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:133}
+   [-] 97  ****NODE****
+   [-] 98  sink stats: {files:4961 flushes:0 oooFlushes:228 sizeFlushes:0 spanGrows:50 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:168}
+
+
+
+
+
+I211211 22:38:21.082196 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 100  merge_file_buffer_size  = 64 MiB; max queue size disabled false
+
+   [-] 102  ****NODE****
+   [-] 103  sink stats: {files:4915 flushes:0 oooFlushes:227 sizeFlushes:0 spanGrows:38 flushesBecauseOfMaxQueueSize:17 numberOfOtherTableIDs:159}
+   [-] 104  ****NODE****
+   [-] 105  sink stats: {files:5066 flushes:0 oooFlushes:250 sizeFlushes:0 spanGrows:27 flushesBecauseOfMaxQueueSize:16 numberOfOtherTableIDs:200}
+   [-] 106  ****NODE****
+   [-] 107  sink stats: {files:4777 flushes:0 oooFlushes:211 sizeFlushes:0 spanGrows:35 flushesBecauseOfMaxQueueSize:14 numberOfOtherTableIDs:152}
+   [-] 108  ****NODE****
+   [-] 109  sink stats: {files:4990 flushes:0 oooFlushes:214 sizeFlushes:0 spanGrows:101 flushesBecauseOfMaxQueueSize:11 numberOfOtherTableIDs:170}
+   [-] 110  ****NODE****
+   [-] 111  sink stats: {files:5892 flushes:0 oooFlushes:235 sizeFlushes:0 spanGrows:43 flushesBecauseOfMaxQueueSize:287 numberOfOtherTableIDs:129}
+   [-] 112  ****NODE****
+   [-] 113  sink stats: {files:4961 flushes:0 oooFlushes:228 sizeFlushes:0 spanGrows:50 flushesBecauseOfMaxQueueSize:19 numberOfOtherTableIDs:168}
+
+
+
+
+I211211 22:38:29.074441 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 115  merge_file_buffer_size  = 256 MiB; max queue size disabled true
+
+   [-] 118  ****NODE****
+   [-] 119  sink stats: {files:4915 flushes:0 oooFlushes:103 sizeFlushes:0 spanGrows:185 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:88}
+   [-] 120  ****NODE****
+   [-] 121  sink stats: {files:5066 flushes:0 oooFlushes:134 sizeFlushes:0 spanGrows:150 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:122}
+   [-] 122  ****NODE****
+   [-] 123  sink stats: {files:4777 flushes:0 oooFlushes:98 sizeFlushes:0 spanGrows:174 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:85}
+   [-] 124  ****NODE****
+   [-] 125  sink stats: {files:4990 flushes:0 oooFlushes:108 sizeFlushes:0 spanGrows:293 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:104}
+   [-] 126  ****NODE****
+   [-] 127  sink stats: {files:5892 flushes:0 oooFlushes:94 sizeFlushes:0 spanGrows:303 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:88}
+   [-] 128  ****NODE****
+   [-] 129  sink stats: {files:4961 flushes:0 oooFlushes:100 sizeFlushes:0 spanGrows:213 flushesBecauseOfMaxQueueSize:0 numberOfOtherTableIDs:94}
+
+
+
+
+I211211 22:38:37.811033 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 131  merge_file_buffer_size  = 256 MiB; max queue size disabled false
+
+   [-] 133  ****NODE****
+   [-] 134  sink stats: {files:4915 flushes:0 oooFlushes:249 sizeFlushes:0 spanGrows:76 flushesBecauseOfMaxQueueSize:408 numberOfOtherTableIDs:104}
+   [-] 135  ****NODE****
+   [-] 136  sink stats: {files:5066 flushes:0 oooFlushes:229 sizeFlushes:0 spanGrows:76 flushesBecauseOfMaxQueueSize:421 numberOfOtherTableIDs:117}
+   [-] 137  ****NODE****
+   [-] 138  sink stats: {files:4777 flushes:0 oooFlushes:213 sizeFlushes:0 spanGrows:74 flushesBecauseOfMaxQueueSize:397 numberOfOtherTableIDs:109}
+   [-] 139  ****NODE****
+   [-] 140  sink stats: {files:4990 flushes:0 oooFlushes:202 sizeFlushes:0 spanGrows:153 flushesBecauseOfMaxQueueSize:414 numberOfOtherTableIDs:122}
+   [-] 141  ****NODE****
+   [-] 142  sink stats: {files:5892 flushes:0 oooFlushes:334 sizeFlushes:0 spanGrows:58 flushesBecauseOfMaxQueueSize:490 numberOfOtherTableIDs:85}
+   [-] 143  ****NODE****
+   [-] 144  sink stats: {files:4961 flushes:0 oooFlushes:183 sizeFlushes:0 spanGrows:86 flushesBecauseOfMaxQueueSize:412 numberOfOtherTableIDs:102}
+
+
+
+
+I211211 22:38:45.806323 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 146  merge_file_buffer_size  = 1024 MiB; max queue size disabled true
+
+   [-] 148  ****NODE****
+   [-] 149  sink stats: {files:4915 flushes:0 oooFlushes:46 sizeFlushes:0 spanGrows:815 flushesBecauseOfMaxQueueSize:19 numberOfOtherTableIDs:35}
+   [-] 150  ****NODE****
+   [-] 151  sink stats: {files:5066 flushes:0 oooFlushes:72 sizeFlushes:0 spanGrows:822 flushesBecauseOfMaxQueueSize:35 numberOfOtherTableIDs:53}
+   [-] 152  ****NODE****
+   [-] 153  sink stats: {files:4777 flushes:0 oooFlushes:37 sizeFlushes:0 spanGrows:812 flushesBecauseOfMaxQueueSize:21 numberOfOtherTableIDs:34}
+   [-] 154  ****NODE****
+   [-] 155  sink stats: {files:4990 flushes:0 oooFlushes:41 sizeFlushes:0 spanGrows:870 flushesBecauseOfMaxQueueSize:11 numberOfOtherTableIDs:40}
+   [-] 156  ****NODE****
+   [-] 157  sink stats: {files:5892 flushes:0 oooFlushes:60 sizeFlushes:0 spanGrows:853 flushesBecauseOfMaxQueueSize:45 numberOfOtherTableIDs:46}
+   [-] 158  ****NODE****
+   [-] 159  sink stats: {files:4961 flushes:0 oooFlushes:62 sizeFlushes:0 spanGrows:796 flushesBecauseOfMaxQueueSize:39 numberOfOtherTableIDs:45}
+
+
+
+
+I211211 22:38:55.529882 10 ccl/backupccl/backup_sst_sink_test.go:173  [-] 161  merge_file_buffer_size  = 1024 MiB; max queue size disabled false
+
+   [-] 163  ****NODE****
+   [-] 164  sink stats: {files:4915 flushes:0 oooFlushes:249 sizeFlushes:0 spanGrows:76 flushesBecauseOfMaxQueueSize:408 numberOfOtherTableIDs:104}
+   [-] 165  ****NODE****
+   [-] 166  sink stats: {files:5066 flushes:0 oooFlushes:229 sizeFlushes:0 spanGrows:76 flushesBecauseOfMaxQueueSize:421 numberOfOtherTableIDs:117}
+   [-] 167  ****NODE****
+   [-] 168  sink stats: {files:4777 flushes:0 oooFlushes:213 sizeFlushes:0 spanGrows:74 flushesBecauseOfMaxQueueSize:397 numberOfOtherTableIDs:109}
+   [-] 169  ****NODE****
+   [-] 170  sink stats: {files:4990 flushes:0 oooFlushes:202 sizeFlushes:0 spanGrows:153 flushesBecauseOfMaxQueueSize:414 numberOfOtherTableIDs:122}
+   [-] 171  ****NODE****
+   [-] 172  sink stats: {files:5892 flushes:0 oooFlushes:334 sizeFlushes:0 spanGrows:58 flushesBecauseOfMaxQueueSize:490 numberOfOtherTableIDs:85}
+   [-] 173  ****NODE****
+   [-] 174  sink stats: {files:4961 flushes:0 oooFlushes:183 sizeFlushes:0 spanGrows:86 flushesBecauseOfMaxQueueSize:412 numberOfOtherTableIDs:102}

@@ -63,27 +63,12 @@ var (
 		time.Minute*5,
 		settings.NonNegativeDuration,
 	)
-	targetFileSize = settings.RegisterByteSizeSetting(
-		"bulkio.backup.file_size",
-		"target file size",
-		128<<20,
-	)
-	smallFileBuffer = settings.RegisterByteSizeSetting(
-		"bulkio.backup.merge_file_buffer_size",
-		"size limit used when buffering backup files before merging them",
-		16<<20,
-		settings.NonNegativeInt,
-	)
 	splitKeysOnTimestamps = settings.RegisterBoolSetting(
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
 		false,
 	)
 )
-
-// maxSinkQueueFiles is how many replies we'll queue up before flushing to allow
-// some re-ordering, unless we hit smallFileBuffer size first.
-const maxSinkQueueFiles = 24
 
 const backupProcessorName = "backupDataProcessor"
 
