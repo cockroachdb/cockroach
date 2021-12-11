@@ -1307,13 +1307,13 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	}
 	if c.expClose {
 		if sendErr == nil || !grpcutil.IsClosedConnection(sendErr) {
-			newErr := errors.Newf("expected closed connection, found %v", sendErr)
+			newErr := errors.Newf("expected closed connection, found %v", sendErr /* nolint:errwrap */)
 			log.Infof(ctx, "%+v", newErr)
 			return newErr
 		}
 	} else {
 		if sendErr != nil {
-			newErr := errors.Newf("expected unclosed connection, found %v", sendErr)
+			newErr := errors.Newf("expected unclosed connection, found %v", sendErr /* nolint:errwrap */)
 			log.Infof(ctx, "%+v", newErr)
 			return newErr
 		}

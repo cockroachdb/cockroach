@@ -87,7 +87,7 @@ func doTestDrain(tt *testing.T) {
 		if grpcutil.IsClosedConnection(err) {
 			return nil
 		}
-		return errors.Newf("server not yet refusing RPC, got %v", err)
+		return errors.Newf("server not yet refusing RPC, got %v", err /* nolint:errwrap */)
 	})
 }
 
