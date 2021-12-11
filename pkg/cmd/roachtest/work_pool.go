@@ -172,6 +172,9 @@ func (p *workPool) selectTestForCluster(
 // If multiple tests are eligible to run, one with the most runs left is chosen.
 // TODO(andrei): We could be smarter in guessing what kind of cluster is best to
 // allocate.
+//
+// ensures:  !testToRunRes.noWork || error == nil
+//
 func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testToRunRes, error) {
 	var ttr testToRunRes
 	alloc, err := qp.AcquireFunc(ctx, func(ctx context.Context, pi quotapool.PoolInfo) (uint64, error) {
