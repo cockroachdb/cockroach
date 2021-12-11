@@ -289,7 +289,7 @@ func createZoneConfigKV(
 ) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
-		panic(errors.AssertionFailedf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not marshal ZoneConfig for ID: %d", keyID))
 	}
 	return roachpb.KeyValue{
 		Key:   codec.ZoneKey(uint32(keyID)),

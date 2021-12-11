@@ -124,7 +124,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 
 	for _, notice := range r.buffer.notices {
 		if err := r.conn.bufferNotice(ctx, notice); err != nil {
-			panic(errors.AssertionFailedf("unexpected err when sending notice: %s", err))
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err when sending notice"))
 		}
 	}
 
@@ -134,7 +134,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 			paramStatusUpdate.val,
 		); err != nil {
 			panic(
-				errors.AssertionFailedf("unexpected err when sending parameter status update: %s", err),
+				errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err when sending parameter status update"),
 			)
 		}
 	}
@@ -194,8 +194,7 @@ func (r *commandResult) SetError(err error) {
 func (r *commandResult) addInternal(bufferData func()) error {
 	r.assertNotReleased()
 	if r.err != nil {
-		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
-			r.err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(r.err, "can't call AddRow after having set error"))
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if err := r.conn.GetErr(); err != nil {
