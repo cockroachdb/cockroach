@@ -760,7 +760,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
 			if err != nil {
 				colexecerror.InternalError(
-					errors.AssertionFailedf("unable to set decimal %f: %v", floatVal, err))
+					errors.NewAssertionErrorWithWrappedErrf(err, "unable to set decimal %f", floatVal))
 			}
 			// .Set is used here instead of assignment to ensure the pointer address
 			// of the underlying storage for apd.Decimal remains the same. This can
@@ -777,7 +777,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			j, err = json.ParseJSON(s)
 			if err != nil {
 				colexecerror.InternalError(
-					errors.AssertionFailedf("unable to set json %s: %v", s, err))
+					errors.NewAssertionErrorWithWrappedErrf(err, "unable to set json %s", s))
 			}
 		}
 		vec.JSON().Set(idx, j)
@@ -991,7 +991,7 @@ func (s *opTestInput) Next() coldata.Batch {
 						d := apd.Decimal{}
 						_, err := d.SetFloat64(rng.Float64())
 						if err != nil {
-							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+							colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "error setting float"))
 						}
 						col.Index(outputIdx).Set(reflect.ValueOf(d))
 					case types.BytesFamily:
@@ -1003,7 +1003,7 @@ func (s *opTestInput) Next() coldata.Batch {
 					case types.JsonFamily:
 						j, err := json.Random(20, rng)
 						if err != nil {
-							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+							colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "error creating json"))
 						}
 						setColVal(vec, outputIdx, j, s.evalCtx)
 					case types.TimestampTZFamily:
