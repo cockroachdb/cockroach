@@ -25,7 +25,7 @@ import (
 // isolation from conflicting transactions to the lockSpans set.
 type DeclareKeysFunc func(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	request roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 )

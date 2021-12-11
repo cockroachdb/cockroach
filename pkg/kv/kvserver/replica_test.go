@@ -2639,7 +2639,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	cmd, _ := batcheval.LookupCommand(roachpb.EndTxn)
 	cmd.DeclareKeys(
 		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("e")},
-		roachpb.Header{},
+		&roachpb.Header{},
 		&roachpb.EndTxnRequest{
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
@@ -8286,7 +8286,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(tc.repl.Desc(), roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
+			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {
