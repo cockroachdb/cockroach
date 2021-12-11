@@ -1163,7 +1163,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// Make sure this replica has not inadvertently quiesced. We need the
 		// replica ticking so that it campaigns.
 		if otherRepl.IsQuiescent() {
-			otherRepl.UnquiesceAndWakeLeader()
+			otherRepl.MaybeUnquiesceAndWakeLeader()
 		}
 		lead := otherRepl.RaftStatus().Lead
 		if lead == raft.None {
@@ -3654,7 +3654,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 		} else if replica != nil {
 			// Make sure the replica is unquiesced so that it will tick and
 			// contact the leader to discover it's no longer part of the range.
-			replica.UnquiesceAndWakeLeader()
+			replica.MaybeUnquiesceAndWakeLeader()
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})

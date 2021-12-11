@@ -310,8 +310,9 @@ type Replica struct {
 		//
 		// Replica objects always begin life in a quiescent state, as the field is
 		// set to true in the Replica constructor newUnloadedReplica. They unquiesce
-		// and set the field to false in either unquiesceAndWakeLeaderLocked or
-		// unquiesceWithOptionsLocked, which are called in response to Raft traffic.
+		// and set the field to false in either maybeUnquiesceAndWakeLeaderLocked or
+		// maybeUnquiesceWithOptionsLocked, which are called in response to Raft
+		// traffic.
 		//
 		// Only initialized replicas that have a non-nil internalRaftGroup are
 		// allowed to unquiesce and be Tick()'d. See canUnquiesceRLocked for an
@@ -1702,7 +1703,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
-	r.unquiesceLocked()
+	r.maybeUnquiesceLocked()
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
