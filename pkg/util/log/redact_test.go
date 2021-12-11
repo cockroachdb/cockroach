@@ -71,7 +71,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 	Errorf(context.Background(), "test3e %v end",
 		errors.AssertionFailedf("hello %v",
-			errors.Newf("error-in-error %s", "world")))
+			errors.Newf("error-in-error %s", "world"))) // nolint:errwrap
 	if !contains(redactableIndicator+" [-] 4  test3e", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}

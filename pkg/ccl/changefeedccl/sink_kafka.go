@@ -581,7 +581,7 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		if dialConfig.clientCert != nil && dialConfig.clientKey != nil {
 			cert, err := tls.X509KeyPair(dialConfig.clientCert, dialConfig.clientKey)
 			if err != nil {
-				return nil, errors.Errorf(`invalid client certificate data provided: %s`, err)
+				return nil, errors.Wrap(err, `invalid client certificate data provided`)
 			}
 			config.Net.TLS.Config.Certificates = []tls.Certificate{cert}
 		}

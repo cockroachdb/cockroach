@@ -421,7 +421,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 	}
 	err := protoutil.Unmarshal(p.curValue, &p.meta)
 	if err != nil {
-		p.err = errors.Errorf("unable to decode MVCCMetadata: %s", err)
+		p.err = errors.Wrap(err, "unable to decode MVCCMetadata")
 		return false
 	}
 	if len(p.meta.RawBytes) != 0 {

@@ -355,7 +355,7 @@ func (w *worker) run(ctx context.Context) error {
 		defer rows.Close()
 	}
 	if err != nil {
-		return errors.Errorf("[q%d]: %s", queryNum, err)
+		return errors.Wrapf(err, "[q%d]", queryNum)
 	}
 	var numRows int
 	// NOTE: we should *NOT* return an error from this function right away
@@ -366,7 +366,7 @@ func (w *worker) run(ctx context.Context) error {
 			if w.config.enableChecks {
 				if _, checkOnlyRowCount := numExpectedRowsByQueryNumber[queryNum]; !checkOnlyRowCount {
 					if err = rows.Scan(vals[:numColsByQueryNumber[queryNum]]...); err != nil {
-						return errors.Errorf("[q%d]: %s", queryNum, err)
+						return errors.Wrapf(err, "[q%d]", queryNum)
 					}
 
 					expectedRow := expectedRowsByQueryNumber[queryNum][numRows]
@@ -451,7 +451,7 @@ func (w *worker) run(ctx context.Context) error {
 	// We first check whether there is any error that came from the server (for
 	// example, an out of memory error). If there is, we return it.
 	if err := rows.Err(); err != nil {
-		return errors.Errorf("[q%d]: %s", queryNum, err)
+		return errors.Wrapf(err, "[q%d]", queryNum)
 	}
 	// Now we check whether there was an error while consuming the rows.
 	if expectedOutputError != nil {

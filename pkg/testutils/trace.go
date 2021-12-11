@@ -36,7 +36,7 @@ func MatchInOrder(s string, res ...string) error {
 		reStr := "(?ms)" + res[i]
 		re, err := regexp.Compile(reStr)
 		if err != nil {
-			return errors.Errorf("regexp %d (%q) does not compile: %s", i, reStr, err)
+			return errors.Wrapf(err, "regexp %d (%q) does not compile", i, reStr)
 		}
 		loc := re.FindStringIndex(s[sPos:])
 		if loc == nil {
