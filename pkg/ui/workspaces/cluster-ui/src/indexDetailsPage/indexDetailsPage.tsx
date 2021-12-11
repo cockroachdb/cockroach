@@ -157,7 +157,7 @@ export class IndexDetailsPage extends React.Component<
             <div className={cx("reset-info")}>
               <Tooltip
                 placement="bottom"
-                title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset index stats’ will reset index stats for the entire cluster."
+                title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster."
               >
                 <div className={cx("last-reset", "underline")}>
                   Last reset:{" "}
@@ -174,7 +174,7 @@ export class IndexDetailsPage extends React.Component<
                     )
                   }
                 >
-                  Reset index stats
+                  Reset all index stats
                 </a>
               </div>
             </div>
