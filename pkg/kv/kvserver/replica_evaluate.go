@@ -544,41 +544,45 @@ func canDoServersideRetry(
 			deadline = et.Deadline
 		}
 	}
-	var newTimestamp hlc.Timestamp
 
-	if pErr != nil {
-		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.WriteTooOldError:
-			// Locking scans hit WriteTooOld errors if they encounter values at
-			// timestamps higher than their read timestamps. The encountered
-			// timestamps are guaranteed to be greater than the txn's read
-			// timestamp, but not its write timestamp. So, when determining what
-			// the new timestamp should be, we make sure to not regress the
-			// txn's write timestamp.
-			newTimestamp = tErr.ActualTimestamp
-			if ba.Txn != nil {
-				newTimestamp.Forward(pErr.GetTxn().WriteTimestamp)
-			}
-		case *roachpb.TransactionRetryError:
-			if ba.Txn == nil {
-				// TODO(andrei): I don't know if TransactionRetryError is possible for
-				// non-transactional batches, but some tests inject them for 1PC
-				// transactions. I'm not sure how to deal with them, so let's not retry.
+	var newTimestamp hlc.Timestamp
+	if ba.Txn != nil {
+		if pErr != nil {
+			// TODO(nvanbenschoten): This is intentionally not allowing server-side
+			// refreshes of ReadWithinUncertaintyIntervalErrors for now, even though
+			// that is the eventual goal here. Lifting that limitation will likely
+			// need to be accompanied by an above-latching retry loop, because read
+			// latches will usually prevent below-latch retries of
+			// ReadWithinUncertaintyIntervalErrors. See the comment in
+			// tryBumpBatchTimestamp.
+			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 				return false
 			}
-			newTimestamp = pErr.GetTxn().WriteTimestamp
-		default:
-			// TODO(andrei): Handle other retriable errors too.
-			return false
+
+			var ok bool
+			ok, newTimestamp = roachpb.TransactionRefreshTimestamp(pErr)
+			if !ok {
+				return false
+			}
+		} else {
+			if !br.Txn.WriteTooOld {
+				log.Fatalf(ctx, "expected the WriteTooOld flag to be set")
+			}
+			newTimestamp = br.Txn.WriteTimestamp
 		}
 	} else {
-		if !br.Txn.WriteTooOld {
-			log.Fatalf(ctx, "programming error: expected the WriteTooOld flag to be set")
+		if pErr == nil {
+			log.Fatalf(ctx, "canDoServersideRetry called for non-txn request without error")
 		}
-		newTimestamp = br.Txn.WriteTimestamp
+		switch tErr := pErr.GetDetail().(type) {
+		case *roachpb.WriteTooOldError:
+			newTimestamp = tErr.ActualTimestamp
+		default:
+			return false
+		}
 	}
 
-	if deadline != nil && deadline.LessEq(newTimestamp) {
+	if batcheval.IsEndTxnExceedingDeadline(newTimestamp, deadline) {
 		return false
 	}
 	return tryBumpBatchTimestamp(ctx, ba, newTimestamp, latchSpans)

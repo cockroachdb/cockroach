@@ -295,11 +295,18 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Check for an error which can be retried after updating spans.
-	canRefreshTxn, refreshTxn := roachpb.CanTransactionRefresh(ctx, pErr)
-	if !canRefreshTxn || !sr.canAutoRetry {
+	txn := pErr.GetTxn()
+	if txn == nil || !sr.canForwardReadTimestamp(txn) {
 		return nil, pErr
 	}
+	// Check for an error which can be refreshed away to avoid a client-side
+	// transaction restart.
+	ok, refreshTS := roachpb.TransactionRefreshTimestamp(pErr)
+	if !ok {
+		return nil, pErr
+	}
+	refreshTxn := txn.Clone()
+	refreshTxn.Refresh(refreshTS)
 	log.VEventf(ctx, 2, "trying to refresh to %s because of %s", refreshTxn.ReadTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
@@ -445,10 +452,14 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 		return ba, nil
 	}
 
-	canRefreshTxn, refreshTxn := roachpb.PrepareTransactionForRefresh(ba.Txn, ba.Txn.WriteTimestamp)
-	if !canRefreshTxn || !sr.canAutoRetry {
-		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+	// If the transaction cannot change its read timestamp, no refresh is
+	// possible.
+	if !sr.canForwardReadTimestamp(ba.Txn) {
+		return ba, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
 	}
+
+	refreshTxn := ba.Txn.Clone()
+	refreshTxn.Refresh(ba.Txn.WriteTimestamp)
 	log.VEventf(ctx, 2, "preemptively refreshing to timestamp %s before issuing %s",
 		refreshTxn.ReadTimestamp, ba)
 
@@ -477,6 +488,9 @@ func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.E
 // than sr.refreshedTimestamp. All implicated timestamp caches are updated with
 // the final transaction timestamp. Returns whether the refresh was successful
 // or not.
+//
+// The provided transaction should be a Clone() of the original transaction with
+// its ReadTimestamp adjusted by the Refresh() method.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
 ) (ok bool) {
@@ -571,6 +585,15 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 }
 
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can
+// forward its read timestamp after refreshing all the reads that has performed
+// to this point. This requires that the transaction's timestamp has not leaked.
+// It also requires that the txnSpanRefresher has been configured to allow
+// auto-retries.
+func (sr *txnSpanRefresher) canForwardReadTimestamp(txn *roachpb.Transaction) bool {
+	return sr.canAutoRetry && !txn.CommitTimestampFixed
+}
+
+// canForwardReadTimestampWithoutRefresh returns whether the transaction can
 // forward its read timestamp without refreshing any read spans. This allows for
 // the "server-side refresh" optimization, where batches are re-evaluated at a
 // higher read-timestamp without returning to transaction coordinator.
@@ -581,9 +604,9 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 // is required.
 //
 // Note that when deciding whether a transaction can be bumped to a particular
-// timestamp, the transaction's deadling must also be taken into account.
+// timestamp, the transaction's deadline must also be taken into account.
 func (sr *txnSpanRefresher) canForwardReadTimestampWithoutRefresh(txn *roachpb.Transaction) bool {
-	return sr.canAutoRetry && !sr.refreshInvalid && sr.refreshFootprint.empty() && !txn.CommitTimestampFixed
+	return sr.canForwardReadTimestamp(txn) && !sr.refreshInvalid && sr.refreshFootprint.empty()
 }
 
 // forwardRefreshTimestampOnResponse updates the refresher's tracked
