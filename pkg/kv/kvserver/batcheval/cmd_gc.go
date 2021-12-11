@@ -27,7 +27,7 @@ func init() {
 
 func declareKeysGC(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 ) {

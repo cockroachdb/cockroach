@@ -27,7 +27,7 @@ func init() {
 }
 
 func declareKeysQueryTransaction(
-	_ ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState, _ *roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	qr := req.(*roachpb.QueryTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
