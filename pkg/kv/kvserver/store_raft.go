@@ -561,7 +561,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		lagging := r.mu.laggingFollowersOnQuiesce
 		r.mu.RUnlock()
 		if quiescent && lagging.MemberStale(l) {
-			r.unquiesce()
+			r.maybeUnquiesce()
 		}
 	})
 }

@@ -331,14 +331,14 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	delete(s.mu.uninitReplicas, rangeID)
 
 	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
-		return errors.Errorf("%s: cannot initialize replica; %s has overlapping range %s",
+		return errors.AssertionFailedf("%s: cannot initialize replica; %s has overlapping range %s",
 			s, desc, it.Desc())
 	}
 
 	// Copy of the start key needs to be set before inserting into replicasByKey.
 	lockedRepl.setStartKeyLocked(desc.StartKey)
 	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
-		return errors.Errorf("range for key %v already exists in replicasByKey btree: %+v",
+		return errors.AssertionFailedf("range for key %v already exists in replicasByKey btree: %+v",
 			it.item.key(), it)
 	}
 
@@ -361,11 +361,13 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	// handleRaftReady do it for us. The benefit is that handleRaftReady cannot
 	// make assumptions about the state of the other replicas in the range when it
 	// unquieces a replica, so when it does so, it also instructs the replica to
-	// campaign and to wake the leader (by calling unquiesceAndWakeLeaderLocked).
+	// campaign and to wake the leader (see maybeUnquiesceAndWakeLeaderLocked).
 	// We have more information here (see "This means that the other replica ..."
 	// above) and can make assumptions about the state of the other replicas in
 	// the range, so we can unquiesce without campaigning or waking the leader.
-	lockedRepl.unquiesceWithOptionsLocked(false /* campaignOnWake */)
+	if !lockedRepl.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
+		return errors.AssertionFailedf("expected replica %s to unquiesce after initialization", desc)
+	}
 
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
