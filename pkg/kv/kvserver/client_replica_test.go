@@ -2450,7 +2450,7 @@ func TestReplicaTombstone(t *testing.T) {
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		testutils.SucceedsSoon(t, func() error {
-			repl.UnquiesceAndWakeLeader()
+			repl.MaybeUnquiesceAndWakeLeader()
 			if len(sawTooOld) == 0 {
 				return errors.New("still haven't seen ReplicaTooOldError")
 			}

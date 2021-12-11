@@ -39,53 +39,57 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 	}
 }
 
-func (r *Replica) unquiesce() {
+func (r *Replica) maybeUnquiesce() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.unquiesceLocked()
+	return r.maybeUnquiesceLocked()
 }
 
-func (r *Replica) unquiesceLocked() {
-	r.unquiesceWithOptionsLocked(true /* campaignOnWake */)
+func (r *Replica) maybeUnquiesceLocked() bool {
+	return r.maybeUnquiesceWithOptionsLocked(true /* campaignOnWake */)
 }
 
-func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
-	if r.canUnquiesceRLocked() {
-		ctx := r.AnnotateCtx(context.TODO())
-		if log.V(3) {
-			log.Infof(ctx, "unquiescing %d", r.RangeID)
-		}
-		r.mu.quiescent = false
-		r.mu.laggingFollowersOnQuiesce = nil
-		r.store.unquiescedReplicas.Lock()
-		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
-		r.store.unquiescedReplicas.Unlock()
-		if campaignOnWake {
-			r.maybeCampaignOnWakeLocked(ctx)
-		}
-		// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
-		r.mu.lastUpdateTimes.updateOnUnquiesce(
-			r.mu.state.Desc.Replicas().Descriptors(), r.raftStatusRLocked().Progress, timeutil.Now(),
-		)
+func (r *Replica) maybeUnquiesceWithOptionsLocked(campaignOnWake bool) bool {
+	if !r.canUnquiesceRLocked() {
+		return false
 	}
-}
-
-func (r *Replica) unquiesceAndWakeLeaderLocked() {
-	if r.canUnquiesceRLocked() {
-		ctx := r.AnnotateCtx(context.TODO())
-		if log.V(3) {
-			log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
-		}
-		r.mu.quiescent = false
-		r.mu.laggingFollowersOnQuiesce = nil
-		r.store.unquiescedReplicas.Lock()
-		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
-		r.store.unquiescedReplicas.Unlock()
+	ctx := r.AnnotateCtx(context.TODO())
+	if log.V(3) {
+		log.Infof(ctx, "unquiescing %d", r.RangeID)
+	}
+	r.mu.quiescent = false
+	r.mu.laggingFollowersOnQuiesce = nil
+	r.store.unquiescedReplicas.Lock()
+	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+	r.store.unquiescedReplicas.Unlock()
+	if campaignOnWake {
 		r.maybeCampaignOnWakeLocked(ctx)
-		// Propose an empty command which will wake the leader.
-		data := encodeRaftCommand(raftVersionStandard, makeIDKey(), nil)
-		_ = r.mu.internalRaftGroup.Propose(data)
 	}
+	// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
+	r.mu.lastUpdateTimes.updateOnUnquiesce(
+		r.mu.state.Desc.Replicas().Descriptors(), r.raftStatusRLocked().Progress, timeutil.Now(),
+	)
+	return true
+}
+
+func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
+	if !r.canUnquiesceRLocked() {
+		return false
+	}
+	ctx := r.AnnotateCtx(context.TODO())
+	if log.V(3) {
+		log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
+	}
+	r.mu.quiescent = false
+	r.mu.laggingFollowersOnQuiesce = nil
+	r.store.unquiescedReplicas.Lock()
+	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+	r.store.unquiescedReplicas.Unlock()
+	r.maybeCampaignOnWakeLocked(ctx)
+	// Propose an empty command which will wake the leader.
+	data := encodeRaftCommand(raftVersionStandard, makeIDKey(), nil)
+	_ = r.mu.internalRaftGroup.Propose(data)
+	return true
 }
 
 func (r *Replica) canUnquiesceRLocked() bool {
@@ -417,7 +421,7 @@ func (r *Replica) quiesceAndNotifyLocked(
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
-			r.unquiesceLocked()
+			r.maybeUnquiesceLocked()
 			return false
 		}
 

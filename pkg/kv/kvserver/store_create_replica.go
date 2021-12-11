@@ -361,11 +361,13 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	// handleRaftReady do it for us. The benefit is that handleRaftReady cannot
 	// make assumptions about the state of the other replicas in the range when it
 	// unquieces a replica, so when it does so, it also instructs the replica to
-	// campaign and to wake the leader (by calling unquiesceAndWakeLeaderLocked).
+	// campaign and to wake the leader (see maybeUnquiesceAndWakeLeaderLocked).
 	// We have more information here (see "This means that the other replica ..."
 	// above) and can make assumptions about the state of the other replicas in
 	// the range, so we can unquiesce without campaigning or waking the leader.
-	lockedRepl.unquiesceWithOptionsLocked(false /* campaignOnWake */)
+	if !lockedRepl.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
+		return errors.Errorf("expected replica %s to unquiesce after initialization", desc)
+	}
 
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)

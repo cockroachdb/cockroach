@@ -452,7 +452,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// other replica is not quiesced, so we don't need to wake the leader.
 		// Note that we avoid campaigning when receiving raft messages, because
 		// we expect the originator to campaign instead.
-		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
+		r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		if req.Message.Type == raftpb.MsgSnap {
 			// Occasionally a snapshot message may arrive under an outdated term,
@@ -1546,19 +1546,18 @@ func (r *Replica) withRaftGroupLocked(
 		// stricter about validating incoming Quiesce requests) but it's good
 		// defense-in-depth.
 		//
-		// Note that unquiesceAndWakeLeaderLocked won't manage to wake up the
-		// leader since it's unknown to this replica, and at the time of writing
-		// the heuristics for campaigning are defensive (won't campaign if there
-		// is a live leaseholder). But if we are trying to unquiesce because
-		// this follower was asked to propose something, then this means that a
-		// request is going to have to wait until the leader next contacts us,
-		// or, in the worst case, an election timeout. This is not ideal - if a
-		// node holds a live lease, we should direct the client to it
-		// immediately.
+		// Note that maybeUnquiesceAndWakeLeaderLocked won't manage to wake up the
+		// leader since it's unknown to this replica, and at the time of writing the
+		// heuristics for campaigning are defensive (won't campaign if there is a
+		// live leaseholder). But if we are trying to unquiesce because this
+		// follower was asked to propose something, then this means that a request
+		// is going to have to wait until the leader next contacts us, or, in the
+		// worst case, an election timeout. This is not ideal - if a node holds a
+		// live lease, we should direct the client to it immediately.
 		unquiesce = true
 	}
 	if unquiesce {
-		r.unquiesceAndWakeLeaderLocked()
+		r.maybeUnquiesceAndWakeLeaderLocked()
 	}
 	return err
 }
