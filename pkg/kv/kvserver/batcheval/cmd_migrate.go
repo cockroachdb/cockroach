@@ -28,10 +28,7 @@ func init() {
 }
 
 func declareKeysMigrate(
-	rs ImmutableRangeState,
-	_ roachpb.Header,
-	_ roachpb.Request,
-	latchSpans, lockSpans *spanset.SpanSet,
+	rs ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// TODO(irfansharif): This will eventually grow to capture the super set of
 	// all keys accessed by all migrations defined here. That could get

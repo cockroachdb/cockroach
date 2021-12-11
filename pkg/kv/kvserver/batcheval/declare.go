@@ -22,7 +22,10 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState,
+	header *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
 ) {
 	access := spanset.SpanReadWrite
 	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
@@ -38,7 +41,7 @@ func DefaultDeclareKeys(
 // when it evaluated.
 func DefaultDeclareIsolatedKeys(
 	_ ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
@@ -73,7 +76,7 @@ func DefaultDeclareIsolatedKeys(
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
 func DeclareKeysForBatch(
-	rs ImmutableRangeState, header roachpb.Header, latchSpans *spanset.SpanSet,
+	rs ImmutableRangeState, header *roachpb.Header, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())

@@ -24,10 +24,7 @@ func init() {
 }
 
 func declareKeysBarrier(
-	rs ImmutableRangeState,
-	h roachpb.Header,
-	req roachpb.Request,
-	latchSpans, lockSpans *spanset.SpanSet,
+	_ ImmutableRangeState, _ *roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// Barrier is special-cased in the concurrency manager to *not* actually
 	// grab these latches. Instead, any conflicting latches with these are waited

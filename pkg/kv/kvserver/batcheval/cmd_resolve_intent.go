@@ -51,7 +51,7 @@ func declareKeysResolveIntentCombined(
 }
 
 func declareKeysResolveIntent(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ *roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	declareKeysResolveIntentCombined(rs, req, latchSpans)
 }
