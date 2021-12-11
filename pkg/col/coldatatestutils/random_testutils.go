@@ -216,7 +216,7 @@ func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
 	case types.DecimalFamily:
 		_, err := vec.Decimal()[i].SetFloat64(rng.Float64())
 		if err != nil {
-			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+			colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "could not set decimal"))
 		}
 	case types.IntervalFamily:
 		vec.Interval()[i] = duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63())

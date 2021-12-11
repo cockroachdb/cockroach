@@ -616,7 +616,7 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 		var count int
 		if err := db.QueryRow(
 			"SELECT count(*) FROM defaultdb.foo").Scan(&count); err != nil || count != 3 {
-			return errors.Newf("expected 3 rows, got %d (err=%+v)", count, err)
+			return errors.Newf("expected 3 rows, got %d (err=%+v)", count, err /* nolint:errwrap */)
 		}
 		return nil
 	})
