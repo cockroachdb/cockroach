@@ -391,13 +391,14 @@ func (p *pebbleMVCCScanner) init(
 		p.txnEpoch = txn.Epoch
 		p.txnSequence = txn.Sequence
 		p.txnIgnoredSeqNums = txn.IgnoredSeqNums
-
-		p.uncertainty = ui
-		// We must check uncertainty even if p.ts.Less(p.uncertainty.LocalLimit)
-		// because the local uncertainty limit cannot be applied to values with
-		// synthetic timestamps.
-		p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit)
 	}
+
+	p.uncertainty = ui
+	// We must check uncertainty even if p.ts >= local_uncertainty_limit
+	// because the local uncertainty limit cannot be applied to values with
+	// synthetic timestamps. We are only able to skip uncertainty checks if
+	// p.ts >= global_uncertainty_limit.
+	p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit)
 }
 
 // get iterates exactly once and adds one KV to the result set.
