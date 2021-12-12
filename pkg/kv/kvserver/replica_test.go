@@ -10001,23 +10001,10 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 }
 
 // TestReplicaServersideRefreshes verifies local retry logic for transactional
-// and non transactional batches. Verifies the timestamp cache is updated to
-// reflect the timestamp at which retried batches are executed.
+// and non-transactional batches.
 func TestReplicaServersideRefreshes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO(andrei): make each subtest use its own testContext so that they don't
-	// have to use distinct keys.
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
-
-	// Increment the clock so that all the transactions in the tests run at a
-	// different physical timestamp than the one used to initialize the replica's
-	// timestamp cache. This allows one of the tests to reset the logical part of
-	// the timestamp it's operating and not run into the timestamp cache.
-	tc.manualClock.Increment(1)
 
 	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
 		txn := roachpb.MakeTransaction(
@@ -10025,7 +10012,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		)
 		return &txn
 	}
-	send := func(ba roachpb.BatchRequest) (hlc.Timestamp, error) {
+	send := func(tc *testContext, ba roachpb.BatchRequest) (hlc.Timestamp, error) {
 		br, pErr := tc.Sender().Send(context.Background(), ba)
 		if pErr != nil {
 			return hlc.Timestamp{}, pErr.GoError()
@@ -10047,31 +10034,31 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 
 		return br.Timestamp, nil
 	}
-	get := func(key string) (hlc.Timestamp, error) {
+	get := func(tc *testContext, key string) (hlc.Timestamp, error) {
 		var ba roachpb.BatchRequest
 		get := getArgs(roachpb.Key(key))
 		ba.Add(&get)
-		return send(ba)
+		return send(tc, ba)
 	}
-	put := func(key, val string) (hlc.Timestamp, error) {
+	put := func(tc *testContext, key, val string) (hlc.Timestamp, error) {
 		var ba roachpb.BatchRequest
 		put := putArgs(roachpb.Key(key), []byte(val))
 		ba.Add(&put)
-		return send(ba)
+		return send(tc, ba)
 	}
 
 	testCases := []struct {
 		name    string
-		setupFn func() (hlc.Timestamp, error) // returns expected batch execution timestamp
-		batchFn func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
+		setupFn func(*testContext) (hlc.Timestamp, error) // returns expected batch execution timestamp
+		batchFn func(*testContext, hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
 		expErr  string
 	}{
 		{
 			name: "serverside-refresh of write too old on put",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("a", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				put := putArgs(roachpb.Key("a"), []byte("put2"))
@@ -10081,14 +10068,14 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		{
 			name: "serverside-refresh of write too old on cput",
-			setupFn: func() (hlc.Timestamp, error) {
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
 				// Note there are two different version of the value, but a
 				// non-txnal cput will evaluate the most recent version and
 				// avoid a condition failed error.
-				_, _ = put("b", "put1")
-				return put("b", "put2")
+				_, _ = put(tc, "b", "put1")
+				return put(tc, "b", "put2")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				cput := cPutArgs(roachpb.Key("b"), []byte("cput"), []byte("put2"))
@@ -10098,14 +10085,14 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		{
 			name: "serverside-refresh of write too old on initput",
-			setupFn: func() (hlc.Timestamp, error) {
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
 				// Note there are two different version of the value, but a
 				// non-txnal cput will evaluate the most recent version and
 				// avoid a condition failed error.
-				_, _ = put("b-iput", "put1")
-				return put("b-iput", "put2")
+				_, _ = put(tc, "b-iput", "put1")
+				return put(tc, "b-iput", "put2")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				iput := iPutArgs(roachpb.Key("b-iput"), []byte("put2"))
@@ -10121,10 +10108,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// reads and writes. Still, we should handle it correctly.
 		{
 			name: "no serverside-refresh of write too old on get and put",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("a", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
 				get := getArgs(roachpb.Key("a"))
 				put := putArgs(roachpb.Key("a"), []byte("put2"))
@@ -10135,10 +10122,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		{
 			name: "serializable push without retry",
-			setupFn: func() (hlc.Timestamp, error) {
-				return get("a")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return get(tc, "a")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				put := putArgs(roachpb.Key("a"), []byte("put2"))
@@ -10148,12 +10135,12 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// Non-1PC serializable txn cput will fail with write too old error.
 		{
-			name: "no serverside-refresh of write too old on non-1PC txn cput",
-			setupFn: func() (hlc.Timestamp, error) {
-				_, _ = put("c-cput", "put")
-				return put("c-cput", "put")
+			name: "no serverside-refresh of write too old on non-1PC txn cput with prior reads",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				_, _ = put(tc, "c-cput", "put")
+				return put(tc, "c-cput", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("c-cput", ts.Prev())
 				cput := cPutArgs(roachpb.Key("c-cput"), []byte("iput"), []byte("put"))
 				ba.Add(&cput)
@@ -10164,11 +10151,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// Non-1PC serializable txn initput will fail with write too old error.
 		{
-			name: "no serverside-refresh of write too old on non-1PC txn initput",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("c-iput", "put")
+			name: "no serverside-refresh of write too old on non-1PC txn initput with prior reads",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "c-iput", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("c-iput", ts.Prev())
 				iput := iPutArgs(roachpb.Key("c-iput"), []byte("iput"))
 				ba.Add(&iput)
@@ -10179,11 +10166,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// Non-1PC serializable txn locking scan will fail with write too old error.
 		{
-			name: "no serverside-refresh of write too old on non-1PC txn locking scan",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("c-scan", "put")
+			name: "no serverside-refresh of write too old on non-1PC txn locking scan with prior reads",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "c-scan", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("c-scan", ts.Prev())
 				scan := scanArgs(roachpb.Key("c-scan"), roachpb.Key("c-scan\x00"))
 				scan.KeyLocking = lock.Exclusive
@@ -10195,12 +10182,12 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Non-1PC serializable txn cput with CanForwardReadTimestamp set to
 		// true will succeed with write too old error.
 		{
-			name: "serverside-refresh of write too old on non-1PC txn cput without prior reads",
-			setupFn: func() (hlc.Timestamp, error) {
-				_, _ = put("c-cput", "put")
-				return put("c-cput", "put")
+			name: "serverside-refresh of write too old on non-1PC txn cput",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				_, _ = put(tc, "c-cput", "put")
+				return put(tc, "c-cput", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ba.Txn = newTxn("c-cput", ts.Prev())
 				ba.CanForwardReadTimestamp = true
@@ -10216,15 +10203,15 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// current behavior; for example since there's nothing to refresh, the
 		// request could be retried.
 		{
-			name: "serverside-refresh of write too old on non-1PC txn initput without prior reads",
-			setupFn: func() (hlc.Timestamp, error) {
+			name: "serverside-refresh of write too old on non-1PC txn initput",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
 				// Note there are two different version of the value, but a
 				// non-txnal cput will evaluate the most recent version and
 				// avoid a condition failed error.
-				_, _ = put("c-iput", "put1")
-				return put("c-iput", "put2")
+				_, _ = put(tc, "c-iput", "put1")
+				return put(tc, "c-iput", "put2")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("c-iput", ts.Prev())
 				ba.CanForwardReadTimestamp = true
 				iput := iPutArgs(roachpb.Key("c-iput"), []byte("put2"))
@@ -10237,11 +10224,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Non-1PC serializable txn locking scan with CanForwardReadTimestamp
 		// set to true will succeed with write too old error.
 		{
-			name: "serverside-refresh of write too old on non-1PC txn locking scan without prior reads",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("c-scan", "put")
+			name: "serverside-refresh of write too old on non-1PC txn locking scan",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "c-scan", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ba.Txn = newTxn("c-scan", ts.Prev())
 				ba.CanForwardReadTimestamp = true
@@ -10254,12 +10241,12 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// 1PC serializable transaction will fail instead of retrying if
 		// BatchRequest.CanForwardReadTimestamp is not true.
 		{
-			name: "no serverside-refresh of write too old on 1PC txn",
-			setupFn: func() (hlc.Timestamp, error) {
-				_, _ = put("d", "put")
-				return put("d", "put")
+			name: "no serverside-refresh of write too old on 1PC txn with prior reads",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				_, _ = put(tc, "d", "put")
+				return put(tc, "d", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("d", ts.Prev())
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
@@ -10271,12 +10258,12 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// 1PC serializable transaction will retry locally.
 		{
-			name: "serverside-refresh of write too old on 1PC txn without prior reads",
-			setupFn: func() (hlc.Timestamp, error) {
-				_, _ = put("e", "put")
-				return put("e", "put")
+			name: "serverside-refresh of write too old on 1PC txn",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				_, _ = put(tc, "e", "put")
+				return put(tc, "e", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ba.Txn = newTxn("e", ts.Prev())
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
@@ -10289,12 +10276,12 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// 1PC serializable transaction will retry locally.
 		{
-			name: "serverside-refresh of write too old on 1PC txn without prior reads",
-			setupFn: func() (hlc.Timestamp, error) {
-				_, _ = put("e", "put")
-				return put("e", "put")
+			name: "serverside-refresh of write too old on 1PC txn",
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				_, _ = put(tc, "e", "put")
+				return put(tc, "e", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ba.Txn = newTxn("e", ts.Prev())
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
@@ -10313,10 +10300,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// request or a 1PC one.
 		{
 			name: "no serverside-refresh with failed cput despite write too old errors on non-1PC txn",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("e1", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "e1", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				txn := newTxn("e1", ts.Prev())
 
 				// Send write to another key first to avoid 1PC.
@@ -10324,7 +10311,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				put := putArgs([]byte("e1-other-key"), []byte("otherput"))
 				ba.Add(&put)
 				assignSeqNumsForReqs(ba.Txn, &put)
-				if _, err := send(ba); err != nil {
+				if _, err := send(tc, ba); err != nil {
 					panic(err)
 				}
 
@@ -10349,16 +10336,16 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// generally would receive a ConditionFailedError from the CPuts.
 		{
 			name: "serverside-refresh with multiple write too old errors on non-txn request",
-			setupFn: func() (hlc.Timestamp, error) {
-				if _, err := put("f1", "put"); err != nil {
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				if _, err := put(tc, "f1", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				if _, err := put("f2", "put"); err != nil {
+				if _, err := put(tc, "f2", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				return put("f3", "put")
+				return put(tc, "f3", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				// We're going to execute before any of the writes in setupFn.
 				ts.Logical = 0
@@ -10373,19 +10360,19 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Handle multiple write too old errors in 1PC transaction.
 		{
 			name: "serverside-refresh with multiple write too old errors on 1PC txn",
-			setupFn: func() (hlc.Timestamp, error) {
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
 				// Do a couple of writes. Their timestamps are going to differ in their
 				// logical component. The batch that we're going to run in batchFn will
 				// run at a lower timestamp than all of them.
-				if _, err := put("ga1", "put"); err != nil {
+				if _, err := put(tc, "ga1", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				if _, err := put("ga2", "put"); err != nil {
+				if _, err := put(tc, "ga2", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				return put("ga3", "put")
+				return put(tc, "ga3", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				// We're going to execute before any of the writes in setupFn.
 				ts.Logical = 0
@@ -10405,20 +10392,20 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Serializable transaction will commit with forwarded timestamp if no refresh spans.
 		{
 			name: "serializable commit with forwarded timestamp",
-			setupFn: func() (hlc.Timestamp, error) {
-				if _, err := put("h", "put"); err != nil {
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				if _, err := put(tc, "h", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				return get("h")
+				return get(tc, "h")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				txn := newTxn("h", ts.Prev())
 				// Send write to another key first to avoid 1PC.
 				ba.Txn = txn
 				put := putArgs([]byte("h2"), []byte("otherput"))
 				ba.Add(&put)
 				assignSeqNumsForReqs(ba.Txn, &put)
-				if _, err := send(ba); err != nil {
+				if _, err := send(tc, ba); err != nil {
 					panic(err)
 				}
 				// Send the remainder of the transaction in another batch.
@@ -10438,10 +10425,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// using the 1PC path if no refresh spans.
 		{
 			name: "serializable commit with forwarded timestamp on 1PC txn",
-			setupFn: func() (hlc.Timestamp, error) {
-				return get("a")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return get(tc, "a")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("a", ts.Prev())
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				expTS = ts.Next()
@@ -10458,10 +10445,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// existing write timestamp.
 		{
 			name: "serverside-refresh with write too old errors during locking scan",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("lscan", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "lscan", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				// Txn with (read_ts, write_ts) = (1, 4) finds a value with
 				// `ts = 2`. Final timestamp should be `ts = 4`.
 				ba.Txn = newTxn("lscan", ts.Prev())
@@ -10479,17 +10466,17 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Serializable transaction will commit with WriteTooOld flag if no refresh spans.
 		{
 			name: "serializable commit with write-too-old flag",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("i", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "i", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				txn := newTxn("i", ts.Prev())
 				// Send write to another key first to avoid 1PC.
 				ba.Txn = txn
 				put1 := putArgs([]byte("i2"), []byte("otherput"))
 				ba.Add(&put1)
 				assignSeqNumsForReqs(ba.Txn, &put1)
-				if _, err := send(ba); err != nil {
+				if _, err := send(tc, ba); err != nil {
 					panic(err)
 				}
 				// Send the remainder of the transaction in another batch.
@@ -10510,10 +10497,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// succeed.
 		{
 			name: "no serverside-refresh of write too old on overlapping puts on non-txn request",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("j1", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "j1", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Timestamp = ts.Prev()
 				put1 := putArgs(roachpb.Key("j1"), []byte("put2"))
 				put2 := putArgs(roachpb.Key("j1"), []byte("put3"))
@@ -10525,10 +10512,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Handle overlapping writes and a write too old error in non-1PC transaction.
 		{
 			name: "serverside-refresh of write too old on overlapping puts on non-1PC txn",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("j2", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "j2", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ts = ts.Prev()
 				ba.Txn = newTxn("j2", ts)
@@ -10543,10 +10530,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Handle overlapping writes and a write too old error in 1PC transaction.
 		{
 			name: "serverside-refresh of write too old on overlapping puts on 1PC txn",
-			setupFn: func() (hlc.Timestamp, error) {
-				return put("j3", "put")
+			setupFn: func(tc *testContext) (hlc.Timestamp, error) {
+				return put(tc, "j3", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(tc *testContext, ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ts = ts.Prev()
 				ba.Txn = newTxn("j3", ts)
@@ -10568,12 +10555,23 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			ts, err := test.setupFn()
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+			tc.Start(t, stopper)
+
+			// Increment the clock so that all the transactions in the tests run at a
+			// different physical timestamp than the one used to initialize the replica's
+			// timestamp cache. This allows one of the tests to reset the logical part of
+			// the timestamp it's operating and not run into the timestamp cache.
+			tc.manualClock.Increment(1)
+
+			ts, err := test.setupFn(&tc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ba, expTS := test.batchFn(ts)
-			actualTS, err := send(ba)
+			ba, expTS := test.batchFn(&tc, ts)
+			actualTS, err := send(&tc, ba)
 			if !testutils.IsError(err, test.expErr) {
 				t.Fatalf("expected error %q; got \"%v\"", test.expErr, err)
 			}
