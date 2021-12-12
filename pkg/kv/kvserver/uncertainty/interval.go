@@ -37,6 +37,12 @@ import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 // global limit for the purposes of uncertainty, because observed timestamps do
 // not apply to values with synthetic timestamps.
 //
+// Uncertainty intervals also apply to non-transactional requests that require
+// strong consistency (single-key linearizability). These requests defer their
+// timestamp allocation to the leaseholder of their (single) range. They then
+// establish an uncertainty interval and perform any uncertainty restarts on the
+// server.
+//
 // NOTE: LocalLimit can be empty if no observed timestamp has been captured on
 // the local node. However, if it is set, it must be <= GlobalLimit.
 type Interval struct {

@@ -58,10 +58,10 @@ import (
 // cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]]
+// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -675,11 +675,15 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	opts.Uncertainty = uncertainty.Interval{
+		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
+		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+	}
 	if opts.Txn != nil {
-		opts.Uncertainty = uncertainty.Interval{
-			GlobalLimit: txn.GlobalUncertaintyLimit,
-			LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		if !opts.Uncertainty.GlobalLimit.IsEmpty() {
+			e.Fatalf("globalUncertaintyLimit arg incompatible with txn")
 		}
+		opts.Uncertainty.GlobalLimit = txn.GlobalUncertaintyLimit
 	}
 	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
 	// NB: the error is returned below. This ensures the test can
@@ -777,11 +781,15 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	opts.Uncertainty = uncertainty.Interval{
+		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
+		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+	}
 	if opts.Txn != nil {
-		opts.Uncertainty = uncertainty.Interval{
-			GlobalLimit: txn.GlobalUncertaintyLimit,
-			LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		if !opts.Uncertainty.GlobalLimit.IsEmpty() {
+			e.Fatalf("globalUncertaintyLimit arg incompatible with txn")
 		}
+		opts.Uncertainty.GlobalLimit = txn.GlobalUncertaintyLimit
 	}
 	if e.hasArg("max") {
 		var n int
