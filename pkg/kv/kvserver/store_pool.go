@@ -51,6 +51,16 @@ var FailedReservationsTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// DeclinedSnapshotTimeout specifies a duration during which the local replicate
+// queue will not consider stores which have declined a snapshot a viable
+// target.
+var DeclinedSnapshotTimeout = settings.RegisterDurationSetting(
+	"server.declined_snapshot_timeout",
+	"the amount of time to consider the store throttled for up-replication after a declined rebalance snapshot",
+	60*time.Second,
+	settings.NonNegativeDuration,
+)
+
 const timeAfterStoreSuspectSettingName = "server.time_after_store_suspect"
 
 // TimeAfterStoreSuspect measures how long we consider a store suspect since
@@ -914,6 +924,7 @@ type throttleReason int
 const (
 	_ throttleReason = iota
 	throttleFailed
+	throttleDeclined
 )
 
 // throttle informs the store pool that the given remote store declined a
@@ -937,6 +948,14 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
+				why, storeID, timeout, detail.throttledUntil)
+		}
+	case throttleDeclined:
+		timeout := DeclinedSnapshotTimeout.Get(&sp.st.SV)
+		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
+		if log.V(2) {
+			ctx := sp.AnnotateCtx(context.TODO())
+			log.Infof(ctx, "snapshot declined (%s), s%d will be throttled for %s until %s",
 				why, storeID, timeout, detail.throttledUntil)
 		}
 	default:
