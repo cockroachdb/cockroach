@@ -207,6 +207,7 @@ message SnapshotResponse {
     ACCEPTED = 1;
     APPLIED = 2;
     ERROR = 3;
+    DECLINED = 5;
     reserved 4;
   }
   Status status = 1;

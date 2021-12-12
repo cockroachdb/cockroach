@@ -2781,13 +2781,16 @@ func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
 }
 
 type fakeStorePool struct {
-	failedThrottles int
+	failedThrottles   int
+	declinedThrottles int
 }
 
-func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID roachpb.StoreID) {
+func (sp *fakeStorePool) throttle(reason throttleReason, _ string, _ roachpb.StoreID) {
 	switch reason {
 	case throttleFailed:
 		sp.failedThrottles++
+	case throttleDeclined:
+		sp.declinedThrottles++
 	default:
 		panic("unknown reason")
 	}
@@ -2836,6 +2839,25 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
+		}
+	}
+
+	// Test that a declined snapshot causes a declined throttle.
+	{
+		sp := &fakeStorePool{}
+		resp := &SnapshotResponse{
+			Status: SnapshotResponse_DECLINED,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
+		if sp.failedThrottles != 0 {
+			t.Fatalf("expected 0 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if sp.declinedThrottles != 1 {
+			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
 		}
 		if err == nil {
 			t.Fatalf("expected error, found nil")

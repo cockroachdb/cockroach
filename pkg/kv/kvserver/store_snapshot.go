@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -395,6 +395,29 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
+const readAmpSnapshotDeclineDefaultThreshold = 1000
+
+// readAmpSnapshotDeclineThreshold defines the read amplification threshold
+// beyond which all incoming rebalance snapshots will be declined by the
+// receiving store.
+var readAmpSnapshotDeclineThreshold = settings.RegisterIntSetting(
+	"kv.snapshot_decline.read_amp_threshold",
+	"when the receiving store's read amplification exceeds this threshold,"+
+		" the store will decline all incoming rebalance snapshots",
+	readAmpSnapshotDeclineDefaultThreshold,
+	settings.PositiveInt,
+)
+
+// shouldDeclineSnapshot determines whether the store should decline the
+// incoming rebalance snapshot due to poor LSM health. Note that recovery
+// snapshots are never declined.
+func (s *Store) shouldDeclineSnapshot(header *SnapshotRequest_Header) bool {
+	if header.Priority == SnapshotRequest_REBALANCE {
+		return int64(s.engine.GetMetrics().ReadAmp()) > readAmpSnapshotDeclineThreshold.Get(&s.cfg.Settings.SV)
+	}
+	return false
+}
+
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
 // to cleanup the reservation and release its resources.
 func (s *Store) reserveSnapshot(
@@ -583,6 +606,10 @@ func (s *Store) receiveSnapshot(
 			header.Type, storeID, header.State.Desc.Replicas())
 	}
 
+	if s.shouldDeclineSnapshot(header) {
+		return declineSnapshot(stream)
+	}
+
 	cleanup, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err
@@ -673,10 +700,21 @@ func (s *Store) receiveSnapshot(
 }
 
 func sendSnapshotError(stream incomingSnapshotStream, err error) error {
-	return stream.Send(&SnapshotResponse{
-		Status:  SnapshotResponse_ERROR,
-		Message: err.Error(),
-	})
+	return stream.Send(
+		&SnapshotResponse{
+			Status:  SnapshotResponse_ERROR,
+			Message: err.Error(),
+		},
+	)
+}
+
+func declineSnapshot(stream incomingSnapshotStream) error {
+	return stream.Send(
+		&SnapshotResponse{
+			Status:  SnapshotResponse_DECLINED,
+			Message: "snapshot declined due to read amplification higher than kv.snapshot_decline.read_amp_threshold",
+		},
+	)
 }
 
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
@@ -922,6 +960,11 @@ func sendSnapshot(
 	case SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
+			to, snap, resp.Message)
+	case SnapshotResponse_DECLINED:
+		// The snapshot was declined by the receiver due to poor LSM health.
+		storePool.throttle(throttleDeclined, resp.Message, to.StoreID)
+		return errors.Errorf("%s: remote couldn't accept %s with message: %s",
 			to, snap, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
