@@ -206,7 +206,7 @@ func maybeBumpReadTimestampToWriteTimestamp(
 func tryBumpBatchTimestamp(
 	ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp, latchSpans *spanset.SpanSet,
 ) bool {
-	if len(latchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) > 0 {
+	if latchSpans != nil && len(latchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) > 0 {
 		// If the batch acquired any read latches with bounded (MVCC) timestamps
 		// then we can not trivially bump the batch's timestamp without dropping
 		// and re-acquiring those latches. Doing so could allow the request to
@@ -222,27 +222,24 @@ func tryBumpBatchTimestamp(
 		// table that they should have seen or discovering replicated intents in
 		// MVCC that they should not have seen (from the perspective of the lock
 		// table's AddDiscoveredLock method).
-		//
-		// NOTE: we could consider adding a retry-loop above the latch
-		// acquisition to allow this to be retried, but given that we try not to
-		// mix read-only and read-write requests, doing so doesn't seem worth
-		// it.
 		return false
 	}
 	if ts.Less(ba.Timestamp) {
 		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
-	ba.Timestamp = ts
 	if ba.Txn == nil {
+		log.VEventf(ctx, 2, "bumping batch timestamp to %s from %s", ts, ba.Timestamp)
+		ba.Timestamp = ts
 		return true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
 		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
 			"ba.Txn.WriteTimestamp: %s", ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
-	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s)",
+	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s",
 		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	ba.Txn = ba.Txn.Clone()
 	ba.Txn.Refresh(ts)
+	ba.Timestamp = ba.Txn.ReadTimestamp
 	return true
 }

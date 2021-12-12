@@ -699,6 +699,177 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	require.IsType(t, &roachpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
 }
 
+// TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer tests a case where
+// a non-transactional request defers its timestamp allocation to a replica that
+// does not hold the lease at the time of receiving the request, but does by the
+// time that the request consults the lease. In the test, a value is written on
+// the previous leaseholder at a higher timestamp than that assigned to the non-
+// transactional request. After the lease transfer, the non-txn request is
+// required by uncertainty.ComputeInterval to forward its local uncertainty
+// limit to the new lease start time. This prevents the read from ignoring the
+// previous write, which avoids a stale read. Instead, the non-txn read hits an
+// uncertainty error, performs a server-side retry, and re-evaluates with a
+// timestamp above the write.
+//
+// This test exercises the hazard described in "reason #1" of uncertainty.D7.
+func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Inject a request filter, which intercepts the server-assigned timestamp
+	// of a non-transactional request and then blocks that request until after
+	// the lease has been transferred to the server.
+	type nonTxnGetKey struct{}
+	nonTxnOrigTsC := make(chan hlc.Timestamp, 1)
+	nonTxnBlockerC := make(chan struct{})
+	requestFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ctx.Value(nonTxnGetKey{}) != nil {
+			// Give the test the server-assigned timestamp.
+			require.NotNil(t, ba.TimestampFromServerClock)
+			nonTxnOrigTsC <- ba.Timestamp
+			// Wait for the test to give the go-ahead.
+			select {
+			case <-nonTxnBlockerC:
+			case <-ctx.Done():
+			}
+		}
+		return nil
+	}
+	var uncertaintyErrs int32
+	concurrencyRetryFilter := func(ctx context.Context, _ roachpb.BatchRequest, pErr *roachpb.Error) {
+		if ctx.Value(nonTxnGetKey{}) != nil {
+			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+				atomic.AddInt32(&uncertaintyErrs, 1)
+			}
+		}
+	}
+
+	const numNodes = 2
+	var manuals []*hlc.HybridManualClock
+	for i := 0; i < numNodes; i++ {
+		manuals = append(manuals, hlc.NewHybridManualClock())
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manuals[i].UnixNano,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter:          requestFilter,
+					TestingConcurrencyRetryFilter: concurrencyRetryFilter,
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Split off a scratch range and upreplicate to node 2.
+	key := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+	// Pause the servers' clocks going forward.
+	var maxNanos int64
+	for _, m := range manuals {
+		m.Pause()
+		if cur := m.UnixNano(); cur > maxNanos {
+			maxNanos = cur
+		}
+	}
+	// After doing so, perfectly synchronize them.
+	for _, m := range manuals {
+		m.Increment(maxNanos - m.UnixNano())
+	}
+
+	// Initiate a non-txn read on node 2. The request will be intercepted after
+	// the request has received a server-assigned timestamp, but before it has
+	// consulted the lease. We'll transfer the lease to node 2 before the request
+	// checks, so that it ends up evaluating on node 2.
+	type resp struct {
+		*roachpb.BatchResponse
+		*roachpb.Error
+	}
+	nonTxnRespC := make(chan resp, 1)
+	_ = tc.Stopper().RunAsyncTask(ctx, "non-txn get", func(ctx context.Context) {
+		ctx = context.WithValue(ctx, nonTxnGetKey{}, "foo")
+		ba := roachpb.BatchRequest{}
+		ba.RangeID = desc.RangeID
+		ba.Add(getArgs(key))
+		br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba)
+		nonTxnRespC <- resp{br, pErr}
+	})
+
+	// Wait for the non-txn read to get stuck.
+	var nonTxnOrigTs hlc.Timestamp
+	select {
+	case nonTxnOrigTs = <-nonTxnOrigTsC:
+	case nonTxnResp := <-nonTxnRespC:
+		t.Fatalf("unexpected response %+v", nonTxnResp)
+	}
+
+	// Advance the clock on node 1.
+	manuals[0].Increment(100)
+
+	// Perform a non-txn write on node 1. This will grab a timestamp from node 1's
+	// clock, which leads the clock on node 2 and the timestamp assigned to the
+	// non-txn read.
+	//
+	// NOTE: we perform the clock increment and write _after_ sending the non-txn
+	// read. Ideally, we would write this test such that we did this before
+	// beginning the read on node 2, so that the absence of an uncertainty error
+	// would be a true "stale read". However, doing so causes the test to be flaky
+	// because background operations can leak the clock signal from node 1 to node
+	// 2 between the time that we write and the time that the non-txn read request
+	// is sent. If we had a way to disable all best-effort HLC clock stabilization
+	// channels and only propagate clock signals when strictly necessary then it's
+	// possible that we could avoid flakiness. For now, we just re-order the
+	// operations and assert that we observe an uncertainty error even though its
+	// absence would not be a true stale read.
+	ba := roachpb.BatchRequest{}
+	ba.Add(putArgs(key, []byte("val")))
+	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	writeTs := br.Timestamp
+	require.True(t, nonTxnOrigTs.Less(writeTs))
+
+	// Then transfer the lease to node 2. The new lease should end up with a start
+	// time above the timestamp assigned to the non-txn read.
+	var lease roachpb.Lease
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(desc.StartKey)
+		lease, _ = repl.GetLease()
+		if lease.Replica.NodeID != repl.NodeID() {
+			return errors.Errorf("expected lease transfer to node 2: %s", lease)
+		}
+		return nil
+	})
+	require.True(t, nonTxnOrigTs.Less(lease.Start.ToTimestamp()))
+
+	// Let the non-txn read proceed. It should complete, but only after hitting a
+	// ReadWithinUncertaintyInterval, performing a server-side retry, reading
+	// again at a higher timestamp, and returning the written value.
+	close(nonTxnBlockerC)
+	nonTxnResp := <-nonTxnRespC
+	require.Nil(t, nonTxnResp.Error)
+	br = nonTxnResp.BatchResponse
+	require.NotNil(t, br)
+	require.True(t, nonTxnOrigTs.Less(br.Timestamp))
+	require.True(t, writeTs.LessEq(br.Timestamp))
+	require.Len(t, br.Responses, 1)
+	require.NotNil(t, br.Responses[0].GetGet())
+	require.NotNil(t, br.Responses[0].GetGet().Value)
+	require.Equal(t, writeTs, br.Responses[0].GetGet().Value.Timestamp)
+	require.Equal(t, int32(1), atomic.LoadInt32(&uncertaintyErrs))
+}
+
 // TestRangeLookupUseReverse tests whether the results and the results count
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {

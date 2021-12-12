@@ -522,8 +522,14 @@ func evaluateCommand(
 // this function. Its existence indicates that the current error was hit during
 // a server-side retry.
 //
+// latchSpans, if not nil, indicates that the caller is holding latches and
+// cannot adjust it timestamp outside the limits or what are protected by those
+// latches. If latchSpans is nil, the caller indicates that it is not holding
+// latches and can therefore more freely adjust its timestamp because it will
+// re-acquire latches at whatever timestamp the batch is bumped to.
+//
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
+// the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 //
 // If true is returned, ba and ba.Txn will have been updated with the new
@@ -552,17 +558,6 @@ func canDoServersideRetry(
 	var newTimestamp hlc.Timestamp
 	if ba.Txn != nil {
 		if pErr != nil {
-			// TODO(nvanbenschoten): This is intentionally not allowing server-side
-			// refreshes of ReadWithinUncertaintyIntervalErrors for now, even though
-			// that is the eventual goal here. Lifting that limitation will likely
-			// need to be accompanied by an above-latching retry loop, because read
-			// latches will usually prevent below-latch retries of
-			// ReadWithinUncertaintyIntervalErrors. See the comment in
-			// tryBumpBatchTimestamp.
-			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-				return false
-			}
-
 			var ok bool
 			ok, newTimestamp = roachpb.TransactionRefreshTimestamp(pErr)
 			if !ok {
@@ -609,8 +604,11 @@ func canDoServersideRetry(
 			if _, ok := prevPErr.GetDetail().(*roachpb.WriteTooOldError); ok {
 				return false
 			}
+			newTimestamp = tErr.RetryTimestamp()
 
-			newTimestamp = tErr.ActualTimestamp
+		case *roachpb.ReadWithinUncertaintyIntervalError:
+			newTimestamp = tErr.RetryTimestamp()
+
 		default:
 			return false
 		}

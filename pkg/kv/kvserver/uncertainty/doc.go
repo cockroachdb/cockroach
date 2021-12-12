@@ -128,6 +128,7 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //    purposes of uncertainty.
 //
 // There are two invariants necessary for this property to hold:
+//
 //  1. a leaseholder's clock must always be equal to or greater than the timestamp
 //     of all writes that it has served. This is trivial to enforce for
 //     non-transactional writes. It is more complicated for transactional writes
@@ -137,6 +138,7 @@ var D5 = (&roachpb.Transaction{}).UpdateObservedTimestamp
 //     leaseholder for a Range that contains one of its intent has an HLC clock
 //     with an equal or greater timestamp than the transaction's commit timestamp.
 //     TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
+//
 //  2. a leaseholder's clock must always be equal to or greater than the timestamp
 //     of all writes that previous leaseholders for its Range have served. We
 //     enforce that when a Replica acquires a lease it bumps its node's clock to a
@@ -192,6 +194,80 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 
 // D7 ————————————————————————————————————————————————
 //
+// TimestampFromServerClock
+//
+// Non-transactional requests that defer their timestamp allocation to the
+// leaseholder of their (single) range also have uncertainty intervals, which
+// ensures that they also guarantee single-key linearizability even with only
+// loose (but bounded) clock synchronization. Non-transactional requests that
+// use a client-provided timestamp do not have uncertainty intervals and do not
+// make real-time ordering guarantees.
+//
+// Unlike transactions, which establish an uncertainty interval on their
+// coordinator node during initialization, non-transactional requests receive
+// uncertainty intervals from their target leaseholder, using a clock reading
+// from the leaseholder's local HLC as the local limit and this clock reading +
+// the cluster's maximum clock skew as the global limit.
+//
+// It is somewhat non-intuitive that non-transactional requests need uncertainty
+// intervals — after all, they receive their timestamp to the leaseholder of the
+// only range that they talk to, so isn't every value with a commit timestamp
+// above their read timestamp certainly concurrent? The answer is surprisingly
+// "no" for the following reasons, so they cannot forgo the use of uncertainty
+// interval:
+//
+// 1. the request timestamp is allocated before consulting the replica's lease.
+//    This means that there are times when the replica is not the leaseholder at
+//    the point of timestamp allocation, and only becomes the leaseholder later.
+//    In such cases, the timestamp assigned to the request is not guaranteed to
+//    be greater than the written_timestamp of all writes served by the range at
+//    the time of allocation. This is true despite invariants 1 & 2 from above,
+//    because the replica allocating the timestamp is not yet the leaseholder.
+//
+//    In cases where the replica that assigned the non-transactional request's
+//    timestamp takes over as the leaseholder after the timestamp allocation, we
+//    expect minimumLocalLimitForLeaseholder to forward the local uncertainty
+//    limit above TimestampFromServerClock, to the lease start time.
+//
+// 2. ignoring reason #1, the request timestamp assigned by the leaseholder is
+//    equal to its local uncertainty limit and is guaranteed to lead the
+//    written_timestamp of all writes served by the range at the time the
+//    request arrived at the leaseholder node. However, this timestamp is still
+//    not guaranteed to lead the commit timestamp of all of these writes. As a
+//    result, the non-transactional request needs an uncertainty interval with a
+//    global uncertainty limit far enough in advance of the local HLC clock to
+//    ensure that it considers any value that was part of a transaction which
+//    could have committed before the request was received by the leaseholder to
+//    be uncertain. Concretely, the non-transactional request needs to consider
+//    values of the following form to be uncertain:
+//
+//      written_timestamp < local_limit && commit_timestamp < global_limit
+//
+//    The value that the non-transactional request is observing may have been
+//    written on the local leaseholder at time 10, its transaction may have been
+//    committed remotely at time 20, acknowledged, then the non-transactional
+//    request may have begun and received a timestamp of 15 from the local
+//    leaseholder, then finally the value may have been resolved asynchronously
+//    and moved to timestamp 20 (written_timestamp: 10, commit_timestamp: 20).
+//    The failure of the non-transactional request to observe this value would
+//    be a stale read.
+//
+//    TODO(nvanbenschoten): expand on this when we fix #36431. For now, this can
+//    be framed in relation to synthetic timestamps, but it's easier to discuss
+//    in terms of the impending "written_timestamp" attribute of each value.
+//
+//    TODO(nvanbenschoten): add more direct testing for this when we fix #36431.
+//
+//    TODO(nvanbenschoten): add another reason here once we address #73292.
+//
+// Convenient, because non-transactional requests are always scoped to a
+// single-range, those that hit uncertainty errors can always retry on the
+// server, so these errors never bubble up to the client that initiated the
+// request.
+var D7 = roachpb.Header{}.TimestampFromServerClock
+
+// D8 ————————————————————————————————————————————————
+//
 // ComputeInterval
 //
 // Observed timestamps allow transactions to avoid uncertainty related restarts
@@ -200,7 +276,7 @@ var D6 = roachpb.Transaction{}.ObservedTimestamps
 // Similarly, observed timestamps can also assist a transaction even on its
 // first visit to a node in cases where it gets stuck waiting on locks for long
 // periods of time.
-var D7 = ComputeInterval
+var D8 = ComputeInterval
 
 // Ignore unused warnings.
-var _, _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6, D7
+var _, _, _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6, D7, D8

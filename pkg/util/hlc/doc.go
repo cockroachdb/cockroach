@@ -99,25 +99,19 @@ correctness. It is intended to be exhaustive.
    transaction can be used to make a claim about values that could not have been
    written yet at the time that the transaction first visited the node, and by
    extension, at the time that the transaction began. This allows the
-   transaction to avoid uncertainty restarts in some circumstances. For more,
-   see pkg/kv/kvserver/uncertainty/doc.go.
+   transaction to avoid uncertainty restarts in some circumstances.
 
- - Non-transactional requests (Raft + BatchRequest channels). Most KV operations
-   in CockroachDB are transactional and receive their read timestamps from their
-   gateway's HLC clock they are instantiated. They use an uncertainty interval
-   (see below) to avoid stale reads in the presence of clock skew.
+   A variant of this same mechanism applies to non-transactional requests that
+   defer their timestamp allocation to the leaseholder of their (single) range.
+   These requests do not collect observed timestamps directly, but they do
+   establish an uncertainty interval immediately upon receipt by their target
+   leaseholder, using a clock reading from the leaseholder's local HLC as the
+   local limit and this clock reading + the cluster's maximum clock skew as the
+   global limit. This limit can be used to make claims about values that could
+   not have been written yet at the time that the non-transaction request first
+   reached the leaseholder node.
 
-   The KV API also exposes the option to elide the transaction for requests
-   targeting a single range (which trivially applies to all point requests).
-   These requests do not carry a predetermined read timestamp; instead, this
-   timestamp is chosen from the HLC upon arrival at the leaseholder for the
-   range. Since the HLC clock always leads the timestamp if any write served
-   on the range, this will not result in stale reads, despite not using an
-   uncertainty interval for such requests.
-
-   TODO(nvanbenschoten): this mechanism is currently broken for future-time
-   writes. We either need to give non-transactional requests uncertainty
-   intervals or remove them. See https://github.com/cockroachdb/cockroach/issues/58459.
+   For more, see pkg/kv/kvserver/uncertainty/doc.go.
 
  - Transaction retry errors (BatchRequest and DistSQL channels).
    TODO(nvanbenschoten/andreimatei): is this a real case where passing a remote
