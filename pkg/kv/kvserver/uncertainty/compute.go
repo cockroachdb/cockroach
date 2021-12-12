@@ -11,12 +11,18 @@
 package uncertainty
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// ComputeInterval returns the provided transaction's uncertainty interval to be
-// used when evaluating requests under the specified lease.
+// ComputeInterval returns the provided request's uncertainty interval to be
+// used when evaluating under the specified lease.
+//
+// If the function returns an empty Interval{} then the request should bypass
+// all uncertainty checks.
 //
 // The computation uses observed timestamps gathered from the leaseholder's node
 // to limit the interval's local uncertainty limit. This prevents unnecessary
@@ -55,16 +61,26 @@ import (
 //    right-hand side.
 // TODO(nvanbenschoten): fix this bug with range merges.
 //
-func ComputeInterval(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) Interval {
-	// Non-transactional requests do not have uncertainty intervals.
-	// TODO(nvanbenschoten): Yet, they should. Fix this.
-	//  See https://github.com/cockroachdb/cockroach/issues/58459.
-	if txn == nil {
-		return Interval{}
+func ComputeInterval(
+	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+) Interval {
+	if h.Txn != nil {
+		return computeIntervalForTxn(h.Txn, status)
+	}
+	return computeIntervalForNonTxn(h, status, maxOffset)
+}
+
+func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) Interval {
+	in := Interval{
+		// The transaction's global uncertainty limit is computed by its coordinator
+		// when the transaction is initiated. It stays constant across all requests
+		// issued by the transaction and across all retries.
+		GlobalLimit: txn.GlobalUncertaintyLimit,
 	}
 
-	in := Interval{GlobalLimit: txn.GlobalUncertaintyLimit}
 	if status.State != kvserverpb.LeaseState_VALID {
+		// If the lease is invalid, this must be a follower read. In such cases, we
+		// must use the most pessimistic uncertainty limit.
 		return in
 	}
 
@@ -83,14 +99,82 @@ func ComputeInterval(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) In
 	}
 	in.LocalLimit = obsTs
 
-	// If the lease is valid, we use the greater of the observed timestamp and
-	// the lease start time. This ensures we avoid incorrect assumptions about
-	// when data was written, in absolute time on a different node, which held
-	// the lease before this replica acquired it.
-	in.LocalLimit.Forward(status.Lease.Start)
+	// Adjust the uncertainty interval for the lease it is being used under.
+	in.LocalLimit.Forward(minimumLocalLimitForLeaseholder(status.Lease))
 
 	// The local uncertainty limit should always be <= the global uncertainty
 	// limit.
 	in.LocalLimit.BackwardWithTimestamp(in.GlobalLimit)
 	return in
+}
+
+func computeIntervalForNonTxn(
+	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+) Interval {
+	if h.TimestampFromServerClock == nil || h.ReadConsistency != roachpb.CONSISTENT {
+		// Non-transactional requests with client-provided timestamps do not
+		// guarantee linearizability. Neither do entirely inconsistent requests.
+		// As a result, they do not have uncertainty intervals.
+		return Interval{}
+	}
+
+	// Non-transactional requests that defer their timestamp allocation to the
+	// leaseholder of their (single) range do have uncertainty intervals. As a
+	// result, they do guarantee linearizability.
+	in := Interval{
+		// Even though the non-transactional request received its timestamp from the
+		// leaseholder of its range, it can still observe writes that were performed
+		// before it in real-time that have MVCC timestamps above its timestamp. In
+		// these cases, it needs to perform an uncertainty restart.
+		//
+		// For example, the non-transactional request may observe an intent with a
+		// provisional timestamp below its server-assigned timestamp. It will begin
+		// waiting on this intent. It is possible for the intent to then be resolved
+		// (asynchronously with respect to the intent's txn commit) with a timestamp
+		// above its server-assigned timestamp. To guarantee linearizability, the
+		// non-transactional request must observe the effect of the intent write, so
+		// it must perform a (server-side) uncertainty restart to a timestamp above
+		// the now-resolved write.
+		//
+		// See the comment on D7 in doc.go for an example.
+		GlobalLimit: h.TimestampFromServerClock.ToTimestamp().Add(maxOffset.Nanoseconds(), 0),
+	}
+
+	if status.State != kvserverpb.LeaseState_VALID {
+		// If the lease is invalid, this is either a lease request or we are computing
+		// the request's uncertainty interval before grabbing latches and checking for
+		// the current lease. Either way, return without a local limit.
+		return in
+	}
+
+	// The request's timestamp was selected on this server, so it can serve the
+	// role of an observed timestamp and as the local uncertainty limit.
+	in.LocalLimit = *h.TimestampFromServerClock
+
+	// Adjust the uncertainty interval for the lease it is being used under.
+	in.LocalLimit.Forward(minimumLocalLimitForLeaseholder(status.Lease))
+
+	// The local uncertainty limit should always be <= the global uncertainty
+	// limit.
+	in.LocalLimit.BackwardWithTimestamp(in.GlobalLimit)
+	return in
+}
+
+// minimumLocalLimitForLeaseholder returns the minimum timestamp that can be
+// used as a local limit when evaluating a request under the specified lease.
+// See the comment on ComputeInterval for an explanation of cases where observed
+// timestamps captured on the current leaseholder's node are not applicable to
+// data written by prior leaseholders (either before a lease change or before a
+// range merge).
+func minimumLocalLimitForLeaseholder(lease roachpb.Lease) hlc.ClockTimestamp {
+	// If the lease is valid, we use the greater of the observed timestamp and
+	// the lease start time. This ensures we avoid incorrect assumptions about
+	// when data was written, in absolute time on a different node, which held
+	// the lease before this replica acquired it.
+	min := lease.Start
+
+	// TODO(nvanbenschoten): handle RHS freeze timestamp after merge here when
+	// we fix https://github.com/cockroachdb/cockroach/issues/73292.
+
+	return min
 }
