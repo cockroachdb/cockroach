@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
@@ -407,16 +408,21 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Set up a tracing span for the start process.  We want any logging
-	// happening beyond this point to be accounted to this start
-	// context, including logging related to the initialization of
-	// the logging infrastructure below.
-	// This span concludes when the startup goroutine started below
-	// has completed.
-	// TODO(andrei): we don't close the span on the early returns below.
-	tracer := serverCfg.Tracer
-	startupSpan := tracer.StartSpan("server start")
-	ctx = tracing.ContextWithSpan(ctx, startupSpan)
+	ambientCtx := serverCfg.AmbientCtx
+
+	// Annotate the context, and set up a tracing span for the start process.
+	//
+	// The context annotation ensures that server identifiers show up
+	// in the logging metadata as soon as they are known.
+	//
+	// The tracing span is because we want any logging happening beyond
+	// this point to be accounted to this start context, including
+	// logging related to the initialization of the logging
+	// infrastructure below.  This span concludes when the startup
+	// goroutine started below has completed.  TODO(andrei): we don't
+	// close the span on the early returns below.
+	var startupSpan *tracing.Span
+	ctx, startupSpan = ambientCtx.AnnotateCtxWithSpan(ctx, "server start")
 
 	// Set up the logging and profiling output.
 	//
@@ -568,7 +574,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 If problems persist, please see %s.`
 		docLink := docs.URL("cluster-setup-troubleshooting.html")
 		if !startCtx.inBackground {
-			log.Ops.Shoutf(context.Background(), severity.WARNING, msg, docLink)
+			log.Ops.Shoutf(ctx, severity.WARNING, msg, docLink)
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
@@ -699,9 +705,8 @@ If problems persist, please see %s.`
 	// decommission`, or a signal.
 
 	// We'll want to log any shutdown activity against a separate span.
-	shutdownSpan := tracer.StartSpan("server shutdown")
+	shutdownCtx, shutdownSpan := ambientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
 	defer shutdownSpan.Finish()
-	shutdownCtx := tracing.ContextWithSpan(context.Background(), shutdownSpan)
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
 
@@ -764,9 +769,8 @@ If problems persist, please see %s.`
 			}
 			// Don't use shutdownCtx because this is in a goroutine that may
 			// still be running after shutdownCtx's span has been finished.
-			ac := log.AmbientContext{}
-			ac.AddLogTag("server drain process", nil)
-			drainCtx := ac.AnnotateCtx(context.Background())
+			drainCtx := ambientCtx.AnnotateCtx(context.Background())
+			drainCtx = logtags.AddTag(drainCtx, "server drain process", nil)
 
 			// Perform a graceful drain. We keep retrying forever, in
 			// case there are many range leases or some unavailability
@@ -824,7 +828,7 @@ If problems persist, please see %s.`
 		for {
 			select {
 			case <-ticker.C:
-				log.Ops.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
+				log.Ops.Infof(shutdownCtx, "%d running tasks", stopper.NumTasks())
 			case <-stopper.IsStopped():
 				return
 			case <-stopWithoutDrain:
@@ -1063,7 +1067,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
 		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
-		if size, err := status.GetTotalMemory(context.Background()); err == nil {
+		if size, err := status.GetTotalMemory(ctx); err == nil {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {
@@ -1143,7 +1147,7 @@ func setupAndInitializeLoggingAndProfiling(
 		if addr == "" {
 			addr = "any of your IP addresses"
 		}
-		log.Ops.Shoutf(context.Background(), severity.WARNING,
+		log.Ops.Shoutf(ctx, severity.WARNING,
 			"ALL SECURITY CONTROLS HAVE BEEN DISABLED!\n\n"+
 				"This mode is intended for non-production testing only.\n"+
 				"\n"+
@@ -1153,7 +1157,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"- Intruders can log in without password and read or write any data in the cluster.\n"+
 				"- Intruders can consume all your server's resources and cause unavailability.",
 			addr)
-		log.Ops.Shoutf(context.Background(), severity.INFO,
+		log.Ops.Shoutf(ctx, severity.INFO,
 			"To start a secure server without mandating TLS for clients,\n"+
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
@@ -1172,7 +1176,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"to databases, the --locality flag must contain a \"region\" tier.\n" +
 				"For more information, see:\n\n" +
 				"- %s"
-			log.Shoutf(context.Background(), severity.WARNING, warningString,
+			log.Shoutf(ctx, severity.WARNING, warningString,
 				log.Safe(docs.URL("cockroach-start.html#locality")))
 		}
 	}

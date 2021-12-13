@@ -78,7 +78,7 @@ func shoutfDepth(
 		// it here.
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
 			strings.Replace(
-				FormatWithContextTags(ctx, format, args...),
+				formatOnlyArgs(format, args...),
 				"\n", "\n* ", -1))
 	}
 	logfDepth(ctx, depth+1, sev, ch, format, args...)
