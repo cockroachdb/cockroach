@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -24,7 +25,11 @@ func init() {
 }
 
 func declareKeysBarrier(
-	_ ImmutableRangeState, _ *roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState,
+	_ *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// Barrier is special-cased in the concurrency manager to *not* actually
 	// grab these latches. Instead, any conflicting latches with these are waited

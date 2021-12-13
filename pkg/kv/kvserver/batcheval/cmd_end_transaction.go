@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -56,6 +57,7 @@ func declareKeysEndTxn(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	et := req.(*roachpb.EndTxnRequest)
 	declareKeysWriteTransaction(rs, header, req, latchSpans)

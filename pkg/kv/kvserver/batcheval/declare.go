@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -26,6 +27,7 @@ func DefaultDeclareKeys(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	access := spanset.SpanReadWrite
 	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
@@ -44,6 +46,7 @@ func DefaultDeclareIsolatedKeys(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 ) {
 	access := spanset.SpanReadWrite
 	timestamp := header.Timestamp
