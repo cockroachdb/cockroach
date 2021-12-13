@@ -677,10 +677,11 @@ with &2 (update_last_trade)
                 │    │    │    └── "?column?":63 => trade_history.th_st_id:53
                 │    │    ├── input binding: &5
                 │    │    ├── volatile, mutations
+                │    │    ├── key: (51)
                 │    │    ├── fd: ()-->(53)
                 │    │    ├── project
                 │    │    │    ├── columns: tr_t_id:62!null "?column?":63!null timestamp:64!null
-                │    │    │    ├── immutable
+                │    │    │    ├── key: (62)
                 │    │    │    ├── fd: ()-->(63,64)
                 │    │    │    ├── with-scan &3 (request_list)
                 │    │    │    │    ├── columns: tr_t_id:56!null
@@ -688,8 +689,7 @@ with &2 (update_last_trade)
                 │    │    │    │    │    └──  trade_request.tr_t_id:20 => tr_t_id:56
                 │    │    │    │    └── key: (56)
                 │    │    │    └── projections
-                │    │    │         ├── assignment-cast: INT8 [as=tr_t_id:62, outer=(56), immutable]
-                │    │    │         │    └── tr_t_id:56
+                │    │    │         ├── tr_t_id:56 [as=tr_t_id:62, outer=(56)]
                 │    │    │         ├── 'SBMT' [as="?column?":63]
                 │    │    │         └── '2020-06-15 22:27:42.148484' [as=timestamp:64]
                 │    │    └── f-k-checks
@@ -698,10 +698,12 @@ with &2 (update_last_trade)
                 │    │         │         ├── columns: th_t_id:65!null
                 │    │         │         ├── key columns: [65] = [66]
                 │    │         │         ├── lookup columns are key
+                │    │         │         ├── key: (65)
                 │    │         │         ├── with-scan &5
                 │    │         │         │    ├── columns: th_t_id:65!null
-                │    │         │         │    └── mapping:
-                │    │         │         │         └──  tr_t_id:62 => th_t_id:65
+                │    │         │         │    ├── mapping:
+                │    │         │         │    │    └──  tr_t_id:62 => th_t_id:65
+                │    │         │         │    └── key: (65)
                 │    │         │         └── filters (true)
                 │    │         └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
                 │    │              └── anti-join (lookup status_type)

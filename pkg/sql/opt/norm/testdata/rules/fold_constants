@@ -905,7 +905,7 @@ insert assn_cast
 
 # Do not fold non-constants even if they have an identical type as the target
 # type.
-norm expect-not=FoldAssignmentCast
+norm expect-not=FoldAssignmentCast disable=EliminateCast
 INSERT INTO assn_cast(c) VALUES ($1::CHAR)
 ----
 insert assn_cast

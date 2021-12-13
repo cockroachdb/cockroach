@@ -1759,11 +1759,13 @@ sort
  ├── columns: a:14!null b:15!null c:16!null
  ├── cardinality: [0 - 2]
  ├── volatile, mutations
+ ├── key: (14-16)
  ├── ordering: +15
  └── with &1
       ├── columns: a:14!null b:15!null c:16!null
       ├── cardinality: [0 - 2]
       ├── volatile, mutations
+      ├── key: (14-16)
       ├── insert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
       │    ├── insert-mapping:
@@ -1772,10 +1774,11 @@ sort
       │    │    └── z:13 => abc.c:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
+      │    ├── key: (1-3)
       │    └── project
       │         ├── columns: x:11!null y:12!null z:13!null
       │         ├── cardinality: [0 - 2]
-      │         ├── immutable
+      │         ├── key: (11-13)
       │         ├── top-k
       │         │    ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
       │         │    ├── internal-ordering: +7,+8
@@ -1786,19 +1789,17 @@ sort
       │         │         ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
       │         │         └── key: (6-8)
       │         └── projections
-      │              ├── assignment-cast: INT8 [as=x:11, outer=(6), immutable]
-      │              │    └── xyz.x:6
-      │              ├── assignment-cast: INT8 [as=y:12, outer=(7), immutable]
-      │              │    └── xyz.y:7
-      │              └── assignment-cast: INT8 [as=z:13, outer=(8), immutable]
-      │                   └── xyz.z:8
+      │              ├── xyz.x:6 [as=x:11, outer=(6)]
+      │              ├── xyz.y:7 [as=y:12, outer=(7)]
+      │              └── xyz.z:8 [as=z:13, outer=(8)]
       └── with-scan &1
            ├── columns: a:14!null b:15!null c:16!null
            ├── mapping:
            │    ├──  abc.a:1 => a:14
            │    ├──  abc.b:2 => b:15
            │    └──  abc.c:3 => c:16
-           └── cardinality: [0 - 2]
+           ├── cardinality: [0 - 2]
+           └── key: (14-16)
 
 # Verify that provided orderings are derived correctly.
 opt
@@ -1826,17 +1827,13 @@ sort
       │    └── project
       │         ├── columns: b:13 c:14 d:15
       │         ├── cardinality: [0 - 2]
-      │         ├── immutable
       │         ├── scan abcd@cd
       │         │    ├── columns: abcd.b:7 abcd.c:8 abcd.d:9
       │         │    └── limit: 2
       │         └── projections
-      │              ├── assignment-cast: INT8 [as=b:13, outer=(7), immutable]
-      │              │    └── abcd.b:7
-      │              ├── assignment-cast: INT8 [as=c:14, outer=(8), immutable]
-      │              │    └── abcd.c:8
-      │              └── assignment-cast: INT8 [as=d:15, outer=(9), immutable]
-      │                   └── abcd.d:9
+      │              ├── abcd.b:7 [as=b:13, outer=(7)]
+      │              ├── abcd.c:8 [as=c:14, outer=(8)]
+      │              └── abcd.d:9 [as=d:15, outer=(9)]
       └── with-scan &1
            ├── columns: x:16!null y:17!null z:18!null
            ├── mapping:
@@ -1875,17 +1872,13 @@ sort
       │    └── project
       │         ├── columns: b:13 c:14 d:15
       │         ├── cardinality: [0 - 2]
-      │         ├── immutable
       │         ├── scan abcd@cd
       │         │    ├── columns: abcd.b:7 abcd.c:8 abcd.d:9
       │         │    └── limit: 2
       │         └── projections
-      │              ├── assignment-cast: INT8 [as=b:13, outer=(7), immutable]
-      │              │    └── abcd.b:7
-      │              ├── assignment-cast: INT8 [as=c:14, outer=(8), immutable]
-      │              │    └── abcd.c:8
-      │              └── assignment-cast: INT8 [as=d:15, outer=(9), immutable]
-      │                   └── abcd.d:9
+      │              ├── abcd.b:7 [as=b:13, outer=(7)]
+      │              ├── abcd.c:8 [as=c:14, outer=(8)]
+      │              └── abcd.d:9 [as=d:15, outer=(9)]
       └── select
            ├── columns: x:16!null y:17!null z:18!null
            ├── cardinality: [0 - 2]
@@ -1907,6 +1900,7 @@ SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *]
 with &1
  ├── columns: a:14!null b:15!null c:16!null
  ├── volatile, mutations
+ ├── key: (14-16)
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
  │    ├── insert-mapping:
@@ -1914,25 +1908,24 @@ with &1
  │    │    ├── y:12 => abc.b:2
  │    │    └── z:13 => abc.c:3
  │    ├── volatile, mutations
+ │    ├── key: (1-3)
  │    └── project
  │         ├── columns: x:11!null y:12!null z:13!null
- │         ├── immutable
+ │         ├── key: (11-13)
  │         ├── scan xyz
  │         │    ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
  │         │    └── key: (6-8)
  │         └── projections
- │              ├── assignment-cast: INT8 [as=x:11, outer=(6), immutable]
- │              │    └── xyz.x:6
- │              ├── assignment-cast: INT8 [as=y:12, outer=(7), immutable]
- │              │    └── xyz.y:7
- │              └── assignment-cast: INT8 [as=z:13, outer=(8), immutable]
- │                   └── xyz.z:8
+ │              ├── xyz.x:6 [as=x:11, outer=(6)]
+ │              ├── xyz.y:7 [as=y:12, outer=(7)]
+ │              └── xyz.z:8 [as=z:13, outer=(8)]
  └── with-scan &1
       ├── columns: a:14!null b:15!null c:16!null
-      └── mapping:
-           ├──  abc.a:1 => a:14
-           ├──  abc.b:2 => b:15
-           └──  abc.c:3 => c:16
+      ├── mapping:
+      │    ├──  abc.a:1 => a:14
+      │    ├──  abc.b:2 => b:15
+      │    └──  abc.c:3 => c:16
+      └── key: (14-16)
 
 # --------------------------------------------------
 # Update operator.

@@ -953,17 +953,14 @@ insert xy
  └── limit
       ├── columns: y:9!null y_default:10
       ├── cardinality: [0 - 1]
-      ├── immutable
       ├── key: ()
       ├── fd: ()-->(9,10)
       ├── anti-join (hash)
       │    ├── columns: y:9!null y_default:10
-      │    ├── immutable
       │    ├── fd: ()-->(9,10)
       │    ├── limit hint: 1.00
       │    ├── project
       │    │    ├── columns: y_default:10 y:9!null
-      │    │    ├── immutable
       │    │    ├── fd: ()-->(9,10)
       │    │    ├── select
       │    │    │    ├── columns: xy.y:6!null
@@ -974,8 +971,7 @@ insert xy
       │    │    │         └── xy.y:6 = 0 [outer=(6), constraints=(/6: [/0 - /0]; tight), fd=()-->(6)]
       │    │    └── projections
       │    │         ├── CAST(NULL AS INT8) [as=y_default:10]
-      │    │         └── assignment-cast: INT8 [as=y:9, outer=(6), immutable]
-      │    │              └── xy.y:6
+      │    │         └── xy.y:6 [as=y:9, outer=(6)]
       │    ├── scan xy
       │    │    ├── columns: x:11!null
       │    │    └── key: (11)
@@ -1056,16 +1052,13 @@ insert xy
  └── upsert-distinct-on
       ├── columns: y:9 y_default:10
       ├── grouping columns: y:9
-      ├── immutable
       ├── lax-key: (9)
       ├── fd: ()-->(9,10)
       ├── anti-join (hash)
       │    ├── columns: y:9 y_default:10
-      │    ├── immutable
       │    ├── fd: ()-->(9,10)
       │    ├── project
       │    │    ├── columns: y_default:10 y:9
-      │    │    ├── immutable
       │    │    ├── fd: ()-->(9,10)
       │    │    ├── select
       │    │    │    ├── columns: xy.y:6
@@ -1076,8 +1069,7 @@ insert xy
       │    │    │         └── xy.y:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
       │    │    └── projections
       │    │         ├── CAST(NULL AS INT8) [as=y_default:10]
-      │    │         └── assignment-cast: INT8 [as=y:9, outer=(6), immutable]
-      │    │              └── xy.y:6
+      │    │         └── xy.y:6 [as=y:9, outer=(6)]
       │    ├── scan xy
       │    │    ├── columns: x:11!null
       │    │    └── key: (11)
@@ -1687,17 +1679,14 @@ insert a
  └── limit
       ├── columns: "?column?":17!null i:18!null "?column?":19!null f_default:20 j_default:21
       ├── cardinality: [0 - 1]
-      ├── immutable
       ├── key: ()
       ├── fd: ()-->(17-21)
       ├── anti-join (hash)
       │    ├── columns: "?column?":17!null i:18!null "?column?":19!null f_default:20 j_default:21
-      │    ├── immutable
       │    ├── fd: ()-->(17-21)
       │    ├── limit hint: 1.00
       │    ├── project
       │    │    ├── columns: f_default:20 j_default:21 "?column?":17!null i:18!null "?column?":19!null
-      │    │    ├── immutable
       │    │    ├── fd: ()-->(17-21)
       │    │    ├── select
       │    │    │    ├── columns: a.i:9!null
@@ -1710,8 +1699,7 @@ insert a
       │    │         ├── CAST(NULL AS FLOAT8) [as=f_default:20]
       │    │         ├── CAST(NULL AS JSONB) [as=j_default:21]
       │    │         ├── 1 [as="?column?":17]
-      │    │         ├── assignment-cast: INT8 [as=i:18, outer=(9), immutable]
-      │    │         │    └── a.i:9
+      │    │         ├── a.i:9 [as=i:18, outer=(9)]
       │    │         └── 'foo' [as="?column?":19]
       │    ├── select
       │    │    ├── columns: a.i:23!null s:25!null
@@ -2465,18 +2453,8 @@ insert a
       │    │    │    │    │    ├── columns: column1:12 column2:13!null column3:14!null column4:15!null
       │    │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    │    ├── volatile
-      │    │    │    │    │    ├── tuple
-      │    │    │    │    │    │    ├── assignment-cast: INT8
-      │    │    │    │    │    │    │    └── unique_rowid()
-      │    │    │    │    │    │    ├── 'foo'
-      │    │    │    │    │    │    ├── 1
-      │    │    │    │    │    │    └── 1.0
-      │    │    │    │    │    └── tuple
-      │    │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │    │         │    └── unique_rowid()
-      │    │    │    │    │         ├── 'bar'
-      │    │    │    │    │         ├── 2
-      │    │    │    │    │         └── 2.0
+      │    │    │    │    │    ├── (unique_rowid(), 'foo', 1, 1.0)
+      │    │    │    │    │    └── (unique_rowid(), 'bar', 2, 2.0)
       │    │    │    │    └── projections
       │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:16]
       │    │    │    ├── scan a
@@ -2526,27 +2504,22 @@ insert a
  └── upsert-distinct-on
       ├── columns: i:16!null "?column?":17!null i:18!null f_default:19 j_default:20
       ├── grouping columns: i:18!null
-      ├── immutable
       ├── key: (18)
-      ├── fd: ()-->(17,19,20), (18)-->(16,17,19,20)
+      ├── fd: ()-->(17,19,20), (16)==(18), (18)==(16), (18)-->(16,17,19,20)
       ├── anti-join (hash)
       │    ├── columns: i:16!null "?column?":17!null i:18!null f_default:19 j_default:20
-      │    ├── immutable
-      │    ├── fd: ()-->(17,19,20)
+      │    ├── fd: ()-->(17,19,20), (16)==(18), (18)==(16)
       │    ├── project
       │    │    ├── columns: f_default:19 j_default:20 i:16!null "?column?":17!null i:18!null
-      │    │    ├── immutable
-      │    │    ├── fd: ()-->(17,19,20)
+      │    │    ├── fd: ()-->(17,19,20), (16)==(18), (18)==(16)
       │    │    ├── scan a
       │    │    │    └── columns: a.i:9!null
       │    │    └── projections
       │    │         ├── CAST(NULL AS FLOAT8) [as=f_default:19]
       │    │         ├── CAST(NULL AS JSONB) [as=j_default:20]
-      │    │         ├── assignment-cast: INT8 [as=i:16, outer=(9), immutable]
-      │    │         │    └── a.i:9
+      │    │         ├── a.i:9 [as=i:16, outer=(9)]
       │    │         ├── 'foo' [as="?column?":17]
-      │    │         └── assignment-cast: INT8 [as=i:18, outer=(9), immutable]
-      │    │              └── a.i:9
+      │    │         └── a.i:9 [as=i:18, outer=(9)]
       │    ├── select
       │    │    ├── columns: a.i:22!null s:24!null
       │    │    ├── key: (22)

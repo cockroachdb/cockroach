@@ -86,6 +86,8 @@ func (b *Builder) buildValuesClause(
 				} else if !typ.Equivalent(colTypes[colIdx]) {
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,
 						"VALUES types %s and %s cannot be matched", typ, colTypes[colIdx]))
+				} else if !typ.Identical(colTypes[colIdx]) {
+					colTypes[colIdx] = colTypes[colIdx].WithoutTypeModifiers()
 				}
 			}
 			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)

@@ -2377,7 +2377,9 @@ func typeCheckSameTypedConsts(
 			}
 		}
 		if all {
-			return setTypeForConsts(typ)
+			// Constants do not have types with modifiers so clear the modifiers
+			// of typ before setting it.
+			return setTypeForConsts(typ.WithoutTypeModifiers())
 		}
 	}
 
