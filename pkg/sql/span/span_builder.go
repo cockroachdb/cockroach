@@ -221,7 +221,7 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 	// * The table is not a special system table. (System tables claim to have
 	//   column families, but actually do not, since they're written to with
 	//   raw KV puts in a "legacy" way.)
-	if s.table.GetID() > 0 && s.table.GetID() < keys.MaxReservedDescID {
+	if catalog.IsSystemDescriptor(s.table) {
 		return false
 	}
 

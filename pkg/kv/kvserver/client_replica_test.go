@@ -3822,7 +3822,7 @@ func TestTenantID(t *testing.T) {
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.TestingUserTableDataMin())
 			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}
