@@ -2293,3 +2293,24 @@ var (
 
 // SpanConfigurationsTableName represents system.span_configurations.
 var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))
+
+// TestingNonPredefinedUserDescID is intended to replace direct usage of
+// keys.MinNonPredefinedUserDescID in tests. In the future we will have the
+// return value depend on the bootstrapped system schema.
+func TestingNonPredefinedUserDescID(offset uint32) uint32 {
+	return keys.MinNonPredefinedUserDescID + offset
+}
+
+// TestingUserDescID is intended to replace direct usage of keys.MinUserDescID
+// in tests. In the future we will have the return value depend on the
+// bootstrapped system schema.
+func TestingUserDescID(offset uint32) uint32 {
+	return keys.MinUserDescID + offset
+}
+
+// TestingMaxReservedDescID is intended to replace direct usage of
+// keys.MaxReservedDescID in tests. In the future we will have the return value
+// depend on the bootstrapped system schema.
+func TestingMaxReservedDescID() uint32 {
+	return keys.MaxReservedDescID
+}

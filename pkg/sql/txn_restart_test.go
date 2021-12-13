@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1308,7 +1309,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	// targetKey is represents one of the rows in the table.
 	// +2 since the first two available ids are allocated to the database and
 	// public schema.
-	firstTableID := uint32(keys.MinNonPredefinedUserDescID + 2)
+	firstTableID := systemschema.TestingNonPredefinedUserDescID(2)
 	indexID := uint32(1)
 	valInTable := uint64(2)
 	indexKey := keys.SystemSQLCodec.IndexPrefix(firstTableID, indexID)

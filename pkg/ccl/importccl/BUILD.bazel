@@ -168,6 +168,7 @@ go_test(
         "//pkg/sql/catalog/catformat",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",

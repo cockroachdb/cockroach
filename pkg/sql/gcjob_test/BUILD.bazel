@@ -22,6 +22,7 @@ go_test(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
         "//pkg/testutils",

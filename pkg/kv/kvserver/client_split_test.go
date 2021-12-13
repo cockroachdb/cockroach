@@ -289,7 +289,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 			return err
 		}
 		// We don't care about the values, just the keys.
-		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MinUserDescID))
+		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(systemschema.TestingUserDescID(0)))
 		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -339,7 +339,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	// Manually create some the column keys corresponding to the table:
 	//
 	//   CREATE TABLE t (id STRING PRIMARY KEY, col1 INT, col2 INT)
-	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID))
+	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(systemschema.TestingUserDescID(0)))
 	rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), "a")
 	col1Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
@@ -703,7 +703,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	start := s.Clock().Now()
 
 	// Split the range after the last table data key.
-	keyPrefix := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
+	keyPrefix := keys.SystemSQLCodec.TablePrefix(systemschema.TestingUserDescID(0))
 	args := adminSplitArgs(keyPrefix)
 	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
@@ -830,7 +830,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 
 	// Split the range after the last table data key to get a range that contains
 	// no user data.
-	splitKey := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
+	splitKey := keys.SystemSQLCodec.TablePrefix(systemschema.TestingUserDescID(0))
 	splitArgs := adminSplitArgs(splitKey)
 	if _, err := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), splitArgs); err != nil {
 		t.Fatal(err)
@@ -906,7 +906,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	start := s.Clock().Now()
 
 	// Split the range after the last table data key.
-	keyPrefix := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
+	keyPrefix := keys.SystemSQLCodec.TablePrefix(systemschema.TestingUserDescID(0))
 	args := adminSplitArgs(keyPrefix)
 	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
@@ -1025,7 +1025,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 	const maxBytes = 1 << 16
 	// Set max bytes.
-	descID := uint32(keys.MinUserDescID)
+	descID := systemschema.TestingUserDescID(0)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
@@ -1096,7 +1096,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Set max bytes.
 	const maxBytes = 1 << 16
-	descID := uint32(keys.MinUserDescID)
+	descID := systemschema.TestingUserDescID(0)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
@@ -1311,7 +1311,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	userTableMax := keys.MinUserDescID + 4
+	userTableMax := systemschema.TestingUserDescID(4)
 	var exceptions map[int]struct{}
 	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
@@ -1335,7 +1335,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 				return err
 			}
 		}
-		for i := keys.MinUserDescID; i <= userTableMax; i++ {
+		for i := systemschema.TestingUserDescID(0); i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
 			id := descpb.ID(i)
 			key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
@@ -1370,10 +1370,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 				testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(i)),
 			)
 		}
-		for i := keys.MinUserDescID; i <= userTableMax; i++ {
-			if _, ok := exceptions[i]; !ok {
+		for i := systemschema.TestingUserDescID(0); i <= userTableMax; i++ {
+			if _, ok := exceptions[int(i)]; !ok {
 				expKeys = append(expKeys,
-					testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(uint32(i))),
+					testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(i)),
 				)
 			}
 		}
@@ -1399,7 +1399,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	// Write another, disjoint (+3) descriptor for a user table.
 	userTableMax += 3
-	exceptions = map[int]struct{}{userTableMax - 1: {}, userTableMax - 2: {}}
+	exceptions = map[int]struct{}{int(userTableMax) - 1: {}, int(userTableMax) - 2: {}}
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
@@ -2904,6 +2904,8 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
+	// The following assumes that keys.TestingUserDescID(0) returns 50.
+	//
 	// Create a split at /Table/48 and /Meta2/Table/51. This creates:
 	//   meta ranges [/Min-/Meta2/Table/51) and [/Meta2/Table/51-/System)
 	//   user ranges [/Table/19-/Table/48)  and [/Table/48-/Max)
@@ -2912,7 +2914,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	// will first search for meta(/Table/49) which is on the left meta2 range. However,
 	// the user range [/Table/48-/Max) is stored on the right meta2 range, so the lookup
 	// will require a scan that continues into the next meta2 range.
-	const tableID = keys.MinUserDescID + 1 // 51
+	tableID := systemschema.TestingUserDescID(1) // 51
 	splitReq := adminSplitArgs(keys.SystemSQLCodec.TablePrefix(tableID - 3 /* 48 */))
 	if _, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
@@ -3567,7 +3569,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	config.TestingSetupZoneConfigHook(s.Stopper())
 
 	// Set global reads.
-	descID := uint32(keys.MinUserDescID)
+	descID := systemschema.TestingUserDescID(0)
 	descKey := keys.SystemSQLCodec.TablePrefix(descID)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.GlobalReads = proto.Bool(true)

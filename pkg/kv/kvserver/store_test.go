@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1274,7 +1275,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		},
 		&cfg)
 
-	baseID := uint32(keys.MinUserDescID)
+	baseID := systemschema.TestingUserDescID(0)
 	testData := []struct {
 		repl        *Replica
 		expMaxBytes int64

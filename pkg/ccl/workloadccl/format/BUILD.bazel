@@ -12,6 +12,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/parser",
         "//pkg/sql/row",
         "//pkg/sql/sem/tree",

@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -142,7 +144,7 @@ func (pt *partitioningTest) parse() error {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
 		st := cluster.MakeTestingClusterSettings()
-		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
+		parentID, tableID := descpb.ID(systemschema.TestingUserDescID(0)), descpb.ID(systemschema.TestingUserDescID(1))
 		mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 		if err != nil {

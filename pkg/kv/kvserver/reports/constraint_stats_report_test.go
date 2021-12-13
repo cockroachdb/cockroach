@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -760,7 +761,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 	// Databases and tables share the id space, so we'll use a common counter for them.
 	// And we're going to use keys in user space, otherwise there's special cases
 	// in the zone config lookup that we bump into.
-	objectCounter := keys.MinUserDescID
+	objectCounter := int(systemschema.TestingUserDescID(0))
 	sysCfgBuilder := makeSystemConfigBuilder()
 	if err := sysCfgBuilder.setDefaultZoneConfig(tc.defaultZone.toZoneConfig()); err != nil {
 		return compiledTestCase{}, err

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -731,7 +732,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	// which means keys.MaxReservedDescID+1.
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, zoneConfig)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(systemschema.TestingUserDescID(1)), zoneConfig)
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()

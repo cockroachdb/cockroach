@@ -80,6 +80,7 @@ go_test(
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/types",
         "//pkg/testutils",

@@ -48,6 +48,7 @@ go_test(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/oidext",
         "//pkg/sql/privilege",
         "//pkg/sql/types",

@@ -126,6 +126,7 @@ go_test(
         "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/testutils",

@@ -344,6 +344,7 @@ go_test(
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

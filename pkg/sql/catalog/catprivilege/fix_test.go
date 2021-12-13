@@ -484,7 +484,7 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		testParentID := descpb.ID(keys.MaxReservedDescID + 1)
+		testParentID := descpb.ID(keys.MinUserDescID)
 		MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,

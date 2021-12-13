@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -55,7 +56,7 @@ func BenchmarkImportWorkload(b *testing.B) {
 	ts := timeutil.Now()
 	var tableSSTs []tableSSTable
 	for i, table := range g.Tables() {
-		tableID := descpb.ID(keys.MinUserDescID + 1 + i)
+		tableID := descpb.ID(systemschema.TestingUserDescID(1 + uint32(i)))
 		sst, err := format.ToSSTable(table, tableID, ts)
 		require.NoError(b, err)
 
@@ -160,7 +161,7 @@ func BenchmarkConvertToKVs(b *testing.B) {
 
 func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 	ctx := context.Background()
-	const tableID = descpb.ID(keys.MinUserDescID)
+	tableID := descpb.ID(systemschema.TestingUserDescID(0))
 	ts := timeutil.Now()
 
 	var bytes int64

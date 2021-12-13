@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -396,7 +397,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 
-	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
+	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(systemschema.TestingMaxReservedDescID()))
 	valAt := func(i int) *descpb.Descriptor {
 		return dbdesc.NewInitial(
 			descpb.ID(i), "foo", security.AdminRoleName(),

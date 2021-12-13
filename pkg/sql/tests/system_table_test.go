@@ -61,7 +61,7 @@ func TestInitialKeys(t *testing.T) {
 		desc, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
-			keys.MaxReservedDescID,
+			descpb.ID(systemschema.TestingMaxReservedDescID()),
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
 			descpb.NewBasePrivilegeDescriptor(security.NodeUserName()),
 		)
@@ -95,7 +95,7 @@ func TestInitialKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := i, int64(keys.MinUserDescID); a != e {
+		if a, e := i, int64(systemschema.TestingUserDescID(0)); a != e {
 			t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
 		}
 	})

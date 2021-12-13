@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -65,8 +66,8 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
-	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
+	parentID := descpb.ID(systemschema.TestingUserDescID(0))
+	tableID := descpb.ID(systemschema.TestingUserDescID(1))
 	semaCtx := makeTestSemaCtx()
 	mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())

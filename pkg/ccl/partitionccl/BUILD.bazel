@@ -59,6 +59,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
         "//pkg/sql/parser",

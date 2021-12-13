@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -377,7 +378,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	invalidPrivileges := descpb.NewBasePrivilegeDescriptor(security.RootUserName())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
 	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT}, false)
-	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)
+	typeDescID := descpb.ID(systemschema.TestingUserDescID(0))
 	testData := []struct {
 		err  string
 		desc descpb.TypeDescriptor

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -46,7 +47,7 @@ func ToTableDescriptor(
 	if !ok {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
-	const parentID descpb.ID = keys.MaxReservedDescID
+	parentID := descpb.ID(systemschema.TestingMaxReservedDescID())
 	testSettings := cluster.MakeTestingClusterSettings()
 	tableDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, testSettings, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, ts.UnixNano())

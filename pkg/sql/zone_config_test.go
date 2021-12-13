@@ -37,7 +37,7 @@ import (
 )
 
 var configID = descpb.ID(1)
-var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
+var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(systemschema.TestingMaxReservedDescID()))
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
@@ -439,7 +439,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.MaxReservedDescID, nil, "", defaultZoneConfig},
+		{systemschema.TestingMaxReservedDescID(), nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -568,7 +568,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.MaxReservedDescID, nil, "", defaultZoneConfig},
+		{systemschema.TestingMaxReservedDescID(), nil, "", defaultZoneConfig},
 		{db1, nil, "", expectedDb1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", expectedTb11Cfg},
@@ -648,7 +648,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID))
+		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(systemschema.TestingUserDescID(0)))
 		_, err := cfg.GetZoneConfigForKey(key)
 		if err != nil {
 			b.Fatal(err)
