@@ -550,3 +550,149 @@ WHERE
   t.oid
   NOT IN (SELECT (ARRAY[704, 11676, 10005, 3912, 11765, 59410, 11397])[i] FROM generate_series(1, 376) AS i)
 ----
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+
+statement ok
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+
+statement ok
+INSERT INTO xyz VALUES(5, 4, 7)
+
+statement ok
+INSERT INTO abc VALUES(12, 13, 14)
+
+statement ok
+CREATE INDEX abc_b ON abc(b)
+
+statement ok
+CREATE INDEX xyz_y ON xyz(y)
+
+### Split Disjunctions Tests
+query IIIIII rowsort
+SELECT * FROM abc INNER JOIN xyz on abc.a = xyz.x or abc.b = xyz.y
+----
+4  5  6  4  5   6
+7  8  9  7  11  12
+2  5  6  4  5   6
+
+query IIIIII rowsort
+SELECT * FROM abc INNER JOIN xyz on abc.a = xyz.y or abc.b = xyz.x
+----
+2  5  6  1  2  3
+4  5  6  5  4  7
+2  5  6  5  4  7
+12  13  14  13  11  12
+
+query IIIIII rowsort
+SELECT * FROM abc INNER JOIN xyz on abc.a = xyz.x or abc.b = xyz.y where abc.a > 3 and xyz.z > 10
+----
+7  8  9  7  11  12
+
+query IIIIII rowsort
+SELECT * FROM abc INNER JOIN xyz on abc.a = xyz.y or abc.b = xyz.x where abc.a > 3 and xyz.z > 10
+----
+12  13  14  13  11  12
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.x or abc.b = xyz.y)
+----
+4  5  6
+7  8  9
+2  5  6
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.y or abc.b = xyz.x)
+----
+2   5   6
+4   5   6
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x or abc.b = xyz.y)and abc.a > 3 and xyz.z > 10)
+----
+7  8  9
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.y or abc.b = xyz.x) and abc.a > 3 and xyz.z > 10)
+----
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.x or abc.b = xyz.y)
+----
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.y or abc.b = xyz.x)
+----
+7  8  9
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x or abc.b = xyz.y)and abc.a > 3 and xyz.z > 10)
+----
+2   5   6
+4   5   6
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.y or abc.b = xyz.x) and abc.a > 3 and xyz.z > 10)
+----
+2  5  6
+4  5  6
+7  8  9
+
+query IIIIII rowsort
+SELECT * FROM abc inner join xyz on (abc.a = xyz.x or abc.b = xyz.y) and (abc.a = xyz.y or abc.b = xyz.y)
+----
+4  5  6  4  5  6
+2  5  6  4  5  6
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x or abc.b = xyz.y) and (abc.a = xyz.y or abc.b = xyz.y))
+----
+4  5  6
+2  5  6
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x or abc.b = xyz.y) and (abc.a = xyz.y or abc.b = xyz.y))
+----
+7   8   9
+12  13  14
+
+### End Split Disjunctions Tests

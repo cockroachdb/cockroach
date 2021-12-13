@@ -13,6 +13,7 @@ package xform
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1598,4 +1599,370 @@ func (c *CustomFuncs) splitValues(
 		}
 	}
 	return localVals, remoteVals
+}
+
+// SplitDisjunctionForJoin finds the first disjunction in the ON clause that can
+// be split into an interesting pair of predicates. It returns the pair of
+// predicates and the Filters item they were a part of. If an "interesting"
+// disjunction is not found, ok=false is returned. This method also detects
+// which Scan in the joins needs to be duplicated first to maintain the relative
+// order of ColIDs between the left and right relations, and sets
+// swapDuplicateScanPrivateOrder accordingly (we duplicate the left's
+// ScanPrivate first unless swapDuplicateScanPrivateOrder is true).
+//
+// For details on what makes an "interesting" disjunction, see
+// findInterestingDisjunctionPairForJoin.
+func (c *CustomFuncs) SplitDisjunctionForJoin(
+	joinRel memo.RelExpr,
+	filters memo.FiltersExpr,
+	origLeftScan *memo.ScanExpr,
+	origRightScan *memo.ScanExpr,
+) (
+	left opt.ScalarExpr,
+	right opt.ScalarExpr,
+	itemToReplace *memo.FiltersItem,
+	swapDuplicateScanPrivateOrder bool,
+	ok bool,
+) {
+	for i := range filters {
+		if filters[i].Condition.Op() == opt.OrOp {
+			if left, right, ok = c.findInterestingDisjunctionPairForJoin(joinRel, &filters[i]); ok {
+				itemToReplace = &filters[i]
+				// The scan with lower column ids is expected on the left. If this is
+				// not the case, set swapDuplicateScanPrivateOrder to indicate to the
+				// caller that the right Scan should be duplicated first.
+				// We construct replacement scans in the order of increasing column ids
+				// so that remapping can be done directly from a source ColSet to a
+				// target ColSet.
+				leftColID, _ := origLeftScan.Relational().OutputCols.Next(0)
+				rightColID, _ := origRightScan.Relational().OutputCols.Next(0)
+				if leftColID < rightColID {
+					swapDuplicateScanPrivateOrder = false
+				} else {
+					// Left and right scan duplication order must be swapped.
+					swapDuplicateScanPrivateOrder = true
+				}
+				return
+			}
+		}
+	}
+	return nil, nil, nil, false, false
+}
+
+// SplitJoinWithEquijoinDisjuncts checks a join relation for a disjunction of
+// equijoin predicates in an InnerJoin, SemiJoin or AntiJoin. If present, and
+// the inputs to the join are canonical scans, or Selects from canonical scans,
+// it builds two new join relations of the same join type as the original, but
+// with one disjunct assigned to firstJoin and the remaining disjuncts assigned
+// to secondJoin.
+// In the case of inner join, newRelationCols contains the column ids from the
+// original Scans in the left and right inputs plus primary key columns from
+// both input relations. For semijoin or antijoin, newRelationCols contains the
+// column ids from the original left Scan plus primary key columns from the left
+// relation.
+// aggCols contains the non-key columns of the left and right inputs.
+// groupingCols contains the primary key columns of the left and right inputs,
+// needed for deduplicating results.
+// If there is no disjunction of equijoin predicates, or the join type is not
+// one of the supported join types listed above, ok=false is returned.
+func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
+	joinRel memo.RelExpr, joinFilters memo.FiltersExpr,
+) (
+	firstJoin memo.RelExpr,
+	secondJoin memo.RelExpr,
+	newRelationCols opt.ColSet,
+	aggCols opt.ColSet,
+	groupingCols opt.ColSet,
+	ok bool,
+) {
+
+	notOkSplitJoin := func() (memo.RelExpr, memo.RelExpr, opt.ColSet, opt.ColSet, opt.ColSet, bool) {
+		emptyColSet := opt.ColSet{}
+		return nil, nil, emptyColSet, emptyColSet, emptyColSet, false
+	}
+	var joinType descpb.JoinType
+	var joinPrivate *memo.JoinPrivate
+	var leftInput memo.RelExpr
+	var rightInput memo.RelExpr
+
+	switch joinRel.(type) {
+	case *memo.InnerJoinExpr:
+		join := joinRel.(*memo.InnerJoinExpr)
+		joinPrivate = &join.JoinPrivate
+		leftInput = join.Left
+		rightInput = join.Right
+		joinType = descpb.JoinType_INNER
+	case *memo.SemiJoinExpr:
+		join := joinRel.(*memo.SemiJoinExpr)
+		joinPrivate = &join.JoinPrivate
+		leftInput = join.Left
+		rightInput = join.Right
+		joinType = descpb.JoinType_LEFT_SEMI
+	case *memo.AntiJoinExpr:
+		join := joinRel.(*memo.AntiJoinExpr)
+		joinPrivate = &join.JoinPrivate
+		leftInput = join.Left
+		rightInput = join.Right
+		joinType = descpb.JoinType_LEFT_ANTI
+	default:
+		return notOkSplitJoin()
+	}
+
+	origLeftScan, origLeftScanPrivate, leftFilters, ok := c.e.funcs.getfilteredScan(leftInput)
+	if !ok || !c.IsCanonicalScan(origLeftScanPrivate) {
+		return notOkSplitJoin()
+	}
+	origRightScan, origRightScanPrivate, rightFilters, ok := c.e.funcs.getfilteredScan(rightInput)
+	if !ok || !c.IsCanonicalScan(origRightScanPrivate) {
+		return notOkSplitJoin()
+	}
+	// Look for a disjunction of equijoin predicates.
+	firstOnClause, secondOnClause, itemToReplace, swapDuplicateScanPrivateOrder, ok :=
+		c.SplitDisjunctionForJoin(joinRel, joinFilters, origLeftScan, origRightScan)
+	if !ok {
+		return notOkSplitJoin()
+	}
+
+	// Add in the primary key columns so the caller can group by them to
+	// deduplicate results.
+	leftSP := c.e.funcs.AddPrimaryKeyColsToScanPrivate(origLeftScanPrivate)
+	var rightSP *memo.ScanPrivate
+	if joinType == descpb.JoinType_INNER {
+		rightSP = c.e.funcs.AddPrimaryKeyColsToScanPrivate(origRightScanPrivate)
+	} else {
+		rightSP = origRightScanPrivate
+	}
+
+	// Make new column ids for the new scans which are input to the two
+	// new joins we're building.
+	newLeftScanPrivate, newRightScanPrivate :=
+		c.e.funcs.duplicateScanPrivatesForJoin(leftSP, rightSP, swapDuplicateScanPrivateOrder)
+	newLeftScanPrivate2, newRightScanPrivate2 :=
+		c.e.funcs.duplicateScanPrivatesForJoin(leftSP, rightSP, swapDuplicateScanPrivateOrder)
+	amendedLeftOrigCols := c.e.funcs.ScanPrivateCols(leftSP)
+	amendedRightOrigCols := c.e.funcs.ScanPrivateCols(rightSP)
+	amendedOrigCols := c.e.funcs.UnionCols(amendedLeftOrigCols, amendedRightOrigCols)
+
+	// Tell the caller what the complete set of column ids is for the new relation
+	// they are building (e.g., a UNION ALL of the 2 new joins).
+	if joinType == descpb.JoinType_INNER {
+		newRelationCols = amendedOrigCols
+	} else {
+		newRelationCols = amendedLeftOrigCols
+	}
+
+	// Build the new Selects for the first new join, with mapped filter columns.
+	newLeftScan := c.e.f.ConstructScan(newLeftScanPrivate)
+	newLeftSelect :=
+		c.e.f.ConstructSelect(
+			newLeftScan,
+			c.e.funcs.MapFilterCols(leftFilters, amendedLeftOrigCols, c.e.funcs.OutputCols(newLeftScan)),
+		)
+	newRightScan := c.e.f.ConstructScan(newRightScanPrivate)
+	newRightSelect :=
+		c.e.f.ConstructSelect(
+			newRightScan,
+			c.e.funcs.MapFilterCols(rightFilters, amendedRightOrigCols, c.e.funcs.OutputCols(newRightScan)),
+		)
+
+	// Assign the firstOnClause, which was built from splitting the disjunction,
+	// to the first new join.
+	newJoinFilters :=
+		c.e.funcs.MapFilterCols(
+			c.e.funcs.ReplaceFiltersItem(joinFilters, itemToReplace, firstOnClause),
+			amendedOrigCols,
+			c.e.funcs.UnionCols(c.e.funcs.OutputCols(newLeftScan), c.e.funcs.OutputCols(newRightScan)),
+		)
+	newJoinPrivate := c.e.funcs.DuplicateJoinPrivate(joinPrivate)
+
+	// Build a new first join with an identical join type to the original join.
+	if joinType == descpb.JoinType_INNER {
+		firstJoin = c.e.f.ConstructInnerJoin(newLeftSelect, newRightSelect, newJoinFilters, newJoinPrivate)
+	} else if joinType == descpb.JoinType_LEFT_SEMI {
+		firstJoin = c.e.f.ConstructSemiJoin(newLeftSelect, newRightSelect, newJoinFilters, newJoinPrivate)
+	} else if joinType == descpb.JoinType_LEFT_ANTI {
+		firstJoin = c.e.f.ConstructAntiJoin(newLeftSelect, newRightSelect, newJoinFilters, newJoinPrivate)
+	} else {
+		panic(errors.AssertionFailedf("Unexpected join type while splitting disjuncted join predicates: %v",
+			joinRel.Op()))
+	}
+
+	// Build the new Selects for the second new join, with mapped filter columns.
+	newLeftScan2 := c.e.f.ConstructScan(newLeftScanPrivate2)
+	newLeftSelect2 :=
+		c.e.f.ConstructSelect(
+			newLeftScan2,
+			c.e.funcs.MapFilterCols(leftFilters, amendedLeftOrigCols, c.e.funcs.OutputCols(newLeftScan2)),
+		)
+	newRightScan2 := c.e.f.ConstructScan(newRightScanPrivate2)
+	newRightSelect2 :=
+		c.e.f.ConstructSelect(
+			newRightScan2,
+			c.e.funcs.MapFilterCols(rightFilters, amendedRightOrigCols, c.e.funcs.OutputCols(newRightScan2)),
+		)
+
+	// Assign the secondOnClause, which was built from splitting the disjunction,
+	// to the second new join.
+	newJoinFilters2 :=
+		c.e.funcs.MapFilterCols(
+			c.e.funcs.ReplaceFiltersItem(joinFilters, itemToReplace, secondOnClause),
+			amendedOrigCols,
+			c.e.funcs.UnionCols(c.e.funcs.OutputCols(newLeftScan2), c.e.funcs.OutputCols(newRightScan2)),
+		)
+	newJoinPrivate2 := c.e.funcs.DuplicateJoinPrivate(joinPrivate)
+
+	// Build a new second join with an identical join type to the original join.
+	if joinType == descpb.JoinType_INNER {
+		secondJoin = c.e.f.ConstructInnerJoin(newLeftSelect2, newRightSelect2, newJoinFilters2, newJoinPrivate2)
+	} else if joinType == descpb.JoinType_LEFT_SEMI {
+		secondJoin = c.e.f.ConstructSemiJoin(newLeftSelect2, newRightSelect2, newJoinFilters2, newJoinPrivate2)
+	} else if joinType == descpb.JoinType_LEFT_ANTI {
+		secondJoin = c.e.f.ConstructAntiJoin(newLeftSelect2, newRightSelect2, newJoinFilters2, newJoinPrivate2)
+	} else {
+		panic(errors.AssertionFailedf("Unexpected join type while splitting disjuncted join predicates: %v",
+			joinRel.Op()))
+	}
+
+	// To find the non-key agg cols and grouping key cols, map from firstJoinCols,
+	// which contains the column ids from the left and right inputs, to the
+	// amendedOrigCols set, which is the final set of column ids we are telling
+	// the caller to use in constructing their set operation (e.g., UNION ALL).
+	// The selection of the first join's columns to do the mapping is arbitrary.
+	// We could have just as easily mapped from the second join's columns.
+	firstJoinCols := c.e.funcs.OutputCols(firstJoin)
+	if joinType == descpb.JoinType_INNER {
+		aggCols =
+			c.e.funcs.remapColSet(
+				c.e.funcs.UnionCols(
+					c.e.funcs.NonKeyCols(newLeftScan),
+					c.e.funcs.NonKeyCols(newRightScan)),
+				firstJoinCols,
+				amendedOrigCols,
+			)
+		groupingCols =
+			c.e.funcs.remapColSet(
+				c.e.funcs.UnionCols(
+					c.e.funcs.KeyCols(newLeftScan),
+					c.e.funcs.KeyCols(newRightScan)),
+				firstJoinCols,
+				amendedOrigCols,
+			)
+	} else {
+		aggCols = c.e.funcs.remapColSet(c.e.funcs.NonKeyCols(newLeftScan), firstJoinCols, amendedLeftOrigCols)
+		groupingCols = c.e.funcs.remapColSet(c.e.funcs.KeyCols(newLeftScan), firstJoinCols, amendedLeftOrigCols)
+	}
+	ok = true
+	return
+}
+
+// findInterestingDisjunctionPairForJoin groups disjunction subexpressions into
+// an "interesting" pair of join predicates.
+//
+// An "interesting" pair of predicates is one where each predicate is an
+// equality predicate which could enable more performant joins than cross join,
+// such as hash join or lookup join. All predicates in the disjunction must be
+// equality join terms referencing both input relations. When there are more
+// than two predicates, the deepest leaf node in the left depth OrExpr tree
+// is returned as "left" and the remaining predicates are built into a brand new
+// OrExpr chain and returned as "right". The inputs to joinRel are expected to
+// be ScanExprs or SelectExprs with a ScanExpr as input.
+//
+// findInterestingDisjunctionPairForJoin returns an ok=false if at least one of
+// the ORed predicates is not an equality join term referencing both input
+// relations.
+func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
+	joinRel memo.RelExpr, filter *memo.FiltersItem,
+) (left opt.ScalarExpr, right opt.ScalarExpr, ok bool) {
+	interesting := true
+	switch joinRel.(type) {
+	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.SemiJoinApplyExpr, *memo.LeftJoinExpr, *memo.RightJoinExpr,
+		*memo.FullJoinExpr, *memo.AntiJoinExpr, *memo.AntiJoinApplyExpr:
+		// Do nothing
+	default:
+		return nil, nil, false
+	}
+	var leftScan *memo.ScanExpr
+	var rightScan *memo.ScanExpr
+	if leftSelect, ok := joinRel.Child(0).(*memo.SelectExpr); ok {
+		if leftScan, ok = leftSelect.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, false
+		}
+	} else if leftScan, ok = joinRel.Child(0).(*memo.ScanExpr); !ok {
+		return nil, nil, false
+	}
+	if rightSelect, ok := joinRel.Child(1).(*memo.SelectExpr); ok {
+		if rightScan, ok = rightSelect.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, false
+		}
+	} else if rightScan, ok = joinRel.Child(1).(*memo.ScanExpr); !ok {
+		return nil, nil, false
+	}
+
+	var leftExprs memo.ScalarListExpr
+	var rightExprs memo.ScalarListExpr
+	leftColSet := c.OutputCols(leftScan)
+	rightColSet := c.OutputCols(rightScan)
+
+	// Traverse all adjacent OrExpr.
+	var collect func(opt.ScalarExpr)
+	collect = func(expr opt.ScalarExpr) {
+		switch t := expr.(type) {
+		case *memo.OrExpr:
+			collect(t.Left)
+			if !interesting {
+				return
+			}
+			collect(t.Right)
+			return
+		case *memo.EqExpr:
+			// Do nothing
+			break
+		default:
+			interesting = false
+			return
+		}
+		cols := c.OuterCols(expr)
+
+		// The join predicate must reference columns from both the
+		// left and right relations.
+		if !leftColSet.Intersects(cols) || !rightColSet.Intersects(cols) {
+			interesting = false
+			return
+		}
+
+		if len(leftExprs) == 0 {
+			leftExprs = append(leftExprs, expr)
+		} else {
+			rightExprs = append(rightExprs, expr)
+		}
+	}
+	collect(filter.Condition)
+	// Return an empty pair if either of the expression lists is empty.
+	if !interesting ||
+		len(leftExprs) == 0 ||
+		len(rightExprs) == 0 {
+		return nil, nil, false
+	}
+
+	return c.constructOr(leftExprs), c.constructOr(rightExprs), true
+}
+
+// duplicateScanPrivatesForJoin duplicates leftScanPrivate and rightScanPrivate,
+// returned as newLeftScanPrivate and newRightScanPrivate. If
+// swapDuplicateScanPrivateOrder is true, rightScanPrivate is duplicated first,
+// otherwise leftScanPrivate is duplicated first. The ScanPrivate duplicated
+// first will have lower ColIDs in the copy than those of the other copy.
+func (c *CustomFuncs) duplicateScanPrivatesForJoin(
+	leftScanPrivate *memo.ScanPrivate,
+	rightScanPrivate *memo.ScanPrivate,
+	swapDuplicateScanPrivateOrder bool,
+) (newLeftScanPrivate *memo.ScanPrivate, newRightScanPrivate *memo.ScanPrivate) {
+	if swapDuplicateScanPrivateOrder {
+		newRightScanPrivate = c.DuplicateScanPrivate(rightScanPrivate)
+		newLeftScanPrivate = c.DuplicateScanPrivate(leftScanPrivate)
+	} else {
+		newLeftScanPrivate = c.DuplicateScanPrivate(leftScanPrivate)
+		newRightScanPrivate = c.DuplicateScanPrivate(rightScanPrivate)
+	}
+	return
 }
