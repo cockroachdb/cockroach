@@ -206,6 +206,10 @@ type TestServerInterface interface {
 
 	// CollectionFactory returns a *descs.CollectionFactory.
 	CollectionFactory() interface{}
+
+	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
+	// the server.
+	SpanConfigKVSubscriber() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

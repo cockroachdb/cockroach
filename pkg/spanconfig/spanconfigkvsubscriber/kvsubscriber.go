@@ -98,6 +98,7 @@ type KVSubscriber struct {
 	started int32    // accessed atomically
 	mu      struct { // serializes between Start and external threads
 		syncutil.RWMutex
+		lastUpdated hlc.Timestamp
 		// internal is the internal spanconfig.Store maintained by the
 		// KVSubscriber. A read-only view over this store is exposed as part of
 		// the interface. When re-subscribing, a fresh spanconfig.Store is
@@ -342,6 +343,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 				// avoid this mutex.
 				s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 			}
+			s.mu.lastUpdated = frontierTS
 			handlers := s.mu.handlers
 			s.mu.Unlock()
 
@@ -363,6 +365,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 
 			s.mu.Lock()
 			s.mu.internal = freshStore
+			s.mu.lastUpdated = initialScanTS
 			handlers := s.mu.handlers
 			s.mu.Unlock()
 
@@ -392,6 +395,14 @@ func (s *KVSubscriber) Subscribe(fn func(roachpb.Span)) {
 	defer s.mu.Unlock()
 
 	s.mu.handlers = append(s.mu.handlers, handler{fn: fn})
+}
+
+// LastUpdated is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) LastUpdated() hlc.Timestamp {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.lastUpdated
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.

@@ -86,6 +86,8 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	tenSQLTranslator := tenantState.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
 	tenSQLWatcher := tenantState.SpanConfigSQLWatcher().(spanconfig.SQLWatcher)
 
+	// TODO(irfansharif): We don't always care about these recordings -- should
+	// it be optional?
 	tenantState.recorder = spanconfigtestutils.NewKVAccessorRecorder(tenKVAccessor)
 	tenantState.reconciler = spanconfigreconciler.New(
 		tenSQLWatcher,
