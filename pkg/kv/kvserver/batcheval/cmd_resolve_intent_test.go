@@ -109,7 +109,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				if !ranged {
 					cArgs.Args = &ri
-					declareKeysResolveIntent(&desc, &h, &ri, &latchSpans, &lockSpans)
+					declareKeysResolveIntent(&desc, &h, &ri, &latchSpans, &lockSpans, 0)
 					batch := spanset.NewBatch(engine.NewBatch(), &latchSpans)
 					defer batch.Close()
 					if _, err := ResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
@@ -117,7 +117,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					}
 				} else {
 					cArgs.Args = &rir
-					declareKeysResolveIntentRange(&desc, &h, &rir, &latchSpans, &lockSpans)
+					declareKeysResolveIntentRange(&desc, &h, &rir, &latchSpans, &lockSpans, 0)
 					batch := spanset.NewBatch(engine.NewBatch(), &latchSpans)
 					defer batch.Close()
 					if _, err := ResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
@@ -203,7 +203,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 			}
 			ri.Key = k
 
-			declareKeysResolveIntent(&desc, &h, &ri, &spans, nil)
+			declareKeysResolveIntent(&desc, &h, &ri, &spans, nil, 0)
 			rbatch = spanset.NewBatch(db.NewBatch(), &spans)
 			defer rbatch.Close()
 
@@ -227,7 +227,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 			rir.Key = k
 			rir.EndKey = endKey
 
-			declareKeysResolveIntentRange(&desc, &h, &rir, &spans, nil)
+			declareKeysResolveIntentRange(&desc, &h, &rir, &spans, nil, 0)
 			rbatch = spanset.NewBatch(db.NewBatch(), &spans)
 			defer rbatch.Close()
 

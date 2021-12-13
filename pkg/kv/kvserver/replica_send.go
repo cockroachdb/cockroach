@@ -919,7 +919,7 @@ func (r *Replica) collectSpans(
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans)
+			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
 			if considerOptEval {
 				switch inner.(type) {
 				case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:

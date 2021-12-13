@@ -28,7 +28,11 @@ func init() {
 }
 
 func declareKeysComputeChecksum(
-	rs ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// The correctness of range merges depends on the lease applied index of a
 	// range not being bumped while the RHS is subsumed. ComputeChecksum bumps a

@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -31,6 +32,7 @@ func declareKeysHeartbeatTransaction(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	declareKeysWriteTransaction(rs, header, req, latchSpans)
 }
