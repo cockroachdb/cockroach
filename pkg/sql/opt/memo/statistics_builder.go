@@ -784,7 +784,8 @@ func (sb *statisticsBuilder) constrainScan(
 	// Calculate distinct counts and histograms for the partial index predicate
 	// ------------------------------------------------------------------------
 	if pred != nil {
-		predUnappliedConjucts, predConstrainedCols, predHistCols := sb.applyFilters(pred, scan, relProps)
+		predUnappliedConjucts, predConstrainedCols, predHistCols :=
+			sb.applyFilters(pred, scan, relProps, false /* skipOrTermAccounting */)
 		numUnappliedConjuncts += predUnappliedConjucts
 		constrainedCols.UnionWith(predConstrainedCols)
 		constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
@@ -1127,7 +1128,8 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilters(h.filters, join, relProps)
+	numUnappliedConjuncts, constrainedCols, histCols :=
+		sb.applyFilters(h.filters, join, relProps, true /* skipOrTermAccounting */)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -1154,6 +1156,10 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalenciesSemiJoin(
 			equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, &h.filtersFD, join, s,
 		))
+		var oredTermSelectivity props.Selectivity
+		oredTermSelectivity, numUnappliedConjuncts =
+			sb.selectivityFromOredEquivalencies(h, join, s, numUnappliedConjuncts, true /* semiJoin */)
+		s.ApplySelectivity(oredTermSelectivity)
 
 	default:
 		s.RowCount = leftStats.RowCount * rightStats.RowCount
@@ -1170,6 +1176,10 @@ func (sb *statisticsBuilder) buildJoin(
 		}
 
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
+		var oredTermSelectivity props.Selectivity
+		oredTermSelectivity, numUnappliedConjuncts =
+			sb.selectivityFromOredEquivalencies(h, join, s, numUnappliedConjuncts, false /* semiJoin */)
+		s.ApplySelectivity(oredTermSelectivity)
 	}
 
 	if join.Op() == opt.InvertedJoinOp || hasInvertedJoinCond(h.filters) {
@@ -1662,7 +1672,8 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// to iterate through FixedCols here if we are already processing the ON
 	// clause.
 	// TODO(rytaft): use histogram for zig zag join.
-	numUnappliedConjuncts, constrainedCols, _ := sb.applyFilters(zigzag.On, zigzag, relProps)
+	numUnappliedConjuncts, constrainedCols, _ :=
+		sb.applyFilters(zigzag.On, zigzag, relProps, false /* skipOrTermAccounting */)
 
 	// Application of constraints on inverted indexes needs to be handled a
 	// little differently since a constraint on an inverted index key column
@@ -2895,7 +2906,8 @@ func (sb *statisticsBuilder) filterRelExpr(
 
 	// Calculate distinct counts and histograms for constrained columns
 	// ----------------------------------------------------------------
-	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilters(filters, e, relProps)
+	numUnappliedConjuncts, constrainedCols, histCols :=
+		sb.applyFilters(filters, e, relProps, false /* skipOrTermAccounting */)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -2932,11 +2944,12 @@ func (sb *statisticsBuilder) filterRelExpr(
 // applyFilters uses constraints to update the distinct counts and histograms
 // for the constrained columns in the filter. The changes in the distinct
 // counts and histograms will be used later to determine the selectivity of
-// the filter.
+// the filter. If skipOrTermAccounting is true, OrExpr filters are not counted
+// towards numUnappliedConjuncts.
 //
 // See applyFiltersItem for more details.
 func (sb *statisticsBuilder) applyFilters(
-	filters FiltersExpr, e RelExpr, relProps *props.Relational,
+	filters FiltersExpr, e RelExpr, relProps *props.Relational, skipOrTermAccounting bool,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
 	// Special hack for lookup and inverted joins. Add constant filters from the
 	// equality conditions.
@@ -2953,7 +2966,11 @@ func (sb *statisticsBuilder) applyFilters(
 	for i := range filters {
 		numUnappliedConjunctsLocal, constrainedColsLocal, histColsLocal :=
 			sb.applyFiltersItem(&filters[i], e, relProps)
-		numUnappliedConjuncts += numUnappliedConjunctsLocal
+		// Selectivity from OrExprs is computed elsewhere when skipOrTermAccounting
+		// is true.
+		if _, ok := filters[i].Condition.(*OrExpr); !skipOrTermAccounting || !ok {
+			numUnappliedConjuncts += numUnappliedConjunctsLocal
+		}
 		constrainedCols.UnionWith(constrainedColsLocal)
 		histCols.UnionWith(histColsLocal)
 	}
@@ -3890,6 +3907,177 @@ func (sb *statisticsBuilder) selectivityFromEquivalencies(
 	})
 
 	return selectivity
+}
+
+// selectivityFromOredEquivalencies determines the selectivity of all
+// disjunctions of equality constraints present in the array of conjuncts,
+// h.filters. For every conjunct that is an OrExpr chain in which at least one
+// disjunct exists with no column equivalency set, selectivity estimation is
+// skipped for that conjunct and numUnappliedConjuncts is incremented by 1.
+// If in the future the accuracy of inequality join predicate selectivity
+// estimation is improved, this method can be updated to handle those predicates
+// as well.
+func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
+	h *joinPropsHelper,
+	e RelExpr,
+	s *props.Statistics,
+	numUnappliedConjunctsIn float64,
+	semiJoin bool,
+) (selectivity props.Selectivity, numUnappliedConjuncts float64) {
+	numUnappliedConjuncts = numUnappliedConjunctsIn
+	selectivity = props.OneSelectivity
+	var conjunctSelectivity props.Selectivity
+
+	for f := 0; f < len(h.filters); f++ {
+		conjunctSelectivity = props.OneSelectivity
+		disjunction := h.filters[f]
+		var disjuncts []opt.ScalarExpr
+		if orExpr, ok := disjunction.Condition.(*OrExpr); !ok {
+			continue
+		} else {
+			disjuncts = CollectContiguousOrExprs(orExpr)
+		}
+		var filter FiltersItem
+		var filters FiltersExpr
+		var filtersFDs []props.FuncDepSet
+		var ok = true
+
+		for i := 0; ok && i < len(disjuncts); i++ {
+			var andFilters FiltersExpr
+			var filtersFD props.FuncDepSet
+
+			// Only handle ANDed equality expressions for which constructFiltersItem
+			// is able to build column equivalencies.
+			switch disjuncts[i].(type) {
+			case *EqExpr, *AndExpr:
+				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
+					numUnappliedConjuncts++
+					continue
+				}
+				e.Memo().logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
+			default:
+				numUnappliedConjuncts++
+				ok = false
+				continue
+			}
+			// If no column equivalencies are found, we know nothing about this term,
+			// so should skip selectivity estimation on the entire conjunct.
+			if filtersFD.Empty() || filtersFD.EquivReps().Empty() {
+				numUnappliedConjuncts++
+				ok = false
+				break
+			}
+			filters = append(filters, filter)
+			filtersFDs = append(filtersFDs, filtersFD)
+		}
+		if !ok {
+			continue
+		}
+		var singleSelectivity props.Selectivity
+		var selectivities []props.Selectivity
+		for i := 0; i < len(filters); i++ {
+			FD := &filtersFDs[i]
+			equivReps := FD.EquivReps()
+			if semiJoin {
+				singleSelectivity = sb.selectivityFromEquivalenciesSemiJoin(
+					equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, FD, e, s,
+				)
+			} else {
+				singleSelectivity = sb.selectivityFromEquivalencies(equivReps, FD, e, s)
+			}
+			selectivities = append(selectivities, singleSelectivity)
+		}
+		if !ok {
+			continue
+		}
+		// Combine the selectivities of each ORed predicate to get the total
+		// combined selectivity of the entire OR expression.
+		conjunctSelectivity = combineOredSelectivities(selectivities)
+
+		// Combine this disjunction's selectivity with that of other disjunctions.
+		selectivity.Multiply(conjunctSelectivity)
+	}
+	return selectivity, numUnappliedConjuncts
+}
+
+// combineOredSelectivities iteratively applies the General Disjunction Rule
+// on a slice of 'selectivities' where each selectivity in the slice is the
+// selectivity of an individual ORed predicate.
+//
+// Given predicates A and B and probability function P:
+//     P(A or B) = P(A) + P(B) - P(A and B)
+// Continuation:
+//     P(A or B or C) = P(A or B) + P(C) - P((A or B) and C)
+//     P(A or B or C or D) = P(A or B or C) + P(D) - P((A or B or C) and D)
+//     ...
+//
+// This seems to be a standard approach in the database world.
+// The textbook solution is more complex:
+// https://www.thoughtco.com/probability-union-of-three-sets-more-3126263
+// https://stats.stackexchange.com/questions/87533/whats-the-general-disjunction-rule-for-n-events
+//
+// Q: Does the iterative approach do a good enough job of approximating
+//    the non-iterative textbook solution?
+//
+// In the formula we assume A and B are independent, so:
+//    P(A and B) = P(A) * P(B)
+// The independence assumption may not be correct in all cases.
+// Would using the full formula lead to more errors since the independence
+// assumption is used in more terms in that formula?
+// In any case, the runtime of computing the full formula for filters with
+// many predicates may be excessive due to combinatorial explosion.
+// That shouldn't apply to the ON clause because typically it would not have
+// hundreds of disjuncts, but may apply if this method were used for
+// single-table filter selectivity estimation.
+//
+// Possible improvement: Use multicolumn stats to estimate P(A and B)
+// instead of assuming full independence.
+func combineOredSelectivities(selectivities []props.Selectivity) props.Selectivity {
+	totalSelectivity := selectivities[0]
+	var combinedSel props.Selectivity
+	for i := 1; i < len(selectivities); i++ {
+		// combinedSel represents P(A and B)
+		combinedSel = props.MakeSelectivity((&totalSelectivity).AsFloat())
+		(&combinedSel).Multiply(selectivities[i])
+		totalSelectivity.UnsafeAdd(selectivities[i])
+		totalSelectivity.Subtract(combinedSel)
+	}
+	return totalSelectivity
+}
+
+// constructFiltersItem constructs an expression for the FiltersItem operator,
+// with identical behavior to the Factory method of the same name, but for use
+// in cases where the Factory is not accessible.
+func constructFiltersItem(condition opt.ScalarExpr, m *Memo) FiltersItem {
+	item := FiltersItem{Condition: condition}
+	item.PopulateProps(m)
+	return item
+}
+
+// addEqExprConjuncts recursively walks a scalar expression as long as it
+// continues to find nested And operators. It adds any equality expression
+// conjuncts to the given FiltersExpr and returns true.
+// This function is inspired by norm.CustomFuncs.addConjuncts, but serves
+// a different purpose.
+// The whole purpose of this new function is to enable the building of
+// functional dependencies based on equality predicates for selectivity
+// estimation purposes, so it is not important to traverse OrExpr expression
+// subtrees or make filters for any other expression type.
+func addEqExprConjuncts(
+	scalar opt.ScalarExpr, filters FiltersExpr, m *Memo,
+) (_ FiltersExpr, ok bool) {
+	switch t := scalar.(type) {
+	case *AndExpr:
+		var ok1, ok2 bool
+		filters, ok1 = addEqExprConjuncts(t.Left, filters, m)
+		filters, ok2 = addEqExprConjuncts(t.Right, filters, m)
+		return filters, ok1 || ok2
+	case *EqExpr:
+		filters = append(filters, constructFiltersItem(t, m))
+	default:
+		return nil, false
+	}
+	return filters, true
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalency(

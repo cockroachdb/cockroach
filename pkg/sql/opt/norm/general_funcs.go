@@ -1069,3 +1069,12 @@ func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPriva
 		Locking: sp.Locking,
 	}
 }
+
+// DuplicateJoinPrivate copies a JoinPrivate, preserving the Flags and
+// SkipReorderJoins field values.
+func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPrivate {
+	return &memo.JoinPrivate{
+		Flags:            jp.Flags,
+		SkipReorderJoins: jp.SkipReorderJoins,
+	}
+}
