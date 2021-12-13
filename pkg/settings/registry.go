@@ -104,6 +104,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.telemetry.query_sampling.qps_threshold":                     {},
 	"sql.telemetry.query_sampling.sample_rate":                       {},
 	"diagnostics.sql_stat_reset.interval":                            {},
+	"changefeed.mem.pushback_enabled":                                {},
 
 	// removed as of 22.1.
 	"sql.defaults.drop_enum_value.enabled":                             {},
