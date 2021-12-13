@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -23,9 +22,9 @@ import (
 )
 
 // hypotheticalIndex is a dummy implementation of cat.Index, used with
-// hypotheticalTable for index recommendations.
+// HypotheticalTable for index recommendations.
 type hypotheticalIndex struct {
-	tab  *hypotheticalTable
+	tab  *HypotheticalTable
 	name tree.Name
 
 	// cols stores the index columns, in order.
@@ -50,7 +49,7 @@ type hypotheticalIndex struct {
 var _ cat.Index = &hypotheticalIndex{}
 
 func (hi *hypotheticalIndex) init(
-	tab *hypotheticalTable,
+	tab *HypotheticalTable,
 	name tree.Name,
 	cols []cat.IndexColumn,
 	indexOrd int,
@@ -197,7 +196,7 @@ func (hi *hypotheticalIndex) GeoConfig() *geoindex.Config {
 func (hi *hypotheticalIndex) Version() descpb.IndexDescriptorVersion {
 	// Return the latest version for non-primary indexes, since hypothetical
 	// indexes are not primary indexes.
-	return tabledesc.LatestNonPrimaryIndexDescriptorVersion
+	return descpb.LatestNonPrimaryIndexDescriptorVersion
 }
 
 // PartitionCount is part of the cat.Index interface.

@@ -879,9 +879,9 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 		}
 		if idx.Primary() {
-			if idx.GetVersion() != descpb.PrimaryIndexWithStoredColumnsVersion {
+			if idx.GetVersion() != descpb.LatestPrimaryIndexDescriptorVersion {
 				return errors.AssertionFailedf("primary index %q has invalid version %d, expected %d",
-					idx.GetName(), idx.GetVersion(), descpb.PrimaryIndexWithStoredColumnsVersion)
+					idx.GetName(), idx.GetVersion(), descpb.LatestPrimaryIndexDescriptorVersion)
 			}
 			if idx.IndexDesc().EncodingType != descpb.PrimaryIndexEncoding {
 				return errors.AssertionFailedf("primary index %q has invalid encoding type %d in proto, expected %d",

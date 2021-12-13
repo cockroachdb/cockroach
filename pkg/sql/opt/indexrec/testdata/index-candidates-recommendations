@@ -10,6 +10,35 @@ exec-ddl
 CREATE TABLE t3 (k INT, i INT, f FLOAT)
 ----
 
+exec-ddl
+CREATE TABLE t4 (k INT, f FLOAT, j JSONB, a INT[])
+----
+
+# Ensure that columns that require inverted indexes do not have candidates. This
+# is temporary until we support inverted index recommendations.
+
+index-candidates
+SELECT k, f FROM t4 WHERE j IS NULL
+----
+
+index-candidates
+SELECT * FROM t4 WHERE k = 2 AND a IS NULL OR f > 2
+----
+t4:
+ (f)
+ (k)
+ (k, f)
+
+# Ensure that index candidates are not created for virtual tables.
+index-candidates
+SELECT *
+FROM information_schema.schemata JOIN t1
+ON true
+WHERE information_schema.schemata.SCHEMA_NAME='public' AND t1.k > 3
+----
+t1:
+ (k)
+
 # Ensure that new indexes do not get recommended if an identical existing
 # index exists.
 

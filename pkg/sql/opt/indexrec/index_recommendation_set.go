@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -27,11 +28,11 @@ import (
 // Note that because the index recommendation engine stores all table columns in
 // its hypothetical indexes when optimizing, and then prunes the stored columns
 // after, this may result in the best plan not being chosen. Meaning, a plan
-// might not be recommended because the optimizer includes the overhead of
-// scanning stored columns of an index, which results in plans with hypothetical
-// indexes being more expensive and reduces their likelihood of being
-// recommended. This is a tradeoff we accept in order to recommend STORING
-// columns, as the difference in plan costs is not very significant.
+// might not be chosen because the optimizer includes the overhead of scanning
+// stored columns of an index, which results in plans with hypothetical indexes
+// being more expensive and reduces their likelihood of being chosen. This is a
+// tradeoff we accept in order to recommend STORING columns, as the difference
+// in plan costs is not very significant.
 func FindIndexRecommendationSet(expr opt.Expr, md *opt.Metadata) IndexRecommendationSet {
 	var recommendationSet IndexRecommendationSet
 	recommendationSet.init(md)
@@ -119,14 +120,14 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	}
 	// Do not add real table indexes (non-hypothetical table indexes).
 	switch hypTable := irs.md.TableMeta(tabID).Table.(type) {
-	case *hypotheticalTable:
+	case *HypotheticalTable:
 		scannedColOrds := irs.getColOrdSet(scannedCols, tabID)
 		// Try to find an identical existing index recommendation.
 		for _, indexRec := range irs.indexRecs[hypTable] {
 			index := indexRec.index
 			if index.indexOrdinal == indexOrd {
-				// Update newStoredColOrds to include all stored column ordinals that
-				// are in scannedColOrds.
+				// Update indexRec.newStoredColOrds to include all stored column
+				// ordinals that are in scannedColOrds.
 				indexRec.addStoredColOrds(scannedColOrds)
 				return
 			}
@@ -139,20 +140,20 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	}
 }
 
-// String returns the string index recommendation output that will be
+// Output returns a string slice of index recommendation output that will be
 // displayed below the statement plan in EXPLAIN.
-func (irs *IndexRecommendationSet) String() string {
+func (irs *IndexRecommendationSet) Output() []string {
 	indexRecCount := 0
 	for t := range irs.indexRecs {
 		indexRecCount += len(irs.indexRecs[t])
 	}
 	if indexRecCount == 0 {
-		return ""
+		return nil
 	}
-	var sb strings.Builder
-	sb.WriteString(
-		fmt.Sprintf("\n\nindex recommendations: %d\n\n", indexRecCount),
-	)
+
+	outputRowCount := 2*len(irs.indexRecs) + 1
+	output := make([]string, 0, outputRowCount)
+	output = append(output, fmt.Sprintf("index recommendations: %d", indexRecCount))
 
 	sortedTables := make([]cat.Table, 0, len(irs.indexRecs))
 	for t := range irs.indexRecs {
@@ -170,14 +171,16 @@ func (irs *IndexRecommendationSet) String() string {
 			if indexRec.existingIndex != nil {
 				recTypeStr = "index replacement"
 			}
-			sb.WriteString(fmt.Sprintf("%d. type: %s", indexRecOrd, recTypeStr))
+			indexCols := indexRec.indexCols()
+			storing := indexRec.storingColumns()
+
+			indexRecType := fmt.Sprintf("%d. type: %s", indexRecOrd, recTypeStr)
+			indexRecSQL := indexRec.indexRecommendationString(indexCols, storing)
+			output = append(output, indexRecType, indexRecSQL)
 			indexRecOrd++
-			indexCols := indexRec.indexColsString()
-			storingClause := indexRec.storingClauseString()
-			sb.WriteString(indexRec.indexRecommendationString(indexCols, storingClause))
 		}
 	}
-	return sb.String()
+	return output
 }
 
 // indexRecommendation stores the information pertaining to a single index
@@ -202,7 +205,7 @@ type indexRecommendation struct {
 // init initializes an index recommendation. If there is an existingIndex with
 // the same explicit key columns, it is stored here.
 func (ir *indexRecommendation) init(
-	indexOrd int, hypTable *hypotheticalTable, scannedColOrds util.FastIntSet,
+	indexOrd int, hypTable *HypotheticalTable, scannedColOrds util.FastIntSet,
 ) {
 	index := hypTable.Index(indexOrd).(*hypotheticalIndex)
 	ir.index = index
@@ -244,67 +247,67 @@ func (ir *indexRecommendation) addStoredColOrds(scannedColOrds util.FastIntSet) 
 	ir.newStoredColOrds.UnionWith(scannedStoredColOrds)
 }
 
-// indexColsString returns a string containing the explicit key columns of the
-// index, used in indexRecommendationString.
-func (ir *indexRecommendation) indexColsString() string {
-	indexCols := make([]string, len(ir.index.cols))
+// indexCols returns the explicit key columns of the index, used in
+// indexRecommendationString.
+func (ir *indexRecommendation) indexCols() []tree.IndexElem {
+	indexCols := make([]tree.IndexElem, len(ir.index.cols))
 
-	for i, n := 0, len(ir.index.cols); i < n; i++ {
-		var indexColSb strings.Builder
+	for i := range ir.index.cols {
 		indexCol := ir.index.Column(i)
 		colName := indexCol.Column.ColName()
-		indexColSb.WriteString(colName.String())
 
+		var direction tree.Direction
 		if indexCol.Descending {
-			indexColSb.WriteString(" DESC")
+			direction = tree.Descending
 		}
 
-		indexCols[i] = indexColSb.String()
+		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction}
 	}
 
-	return strings.Join(indexCols, ", ")
+	return indexCols
 }
 
-// storingClauseString returns the STORING clause string output of an index
-// recommendation.
-func (ir *indexRecommendation) storingClauseString() string {
-	if ir.newStoredColOrds.Len() == 0 {
-		return ""
+// storingColumns returns the stored columns of an index recommendation, used in
+// indexRecommendationString.
+func (ir *indexRecommendation) storingColumns() []tree.Name {
+	storingLen := ir.newStoredColOrds.Len()
+	if storingLen == 0 {
+		return nil
 	}
-	var storingSb strings.Builder
-	for i, col := range ir.newStoredColOrds.Ordered() {
-		colName := ir.index.tab.Column(col).ColName()
-		if i > 0 {
-			storingSb.WriteString(", ")
-		}
-		storingSb.WriteString(colName.String())
-	}
-	return " STORING (" + storingSb.String() + ")"
+	storingCols := make([]tree.Name, 0, storingLen)
+	ir.newStoredColOrds.ForEach(func(colOrd int) {
+		colName := ir.index.tab.Column(colOrd).ColName()
+		storingCols = append(storingCols, colName)
+	})
+	return storingCols
 }
 
 // indexRecommendationString returns the string output for an index
 // recommendation, containing the SQL command(s) needed to follow this
 // recommendation.
-func (ir *indexRecommendation) indexRecommendationString(indexCols, storingClause string) string {
+func (ir *indexRecommendation) indexRecommendationString(
+	indexCols []tree.IndexElem, storing []tree.Name,
+) string {
 	var sb strings.Builder
-	tableName := ir.index.tab.Name()
+	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
 
 	if ir.existingIndex != nil {
-		sb.WriteString("\n   SQL commands: ")
-		indexName := ir.existingIndex.Name()
-		dropCmd := fmt.Sprintf("DROP INDEX %s@%s; ", tableName.String(), indexName.String())
-		sb.WriteString(dropCmd)
+		sb.WriteString("   SQL commands: ")
+		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
+		dropCmd := tree.DropIndex{
+			IndexList: []*tree.TableIndexName{{Table: *tableName, Index: indexName}},
+		}
+		sb.WriteString(dropCmd.String() + "; ")
 	} else {
-		sb.WriteString("\n   SQL command: ")
+		sb.WriteString("   SQL command: ")
 	}
 
-	createCmd := fmt.Sprintf(
-		"CREATE INDEX ON %s (%s)%s;\n\n",
-		tableName.String(),
-		indexCols,
-		storingClause,
-	)
-	sb.WriteString(createCmd)
+	createCmd := tree.CreateIndex{
+		Table:   *tableName,
+		Columns: indexCols,
+		Storing: storing,
+	}
+	sb.WriteString(createCmd.String() + ";")
 
 	return sb.String()
 }

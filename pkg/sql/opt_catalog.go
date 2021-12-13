@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1150,6 +1151,19 @@ func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 		"column [%d] does not exist", colID)
 }
 
+// convertTableToOptTable converts a table to an *optTable. This is either an
+// *optTable or a *indexrec.HypotheticalTable (which has an embedded *optTable).
+func convertTableToOptTable(tab cat.Table) *optTable {
+	var optTab *optTable
+	switch t := tab.(type) {
+	case *optTable:
+		optTab = t
+	case *indexrec.HypotheticalTable:
+		optTab = t.Table.(*optTable)
+	}
+	return optTab
+}
+
 // CollectTypes is part of the cat.DataSource interface.
 func (ot *optTable) CollectTypes(ord int) (descpb.IDs, error) {
 	col := ot.desc.AllColumns()[ord]
@@ -1616,7 +1630,7 @@ func (u *optUniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
 			tab.ID(), u.table,
 		))
 	}
-	optTab := tab.(*optTable)
+	optTab := convertTableToOptTable(tab)
 	ord, _ := optTab.lookupColumnOrdinal(u.columns[i])
 	return ord
 }
@@ -1686,7 +1700,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 		))
 	}
 
-	tab := originTable.(*optTable)
+	tab := convertTableToOptTable(originTable)
 	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
@@ -1699,7 +1713,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 			referencedTable.ID(), fk.referencedTable,
 		))
 	}
-	tab := referencedTable.(*optTable)
+	tab := convertTableToOptTable(referencedTable)
 	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }

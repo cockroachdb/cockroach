@@ -502,7 +502,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 }
 
 // maybeUpgradePrimaryIndexFormatVersion tries to promote a primary index to
-// version descpb.PrimaryIndexWithStoredColumnsVersion whenever possible.
+// version LatestPrimaryIndexDescriptorVersion whenever possible.
 func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
 	// Always set the correct encoding type for the primary index.
 	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
@@ -547,12 +547,12 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	}
 	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
 	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
-	desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	desc.PrimaryIndex.Version = descpb.LatestPrimaryIndexDescriptorVersion
 	return true
 }
 
 // maybeUpgradeSecondaryIndexFormatVersion tries to promote a secondary index to
-// version descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
+// version LatestNonPrimaryIndexDescriptorVersion whenever possible.
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
@@ -575,7 +575,7 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	if set.Contains(0) {
 		return false
 	}
-	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	idx.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
 	return true
 }
 

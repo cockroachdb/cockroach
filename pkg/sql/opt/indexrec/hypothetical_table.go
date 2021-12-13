@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// BuildOptAndHypTableMaps builds a hypotheticalTable for each table in
-// indexCandidates. This hypotheticalTable stores a hypothetical index for each
+// BuildOptAndHypTableMaps builds a HypotheticalTable for each table in
+// indexCandidates. This HypotheticalTable stores a hypothetical index for each
 // of the table's index candidates. The function returns a map from each table's
 // cat.StableID to its original sql.optTable, as well as a map from each table's
-// cat.StableID to its constructed hypotheticalTable. These tables will be used
+// cat.StableID to its constructed HypotheticalTable. These tables will be used
 // to update the table query metadata when making index recommendations.
 func BuildOptAndHypTableMaps(
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
@@ -34,7 +34,7 @@ func BuildOptAndHypTableMaps(
 
 	for t, indexes := range indexCandidates {
 		hypIndexes := make([]hypotheticalIndex, 0, len(indexes))
-		var hypTable hypotheticalTable
+		var hypTable HypotheticalTable
 		hypTable.init(t, hypIndexes)
 
 		for i, index := range indexes {
@@ -58,18 +58,18 @@ func BuildOptAndHypTableMaps(
 	return optTables, hypTables
 }
 
-// hypotheticalTable is a wrapper around cat.Table, used for creating index
+// HypotheticalTable is a wrapper around cat.Table, used for creating index
 // recommendations. The hypotheticalIndexes slice stores fake indexes that could
 // potentially speed up queries to this table.
-type hypotheticalTable struct {
+type HypotheticalTable struct {
 	cat.Table
 	primaryKeyColsOrdSet util.FastIntSet
 	hypotheticalIndexes  []hypotheticalIndex
 }
 
-var _ cat.Table = &hypotheticalTable{}
+var _ cat.Table = &HypotheticalTable{}
 
-func (ht *hypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalIndex) {
+func (ht *HypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalIndex) {
 	ht.Table = table
 	ht.hypotheticalIndexes = hypIndexes
 
@@ -82,24 +82,24 @@ func (ht *hypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalInde
 }
 
 // IndexCount is part of the cat.Table interface.
-func (ht *hypotheticalTable) IndexCount() int {
-	// A hypotheticalTable stores the embedded table's primary index in addition
+func (ht *HypotheticalTable) IndexCount() int {
+	// A HypotheticalTable stores the embedded table's primary index in addition
 	// to its hypothetical indexes.
 	return len(ht.hypotheticalIndexes) + 1
 }
 
 // WritableIndexCount is part of the cat.Table interface.
-func (ht *hypotheticalTable) WritableIndexCount() int {
+func (ht *HypotheticalTable) WritableIndexCount() int {
 	return ht.IndexCount()
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
-func (ht *hypotheticalTable) DeletableIndexCount() int {
+func (ht *HypotheticalTable) DeletableIndexCount() int {
 	return ht.IndexCount()
 }
 
 // Index is part of the cat.Table interface.
-func (ht *hypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
+func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 	if i == cat.PrimaryIndex {
 		return ht.Table.Index(cat.PrimaryIndex)
 	}
@@ -107,10 +107,10 @@ func (ht *hypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 }
 
 // existingRedundantIndex checks whether an index with the same explicit columns
-// as the index argument is present in the hypotheticalTable's embedded table.
+// as the index argument is present in the HypotheticalTable's embedded table.
 // If so, it returns the first instance of such an existing index. Otherwise, it
 // returns nil.
-func (ht *hypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
+func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
 		indexCols := index.cols
 		existingIndex := ht.Table.Index(i)
