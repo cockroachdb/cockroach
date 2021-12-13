@@ -122,27 +122,28 @@ const statementStats: any = {
   exec_stats: execStats,
 };
 
+const fingerprintID = "4705782015019656142";
 const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
 const aggregationInterval = 3600; // 1 hour
+// The aggregate key value will need to change if implementation of
+// 'statementKey' in appStats.ts changes.
+const aggregateKey = fingerprintID + aggregatedTs + aggregationInterval;
 
 export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   history,
   location: {
-    pathname:
-      "/statement/true/SELECT city%2C id FROM vehicles WHERE city %3D %241",
+    pathname: "/statement/true/4705782015019656142",
     search: "",
     hash: "",
     state: null,
   },
   match: {
-    path: "/statement/:database/:implicitTxn/:statement",
-    url:
-      "/statement/defaultdb/true/SELECT city%2C id FROM vehicles WHERE city %3D %241",
+    path: "/statement/:implicitTxn/:statement",
+    url: "/statement/true/4705782015019656142",
     isExact: true,
     params: {
       implicitTxn: "true",
-      statement: "SELECT city%2C id FROM vehicles WHERE city %3D %241",
-      database: "defaultdb",
+      statement: "4705782015019656142",
     },
   },
   timeScale: {
@@ -152,13 +153,23 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     key: "Custom",
   },
   statement: {
-    statement: "SELECT city, id FROM vehicles WHERE city = $1",
+    statement:
+      "CREATE TABLE IF NOT EXISTS promo_codes (\n" +
+      "  code            VARCHAR NOT NULL,\n" +
+      "  description     VARCHAR NULL,\n" +
+      "  creation_time   TIMESTAMP NULL,\n" +
+      "  expiration_time TIMESTAMP NULL,\n" +
+      "  rules           JSONB NULL,\n" +
+      "  PRIMARY KEY (code ASC)\n" +
+      ")",
     stats: statementStats,
     database: "defaultdb",
     byNode: [
       {
+        aggregateKey,
         label: "4",
-        summary: "SELECT city, id FROM vehicles",
+        summary:
+          "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,
@@ -167,8 +178,10 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
         stats: statementStats,
       },
       {
+        aggregateKey,
         label: "3",
-        summary: "SELECT city, id FROM vehicles",
+        summary:
+          "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,
@@ -177,8 +190,10 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
         stats: statementStats,
       },
       {
+        aggregateKey,
         label: "2",
-        summary: "SELECT city, id FROM vehicles",
+        summary:
+          "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,
@@ -187,8 +202,10 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
         stats: statementStats,
       },
       {
+        aggregateKey,
         label: "1",
-        summary: "SELECT city, id FROM vehicles",
+        summary:
+          "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
         aggregatedTs,
         aggregationInterval,
         implicitTxn: true,

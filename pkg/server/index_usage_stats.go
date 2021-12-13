@@ -230,7 +230,7 @@ func getTableIndexUsageStats(
 			ti.index_type,
 			total_reads,
 			last_read,
-			indexdef
+			prettify_statement(indexdef)
 		FROM crdb_internal.index_usage_statistics AS us
   	JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id 
 		AND us.table_id = ti.descriptor_id

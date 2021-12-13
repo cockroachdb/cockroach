@@ -17,7 +17,6 @@ import { merge } from "lodash";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
-import { util } from "@cockroachlabs/cluster-ui";
 import { appAttr, statementAttr } from "src/util/constants";
 import {
   selectStatements,
@@ -28,6 +27,7 @@ import {
 import { selectStatement } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
+import { util } from "@cockroachlabs/cluster-ui";
 
 type CollectedStatementStatistics = util.CollectedStatementStatistics;
 type ExecStats = util.ExecStats;
@@ -53,7 +53,6 @@ describe("selectStatements", () => {
     const props = makeEmptyRouteProps();
 
     const result = selectStatements(state, props);
-
     assert.equal(result.length, 3);
 
     const expectedFingerprints = [stmtA, stmtB, stmtC].map(
@@ -276,8 +275,9 @@ describe("selectStatement", () => {
     const stmtB = makeFingerprint(2, "foobar");
     const stmtC = makeFingerprint(3, "another");
     const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
 
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatement(stmtAKey);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -297,8 +297,8 @@ describe("selectStatement", () => {
       .add(stmtB.stats.count.add(stmtC.stats.count))
       .toNumber();
     const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
-
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatement(stmtAKey);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -323,8 +323,8 @@ describe("selectStatement", () => {
       .add(stmtC.stats.count)
       .toNumber();
     const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
-
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatement(stmtAKey);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -364,8 +364,8 @@ describe("selectStatement", () => {
       stmtG,
       stmtH,
     ]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
-
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatement(stmtAKey);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -384,10 +384,8 @@ describe("selectStatement", () => {
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
-    const props = makeRoutePropsWithStatementAndApp(
-      stmtA.key.key_data.query,
-      "foo",
-    );
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatementAndApp(stmtAKey, "foo");
 
     const result = selectStatement(state, props);
 
@@ -407,10 +405,8 @@ describe("selectStatement", () => {
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
-    const props = makeRoutePropsWithStatementAndApp(
-      stmtA.key.key_data.query,
-      "(unset)",
-    );
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatementAndApp(stmtAKey, "(unset)");
 
     const result = selectStatement(state, props);
 
@@ -430,10 +426,8 @@ describe("selectStatement", () => {
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
-    const props = makeRoutePropsWithStatementAndApp(
-      stmtA.key.key_data.query,
-      "$ internal",
-    );
+    const stmtAKey = makeStatementKeyFromStatement(stmtA);
+    const props = makeRoutePropsWithStatementAndApp(stmtAKey, "$ internal");
 
     const result = selectStatement(state, props);
 
@@ -467,6 +461,7 @@ function makeFingerprint(
       },
       node_id: nodeId,
     },
+    id: Long.fromNumber(id),
     stats: makeStats(),
   };
 }
@@ -515,6 +510,19 @@ function makeStat() {
     mean: 10,
     squared_diffs: 1,
   };
+}
+
+// This function creates a statement key from a mocked statement fingerprint.
+// The resulting key is identical to that of 'statementKey' in appStats.ts.
+// Changes to 'statementKey' should also be reflected in this mock function.
+function makeStatementKeyFromStatement(
+  stmt: CollectedStatementStatistics,
+): string {
+  return (
+    stmt.id.toString() +
+    util.TimestampToNumber(null) +
+    util.DurationToNumber(null)
+  );
 }
 
 function makeEmptySensitiveInfo(): ISensitiveInfo {

@@ -110,18 +110,28 @@ func collectCombinedStatements(
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	whereClause, qargs := getFilterAndParams(start, end)
 
+	const lineWidth = 108
+	const alignMode = 2
+	const caseMode = 1
+
 	query := fmt.Sprintf(
 		`SELECT
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
 				aggregated_ts,
-				metadata,
+				jsonb_set(
+					metadata,
+					array['query'],
+					to_jsonb(
+						prettify_statement(metadata ->> 'query', %d, %d, %d)
+					)
+				),
 				statistics,
 				sampled_plan,
 				aggregation_interval
 			FROM crdb_internal.statement_statistics
-			%s`, whereClause)
+			%s`, lineWidth, alignMode, caseMode, whereClause)
 
 	const expectedNumDatums = 8
 
@@ -175,6 +185,10 @@ func collectCombinedStatements(
 		metadata.Key.App = app
 		metadata.Key.TransactionFingerprintID =
 			roachpb.TransactionFingerprintID(transactionFingerprintID)
+
+		if err != nil {
+			return nil, err
+		}
 
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {

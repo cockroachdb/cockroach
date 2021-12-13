@@ -100,6 +100,7 @@ export const aggregateStatements = (
     const key = transactionScopedStatementKey(s);
     if (!(key in statsKey)) {
       statsKey[key] = {
+        aggregateKey: key,
         label: s.statement,
         summary: s.statement_summary,
         aggregatedTs: s.aggregated_ts,
