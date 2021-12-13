@@ -235,7 +235,6 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
   return (
     <div className={cx("timescale")}>
-      <Divider type="vertical" />
       <RangeSelect
         selected={getTimeRangeTitle(currentWindow, currentScale)}
         onChange={onOptionSelect}
