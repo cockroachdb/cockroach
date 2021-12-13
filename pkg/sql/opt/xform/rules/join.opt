@@ -124,6 +124,109 @@
     (OutputCols $left)
 )
 
+# SplitDisjunctionOfJoinTerms splits disjunctions (OR expressions) of ON clause
+# predicates of an inner or semi join into a Union of two Join expressions, the
+# first containing the left subexpression of the OR expression and the second
+# containing the right subexpression.
+# All other filter items in the original expression are preserved in the new
+# Join expressions. The logical Union is evaluated as a UNION ALL followed by a
+# distinct sort on the primary key columns of both the left and right input in
+# the case of inner join, or in the case or semijoin, the primary key columns
+# of the left.
+#
+# The call to SplitJoinWithEquijoinDisjuncts adds primary key columns to the
+# original Scan ColSet which the replace patten removes by adding a Project as
+# the last operation.
+# Inclusion of the primary keys is required to prevent the generated Union from
+# duplicating rows that have the same selected values.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the OR expression, or to enable hash-based join methods instead of cross join.
+# The execution plan can use both indexes to satisfy both sides of the
+# disjunction and union the results together.
+#
+# This rule is a reworking and combining of Select rules SplitDisjunction and
+# SplitDisjunctionAddKey, modified to handle joins and join predicates.
+[SplitDisjunctionOfJoinTerms, Explore]
+(InnerJoin | SemiJoin
+    *
+    *
+    $on:* &
+        (Let
+            (
+                $firstJoin
+                $secondJoin
+                $newRelationCols
+                $aggCols
+                $groupingCols
+                $ok
+            ):(SplitJoinWithEquijoinDisjuncts (Root) $on)
+            $ok
+        )
+    *
+)
+=>
+(Project
+    (DistinctOn
+        (UnionAll
+            $firstJoin
+            $secondJoin
+            (MakeSetPrivate
+                $firstJoinCols:(OutputCols $firstJoin)
+                $secondJoinCols:(OutputCols $secondJoin)
+                $newRelationCols
+            )
+        )
+        (MakeAggCols ConstAgg $aggCols)
+        (MakeGrouping $groupingCols (EmptyOrdering))
+    )
+    []
+    (OutputCols (Root))
+)
+
+# SplitDisjunctionOfAntiJoinTerms splits disjunctions (OR expressions) of ON
+# clause predicates of an antijoin into a Union of two AntiJoin expressions, the
+# first containing the left subexpression of the OR expression and the second
+# containing the right subexpression. This rule is identical to
+# SplitDisjunctionOfJoinTerms, except the INTERSECT ALL set operation is used
+# in place of UNION ALL.
+[SplitDisjunctionOfAntiJoinTerms, Explore]
+(AntiJoin
+    *
+    *
+    $on:* &
+        (Let
+            (
+                $firstJoin
+                $secondJoin
+                $newRelationCols
+                $aggCols
+                $groupingCols
+                $ok
+            ):(SplitJoinWithEquijoinDisjuncts (Root) $on)
+            $ok
+        )
+    *
+)
+=>
+(Project
+    (DistinctOn
+        (IntersectAll
+            $firstJoin
+            $secondJoin
+            (MakeSetPrivate
+                $firstJoinCols:(OutputCols $firstJoin)
+                $secondJoinCols:(OutputCols $secondJoin)
+                $newRelationCols
+            )
+        )
+        (MakeAggCols ConstAgg $aggCols)
+        (MakeGrouping $groupingCols (EmptyOrdering))
+    )
+    []
+    (OutputCols (Root))
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]

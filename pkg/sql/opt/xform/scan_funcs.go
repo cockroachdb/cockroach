@@ -284,3 +284,8 @@ func (c *CustomFuncs) splitSpans(
 	remoteConstraint.Init(&keyCtx, &remoteSpans)
 	return localConstraint, remoteConstraint
 }
+
+// ScanPrivateCols returns the ColSet of a ScanPrivate.
+func (c *CustomFuncs) ScanPrivateCols(sp *memo.ScanPrivate) opt.ColSet {
+	return sp.Cols
+}
