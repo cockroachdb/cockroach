@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/errors"
 )
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
@@ -37,15 +38,40 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 			tlsMode = pgurl.TLSVerifyFull
 		}
 
-		if caCertPath == "" {
-			// Fetch CA cert. This is required to exist, so try to load it. We use
-			// the fact that GetCertificateManager checks that "some certs" exist
-			// and want to return "its error" here since we test it in
-			// test_url_db_override.tcl.
-			if _, err := ctx.GetCertificateManager(); err != nil {
-				return wrapError(err)
+		// Only verify-full and verify-ca should be doing certificate verification.
+		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
+			if caCertPath == "" {
+				// We need a CA certificate.
+				// Try to use the cert manager to find one, and if that fails,
+				// assume that the Go TLS code will fall back to a OS-level
+				// common trust store.
+
+				// First, initialize the cert manager.
+				cm, err := ctx.GetCertificateManager()
+				if err != nil {
+					// The SecurityContext was unable to get a cert manager. We
+					// can further distinguish between:
+					// - cert manager initialized OK, but contains no certs.
+					// - cert manager did not initialize (bad certs dir, file access error etc).
+					// The former case is legitimate and we will fall back below.
+					// The latter case is a real problem and needs to pop up to the user.
+					if !errors.Is(err, errNoCertificatesFound) {
+						// The certificate manager could not load properly. Let
+						// the user know.
+						return err
+					}
+					// Fall back: cert manager initialized OK, but no certs found.
+				}
+				if ourCACert := cm.CACert(); ourCACert != nil {
+					// The CM has a CA cert. Use that.
+					caCertPath = cm.FullPath(ourCACert)
+				}
 			}
-			caCertPath = ctx.CACertPath()
+			// Fallback: if caCertPath was not assigned above, either
+			// we did not have a certs dir, or it did not contain
+			// a CA cert. In that case, we rely on the OS trust store.
+			// Documentation of tls.Config:
+			//     https://pkg.go.dev/crypto/tls#Config
 		}
 
 		// (Re)populate the transport information.
