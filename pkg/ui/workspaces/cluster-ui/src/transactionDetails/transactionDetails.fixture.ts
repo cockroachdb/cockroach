@@ -13,6 +13,7 @@ import moment from "moment";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { TimeScale } from "../timeScaleDropdown";
 
 const history = createMemoryHistory({ initialEntries: ["/transactions"] });
 const timestamp = new protos.google.protobuf.Timestamp({
@@ -624,7 +625,9 @@ export const transactionDetails = {
   },
 };
 
-export const dateRange: [moment.Moment, moment.Moment] = [
-  moment.utc("2021.01.01"),
-  moment.utc("2021.12.31"),
-];
+export const timeScale: TimeScale = {
+  windowSize: moment.duration(1, "year"),
+  sampleSize: moment.duration(1, "day"),
+  windowEnd: moment.utc("2021.12.31"),
+  key: "Custom",
+};

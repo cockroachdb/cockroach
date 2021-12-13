@@ -15,7 +15,7 @@ import { noop } from "lodash";
 import {
   transactionDetails,
   routeProps,
-  dateRange,
+  timeScale,
 } from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
@@ -31,7 +31,7 @@ storiesOf("Transactions Details", module)
     <TransactionDetails
       {...routeProps}
       aggregatedTs={data.aggregatedTs}
-      dateRange={dateRange}
+      timeScale={timeScale}
       transactionFingerprintId={data.transactionFingerprintId}
       transaction={data.transaction}
       statements={data.statements as any}
@@ -44,7 +44,7 @@ storiesOf("Transactions Details", module)
     <TransactionDetails
       {...routeProps}
       aggregatedTs={data.aggregatedTs}
-      dateRange={dateRange}
+      timeScale={timeScale}
       transactionFingerprintId={data.transactionFingerprintId}
       transaction={data.transaction}
       statements={undefined}
@@ -57,7 +57,7 @@ storiesOf("Transactions Details", module)
     <TransactionDetails
       {...routeProps}
       aggregatedTs={undefined}
-      dateRange={undefined}
+      timeScale={undefined}
       transactionFingerprintId={undefined}
       transaction={undefined}
       statements={undefined}

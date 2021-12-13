@@ -11,7 +11,6 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter } from "react-router-dom";
-import moment from "moment";
 import { refreshStatements } from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -27,8 +26,8 @@ import {
   defaultFilters,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
-import { setCombinedStatementsDateRangeAction } from "src/redux/statements";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
+import { setCombinedStatementsTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 
 // selectStatements returns the array of AggregateStatistics to show on the
@@ -57,13 +56,6 @@ export const selectLastReset = createSelector(
 export const selectLastError = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
-);
-
-export const selectDateRange = createSelector(
-  statementsDateRangeLocalSetting.selector,
-  (state: { start: number; end: number }): [moment.Moment, moment.Moment] => {
-    return [moment.unix(state.start), moment.unix(state.end)];
-  },
 );
 
 export const sortSettingLocalSetting = new LocalSetting(
@@ -95,7 +87,7 @@ const TransactionsPageConnected = withRouter(
     (state: AdminUIState) => ({
       columns: transactionColumnsLocalSetting.selectorToArray(state),
       data: selectData(state),
-      dateRange: selectDateRange(state),
+      timeScale: statementsTimeScaleLocalSetting.selector(state),
       error: selectLastError(state),
       filters: filtersLocalSetting.selector(state),
       lastReset: selectLastReset(state),
@@ -107,7 +99,7 @@ const TransactionsPageConnected = withRouter(
     {
       refreshData: refreshStatements,
       resetSQLStats: resetSQLStatsAction,
-      onDateRangeChange: setCombinedStatementsDateRangeAction,
+      onTimeScaleChange: setCombinedStatementsTimeScaleAction,
       // We use `null` when the value was never set and it will show all columns.
       // If the user modifies the selection and no columns are selected,
       // the function will save the value as a blank space, otherwise
