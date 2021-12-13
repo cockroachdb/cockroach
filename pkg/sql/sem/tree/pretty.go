@@ -95,6 +95,16 @@ const (
 	PrettyAlignAndExtraIndent = 3
 )
 
+// CaseMode directs which casing mode to use.
+type CaseMode int
+
+const (
+	// LowerCase transforms case-insensitive strings (like SQL keywords) to lowercase.
+	LowerCase CaseMode = 0
+	// UpperCase transforms case-insensitive strings (like SQL keywords) to uppercase.
+	UpperCase CaseMode = 1
+)
+
 // keywordWithText returns a pretty.Keyword with left and/or right
 // sides concat'd as a pretty.Text.
 func (p *PrettyCfg) keywordWithText(left, keyword, right string) pretty.Doc {
