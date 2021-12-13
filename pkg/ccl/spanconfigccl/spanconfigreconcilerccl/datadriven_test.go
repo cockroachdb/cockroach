@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -199,35 +198,12 @@ func TestDataDriven(t *testing.T) {
 					return entries[i].Span.Key.Compare(entries[j].Span.Key) < 0
 				})
 
-				var offset, limit int
-				if d.HasArg("offset") {
-					d.ScanArgs(t, "offset", &offset)
-					require.True(t, offset >= 0)
-					require.Truef(t, offset <= len(entries),
-						"offset (%d) larger than number of entries (%d)", offset, len(entries))
-				}
-				if d.HasArg("limit") {
-					d.ScanArgs(t, "limit", &limit)
-					require.True(t, limit >= 0)
-				} else {
-					limit = len(entries)
-				}
-				var output strings.Builder
-				if offset > 0 && len(entries) > 0 {
-					output.WriteString("...\n") // print leading elipses
-				}
-
-				entries = entries[offset:]
+				lines := make([]string, len(entries))
 				for i, entry := range entries {
-					if i == limit {
-						output.WriteString("...\n") // print trailing elipses
-						break
-					}
-
-					output.WriteString(fmt.Sprintf("%-42s %s\n", entry.Span,
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(entry.Config)))
+					lines[i] = fmt.Sprintf("%-42s %s", entry.Span,
+						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(entry.Config))
 				}
-				return output.String()
+				return spanconfigtestutils.MaybeLimitAndOffset(t, d, "...", lines)
 
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
