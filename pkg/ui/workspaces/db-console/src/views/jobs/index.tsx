@@ -103,10 +103,11 @@ export class JobsTable extends React.Component<JobsTableProps> {
 
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
+
+    // Sort Settings.
     const ascending = (searchParams.get("ascending") || undefined) === "true";
     const columnTitle = searchParams.get("columnTitle") || undefined;
     const sortSetting = this.props.sort;
-
     if (
       this.props.setSort &&
       columnTitle &&
@@ -114,6 +115,24 @@ export class JobsTable extends React.Component<JobsTableProps> {
         sortSetting.ascending != ascending)
     ) {
       this.props.setSort({ columnTitle, ascending });
+    }
+
+    // Filter Status.
+    const status = searchParams.get("status") || undefined;
+    if (this.props.setStatus && status && status != this.props.status) {
+      this.props.setStatus(status);
+    }
+
+    // Filter Show.
+    const show = searchParams.get("show") || undefined;
+    if (this.props.setShow && show && show != this.props.show) {
+      this.props.setShow(show);
+    }
+
+    // Filter Type.
+    const type = parseInt(searchParams.get("type"), 10) || undefined;
+    if (this.props.setType && type && type != this.props.type) {
+      this.props.setType(type);
     }
   }
 
@@ -145,6 +164,13 @@ export class JobsTable extends React.Component<JobsTableProps> {
     const filter = selected.value === "" ? "all" : selected.value;
     trackFilter("Status", filter);
     this.props.setStatus(selected.value);
+
+    util.syncHistory(
+      {
+        status: selected.value,
+      },
+      this.props.history,
+    );
   };
 
   onTypeSelected = (selected: DropdownOption) => {
@@ -152,10 +178,24 @@ export class JobsTable extends React.Component<JobsTableProps> {
     const typeLabel = typeOptions[type].label;
     trackFilter("Type", typeLabel);
     this.props.setType(type);
+
+    util.syncHistory(
+      {
+        type: type.toString(),
+      },
+      this.props.history,
+    );
   };
 
   onShowSelected = (selected: DropdownOption) => {
     this.props.setShow(selected.value);
+
+    util.syncHistory(
+      {
+        show: selected.value,
+      },
+      this.props.history,
+    );
   };
 
   changeSortSetting = (ss: SortSetting): void => {
