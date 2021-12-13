@@ -124,6 +124,573 @@
     (OutputCols $left)
 )
 
+# SplitDisjunctionOfJoinTerms splits disjunctions (OR expressions) of ON clause
+# predicates of an inner join into a Union of two Join expressions, the first
+# containing the left subexpression of the OR expression and the second
+# containing the right subexpression.
+# All other filter items in the original expression are preserved in the new
+# Join expressions. The logical Union is evaluated as a UNION ALL followed by a
+# distinct sort on the primary key columns of both the left and right input
+# relations to the Join.
+#
+# The replace pattern adds primary key columns to the original Scan ColSet.
+# It also adds a Project to remove those columns as the last operation.
+# Inclusion of the primary keys is required to prevent the generated Union from
+# duplicating rows that have the same selected values.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the OR expression, or to enable hash-based join methods instead of cross join.
+# The execution plan can use both indexes to satisfy both sides of the
+# disjunction and union the results together.
+#
+# This rule is a reworking and combining of Select rules SplitDisjunction and
+# SplitDisjunctionAddKey, modified to handle joins and join predicates.
+[SplitDisjunctionOfJoinTerms, Explore]
+(InnerJoin
+    $leftInput:* &
+        (Let
+            (
+                $origLeftScan
+                $origLeftScanPrivate
+                $leftFilters
+                $ok
+            ):(getfilteredScan $leftInput)
+            $ok
+        ) &
+        (IsCanonicalScan $origLeftScanPrivate)
+    $rightInput:* &
+        (Let
+            (
+                $origRightScan
+                $origRightScanPrivate
+                $rightFilters
+                $ok2
+            ):(getfilteredScan $rightInput)
+            $ok2
+        ) &
+        (IsCanonicalScan $origRightScanPrivate)
+    $on:* &
+        (Let
+            (
+                $leftOn
+                $rightOn
+                $itemToReplace
+                $swapDuplicateScanPrivateOrder
+                $ok3
+            ):(SplitDisjunctionForJoin
+                (Root)
+                $on
+                $origLeftScan
+                $origRightScan
+            )
+            $ok3
+        ) &
+        (Let
+            ($leftSP):(AddPrimaryKeyColsToScanPrivate
+                $origLeftScanPrivate
+            )
+            $ok
+        ) &
+        (Let
+            ($rightSP):(AddPrimaryKeyColsToScanPrivate
+                $origRightScanPrivate
+            )
+            $ok
+        ) &
+        (Let
+            (
+                $newLeftScanPrivate
+                $newRightScanPrivate
+            ):(duplicateScanPrivatesForJoin
+                $leftSP
+                $rightSP
+                $swapDuplicateScanPrivateOrder
+            )
+            $ok
+        ) &
+        (Let
+            (
+                $newLeftScanPrivate2
+                $newRightScanPrivate2
+            ):(duplicateScanPrivatesForJoin
+                $leftSP
+                $rightSP
+                $swapDuplicateScanPrivateOrder
+            )
+            $ok
+        )
+    $joinPrivate:*
+)
+=>
+(Project
+    (DistinctOn
+        $unionRel:(UnionAll
+            $firstJoin:((OpName)
+                (Select
+                    $newLeftScan:(Scan $newLeftScanPrivate)
+                    (MapFilterCols
+                        $leftFilters
+                        $amendedLeftOrigCols:(ScanPrivateCols
+                            $leftSP
+                        )
+                        (OutputCols $newLeftScan)
+                    )
+                )
+                (Select
+                    $newRightScan:(Scan $newRightScanPrivate)
+                    (MapFilterCols
+                        $rightFilters
+                        $amendedRightOrigCols:(ScanPrivateCols
+                            $rightSP
+                        )
+                        (OutputCols $newRightScan)
+                    )
+                )
+                (MapFilterCols
+                    (ReplaceFiltersItem
+                        $on
+                        $itemToReplace
+                        $leftOn
+                    )
+                    $amendedOrigCols:(UnionCols
+                        (ScanPrivateCols $leftSP)
+                        (ScanPrivateCols $rightSP)
+                    )
+                    (UnionCols
+                        (OutputCols $newLeftScan)
+                        (OutputCols $newRightScan)
+                    )
+                )
+                (DuplicateJoinPrivate $joinPrivate)
+            )
+            $secondJoin:((OpName)
+                (Select
+                    $newLeftScan2:(Scan $newLeftScanPrivate2)
+                    (MapFilterCols
+                        $leftFilters
+                        $amendedLeftOrigCols
+                        (OutputCols $newLeftScan2)
+                    )
+                )
+                (Select
+                    $newRightScan2:(Scan $newRightScanPrivate2)
+                    (MapFilterCols
+                        $rightFilters
+                        $amendedRightOrigCols
+                        (OutputCols $newRightScan2)
+                    )
+                )
+                (MapFilterCols
+                    (ReplaceFiltersItem
+                        $on
+                        $itemToReplace
+                        $rightOn
+                    )
+                    $amendedOrigCols
+                    (UnionCols
+                        (OutputCols $newLeftScan2)
+                        (OutputCols $newRightScan2)
+                    )
+                )
+                (DuplicateJoinPrivate $joinPrivate)
+            )
+            (MakeSetPrivate
+                $firstJoinCols:(OutputCols $firstJoin)
+                $secondJoinCols:(OutputCols $secondJoin)
+                $amendedOrigCols
+            )
+        )
+        (MakeAggCols
+            ConstAgg
+            (remapColSet
+                (UnionCols
+                    (NonKeyCols $newLeftScan)
+                    (NonKeyCols $newRightScan)
+                )
+                $firstJoinCols
+                $amendedOrigCols
+            )
+        )
+        (MakeGrouping
+            (remapColSet
+                (UnionCols
+                    (KeyCols $newLeftScan)
+                    (KeyCols $newRightScan)
+                )
+                $firstJoinCols
+                $amendedOrigCols
+            )
+            (EmptyOrdering)
+        )
+    )
+    []
+    (OutputCols (Root))
+)
+
+# SplitDisjunctionOfSemiJoinTerms splits disjunctions (OR expressions) of ON
+# clause predicates of a semijoin into a Union of two SemiJoin expressions, the
+# first containing the left subexpression of the OR expression and the second
+# containing the right subexpression. This rule is identical to
+# SplitDisjunctionOfJoinTerms, except the distinct GROUP BY columns include
+# only the key columns of the left table.
+[SplitDisjunctionOfSemiJoinTerms, Explore]
+(SemiJoin
+    $leftInput:* &
+        (Let
+            (
+                $origLeftScan
+                $origLeftScanPrivate
+                $leftFilters
+                $ok
+            ):(getfilteredScan $leftInput)
+            $ok
+        ) &
+        (IsCanonicalScan $origLeftScanPrivate)
+    $rightInput:* &
+        (Let
+            (
+                $origRightScan
+                $origRightScanPrivate
+                $rightFilters
+                $ok2
+            ):(getfilteredScan $rightInput)
+            $ok2
+        ) &
+        (IsCanonicalScan $origRightScanPrivate)
+    $on:* &
+        (Let
+            (
+                $leftOn
+                $rightOn
+                $itemToReplace
+                $swapDuplicateScanPrivateOrder
+                $ok3
+            ):(SplitDisjunctionForJoin
+                (Root)
+                $on
+                $origLeftScan
+                $origRightScan
+            )
+            $ok3
+        ) &
+        (Let
+            ($leftSP):(AddPrimaryKeyColsToScanPrivate
+                $origLeftScanPrivate
+            )
+            $ok
+        ) &
+        (Let
+            ($rightSP):(AddPrimaryKeyColsToScanPrivate
+                $origRightScanPrivate
+            )
+            $ok
+        ) &
+        (Let
+            (
+                $newLeftScanPrivate
+                $newRightScanPrivate
+            ):(duplicateScanPrivatesForJoin
+                $leftSP
+                $rightSP
+                $swapDuplicateScanPrivateOrder
+            )
+            $ok
+        ) &
+        (Let
+            (
+                $newLeftScanPrivate2
+                $newRightScanPrivate2
+            ):(duplicateScanPrivatesForJoin
+                $leftSP
+                $rightSP
+                $swapDuplicateScanPrivateOrder
+            )
+            $ok
+        )
+    $joinPrivate:*
+)
+=>
+(Project
+    (DistinctOn
+        $unionRel:(UnionAll
+            $firstJoin:((OpName)
+                (Select
+                    $newLeftScan:(Scan $newLeftScanPrivate)
+                    (MapFilterCols
+                        $leftFilters
+                        $amendedLeftOrigCols:(ScanPrivateCols
+                            $leftSP
+                        )
+                        (OutputCols $newLeftScan)
+                    )
+                )
+                (Select
+                    $newRightScan:(Scan $newRightScanPrivate)
+                    (MapFilterCols
+                        $rightFilters
+                        $amendedRightOrigCols:(ScanPrivateCols
+                            $rightSP
+                        )
+                        (OutputCols $newRightScan)
+                    )
+                )
+                (MapFilterCols
+                    (ReplaceFiltersItem
+                        $on
+                        $itemToReplace
+                        $leftOn
+                    )
+                    $amendedOrigCols:(UnionCols
+                        $amendedLeftOrigCols
+                        (ScanPrivateCols $rightSP)
+                    )
+                    (UnionCols
+                        (OutputCols $newLeftScan)
+                        (OutputCols $newRightScan)
+                    )
+                )
+                (DuplicateJoinPrivate $joinPrivate)
+            )
+            $secondJoin:((OpName)
+                (Select
+                    $newLeftScan2:(Scan $newLeftScanPrivate2)
+                    (MapFilterCols
+                        $leftFilters
+                        $amendedLeftOrigCols
+                        (OutputCols $newLeftScan2)
+                    )
+                )
+                (Select
+                    $newRightScan2:(Scan $newRightScanPrivate2)
+                    (MapFilterCols
+                        $rightFilters
+                        $amendedRightOrigCols
+                        (OutputCols $newRightScan2)
+                    )
+                )
+                (MapFilterCols
+                    (ReplaceFiltersItem
+                        $on
+                        $itemToReplace
+                        $rightOn
+                    )
+                    $amendedOrigCols
+                    (UnionCols
+                        (OutputCols $newLeftScan2)
+                        (OutputCols $newRightScan2)
+                    )
+                )
+                (DuplicateJoinPrivate $joinPrivate)
+            )
+            (MakeSetPrivate
+                $firstJoinCols:(OutputCols $firstJoin)
+                $secondJoinCols:(OutputCols $secondJoin)
+                (ScanPrivateCols $leftSP)
+            )
+        )
+        (MakeAggCols
+            ConstAgg
+            (remapColSet
+                (NonKeyCols $newLeftScan)
+                $firstJoinCols
+                $amendedLeftOrigCols
+            )
+        )
+        (MakeGrouping
+            (remapColSet
+                (KeyCols $newLeftScan)
+                $firstJoinCols
+                $amendedLeftOrigCols
+            )
+            (EmptyOrdering)
+        )
+    )
+    []
+    (OutputCols (Root))
+)
+
+# SplitDisjunctionOfAntiJoinTerms splits disjunctions (OR expressions) of ON
+# clause predicates of an antijoin into a Union of two AntiJoin expressions, the
+# first containing the left subexpression of the OR expression and the second
+# containing the right subexpression. This rule is identical to
+# SplitDisjunctionOfSemiJoinTerms, except INTERSECT ALL set operation is used
+# in place of UNION ALL.
+[SplitDisjunctionOfAntiJoinTerms, Explore]
+(AntiJoin
+    $leftInput:* &
+        (Let
+            (
+                $origLeftScan
+                $origLeftScanPrivate
+                $leftFilters
+                $ok
+            ):(getfilteredScan $leftInput)
+            $ok
+        ) &
+        (IsCanonicalScan $origLeftScanPrivate)
+    $rightInput:* &
+        (Let
+            (
+                $origRightScan
+                $origRightScanPrivate
+                $rightFilters
+                $ok2
+            ):(getfilteredScan $rightInput)
+            $ok2
+        ) &
+        (IsCanonicalScan $origRightScanPrivate)
+    $on:* &
+        (Let
+            (
+                $leftOn
+                $rightOn
+                $itemToReplace
+                $swapDuplicateScanPrivateOrder
+                $ok3
+            ):(SplitDisjunctionForJoin
+                (Root)
+                $on
+                $origLeftScan
+                $origRightScan
+            )
+            $ok3
+        ) &
+        (Let
+            ($leftSP):(AddPrimaryKeyColsToScanPrivate
+                $origLeftScanPrivate
+            )
+            $ok
+        ) &
+        (Let
+            ($rightSP):(AddPrimaryKeyColsToScanPrivate
+                $origRightScanPrivate
+            )
+            $ok
+        ) &
+        (Let
+            (
+                $newLeftScanPrivate
+                $newRightScanPrivate
+            ):(duplicateScanPrivatesForJoin
+                $leftSP
+                $rightSP
+                $swapDuplicateScanPrivateOrder
+            )
+            $ok
+        ) &
+        (Let
+            (
+                $newLeftScanPrivate2
+                $newRightScanPrivate2
+            ):(duplicateScanPrivatesForJoin
+                $leftSP
+                $rightSP
+                $swapDuplicateScanPrivateOrder
+            )
+            $ok
+        )
+    $joinPrivate:*
+)
+=>
+(Project
+    (DistinctOn
+        $intersectRel:(IntersectAll
+            $firstJoin:((OpName)
+                (Select
+                    $newLeftScan:(Scan $newLeftScanPrivate)
+                    (MapFilterCols
+                        $leftFilters
+                        $amendedLeftOrigCols:(ScanPrivateCols
+                            $leftSP
+                        )
+                        (OutputCols $newLeftScan)
+                    )
+                )
+                (Select
+                    $newRightScan:(Scan $newRightScanPrivate)
+                    (MapFilterCols
+                        $rightFilters
+                        $amendedRightOrigCols:(ScanPrivateCols
+                            $rightSP
+                        )
+                        (OutputCols $newRightScan)
+                    )
+                )
+                (MapFilterCols
+                    (ReplaceFiltersItem
+                        $on
+                        $itemToReplace
+                        $leftOn
+                    )
+                    $amendedOrigCols:(UnionCols
+                        $amendedLeftOrigCols
+                        (ScanPrivateCols $rightSP)
+                    )
+                    (UnionCols
+                        (OutputCols $newLeftScan)
+                        (OutputCols $newRightScan)
+                    )
+                )
+                (DuplicateJoinPrivate $joinPrivate)
+            )
+            $secondJoin:((OpName)
+                (Select
+                    $newLeftScan2:(Scan $newLeftScanPrivate2)
+                    (MapFilterCols
+                        $leftFilters
+                        $amendedLeftOrigCols
+                        (OutputCols $newLeftScan2)
+                    )
+                )
+                (Select
+                    $newRightScan2:(Scan $newRightScanPrivate2)
+                    (MapFilterCols
+                        $rightFilters
+                        $amendedRightOrigCols
+                        (OutputCols $newRightScan2)
+                    )
+                )
+                (MapFilterCols
+                    (ReplaceFiltersItem
+                        $on
+                        $itemToReplace
+                        $rightOn
+                    )
+                    $amendedOrigCols
+                    (UnionCols
+                        (OutputCols $newLeftScan2)
+                        (OutputCols $newRightScan2)
+                    )
+                )
+                (DuplicateJoinPrivate $joinPrivate)
+            )
+            (MakeSetPrivate
+                $firstJoinCols:(OutputCols $firstJoin)
+                $secondJoinCols:(OutputCols $secondJoin)
+                (ScanPrivateCols $leftSP)
+            )
+        )
+        (MakeAggCols
+            ConstAgg
+            (remapColSet
+                (NonKeyCols $newLeftScan)
+                $firstJoinCols
+                $amendedLeftOrigCols
+            )
+        )
+        (MakeGrouping
+            (remapColSet
+                (KeyCols $newLeftScan)
+                $firstJoinCols
+                $amendedLeftOrigCols
+            )
+            (EmptyOrdering)
+        )
+    )
+    []
+    (OutputCols (Root))
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]

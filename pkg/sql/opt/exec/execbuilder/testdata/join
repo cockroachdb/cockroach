@@ -1,6 +1,14 @@
 # LogicTest: local
 
 statement ok
+CREATE TABLE classes (classID int, description varchar(50));
+INSERT INTO classes SELECT g, 'dummy description' FROM generate_series(1,100) g(g);
+
+statement ok
+CREATE TABLE classRequest (studentID int, firstChoiceClassID int, secondChoiceClassID int, thirdChoiceClassID int, primary key(studentID));
+INSERT INTO classRequest SELECT g, g, g, g FROM generate_series(1,100) g(g);
+
+statement ok
 CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)
 
 statement ok
@@ -2273,4 +2281,90 @@ vectorized: true
 └── • scan
       missing stats
       table: customers@customers_pkey
+      spans: FULL SCAN
+
+# Test selectivity of ORed join predicates
+
+statement ok
+set vectorize=off;
+
+query T
+EXPLAIN (verbose)
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID or
+                                          classRequest.secondChoiceClassID = classes.classID;
+----
+distribution: local
+vectorized: false
+·
+• project
+│ columns: (classid, description, studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+│ estimated row count: 19,701 (missing stats)
+│
+└── • distinct
+    │ columns: (classid, description, rowid, studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+    │ estimated row count: 19,602 (missing stats)
+    │ distinct on: rowid, studentid
+    │
+    └── • union all
+        │ columns: (classid, description, rowid, studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+        │ estimated row count: 19,602 (missing stats)
+        │
+        ├── • hash join (inner)
+        │   │ columns: (classid, description, rowid, studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+        │   │ estimated row count: 9,801 (missing stats)
+        │   │ equality: (classid) = (firstchoiceclassid)
+        │   │
+        │   ├── • scan
+        │   │     columns: (classid, description, rowid)
+        │   │     estimated row count: 1,000 (missing stats)
+        │   │     table: classes@classes_pkey
+        │   │     spans: FULL SCAN
+        │   │
+        │   └── • scan
+        │         columns: (studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+        │         estimated row count: 1,000 (missing stats)
+        │         table: classrequest@classrequest_pkey
+        │         spans: FULL SCAN
+        │
+        └── • hash join (inner)
+            │ columns: (classid, description, rowid, studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+            │ estimated row count: 9,801 (missing stats)
+            │ equality: (classid) = (secondchoiceclassid)
+            │
+            ├── • scan
+            │     columns: (classid, description, rowid)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: classes@classes_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan
+                  columns: (studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+                  estimated row count: 1,000 (missing stats)
+                  table: classrequest@classrequest_pkey
+                  spans: FULL SCAN
+
+query T
+EXPLAIN (verbose)
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID or
+                                          classRequest.secondChoiceClassID = classes.classID or
+                                          classRequest.thirdChoiceClassID = classes.classID;
+----
+distribution: local
+vectorized: false
+·
+• cross join (inner)
+│ columns: (classid, description, studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+│ estimated row count: 29,404 (missing stats)
+│ pred: ((firstchoiceclassid = classid) OR (secondchoiceclassid = classid)) OR (thirdchoiceclassid = classid)
+│
+├── • scan
+│     columns: (classid, description)
+│     estimated row count: 1,000 (missing stats)
+│     table: classes@classes_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (studentid, firstchoiceclassid, secondchoiceclassid, thirdchoiceclassid)
+      estimated row count: 1,000 (missing stats)
+      table: classrequest@classrequest_pkey
       spans: FULL SCAN

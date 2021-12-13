@@ -1713,6 +1713,11 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 	}
 }
 
+// ScanPrivateCols returns the ColSet of a ScanPrivate.
+func (c *CustomFuncs) ScanPrivateCols(sp *memo.ScanPrivate) opt.ColSet {
+	return sp.Cols
+}
+
 // TableIDFromScanPrivate returns the table ID of the scan private.
 func (c *CustomFuncs) TableIDFromScanPrivate(sp *memo.ScanPrivate) opt.TableID {
 	return sp.Table

@@ -1599,3 +1599,163 @@ func (c *CustomFuncs) splitValues(
 	}
 	return localVals, remoteVals
 }
+
+// SplitDisjunctionForJoin finds the first disjunction in the ON clause that can
+// be split into an interesting pair of predicates. It returns the pair of
+// predicates and the Filters item they were a part of. If an "interesting"
+// disjunction is not found, ok=false is returned. This method also detects
+// which Scan in the joins needs to be duplicated first to maintain the relative
+// order of ColIDs between the left and right relations, and sets
+// swapDuplicateScanPrivateOrder accordingly (we duplicate the left's
+// ScanPrivate first unless swapDuplicateScanPrivateOrder is true).
+//
+// For details on what makes an "interesting" disjunction, see
+// findInterestingDisjunctionPairForJoin.
+func (c *CustomFuncs) SplitDisjunctionForJoin(
+	joinRel memo.RelExpr,
+	filters memo.FiltersExpr,
+	origLeftScan *memo.ScanExpr,
+	origRightScan *memo.ScanExpr,
+) (
+	left opt.ScalarExpr,
+	right opt.ScalarExpr,
+	itemToReplace *memo.FiltersItem,
+	swapDuplicateScanPrivateOrder bool,
+	ok bool,
+) {
+	for i := range filters {
+		if filters[i].Condition.Op() == opt.OrOp {
+			if left, right, ok = c.findInterestingDisjunctionPairForJoin(joinRel, &filters[i]); ok {
+				itemToReplace = &filters[i]
+				// The scan with lower column ids is expected on the left. If this is
+				// not the case, set swapDuplicateScanPrivateOrder to indicate to the
+				// caller that the right Scan should be duplicated first.
+				// We construct replacement scans in the order of increasing column ids
+				// so that remapping can be done directly from a source ColSet to a
+				// target ColSet.
+				leftColID, _ := origLeftScan.Relational().OutputCols.Next(0)
+				rightColID, _ := origRightScan.Relational().OutputCols.Next(0)
+				if leftColID < rightColID {
+					swapDuplicateScanPrivateOrder = false
+				} else {
+					// Left and right scan duplication order must be swapped.
+					swapDuplicateScanPrivateOrder = true
+				}
+				return
+			}
+		}
+	}
+	return nil, nil, nil, false, false
+}
+
+// findInterestingDisjunctionPairForJoin groups disjunction subexpressions into
+// an "interesting" pair of join predicates.
+//
+// An "interesting" pair of predicates is one where each predicate is an
+// equality predicate which could enable more performant joins than cross join,
+// such as hash join or lookup join. All predicates in the disjunction must be
+// equality join terms referencing both input relations. When there are more
+// than two predicates, the deepest leaf node in the left depth OrExpr tree
+// is returned as "left" and the remaining predicates are built into a brand new
+// OrExpr chain and returned as "right". The inputs to joinRel are expected to
+// be ScanExprs or SelectExprs with a ScanExpr as input.
+//
+// findInterestingDisjunctionPairForJoin returns an ok=false if at least one of
+// the ORed predicates is not an equality join term referencing both input
+// relations.
+func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
+	joinRel memo.RelExpr, filter *memo.FiltersItem,
+) (left opt.ScalarExpr, right opt.ScalarExpr, ok bool) {
+	interesting := true
+	switch joinRel.(type) {
+	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.SemiJoinApplyExpr, *memo.LeftJoinExpr, *memo.RightJoinExpr,
+		*memo.FullJoinExpr, *memo.AntiJoinExpr, *memo.AntiJoinApplyExpr:
+		// Do nothing
+	default:
+		return nil, nil, false
+	}
+	var leftScan *memo.ScanExpr
+	var rightScan *memo.ScanExpr
+	if leftSelect, ok := joinRel.Child(0).(*memo.SelectExpr); ok {
+		if leftScan, ok = leftSelect.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, false
+		}
+	} else if leftScan, ok = joinRel.Child(0).(*memo.ScanExpr); !ok {
+		return nil, nil, false
+	}
+	if rightSelect, ok := joinRel.Child(1).(*memo.SelectExpr); ok {
+		if rightScan, ok = rightSelect.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, false
+		}
+	} else if rightScan, ok = joinRel.Child(1).(*memo.ScanExpr); !ok {
+		return nil, nil, false
+	}
+
+	var leftExprs memo.ScalarListExpr
+	var rightExprs memo.ScalarListExpr
+	leftColSet := c.OutputCols(leftScan)
+	rightColSet := c.OutputCols(rightScan)
+
+	// Traverse all adjacent OrExpr.
+	var collect func(opt.ScalarExpr)
+	collect = func(expr opt.ScalarExpr) {
+		switch t := expr.(type) {
+		case *memo.OrExpr:
+			collect(t.Left)
+			if !interesting {
+				return
+			}
+			collect(t.Right)
+			return
+		case *memo.EqExpr:
+			// Do nothing
+			break
+		default:
+			interesting = false
+			return
+		}
+		cols := c.OuterCols(expr)
+
+		// The join predicate must reference columns from both the
+		// left and right relations.
+		if !leftColSet.Intersects(cols) || !rightColSet.Intersects(cols) {
+			interesting = false
+			return
+		}
+
+		if len(leftExprs) == 0 {
+			leftExprs = append(leftExprs, expr)
+		} else {
+			rightExprs = append(rightExprs, expr)
+		}
+	}
+	collect(filter.Condition)
+	// Return an empty pair if either of the expression lists is empty.
+	if !interesting ||
+		len(leftExprs) == 0 ||
+		len(rightExprs) == 0 {
+		return nil, nil, false
+	}
+
+	return c.constructOr(leftExprs), c.constructOr(rightExprs), true
+}
+
+// duplicateScanPrivatesForJoin duplicates leftScanPrivate and rightScanPrivate,
+// returned as newLeftScanPrivate and newRightScanPrivate. If
+// swapDuplicateScanPrivateOrder is true, rightScanPrivate is duplicated first,
+// otherwise leftScanPrivate is duplicated first. The ScanPrivate duplicated
+// first will have lower ColIDs in the copy than those of the other copy.
+func (c *CustomFuncs) duplicateScanPrivatesForJoin(
+	leftScanPrivate *memo.ScanPrivate,
+	rightScanPrivate *memo.ScanPrivate,
+	swapDuplicateScanPrivateOrder bool,
+) (newLeftScanPrivate *memo.ScanPrivate, newRightScanPrivate *memo.ScanPrivate) {
+	if swapDuplicateScanPrivateOrder {
+		newRightScanPrivate = c.DuplicateScanPrivate(rightScanPrivate)
+		newLeftScanPrivate = c.DuplicateScanPrivate(leftScanPrivate)
+	} else {
+		newLeftScanPrivate = c.DuplicateScanPrivate(leftScanPrivate)
+		newRightScanPrivate = c.DuplicateScanPrivate(rightScanPrivate)
+	}
+	return
+}
