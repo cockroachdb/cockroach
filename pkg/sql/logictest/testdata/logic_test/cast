@@ -8,6 +8,8 @@ CREATE TABLE assn_cast (
   qc "char",
   b BIT,
   i INT,
+  i2 INT2,
+  f4 FLOAT4,
   t timestamp,
   d DECIMAL(10, 0),
   a DECIMAL(10, 0)[],
@@ -140,6 +142,33 @@ EXECUTE insert_i('1')
 
 statement error value type string doesn't match type int of column \"i\"
 INSERT INTO assn_cast(i) VALUES ('1'::STRING)
+
+statement error integer out of range for type int2
+INSERT INTO assn_cast(i2) VALUES (999999999)
+
+statement ok
+PREPARE insert_i2 AS INSERT INTO assn_cast(i2) VALUES ($1)
+
+statement error integer out of range for type int2
+EXECUTE insert_i2(99999999)
+
+statement ok
+INSERT INTO assn_cast(f4) VALUES (18754999.99)
+
+statement ok
+PREPARE insert_f4 AS INSERT INTO assn_cast(f4) VALUES ($1)
+
+statement ok
+EXECUTE insert_f4(18754999.99)
+
+# TODO(mgartner): Values are not correctly truncated when cast to FLOAT4, either
+# in an assignment or explicit context. The columns should have a value of
+# 1.8755e+07. See #73743.
+query F
+SELECT f4 FROM assn_cast WHERE f4 IS NOT NULL
+----
+1.875499999e+07
+1.875499999e+07
 
 statement ok
 INSERT INTO assn_cast(t) VALUES ('1970-01-01'::timestamptz)
@@ -350,3 +379,37 @@ SELECT '-'::regclass, '-'::regclass::oid,
   '-'::regrole, '-'::regrole::oid
 ----
 -  0  -  0  -  0  -  0  -  0  -  0
+
+# Regression test for #73450. Eliding casts should not cause incorrect results.
+subtest regression_73450
+
+statement ok
+PREPARE s73450_a AS SELECT $1::INT2
+
+statement error integer out of range for type int2
+EXECUTE s73450_a(999999)
+
+statement ok
+PREPARE s73450_b AS SELECT $1::CHAR
+
+query T
+EXECUTE s73450_b('foo')
+----
+f
+
+statement ok
+CREATE TABLE t73450 (c CHAR);
+INSERT INTO t73450 VALUES ('f')
+
+query T
+SELECT * FROM t73450 WHERE c = 'foo'::CHAR
+----
+f
+
+statement ok
+PREPARE s73450_c AS SELECT * FROM t73450 WHERE c = $1::CHAR
+
+query T
+EXECUTE s73450_c('foo')
+----
+f

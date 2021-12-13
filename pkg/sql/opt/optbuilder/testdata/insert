@@ -1585,7 +1585,7 @@ insert defvals
       │         └── assignment-cast: INT8 [as=column1:7]
       │              └── column1:6
       └── projections
-           ├── ARRAY[] [as=arr1_default:8]
+           ├── ARRAY[]::STRING(100)[] [as=arr1_default:8]
            └── ARRAY[] [as=arr2_default:9]
 
 exec-ddl
@@ -1616,7 +1616,7 @@ insert defvals2
       │         └── assignment-cast: INT8 [as=column1:7]
       │              └── column1:6
       └── projections
-           ├── ARRAY[NULL] [as=arr1_default:8]
+           ├── ARRAY[NULL]::STRING(100)[] [as=arr1_default:8]
            └── ARRAY[NULL] [as=arr2_default:9]
 
 # Regression test for #67100. Do not prune check columns for INSERTs even if the

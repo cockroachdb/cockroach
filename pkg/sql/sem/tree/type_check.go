@@ -1546,7 +1546,7 @@ func (expr *Array) TypeCheck(
 ) (TypedExpr, error) {
 	desiredParam := types.Any
 	if desired.Family() == types.ArrayFamily {
-		desiredParam = desired.ArrayContents()
+		desiredParam = desired.ArrayContents().WithoutTypeModifiers()
 	}
 
 	if len(expr.Exprs) == 0 {
