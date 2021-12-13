@@ -76,6 +76,7 @@ export interface Fraction {
 
 interface SingleStatementStatistics {
   statement: string;
+  formattedStatement: string;
   app: string[];
   database: string;
   distSQL: Fraction;
@@ -446,6 +447,7 @@ export class StatementDetails extends React.Component<
     const {
       stats,
       statement,
+      formattedStatement,
       app,
       distSQL,
       vec,
@@ -463,7 +465,7 @@ export class StatementDetails extends React.Component<
       return (
         <React.Fragment>
           <section className={cx("section")}>
-            <SqlBox value={statement} />
+            <SqlBox value={formattedStatement} />
           </section>
           <section className={cx("section")}>
             <h3>Unable to find statement</h3>
@@ -560,7 +562,7 @@ export class StatementDetails extends React.Component<
         <TabPane tab="Overview" key="overview">
           <Row gutter={16}>
             <Col className="gutter-row" span={16}>
-              <SqlBox value={statement} />
+              <SqlBox value={formattedStatement} />
             </Col>
           </Row>
           <Row gutter={16}>

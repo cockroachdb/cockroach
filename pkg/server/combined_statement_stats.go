@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -175,6 +176,14 @@ func collectCombinedStatements(
 		metadata.Key.App = app
 		metadata.Key.TransactionFingerprintID =
 			roachpb.TransactionFingerprintID(transactionFingerprintID)
+
+		lineWidth := 108
+		alignMode := 2
+		caseMode := 1
+		metadata.Key.FormattedQuery, err = builtins.PrettyStatementCustomConfig(metadata.Key.Query, lineWidth, alignMode, caseMode)
+		if err != nil {
+			return nil, err
+		}
 
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {

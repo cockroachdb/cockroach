@@ -161,8 +161,11 @@ export const selectStatement = createSelector(
       ),
     );
     const statement = getMatchParamByName(props.match, statementAttr);
+    const formattedStatements = results.map(s => s.formatted_statement);
+    const formattedStatement = formattedStatements.join();
     return {
       statement,
+      formattedStatement,
       stats: combineStatementStats(results.map(s => s.stats)),
       byNode: coalesceNodeStats(results),
       app: _.uniq(
