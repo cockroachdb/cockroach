@@ -79,6 +79,7 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/log.MakeLegacyEntry":        true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.makeUnstructuredEntry":  true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.FormatWithContextTags":  true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.formatOnlyArgs":         true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.renderArgsAsRedactable": true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.formatArgs":             true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.logfDepth":              true,
