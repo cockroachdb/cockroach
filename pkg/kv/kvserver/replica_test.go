@@ -6940,7 +6940,7 @@ func TestReplicaDestroy(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			t.Fatal(err)
@@ -7034,7 +7034,7 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			t.Fatal(err)
