@@ -776,8 +776,11 @@ func FormatSafeDescriptorProperties(w *redact.StringBuilder, desc Descriptor) {
 // IsSystemDescriptor returns true iff the descriptor is a system or a reserved
 // descriptor.
 func IsSystemDescriptor(desc Descriptor) bool {
-	if desc.GetID() <= keys.MaxReservedDescID {
+	if desc.GetParentID() == keys.SystemDatabaseID {
 		return true
 	}
-	return desc.GetParentID() == keys.SystemDatabaseID
+	if desc.GetID() == keys.SystemDatabaseID {
+		return true
+	}
+	return false
 }

@@ -323,7 +323,7 @@ func allocateDescriptorRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	maxDescIDInBackup := int64(keys.MinNonPredefinedUserDescID)
+	maxDescIDInBackup := int64(catalogkeys.MinNonDefaultUserDescriptorID(p.ExecCfg().SystemIDChecker))
 	for _, table := range tablesByID {
 		if int64(table.ID) > maxDescIDInBackup {
 			maxDescIDInBackup = int64(table.ID)
@@ -950,7 +950,7 @@ func resolveTargetDB(
 		return intoDB, nil
 	}
 
-	if descriptorCoverage == tree.AllDescriptors && descriptor.GetParentID() < keys.MaxReservedDescID {
+	if descriptorCoverage == tree.AllDescriptors && catalog.IsSystemDescriptor(descriptor) {
 		var targetDB string
 		if descriptor.GetParentID() == systemschema.SystemDB.GetID() {
 			// For full cluster backups, put the system tables in the temporary
@@ -1365,24 +1365,6 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 		"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
 		start, end, roachpb.Key(span.Start), roachpb.Key(span.End),
 	)
-}
-
-func getUserDescriptorNames(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]string, error) {
-	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, codec, true /* shouldRunPostDeserializationChanges */)
-	if err != nil {
-		return nil, err
-	}
-
-	var allNames = make([]string, 0, len(allDescs))
-	for _, desc := range allDescs {
-		if !catalogkeys.IsDefaultCreatedDescriptor(desc.GetID()) {
-			allNames = append(allNames, desc.GetName())
-		}
-	}
-
-	return allNames, nil
 }
 
 // resolveOptionsForRestoreJobDescription creates a copy of
@@ -1827,24 +1809,27 @@ func doRestorePlan(
 		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 	}
 
-	// Ensure that no user table descriptors exist for a full cluster restore.
-	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
-	descCount, err := catalogkv.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
-	if err != nil {
-		return errors.Wrap(err, "looking up user descriptors during restore")
-	}
-	if descCount != 0 && restoreStmt.DescriptorCoverage == tree.AllDescriptors {
-		var userDescriptorNames []string
-		userDescriptorNames, err := getUserDescriptorNames(ctx, txn, p.ExecCfg().Codec)
+	// Ensure that no user descriptors exist for a full cluster restore.
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
+		allUserDescs, err := catalogkv.GetAllUserCreatedDescriptors(ctx, txn, p.ExecCfg().Codec)
 		if err != nil {
-			// We're already returning an error, and we're just trying to make the
-			// error message more helpful. If we fail to do that, let's just log.
-			log.Errorf(ctx, "fetching user descriptor names: %+v", err)
+			return errors.Wrap(err, "looking up user descriptors during restore")
 		}
-		return errors.Errorf(
-			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
-			descCount, userDescriptorNames,
-		)
+		if len(allUserDescs) > 0 {
+			userDescriptorNames := make([]string, 0, 20)
+			for i, desc := range allUserDescs {
+				if i == 20 {
+					userDescriptorNames = append(userDescriptorNames, "...")
+					break
+				}
+				userDescriptorNames = append(userDescriptorNames, desc.GetName())
+			}
+			return errors.Errorf(
+				"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
+				len(allUserDescs), strings.Join(userDescriptorNames, ", "),
+			)
+		}
 	}
 
 	// wasOffline tracks which tables were in an offline or adding state at some

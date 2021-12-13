@@ -1165,7 +1165,7 @@ type ExecutorConfig struct {
 
 	// SystemIDChecker is used to check whether an ID is part of the
 	// system database.
-	SystemIDChecker catalog.SystemIDChecker
+	SystemIDChecker *catalog.SystemIDChecker
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

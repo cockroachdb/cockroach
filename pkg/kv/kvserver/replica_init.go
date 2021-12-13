@@ -71,8 +71,11 @@ func newUnloadedReplica(
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        desc.RangeID,
-		store:          store,
-		abortSpan:      abortspan.New(desc.RangeID),
+		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(
+			keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker()),
+		),
+		store:     store,
+		abortSpan: abortspan.New(desc.RangeID),
 		concMgr: concurrency.NewManager(concurrency.Config{
 			NodeDesc:          store.nodeDesc,
 			RangeDesc:         desc,

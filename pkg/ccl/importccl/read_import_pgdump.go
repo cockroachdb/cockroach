@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -243,6 +244,7 @@ func createPostgresSchemas(
 	schemasToCreate map[string]*tree.CreateSchema,
 	execCfg *sql.ExecutorConfig,
 	sessionData *sessiondata.SessionData,
+	nextPlaceholderID placeholderIDGenerator,
 ) ([]*schemadesc.Mutable, error) {
 	createSchema := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -263,7 +265,7 @@ func createPostgresSchemas(
 
 		// We didn't allocate an ID above, so we must assign it a mock ID until it
 		// is assigned an actual ID later in the import.
-		desc.ID = getNextPlaceholderDescID()
+		desc.ID = nextPlaceholderID()
 		desc.SetOffline("importing")
 		return desc, nil
 	}
@@ -305,6 +307,7 @@ func createPostgresSequences(
 	owner security.SQLUsername,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
 	execCfg *sql.ExecutorConfig,
+	nextPlaceholderID placeholderIDGenerator,
 ) ([]*tabledesc.Mutable, error) {
 	ret := make([]*tabledesc.Mutable, 0)
 	for schemaAndTableName, seq := range createSeq {
@@ -318,7 +321,7 @@ func createPostgresSequences(
 			seq.Options,
 			parentID,
 			schema.GetID(),
-			getNextPlaceholderDescID(),
+			nextPlaceholderID(),
 			hlc.Timestamp{WallTime: walltime},
 			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
@@ -364,6 +367,7 @@ func createPostgresTables(
 	parentDB catalog.DatabaseDescriptor,
 	walltime int64,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
+	nextPlaceholderID placeholderIDGenerator,
 ) ([]*tabledesc.Mutable, error) {
 	ret := make([]*tabledesc.Mutable, 0)
 	for schemaAndTableName, create := range createTbl {
@@ -379,7 +383,7 @@ func createPostgresTables(
 		// type resolver to protect against unexpected behavior on UDT resolution.
 		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
 		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
-			create, parentDB, schema, getNextPlaceholderDescID(), fks, walltime)
+			create, parentDB, schema, nextPlaceholderID(), fks, walltime)
 		if err != nil {
 			return nil, err
 		}
@@ -436,9 +440,7 @@ func resolvePostgresFKs(
 	return nil
 }
 
-var placeholderDescID = defaultCSVTableID
-
-// getNextPlaceholderDescID returns a monotonically increasing placeholder ID
+// placeholderIDGenerator returns a monotonically increasing placeholder ID
 // that is used when creating table, sequence and schema descriptors during the
 // schema parsing phase of a PGDUMP import.
 // We assign these descriptors "fake" IDs because it is early in the IMPORT
@@ -447,11 +449,7 @@ var placeholderDescID = defaultCSVTableID
 // data. Thus, we pessimistically wait till all the verification steps in the
 // IMPORT have been completed after which we rewrite the descriptor IDs with
 // "real" unique IDs.
-func getNextPlaceholderDescID() descpb.ID {
-	ret := placeholderDescID
-	placeholderDescID++
-	return ret
-}
+type placeholderIDGenerator func() descpb.ID
 
 // readPostgresCreateTable returns table descriptors for all tables or the
 // matching table from SQL statements.
@@ -495,10 +493,18 @@ func readPostgresCreateTable(
 		}
 	}
 
+	var nextPlaceholderID placeholderIDGenerator
+	placeholderDescID := catalogkeys.MinNonDefaultUserDescriptorID(p.ExecCfg().SystemIDChecker)
+	nextPlaceholderID = func() descpb.ID {
+		ret := placeholderDescID
+		placeholderDescID++
+		return descpb.ID(ret)
+	}
+
 	tables := make([]*tabledesc.Mutable, 0, len(schemaObjects.createTbl))
 	schemaNameToDesc := make(map[string]*schemadesc.Mutable)
 	schemaDescs, err := createPostgresSchemas(ctx, parentDB.GetID(), schemaObjects.createSchema,
-		p.ExecCfg(), p.SessionData())
+		p.ExecCfg(), p.SessionData(), nextPlaceholderID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -528,6 +534,7 @@ func readPostgresCreateTable(
 		owner,
 		schemaNameToDesc,
 		p.ExecCfg(),
+		nextPlaceholderID,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -537,7 +544,7 @@ func readPostgresCreateTable(
 	// Construct table descriptors.
 	backrefs := make(map[descpb.ID]*tabledesc.Mutable)
 	tableDescs, err := createPostgresTables(evalCtx, p, schemaObjects.createTbl, fks, backrefs,
-		parentDB, walltime, schemaNameToDesc)
+		parentDB, walltime, schemaNameToDesc, nextPlaceholderID)
 	if err != nil {
 		return nil, nil, err
 	}

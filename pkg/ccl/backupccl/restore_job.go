@@ -967,15 +967,14 @@ func isSchemaEmpty(
 	return true, nil
 }
 
-func getTempSystemDBID(details jobspb.RestoreDetails) descpb.ID {
-	tempSystemDBID := keys.MinNonPredefinedUserDescID
+func getTempSystemDBID(details jobspb.RestoreDetails, idChecker keys.SystemIDChecker) descpb.ID {
+	tempSystemDBID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker))
 	for id := range details.DescriptorRewrites {
-		if int(id) > tempSystemDBID {
-			tempSystemDBID = int(id)
+		if id > tempSystemDBID {
+			tempSystemDBID = id
 		}
 	}
-
-	return descpb.ID(tempSystemDBID)
+	return tempSystemDBID
 }
 
 // spansForAllRestoreTableIndexes returns non-overlapping spans for every index
@@ -1106,7 +1105,7 @@ func createImportingDescriptors(
 
 	tempSystemDBID := descpb.InvalidID
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		tempSystemDBID = getTempSystemDBID(details)
+		tempSystemDBID = getTempSystemDBID(details, p.ExecCfg().SystemIDChecker)
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
 			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
@@ -2665,7 +2664,7 @@ func (r *restoreResumer) restoreSystemTables(
 	restoreDetails jobspb.RestoreDetails,
 	tables []catalog.TableDescriptor,
 ) error {
-	tempSystemDBID := getTempSystemDBID(restoreDetails)
+	tempSystemDBID := getTempSystemDBID(restoreDetails, r.execCfg.SystemIDChecker)
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)
