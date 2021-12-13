@@ -866,10 +866,11 @@ func parseAndCreateBundleTableDescs(
 	}}
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
+		id := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(p.ExecCfg().SystemIDChecker))
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readMysqlCreateTable(
-			ctx, reader, evalCtx, p, defaultCSVTableID, parentDB, tableName, fks,
+			ctx, reader, evalCtx, p, id, parentDB, tableName, fks,
 			seqVals, owner, walltime,
 		)
 	case roachpb.IOFileFormat_PgDump:

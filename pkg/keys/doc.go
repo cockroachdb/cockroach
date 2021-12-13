@@ -261,7 +261,6 @@ var _ = [...]interface{}{
 	// 	table data.
 	TableDataMin,
 	NamespaceTableMin,
-	UserTableDataMin,
 	TableDataMax,
 
 	//  4. Non-system tenant SQL keys: This is where we store all non-system

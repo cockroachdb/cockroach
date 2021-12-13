@@ -543,7 +543,7 @@ func TestCreateSystemTable(t *testing.T) {
 	ctx := context.Background()
 
 	table := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildExistingMutableTable()
-	table.ID = keys.MaxReservedDescID
+	table.ID = descpb.ID(1000 /* suitably large descriptor ID */)
 
 	table.Name = "dummy"
 	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, table.ParentID, table.Name)

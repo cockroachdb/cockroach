@@ -147,6 +147,16 @@ func TestGet(t *testing.T) {
 	}
 }
 
+type testSystemIDChecker struct {
+	maxID config.SystemTenantObjectID
+}
+
+var _ keys.SystemIDChecker = testSystemIDChecker{}
+
+func (t testSystemIDChecker) IsSystemID(id uint32) bool {
+	return id <= uint32(t.maxID)
+}
+
 func TestGetLargestID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -260,7 +270,11 @@ func TestGetLargestID(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		ret, err := cfg.GetLargestObjectID(tc.maxID, tc.pseudoIDs)
+		var idChecker keys.SystemIDChecker
+		if tc.maxID > 0 {
+			idChecker = testSystemIDChecker{tc.maxID}
+		}
+		ret, err := cfg.GetLargestObjectID(idChecker, tc.pseudoIDs)
 		if !testutils.IsError(err, tc.errStr) {
 			t.Errorf("#%d: expected err=%q, got %v", tcNum, tc.errStr, err)
 			continue
@@ -367,7 +381,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	baseSql, _ /* splits */ := schema.GetInitialValues()
 	// Real system tables plus some user stuff.
 	kvs, _ /* splits */ := schema.GetInitialValues()
-	start := uint32(keys.MinUserDescID)
+	start := keys.TestingUserDescID(0)
 	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
 	var subzoneSQL = make([]roachpb.KeyValue, len(userSQL))
@@ -469,7 +483,7 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
-	minKey := tkey(keys.MinUserDescID)
+	minKey := tkey(keys.TestingUserDescID(0))
 
 	// Real system tenant only.
 	baseSql, _ /* splits */ := schema.GetInitialValues()
@@ -586,15 +600,15 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.LivenessRangesID), keys.SystemDatabaseID},
 
 		// User tables should refer to themselves.
-		{tkey(keys.MinUserDescID), keys.MinUserDescID},
-		{tkey(keys.MinUserDescID + 22), keys.MinUserDescID + 22},
+		{tkey(keys.TestingUserDescID(0)), config.SystemTenantObjectID(keys.TestingUserDescID(0))},
+		{tkey(keys.TestingUserDescID(22)), config.SystemTenantObjectID(keys.TestingUserDescID(22))},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
 
 		// Secondary tenant tables should refer to the TenantsRangesID.
-		{tenantTkey(5, keys.MinUserDescID), keys.TenantsRangesID},
-		{tenantTkey(5, keys.MinUserDescID+22), keys.TenantsRangesID},
-		{tenantTkey(10, keys.MinUserDescID), keys.TenantsRangesID},
-		{tenantTkey(10, keys.MinUserDescID+22), keys.TenantsRangesID},
+		{tenantTkey(5, keys.TestingUserDescID(0)), keys.TenantsRangesID},
+		{tenantTkey(5, keys.TestingUserDescID(22)), keys.TenantsRangesID},
+		{tenantTkey(10, keys.TestingUserDescID(0)), keys.TenantsRangesID},
+		{tenantTkey(10, keys.TestingUserDescID(22)), keys.TenantsRangesID},
 	}
 
 	originalZoneConfigHook := config.ZoneConfigHook

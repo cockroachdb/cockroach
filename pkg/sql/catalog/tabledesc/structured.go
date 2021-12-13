@@ -655,11 +655,10 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	}
 
 	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
-	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
-	// before AllocateIDs.
+	// to pass the table ID check.
 	savedID := desc.ID
 	if desc.ID == 0 {
-		desc.ID = keys.MinUserDescID
+		desc.ID = keys.SystemDatabaseID
 	}
 	err := catalog.ValidateSelf(desc)
 	desc.ID = savedID

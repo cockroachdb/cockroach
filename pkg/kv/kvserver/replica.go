@@ -196,6 +196,7 @@ type Replica struct {
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
+
 	// The start key of a Range remains constant throughout its lifetime (it does
 	// not change through splits or merges). This field carries a copy of
 	// r.mu.state.Desc.StartKey (and nil if the replica is not initialized). The
@@ -986,7 +987,7 @@ func (r *Replica) isSystemRange() bool {
 
 func (r *Replica) isSystemRangeRLocked() bool {
 	rem, _, err := keys.DecodeTenantPrefix(r.mu.state.Desc.StartKey.AsRawKey())
-	return err == nil && roachpb.Key(rem).Compare(keys.UserTableDataMin) < 0
+	return err == nil && roachpb.Key(rem).Compare(r.store.systemRangeStartUpperBound) < 0
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including

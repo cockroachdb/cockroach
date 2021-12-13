@@ -58,7 +58,7 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
 	) (roachpb.Response, *roachpb.Error) {
 		req := &roachpb.ExportRequest{
-			RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+			RequestHeader: roachpb.RequestHeader{Key: keys.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 			StartTime:     start,
 			Storage: roachpb.ExternalStorage{
 				Provider:  roachpb.ExternalStorageProvider_nodelocal,
@@ -423,7 +423,7 @@ func TestExportGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+		RequestHeader: roachpb.RequestHeader{Key: keys.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)

@@ -10,6 +10,8 @@
 
 package keys
 
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
+
 // SystemIDChecker determines whether a table ID corresponds to a system
 // table. In the earlier days of cockroachdb (prior to 22.1), these IDs were
 // all constants and had a value less than 50. In later versions, these IDs
@@ -32,8 +34,37 @@ func DeprecatedSystemIDChecker() SystemIDChecker {
 
 type deprecatedSystemIDChecker struct{}
 
+// IsSystemID implements the SystemIDChecker interface.
 func (d deprecatedSystemIDChecker) IsSystemID(id uint32) bool {
-	return id <= MaxReservedDescID
+	return id < minUserDescID
 }
 
 var _ SystemIDChecker = (*deprecatedSystemIDChecker)(nil)
+
+// MinUserDescriptorID returns the smallest possible non-system descriptor ID
+// after a cluster is bootstrapped.
+func MinUserDescriptorID(idChecker SystemIDChecker) uint32 {
+	id := uint32(MaxSystemConfigDescID + 1)
+	for idChecker.IsSystemID(id) {
+		id++
+	}
+	return id
+}
+
+// TestingSystemIDChecker returns an implementation of SystemIDChecker suitable
+// for simple unit tests.
+func TestingSystemIDChecker() SystemIDChecker {
+	return &deprecatedSystemIDChecker{}
+}
+
+// TestingUserDescID is a convenience function which returns a user ID offset
+// from the minimum value allowed in a simple unit test setting.
+func TestingUserDescID(offset uint32) uint32 {
+	return MinUserDescriptorID(TestingSystemIDChecker()) + offset
+}
+
+// TestingUserTableDataMin is a convenience function which returns the first
+// user table data key in a simple unit test setting.
+func TestingUserTableDataMin() roachpb.Key {
+	return SystemSQLCodec.TablePrefix(TestingUserDescID(0))
+}

@@ -697,7 +697,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
 
-		SystemIDChecker: catalog.SystemIDChecker{
+		SystemIDChecker: &catalog.SystemIDChecker{
 			SystemIDChecker: keys.DeprecatedSystemIDChecker(),
 		},
 	}

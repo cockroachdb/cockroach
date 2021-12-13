@@ -377,7 +377,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	invalidPrivileges := descpb.NewBasePrivilegeDescriptor(security.RootUserName())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
 	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT}, false)
-	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)
+	typeDescID := descpb.ID(keys.TestingUserDescID(0))
 	testData := []struct {
 		err  string
 		desc descpb.TypeDescriptor

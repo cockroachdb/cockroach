@@ -257,7 +257,8 @@ func TestPrivilegeValidate(t *testing.T) {
 
 	descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
 	validate := func() error {
-		return descriptor.Validate(ID(keys.MinUserDescID), privilege.Table, "whatever", DefaultSuperuserPrivileges)
+		id := ID(keys.MinUserDescriptorID(keys.TestingSystemIDChecker()))
+		return descriptor.Validate(id, privilege.Table, "whatever", DefaultSuperuserPrivileges)
 	}
 
 	if err := validate(); err != nil {
@@ -289,7 +290,7 @@ func TestPrivilegeValidate(t *testing.T) {
 
 func TestValidPrivilegesForObjects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := ID(keys.MinUserDescID)
+	id := ID(keys.MinUserDescriptorID(keys.TestingSystemIDChecker()))
 
 	testUser := security.TestUserName()
 
@@ -435,7 +436,7 @@ func TestValidateOwnership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Use a non-system id.
-	id := ID(keys.MinUserDescID)
+	id := ID(keys.MinUserDescriptorID(keys.TestingSystemIDChecker()))
 	validate := func(privs PrivilegeDescriptor) error {
 		return privs.Validate(id, privilege.Table, "whatever", DefaultSuperuserPrivileges)
 	}

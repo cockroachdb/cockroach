@@ -12,6 +12,7 @@ package config
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -40,11 +41,11 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 	testingZoneConfig = make(zoneConfigMap)
 	testingPreviousHook = ZoneConfigHook
 	ZoneConfigHook = testingZoneConfigHook
-	testingLargestIDHook = func(maxID SystemTenantObjectID) (max SystemTenantObjectID) {
+	testingLargestIDHook = func(systemIDChecker keys.SystemIDChecker) (max SystemTenantObjectID) {
 		testingLock.Lock()
 		defer testingLock.Unlock()
 		for id := range testingZoneConfig {
-			if maxID > 0 && id > maxID {
+			if systemIDChecker != nil && !systemIDChecker.IsSystemID(uint32(id)) {
 				continue
 			}
 			if id > max {

@@ -3700,7 +3700,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	// Split so we can rely on RHS range being quiescent after a restart.
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
-	splitKey := keys.UserTableDataMin
+	splitKey := keys.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, splitKey)
 
 	tc.StopServer(0)
@@ -4203,7 +4203,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	// Split so we can rely on RHS range being quiescent after a restart.
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
-	splitKey := keys.UserTableDataMin
+	splitKey := keys.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, splitKey)
 	tc.AddVotersOrFatal(t, splitKey, tc.Target(1))
 	desc := tc.LookupRangeOrFatal(t, splitKey)

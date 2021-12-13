@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -268,22 +270,25 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 // with the possible exception of the version counter and the modification time
 // timestamp.
 func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
+	idChecker := bootstrap.BootstrappedSystemIDChecker()
+	minUserDescID := keys.MinUserDescriptorID(idChecker)
+	minUserCreatedDescID := catalogkeys.MinNonDefaultUserDescriptorID(idChecker)
 	// Print first transaction, which removes all predefined user descriptors.
 	fmt.Fprintln(out, `BEGIN;`)
 	// Add a query which triggers a divide-by-zero error when the txn runs on a
 	// non-empty cluster (excluding predefined user descriptors).
 	fmt.Fprintf(out,
 		"SELECT 1/(1-sign(count(*))) FROM system.descriptor WHERE id >= %d;\n",
-		keys.MinNonPredefinedUserDescID)
+		minUserCreatedDescID)
 	// Delete predefined user descriptors.
 	fmt.Fprintf(out,
 		"SELECT crdb_internal.unsafe_delete_descriptor(id, true) FROM system.descriptor WHERE id >= %d;\n",
-		keys.MinUserDescID)
+		minUserDescID)
 	// Delete predefined user descriptor namespace entries.
 	fmt.Fprintf(out,
 		"SELECT crdb_internal.unsafe_delete_namespace_entry(\"parentID\", \"parentSchemaID\", name, id) "+
 			"FROM system.namespace WHERE id >= %d;\n",
-		keys.MinUserDescID)
+		minUserDescID)
 	fmt.Fprintln(out, `COMMIT;`)
 	// Print second transaction, which inserts namespace and descriptor entries.
 	fmt.Fprintln(out, `BEGIN;`)
@@ -292,7 +297,7 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 		reverseNamespace[row.ID] = append(reverseNamespace[row.ID], row)
 	}
 	for _, descRow := range descTable {
-		if descRow.ID < keys.MinUserDescID {
+		if idChecker.IsSystemID(uint32(descRow.ID)) {
 			// Skip system descriptors.
 			continue
 		}
@@ -318,12 +323,8 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	}
 	// Handle dangling namespace entries.
 	for _, namespaceRow := range namespaceTable {
-		if namespaceRow.ParentID == descpb.InvalidID && namespaceRow.ID < keys.MinUserDescID {
-			// Skip system database entries.
-			continue
-		}
-		if namespaceRow.ParentID != descpb.InvalidID && namespaceRow.ParentID < keys.MinUserDescID {
-			// Skip non-database entries with system parent database.
+		if idChecker.IsSystemID(uint32(namespaceRow.ID)) {
+			// Skip system entries.
 			continue
 		}
 		if _, found := reverseNamespace[namespaceRow.ID]; found {
