@@ -1410,6 +1410,11 @@ func (ts *TestServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
 }
 
+// SpanConfigKVSubscriber is part of the TestServerInterface.
+func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
+	return ts.node.storeCfg.SpanConfigSubscriber
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

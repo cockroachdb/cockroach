@@ -58,6 +58,8 @@ type KVAccessor interface {
 // invocation, subscribers can consult the embedded StoreReader to retrieve an
 // up-to-date[2] config for the updated span. The callback is called in a single
 // goroutine; it should avoid doing any long-running or blocking work.
+// KVSubscriber also exposes a timestamp that indicates how up-to-date it is
+// with the global state.
 //
 // When a callback is first installed, it's invoked with the [min,max) span --
 // a shorthand to indicate that subscribers should consult the StoreReader for all
@@ -77,6 +79,7 @@ type KVAccessor interface {
 //      (typically through a coarsely targeted [min,max) span).
 type KVSubscriber interface {
 	StoreReader
+	LastUpdated() hlc.Timestamp
 	Subscribe(func(updated roachpb.Span))
 }
 
