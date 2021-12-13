@@ -33,11 +33,6 @@ import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnost
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-import {
-  SortedTable,
-  ColumnDescriptor,
-} from "src/views/shared/components/sortedtable";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
@@ -48,6 +43,9 @@ import {
   EmptyTable,
   shortStatement,
   getDiagnosticsStatus,
+  SortedTable,
+  SortSetting,
+  ColumnDescriptor,
 } from "@cockroachlabs/cluster-ui";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
@@ -55,7 +53,7 @@ type StatementDiagnosticsHistoryViewProps = MapStateToProps &
 
 interface StatementDiagnosticsHistoryViewState {
   sortSetting: {
-    sortKey: number;
+    columnTitle?: string;
     ascending: boolean;
   };
 }
@@ -94,6 +92,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
   columns: ColumnDescriptor<IStatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
+      name: "activated_on",
       cell: record =>
         moment(record.requested_at.seconds.toNumber() * 1000).format(
           "LL[ at ]h:mm a",
@@ -102,6 +101,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
     {
       title: "Statement",
+      name: "statement",
       cell: record => {
         const { getStatementByFingerprint } = this.props;
         const fingerprint = record.statement_fingerprint;
@@ -126,6 +126,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
     {
       title: "Status",
+      name: "status",
       sort: record => `${record.completed}`,
       cell: record => (
         <Text>
@@ -135,6 +136,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
     {
       title: "",
+      name: "actions",
       cell: record => {
         if (record.completed) {
           return (
@@ -175,7 +177,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     super(props);
     (this.state = {
       sortSetting: {
-        sortKey: 0,
+        columnTitle: "activated_on",
         ascending: false,
       },
     }),

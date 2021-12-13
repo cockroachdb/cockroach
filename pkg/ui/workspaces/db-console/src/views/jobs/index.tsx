@@ -20,12 +20,11 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, util, SortSetting } from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import "./index.styl";
 import { statusOptions } from "./jobStatusOptions";
 import { JobTable } from "src/views/jobs/jobTable";
@@ -78,12 +77,12 @@ export const formatDuration = (d: moment.Duration) =>
     .join(":");
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "jobs/sort_setting",
+  "sortSetting/Jobs",
   s => s.localSettings,
-  { sortKey: 3 /* creation time */, ascending: false },
+  { columnTitle: "creationTime", ascending: false },
 );
 
-export interface JobsTableProps {
+export interface JobsTableOwnProps {
   sort: SortSetting;
   status: string;
   show: string;
@@ -96,7 +95,28 @@ export interface JobsTableProps {
   jobs: CachedDataReducerState<JobsResponse>;
 }
 
+export type JobsTableProps = JobsTableOwnProps & RouteComponentProps<any>;
+
 export class JobsTable extends React.Component<JobsTableProps> {
+  constructor(props: JobsTableProps) {
+    super(props);
+
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting = this.props.sort;
+
+    if (
+      this.props.setSort &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.setSort({ columnTitle, ascending });
+    }
+  }
+
   refresh(props = this.props) {
     props.refreshJobs(
       new JobsRequest({
@@ -136,6 +156,20 @@ export class JobsTable extends React.Component<JobsTableProps> {
 
   onShowSelected = (selected: DropdownOption) => {
     this.props.setShow(selected.value);
+  };
+
+  changeSortSetting = (ss: SortSetting): void => {
+    if (this.props.setSort) {
+      this.props.setSort(ss);
+    }
+
+    util.syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
   };
 
   render() {
@@ -181,7 +215,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
                   this.props.status.length > 0 || this.props.type > 0
                 }
                 jobs={this.props.jobs}
-                setSort={this.props.setSort}
+                setSort={this.changeSortSetting}
                 sort={this.props.sort}
               />
             )}

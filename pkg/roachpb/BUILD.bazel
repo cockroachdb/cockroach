@@ -103,6 +103,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timetz",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_aws_aws_sdk_go//aws",
         "@com_github_aws_aws_sdk_go//aws/credentials",

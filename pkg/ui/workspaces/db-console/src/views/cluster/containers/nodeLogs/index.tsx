@@ -19,15 +19,16 @@ import { INodeStatus } from "src/util/proto";
 import { nodeIDAttr } from "src/util/constants";
 import { LogEntriesResponseMessage } from "src/util/api";
 import { LongToMoment } from "src/util/convert";
-import { SortableTable } from "src/views/shared/components/sortabletable";
 import { AdminUIState } from "src/redux/state";
 import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { getDisplayName } from "src/redux/nodes";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, SortedTable } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 import "./logs.styl";
+
+type LogEntries = protos.cockroach.util.log.IEntry;
 
 interface LogProps {
   logs: CachedDataReducerState<LogEntriesResponseMessage>;
@@ -53,36 +54,34 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
     const columns = [
       {
         title: "Time",
-        cell: (index: number) =>
-          LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
+        name: "time",
+        cell: (logEntry: LogEntries) =>
+          LongToMoment(logEntry.time).format("YYYY-MM-DD HH:mm:ss"),
       },
       {
         title: "Severity",
-        cell: (index: number) =>
-          protos.cockroach.util.log.Severity[logEntries[index].severity],
+        name: "severity",
+        cell: (logEntry: LogEntries) =>
+          protos.cockroach.util.log.Severity[logEntry.severity],
       },
       {
         title: "Message",
-        cell: (index: number) => (
+        name: "message",
+        cell: (logEntry: LogEntries) => (
           <pre className="sort-table__unbounded-column logs-table__message">
-            {(logEntries[index].tags
-              ? "[" + logEntries[index].tags + "] "
-              : "") + logEntries[index].message}
+            {(logEntry.tags ? "[" + logEntry.tags + "] " : "") +
+              logEntry.message}
           </pre>
         ),
       },
       {
         title: "File:Line",
-        cell: (index: number) =>
-          `${logEntries[index].file}:${logEntries[index].line}`,
+        name: "file",
+        cell: (logEntry: LogEntries) => `${logEntry.file}:${logEntry.line}`,
       },
     ];
     return (
-      <SortableTable
-        count={logEntries.length}
-        columns={columns}
-        className="logs-table"
-      />
+      <SortedTable data={logEntries} columns={columns} className="logs-table" />
     );
   };
 
