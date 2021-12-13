@@ -468,16 +468,20 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if logPlanDiagram {
-		log.VEvent(ctx, 3, "creating plan diagram for logging")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
-			stmtStr = planCtx.planner.stmt.String()
+			if planCtx.planner.stmt.AnonymizedStr == "SELECT um.* FROM r.user_model AS um JOIN r.model AS m ON (m.tenancy, m.model_guid) = (um.model_tenancy, um.model_guid) WHERE (m.tenancy, m.current_workspace_guid) = ($1, $2)" {
+				stmtStr = planCtx.planner.stmt.String()
+			}
 		}
-		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
-		if err != nil {
-			log.Infof(ctx, "error generating diagram: %s", err)
-		} else {
-			log.Infof(ctx, "plan diagram URL:\n%s", url.String())
+		if stmtStr != "" {
+			log.VEvent(ctx, 3, "creating plan diagram for logging")
+			_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
+			if err != nil {
+				log.Infof(ctx, "error generating diagram: %s", err)
+			} else {
+				log.Infof(ctx, "plan diagram URL:\n%s", url.String())
+			}
 		}
 	}
 

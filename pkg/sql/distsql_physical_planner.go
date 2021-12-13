@@ -122,7 +122,7 @@ var ReplicaOraclePolicy = replicaoracle.BinPackingChoice
 
 // If true, the plan diagram (in JSON) is logged for each plan (used for
 // debugging).
-var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
+var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", true)
 
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //
