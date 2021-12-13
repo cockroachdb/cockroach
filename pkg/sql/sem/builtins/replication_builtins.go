@@ -84,8 +84,10 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-
-				tenantID := int(tree.MustBeDInt(args[0]))
+				tenantID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
+				}
 				jobID, err := mgr.StartReplicationStream(evalCtx, evalCtx.Txn, uint64(tenantID))
 				if err != nil {
 					return nil, err

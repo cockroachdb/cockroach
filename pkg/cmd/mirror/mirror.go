@@ -271,7 +271,7 @@ func maybeGetExistingMirror(call *syntax.CallExpr) (string, existingMirror, erro
 		switch bx := arg.(type) {
 		case *syntax.BinaryExpr:
 			if bx.Op != syntax.EQ {
-				return "", existingMirror{}, fmt.Errorf("Unexpected binary expression Op %d", bx.Op)
+				return "", existingMirror{}, fmt.Errorf("unexpected binary expression Op %d", bx.Op)
 			}
 			kwarg, err := expectIdent(bx.X)
 			if err != nil {
