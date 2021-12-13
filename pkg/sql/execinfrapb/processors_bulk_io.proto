@@ -307,10 +307,10 @@ message ParquetWriterSpec {
   optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
 
   // col_names specifies the logical column names for the exported parquet file.
-  repeated string col_names = 8 [(gogoproto.nullable) = false];
+  repeated string col_names = 8 ;
 
   // col_nullability specifies which columns allow null values in the exported parquet file.
-  repeated bool col_nullability = 9 [(gogoproto.nullable) = false];
+  repeated bool col_nullability = 9 ;
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and
