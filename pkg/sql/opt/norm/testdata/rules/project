@@ -1103,10 +1103,8 @@ insert assn_cast
       │         │    └── $1
       │         ├── assignment-cast: "char"
       │         │    └── $2
-      │         ├── assignment-cast: INT8
-      │         │    └── $3
-      │         └── assignment-cast: STRING
-      │              └── $4
+      │         ├── $3
+      │         └── $4
       └── projections
            └── unique_rowid() [as=rowid_default:16, volatile]
 
@@ -1158,12 +1156,12 @@ insert assn_cast
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: c_default:12 qc_default:13 rowid_default:14 x:10!null text:11!null
+      ├── columns: c_default:12 qc_default:13 rowid_default:14 text:11!null x:10!null
       ├── cardinality: [2 - 2]
       ├── volatile
-      ├── fd: ()-->(12,13)
+      ├── fd: ()-->(12,13), (10)-->(11)
       ├── values
-      │    ├── columns: column1:8!null
+      │    ├── columns: x:10!null
       │    ├── cardinality: [2 - 2]
       │    ├── (1,)
       │    └── (2,)
@@ -1171,10 +1169,7 @@ insert assn_cast
            ├── CAST(NULL AS CHAR) [as=c_default:12]
            ├── CAST(NULL AS "char") [as=qc_default:13]
            ├── unique_rowid() [as=rowid_default:14, volatile]
-           ├── assignment-cast: INT8 [as=x:10, outer=(8), immutable]
-           │    └── column1:8
-           └── assignment-cast: STRING [as=text:11, outer=(8), immutable]
-                └── (column1:8 + 1)::STRING
+           └── (x:10 + 1)::STRING [as=text:11, outer=(10), immutable]
 
 # Do not match if there are no assignment cast projections.
 norm expect-not=PushAssignmentCastsIntoValues

@@ -124,14 +124,24 @@ eval
 integer out of range
 
 eval
+-32767:::int2 * -1:::int2
+----
+32767
+
+eval
 -32768:::int2 * -1:::int2
 ----
-32768
+integer out of range for type int2
+
+eval
+-2147483647:::int4 * -1:::int4
+----
+2147483647
 
 eval
 -2147483648:::int4 * -1:::int4
 ----
-2147483648
+integer out of range for type int4
 
 eval
 (-9223372036854775807:::int8 - 1) * -1:::int8
@@ -173,14 +183,24 @@ eval
 #####################
 
 eval
+-32767:::int2 / -1:::int2
+----
+32767
+
+eval
 -32768:::int2 / -1:::int2
 ----
-32768
+integer out of range for type int2
+
+eval
+-2147483647:::int4 / -1:::int4
+----
+2147483647
 
 eval
 -2147483648:::int4 / -1:::int4
 ----
-2147483648
+integer out of range for type int4
 
 eval
 (-9223372036854775807:::int8 - 1) / -1:::int8
