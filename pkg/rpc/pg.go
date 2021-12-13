@@ -37,15 +37,25 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 			tlsMode = pgurl.TLSVerifyFull
 		}
 
-		if caCertPath == "" {
-			// Fetch CA cert. This is required to exist, so try to load it. We use
-			// the fact that GetCertificateManager checks that "some certs" exist
-			// and want to return "its error" here since we test it in
-			// test_url_db_override.tcl.
-			if _, err := ctx.GetCertificateManager(); err != nil {
-				return wrapError(err)
+		// Only verify-full and verify-ca should be doing certificate verification.
+		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
+			if caCertPath == "" {
+				// Fetch CA cert. This is required to exist, so try to load it. Because
+				// the certs dir could not be loaded from options we check from the context.
+				// GetCertificateManager checks that the SecurityContext has a certificate
+				// manager with certs in the certsDir.
+				if _, err := ctx.GetCertificateManager(); err == nil {
+					// If GetCertificateManager successfully retrieves certs, then we can
+					// just set the caCertPath option to the SecurityContext cert path.
+					// Otherwise, we simply continue with no error and no caCertPath set.
+					// Go will find the the server certificates within the OS
+					// trust store, using CertificateManager's lazy initialization which uses
+					// tls.Config from the crypto/tls package to load Server CA's from the OS
+					// if they are not specified.
+					// Documentation of tls.Config: https://pkg.go.dev/crypto/tls#Config
+					caCertPath = ctx.CACertPath()
+				}
 			}
-			caCertPath = ctx.CACertPath()
 		}
 
 		// (Re)populate the transport information.
