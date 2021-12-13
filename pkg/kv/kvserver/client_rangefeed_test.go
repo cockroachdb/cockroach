@@ -68,7 +68,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 
 		// Note: 42 is a system descriptor.
 		const junkDescriptorID = 42
-		require.GreaterOrEqual(t, keys.MaxReservedDescID, junkDescriptorID)
+		require.True(t, keys.DeprecatedSystemIDChecker().IsSystemID(junkDescriptorID))
 		junkDescriptorKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
 		junkDescriptor := dbdesc.NewInitial(
 			junkDescriptorID, "junk", security.AdminRoleName())

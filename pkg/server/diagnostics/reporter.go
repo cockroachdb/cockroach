@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -320,13 +321,14 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 	}
 	tables := make([]descpb.TableDescriptor, 0, len(kvs))
 	redactor := stringRedactor{}
+	c := keys.DeprecatedSystemIDChecker()
 	for _, kv := range kvs {
 		var desc descpb.Descriptor
 		if err := kv.ValueProto(&desc); err != nil {
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", kv.Key)
 		}
 		t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, kv.Value.Timestamp)
-		if t != nil && t.ID > keys.MaxReservedDescID {
+		if t != nil && !catalog.IsSystemID(c, t.ID) {
 			if err := reflectwalk.Walk(t, redactor); err != nil {
 				panic(err) // stringRedactor never returns a non-nil err
 			}

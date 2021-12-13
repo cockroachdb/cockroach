@@ -976,7 +976,8 @@ func (r *Replica) isSystemRange() bool {
 
 func (r *Replica) isSystemRangeRLocked() bool {
 	rem, _, err := keys.DecodeTenantPrefix(r.mu.state.Desc.StartKey.AsRawKey())
-	return err == nil && roachpb.Key(rem).Compare(keys.UserTableDataMin) < 0
+	minUserDescID := keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker())
+	return err == nil && roachpb.Key(rem).Compare(keys.SystemSQLCodec.TablePrefix(minUserDescID)) < 0
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including

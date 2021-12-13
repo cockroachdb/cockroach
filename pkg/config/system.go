@@ -53,7 +53,7 @@ var (
 
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
-	testingLargestIDHook func(SystemTenantObjectID) SystemTenantObjectID
+	testingLargestIDHook func(checker keys.SystemIDChecker) SystemTenantObjectID
 )
 
 type zoneEntry struct {
@@ -195,17 +195,17 @@ func (s *SystemConfig) getIndexBound(key roachpb.Key) int {
 }
 
 // GetLargestObjectID returns the largest object ID found in the config which is
-// less than or equal to maxID. The objects in the config are augmented with the
-// provided pseudo IDs. If maxID is 0, returns the largest ID in the config
+// a system ID. The objects in the config are augmented with the provided pseudo
+// IDs. If systemIDChecker is nil, returns the largest ID in the config
 // (again, augmented by the pseudo IDs).
 func (s *SystemConfig) GetLargestObjectID(
-	maxID SystemTenantObjectID, pseudoIDs []uint32,
+	systemIDChecker keys.SystemIDChecker, pseudoIDs []uint32,
 ) (SystemTenantObjectID, error) {
 	testingLock.Lock()
 	hook := testingLargestIDHook
 	testingLock.Unlock()
 	if hook != nil {
-		return hook(maxID), nil
+		return hook(systemIDChecker), nil
 	}
 
 	// Search for the descriptor table entries within the SystemConfig. lowIndex
@@ -223,14 +223,14 @@ func (s *SystemConfig) GetLargestObjectID(
 	maxPseudoID := SystemTenantObjectID(0)
 	for _, id := range pseudoIDs {
 		objID := SystemTenantObjectID(id)
-		if objID > maxPseudoID && (maxID == 0 || objID <= maxID) {
+		if objID > maxPseudoID && (systemIDChecker == nil || systemIDChecker.IsSystemID(uint32(objID))) {
 			maxPseudoID = objID
 		}
 	}
 
 	// No maximum specified; maximum ID is the last entry in the descriptor
 	// table or the largest pseudo ID, whichever is larger.
-	if maxID == 0 {
+	if systemIDChecker == nil {
 		id, err := keys.SystemSQLCodec.DecodeDescMetadataID(s.Values[highIndex-1].Key)
 		if err != nil {
 			return 0, err
@@ -253,7 +253,7 @@ func (s *SystemConfig) GetLargestObjectID(
 		}
 		var id uint32
 		id, err = keys.SystemSQLCodec.DecodeDescMetadataID(searchSlice[i].Key)
-		return SystemTenantObjectID(id) >= maxID
+		return !systemIDChecker.IsSystemID(id)
 	})
 	if err != nil {
 		return 0, err
@@ -266,13 +266,13 @@ func (s *SystemConfig) GetLargestObjectID(
 		if err != nil {
 			return 0, err
 		}
-		if SystemTenantObjectID(id) == maxID {
+		if systemIDChecker.IsSystemID(id) {
 			return SystemTenantObjectID(id), nil
 		}
 	}
 
 	if maxIdx == 0 {
-		return 0, fmt.Errorf("no descriptors present with ID < %d", maxID)
+		return 0, fmt.Errorf("no system descriptors present")
 	}
 
 	// Return ID of the immediately preceding descriptor.
@@ -576,8 +576,9 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 
 	// If the startKey falls within the non-system reserved range, compute those
 	// keys first.
-	if startID <= keys.MaxReservedDescID {
-		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
+	idChecker := keys.DeprecatedSystemIDChecker()
+	if idChecker.IsSystemID(uint32(startID)) {
+		endID, err := s.GetLargestObjectID(idChecker, keys.PseudoTableIDs)
 		if err != nil {
 			log.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
@@ -585,11 +586,11 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
 			return splitKey
 		}
-		startID = keys.MaxReservedDescID + 1
+		startID = SystemTenantObjectID(keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker()))
 	}
 
 	// Find the split key in the system tenant's user space.
-	endID, err := s.GetLargestObjectID(0, keys.PseudoTableIDs)
+	endID, err := s.GetLargestObjectID(nil /* systemIDChecker */, keys.PseudoTableIDs)
 	if err != nil {
 		log.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
 		return nil
@@ -703,7 +704,8 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id SystemTenantObjectID) 
 	}
 
 	var shouldSplit bool
-	if id < keys.MinUserDescID {
+	idChecker := keys.DeprecatedSystemIDChecker()
+	if idChecker.IsSystemID(uint32(id)) {
 		// The ID might be one of the reserved IDs that refer to ranges but not any
 		// actual descriptors.
 		shouldSplit = true

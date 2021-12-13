@@ -126,7 +126,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// objects.
 	{
 		value := roachpb.Value{}
-		value.SetInt(keys.MinUserDescID)
+		value.SetInt(int64(keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker())))
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 

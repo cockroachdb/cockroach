@@ -54,8 +54,8 @@ func TestAllocateIDs(t *testing.T) {
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
-		ParentID: keys.MinUserDescID,
-		ID:       keys.MinUserDescID + 1,
+		ParentID: descpb.ID(keys.TestingUserDescID(0)),
+		ID:       descpb.ID(keys.TestingUserDescID(1)),
 		Name:     "foo",
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", Type: types.Int},
@@ -86,8 +86,8 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := NewBuilder(&descpb.TableDescriptor{
-		ParentID: keys.MinUserDescID,
-		ID:       keys.MinUserDescID + 1,
+		ParentID: descpb.ID(keys.TestingUserDescID(0)),
+		ID:       descpb.ID(keys.TestingUserDescID(1)),
 		Version:  1,
 		Name:     "foo",
 		Columns: []descpb.ColumnDescriptor{

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -659,7 +660,7 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	// before AllocateIDs.
 	savedID := desc.ID
 	if desc.ID == 0 {
-		desc.ID = keys.MinUserDescID
+		desc.ID = descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(keys.DeprecatedSystemIDChecker()))
 	}
 	err := catalog.ValidateSelf(desc)
 	desc.ID = savedID

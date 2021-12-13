@@ -968,14 +968,13 @@ func isSchemaEmpty(
 }
 
 func getTempSystemDBID(details jobspb.RestoreDetails) descpb.ID {
-	tempSystemDBID := keys.MinNonPredefinedUserDescID
+	tempSystemDBID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(keys.DeprecatedSystemIDChecker()))
 	for id := range details.DescriptorRewrites {
-		if int(id) > tempSystemDBID {
-			tempSystemDBID = int(id)
+		if id > tempSystemDBID {
+			tempSystemDBID = id
 		}
 	}
-
-	return descpb.ID(tempSystemDBID)
+	return tempSystemDBID
 }
 
 // spansForAllRestoreTableIndexes returns non-overlapping spans for every index

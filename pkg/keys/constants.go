@@ -300,9 +300,6 @@ var (
 	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
 	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
-	//
-	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = SystemSQLCodec.TablePrefix(MinUserDescID)
 
 	// 4. Non-system tenant SQL keys
 	//
@@ -320,21 +317,11 @@ const (
 	// this ID range.
 	MaxSystemConfigDescID = 10
 
-	// MaxReservedDescID is the maximum value of reserved descriptor
-	// IDs. Reserved IDs are used by namespaces and tables used internally by
-	// cockroach.
-	MaxReservedDescID = 49
-
-	// MinUserDescID is the first descriptor ID available for user
-	// structured data.
-	MinUserDescID = MaxReservedDescID + 1
-
-	// MinNonPredefinedUserDescID is the first descriptor ID used by
-	// user-level objects that are not created automatically on empty
-	// clusters (default databases).
-	// Two default databases and two public schemas are created by default using
-	// 4 ids.
-	MinNonPredefinedUserDescID = MinUserDescID + 4
+	// minUserDescID is the first descriptor ID available for user
+	// structured data. This is the ID following the maximum value of reserved
+	// descriptor IDs. Reserved IDs are used by namespaces and tables used
+	// internally by cockroach.
+	minUserDescID = 50
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0

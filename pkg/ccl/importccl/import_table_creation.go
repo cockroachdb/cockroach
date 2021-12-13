@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -37,11 +38,11 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-const (
+var (
 	// We need to choose arbitrary database and table IDs. These aren't important,
 	// but they do match what would happen when creating a new database and
 	// table on an empty cluster.
-	defaultCSVParentID descpb.ID = keys.MinNonPredefinedUserDescID
+	defaultCSVParentID descpb.ID = descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(keys.DeprecatedSystemIDChecker()))
 	defaultCSVTableID  descpb.ID = defaultCSVParentID + 2
 )
 

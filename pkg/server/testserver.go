@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -723,8 +724,9 @@ func ExpectedInitialRangeCount(
 	// table with the maximum ID (maxSystemDescriptorID), even when an ID within
 	// the span does not have an associated descriptor.
 	maxSystemDescriptorID := descriptorIDs[0]
+	c := keys.DeprecatedSystemIDChecker()
 	for _, descID := range descriptorIDs {
-		if descID > maxSystemDescriptorID && descID <= keys.MaxReservedDescID {
+		if descID > maxSystemDescriptorID && catalog.IsSystemID(c, descID) {
 			maxSystemDescriptorID = descID
 		}
 	}

@@ -23,6 +23,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/colinfo",

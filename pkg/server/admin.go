@@ -2411,7 +2411,7 @@ func (s *adminServer) DataDistribution(
 		defer acct.Close(txnCtx)
 
 		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
-			Key:    keys.UserTableDataMin,
+			Key:    keys.SystemSQLCodec.TablePrefix(keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker())),
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {

@@ -4805,8 +4805,13 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			descEnd = 0
 			return nil
 		}
-		// Loop over every possible descriptor ID
-		for id := keys.MinUserDescID; id < int(maxDescID); id++ {
+		idChecker := keys.DeprecatedSystemIDChecker()
+		// Loop over every possible non-system descriptor ID
+		for id := uint32(keys.MaxSystemConfigDescID); id < uint32(maxDescID); id++ {
+			if idChecker.IsSystemID(id) {
+				continue
+			}
+
 			// Skip over descriptors that are known
 			if _, ok := dg.Descriptors[descpb.ID(id)]; ok {
 				err := scanAndGenerateRows()
@@ -4817,12 +4822,12 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			}
 			// Update our span range to include this
 			// descriptor.
-			prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
+			prefix := p.extendedEvalCtx.Codec.TablePrefix(id)
 			if unusedDescSpan.Key == nil {
-				descStart = id
+				descStart = int(id)
 				unusedDescSpan.Key = prefix
 			}
-			descEnd = id
+			descEnd = int(id)
 			unusedDescSpan.EndKey = prefix.PrefixEnd()
 
 		}

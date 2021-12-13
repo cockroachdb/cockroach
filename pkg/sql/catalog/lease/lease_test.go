@@ -1271,6 +1271,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 
 	params := createTestServerParams()
+	idChecker := keys.DeprecatedSystemIDChecker()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -1280,12 +1281,12 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 					if err != nil {
 						return
 					}
-					if desc.GetID() > keys.MaxReservedDescID {
+					if !catalog.IsSystemDescriptor(desc) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
 				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if id > keys.MaxReservedDescID {
+					if !catalog.IsSystemID(idChecker, id) {
 						atomic.AddInt32(&testAcquisitionBlockCount, 1)
 					}
 				},
@@ -1725,18 +1726,19 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 
 	params := createTestServerParams()
+	idChecker := keys.DeprecatedSystemIDChecker()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
-					if desc.GetID() > keys.MaxReservedDescID {
+					if !catalog.IsSystemDescriptor(desc) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
 				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
-					if id < keys.MaxReservedDescID {
+					if catalog.IsSystemID(idChecker, id) {
 						return
 					}
 					mu.Lock()
@@ -1744,7 +1746,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					releasedIDs[id] = struct{}{}
 				},
 				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if id > keys.MaxReservedDescID {
+					if !catalog.IsSystemID(idChecker, id) {
 						atomic.AddInt32(&testAcquisitionBlockCount, 1)
 					}
 				},
