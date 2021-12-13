@@ -148,6 +148,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   dateRange: [moment.utc("2021.08.08"), moment.utc("2021.08.12")],
   statement: {
     statement: "SELECT city, id FROM vehicles WHERE city = $1",
+    formattedStatement: "SELECT city, id FROM vehicles WHERE city = $1",
     stats: statementStats,
     database: "defaultdb",
     byNode: [
