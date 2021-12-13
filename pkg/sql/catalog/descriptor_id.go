@@ -19,3 +19,14 @@ import (
 func IsSystemID(c keys.SystemIDChecker, id descpb.ID) bool {
 	return c.IsSystemID(uint32(id))
 }
+
+// SystemIDChecker is a higher-level interface above the keys.SystemIDChecker.
+// See the comments on that interface for semantics.
+type SystemIDChecker struct {
+	keys.SystemIDChecker
+}
+
+// IsSystemID returns true if the ID is part of the system database.
+func (s SystemIDChecker) IsSystemID(id descpb.ID) bool {
+	return IsSystemID(s.SystemIDChecker, id)
+}
