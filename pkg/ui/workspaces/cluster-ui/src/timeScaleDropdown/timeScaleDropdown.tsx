@@ -10,7 +10,6 @@
 
 import React, { useMemo } from "react";
 import moment from "moment";
-import { Divider } from "antd";
 import classNames from "classnames/bind";
 import {
   TimeRangeTitle,
@@ -237,7 +236,6 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
   return (
     <div className={cx("timescale")}>
-      <Divider type="vertical" />
       <RangeSelect
         selected={getTimeRangeTitle(currentWindow, currentScale)}
         onChange={onOptionSelect}
