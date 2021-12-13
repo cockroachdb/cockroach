@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -507,11 +508,21 @@ func (s *Server) GetUnscrubbedStmtStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedStatementStatistics, error) {
 	var stmtStats []roachpb.CollectedStatementStatistics
+	var err error
+
+	lineWidth := 108
+	alignMode := 2
+	caseMode := 1
+
 	stmtStatsVisitor := func(_ context.Context, stat *roachpb.CollectedStatementStatistics) error {
+		stat.Key.FormattedQuery, err = builtins.PrettyStatementCustomConfig(stat.Key.Query, lineWidth, alignMode, caseMode)
+		if err != nil {
+			return err
+		}
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
-	err :=
+	err =
 		s.sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {

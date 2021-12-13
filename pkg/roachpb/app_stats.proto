@@ -187,6 +187,7 @@ message StatementStatisticsKey {
   optional string database = 9 [(gogoproto.nullable) = false];
   optional uint64 plan_hash = 10 [(gogoproto.nullable) = false];
   optional string query_summary = 12 [(gogoproto.nullable) = false];
+  optional string formatted_query = 13 [(gogoproto.nullable) = false];
 
   reserved 5;
   optional uint64 transaction_fingerprint_id = 11
