@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -163,7 +162,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		if n.isGrant {
 			op = "GRANT"
 		}
-		if descriptor.GetID() < keys.MinUserDescID {
+		if catalog.IsSystemDescriptor(descriptor) {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 

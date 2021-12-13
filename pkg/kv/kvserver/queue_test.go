@@ -731,7 +731,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	// which means keys.MaxReservedDescID+1.
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, zoneConfig)
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(keys.TestingUserDescID(1)), zoneConfig)
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()
