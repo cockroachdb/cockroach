@@ -1919,3 +1919,24 @@ vectorized: true
   missing stats
   table: t4@primary
   spans: [/1/1 - /1/1] [/1/5 - /1/5] [/5/1 - /5/1] [/5/5 - /5/5]
+
+# Regression test for crashing when intertwining Get and RevScan requests
+# (which is illegal at the moment).
+statement ok
+CREATE TABLE t73103(pk INT PRIMARY KEY, col0 INT, col1 INT, UNIQUE INDEX idx_storing (col0) STORING (col1));
+
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE t73103 ]
+
+statement ok
+SET tracing = on,kv,results;
+SELECT pk, col0 FROM t73103@idx_storing WHERE col0 <= 63 OR col0 IN (27,11,93,41) ORDER BY 2 DESC;
+SET tracing = off
+
+# Ensure that two RevScan requests are used.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE message LIKE '%r$rangeid: sending batch%'
+----
+r45: sending batch 2 RevScan to (n1,s1):1
