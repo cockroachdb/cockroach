@@ -779,6 +779,8 @@ func postgresCreateTableMutator(
 							if colTypeFamily == types.Box2DFamily {
 								isBox2d = true
 							}
+						} else {
+							col.Expr, changed = replaceNonImmutableExpr(rng, col.Expr, colTypes)
 						}
 						if isBox2d {
 							changed = true
@@ -819,34 +821,7 @@ func postgresCreateTableMutator(
 					changed = true
 				case *tree.ColumnTableDef:
 					if def.IsComputed() {
-						// Postgres has different cast volatility for timestamps and OID
-						// types. The substitution here is specific to the output of
-						// testutils.randComputedColumnTableDef.
-						if funcExpr, ok := def.Computed.Expr.(*tree.FuncExpr); ok {
-							if len(funcExpr.Exprs) == 1 {
-								if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
-									referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
-									isContextDependentType := referencedType.Family() == types.TimestampFamily ||
-										referencedType.Family() == types.OidFamily ||
-										referencedType.Family() == types.DateFamily
-									if isContextDependentType &&
-										tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
-										def.Computed.Expr = &tree.CaseExpr{
-											Whens: []*tree.When{
-												{
-													Cond: &tree.IsNullExpr{
-														Expr: castExpr.Expr,
-													},
-													Val: RandDatum(rng, types.String, true /* nullOK */),
-												},
-											},
-											Else: RandDatum(rng, types.String, true /* nullOK */),
-										}
-										changed = true
-									}
-								}
-							}
-						}
+						def.Computed.Expr, changed = replaceNonImmutableExpr(rng, def.Computed.Expr, colTypes)
 					}
 					newdefs = append(newdefs, def)
 				default:
@@ -857,6 +832,42 @@ func postgresCreateTableMutator(
 		}
 	}
 	return mutated, changed
+}
+
+// replaceNonImmutableExpr checks if expr has a non-immutable operation in it,
+// and returns an immutable expr if it does. This is needed because Postgres has
+// different cast volatility for timestamps and/OID types. The substitution here
+// is specific to the output of randgen.randExpr, which uses
+// `lower(cast(col as string))`.
+func replaceNonImmutableExpr(
+	rng *rand.Rand, expr tree.Expr, colTypes map[string]*types.T,
+) (newExpr tree.Expr, changed bool) {
+	if funcExpr, ok := expr.(*tree.FuncExpr); ok {
+		if len(funcExpr.Exprs) == 1 {
+			if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
+				referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
+				isContextDependentType := referencedType.Family() == types.TimestampFamily ||
+					referencedType.Family() == types.OidFamily ||
+					referencedType.Family() == types.DateFamily
+				if isContextDependentType &&
+					tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
+					newExpr = &tree.CaseExpr{
+						Whens: []*tree.When{
+							{
+								Cond: &tree.IsNullExpr{
+									Expr: castExpr.Expr,
+								},
+								Val: RandDatum(rng, types.String, true /* nullOK */),
+							},
+						},
+						Else: RandDatum(rng, types.String, true /* nullOK */),
+					}
+					return newExpr, true
+				}
+			}
+		}
+	}
+	return expr, false
 }
 
 // columnFamilyMutator is mutations.StatementMutator, but lives here to prevent

@@ -72,7 +72,7 @@ func TestCompareVals(t *testing.T) {
 				pgtype.Numeric{
 					Int:    big1,
 					Exp:    -19,
-					Status: 2,
+					Status: pgtype.Present,
 					NaN:    false,
 				},
 			},
@@ -80,8 +80,42 @@ func TestCompareVals(t *testing.T) {
 				pgtype.Numeric{
 					Int:    big2,
 					Exp:    -16,
-					Status: 2,
+					Status: pgtype.Present,
 					NaN:    false,
+				},
+			},
+		},
+		{
+			equal: true,
+			a: []interface{}{
+				pgtype.Numeric{
+					Int:    big.NewInt(0),
+					Exp:    -1,
+					Status: pgtype.Present,
+					NaN:    false,
+				},
+			},
+			b: []interface{}{
+				pgtype.Numeric{
+					Int:    big.NewInt(0),
+					Exp:    6,
+					Status: pgtype.Present,
+					NaN:    false,
+				},
+			},
+		},
+		{
+			equal: true,
+			a: []interface{}{
+				pgtype.Numeric{
+					Status: pgtype.Present,
+					NaN:    true,
+				},
+			},
+			b: []interface{}{
+				pgtype.Numeric{
+					Status: pgtype.Present,
+					NaN:    true,
 				},
 			},
 		},
