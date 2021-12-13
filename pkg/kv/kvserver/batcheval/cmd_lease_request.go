@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -26,7 +27,11 @@ func init() {
 }
 
 func declareKeysRequestLease(
-	rs ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// NOTE: RequestLease is run on replicas that do not hold the lease, so
 	// acquiring latches would not help synchronize with other requests. As
