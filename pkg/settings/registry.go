@@ -104,6 +104,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.telemetry.query_sampling.qps_threshold":                     {},
 	"sql.telemetry.query_sampling.sample_rate":                       {},
 	"diagnostics.sql_stat_reset.interval":                            {},
+	"changefeed.mem.pushback_enabled":                                {},
 }
 
 // register adds a setting to the registry.
