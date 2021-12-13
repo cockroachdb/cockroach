@@ -269,6 +269,11 @@ func (cl CertsLocator) CACertPath() string {
 	return filepath.Join(cl.certsDir, CACertFilename())
 }
 
+// FullPath takes a CertInfo and returns the full path for it.
+func (cl *CertsLocator) FullPath(ci *CertInfo) string {
+	return filepath.Join(cl.certsDir, ci.Filename)
+}
+
 // EnsureCertsDirectory ensures that the certs directory exists by
 // creating it if does not exist yet.
 func (cl CertsLocator) EnsureCertsDirectory() error {
