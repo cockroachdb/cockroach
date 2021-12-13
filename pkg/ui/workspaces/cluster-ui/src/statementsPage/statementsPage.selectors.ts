@@ -33,6 +33,7 @@ import { SQLStatsState } from "../store/sqlStats";
 
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 export interface StatementsSummaryData {
+  id: Long;
   statement: string;
   statementSummary: string;
   aggregatedTs: number;
@@ -174,6 +175,7 @@ export const selectStatements = createSelector(
       const key = statementKey(stmt);
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
+          id: stmt.id,
           statement: stmt.statement,
           statementSummary: stmt.statement_summary,
           aggregatedTs: stmt.aggregated_ts,
@@ -190,6 +192,7 @@ export const selectStatements = createSelector(
     return Object.keys(statsByStatementKey).map(key => {
       const stmt = statsByStatementKey[key];
       return {
+        id: stmt.id,
         label: stmt.statement,
         summary: stmt.statementSummary,
         aggregatedTs: stmt.aggregatedTs,

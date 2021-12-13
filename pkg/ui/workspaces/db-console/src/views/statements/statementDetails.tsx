@@ -195,8 +195,15 @@ export const selectStatement = createSelector(
       ),
     );
     const statement = getMatchParamByName(props.match, statementAttr);
+    // Create set of unique formatted statements.
+    const formattedStatements = new Set(
+      results.map(s => s.formatted_statement),
+    );
+    // Join unique formatted statements together, separating with a newline character.
+    const formattedStatement = Array.from(formattedStatements).join("\n");
     return {
       statement,
+      formattedStatement,
       stats: combineStatementStats(results.map(s => s.stats)),
       byNode: coalesceNodeStats(results),
       app: _.uniq(

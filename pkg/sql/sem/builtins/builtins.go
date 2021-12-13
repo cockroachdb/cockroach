@@ -339,6 +339,45 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
+	"prettify_statement": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				formattedStmt, err := prettyStatement(tree.DefaultPrettyCfg(), s)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(formattedStmt), nil
+			},
+			types.String,
+			"Prettifies a statement using a the default pretty-printing config.",
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"statement", types.String},
+				{"line_width", types.Int},
+				{"align_mode", types.Int},
+				{"case_mode", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				stmt := string(tree.MustBeDString(args[0]))
+				lineWidth := int(tree.MustBeDInt(args[1]))
+				alignMode := int(tree.MustBeDInt(args[2]))
+				caseMode := int(tree.MustBeDInt(args[3]))
+				formattedStmt, err := prettyStatementCustomConfig(stmt, lineWidth, alignMode, caseMode)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(formattedStmt), nil
+			},
+			Info: "Prettifies a statement using a user-configured pretty-printing config.\n" +
+				"Align mode values range from 0 - 3, representing no, partial, full, and extra alignment respectively.\n" +
+				"Case mode values range between 0 - 1, representing lower casing and upper casing respectively.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"substr":    substringImpls,
 	"substring": substringImpls,
 
@@ -8702,4 +8741,35 @@ func parseContextFromDateStyle(
 		ctx.GetTxnTimestamp(time.Microsecond).Time,
 		tree.NewParseTimeContextOptionDateStyle(ds),
 	), nil
+}
+
+func prettyStatementCustomConfig(
+	stmt string, lineWidth int, alignMode int, caseSetting int,
+) (string, error) {
+	cfg := tree.DefaultPrettyCfg()
+	cfg.LineWidth = lineWidth
+	cfg.Align = tree.PrettyAlignMode(alignMode)
+	caseMode := tree.CaseMode(caseSetting)
+	if caseMode == tree.LowerCase {
+		cfg.Case = func(str string) string { return strings.ToLower(str) }
+	} else if caseMode == tree.UpperCase {
+		cfg.Case = func(str string) string { return strings.ToUpper(str) }
+	}
+	return prettyStatement(cfg, stmt)
+}
+
+func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
+	stmts, err := parser.Parse(stmt)
+	if err != nil {
+		return "", err
+	}
+	var formattedStmt strings.Builder
+	for idx := range stmts {
+		formattedStmt.WriteString(p.Pretty(stmts[idx].AST))
+		if len(stmts) > 1 {
+			formattedStmt.WriteString(";")
+		}
+		formattedStmt.WriteString("\n")
+	}
+	return formattedStmt.String(), nil
 }

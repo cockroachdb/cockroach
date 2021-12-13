@@ -47,6 +47,7 @@ export const StatementTableCell = {
     onStatementClick?: (statement: string) => void,
   ) => (stmt: AggregateStatistics): React.ReactElement => (
     <StatementLink
+      id={stmt.id}
       statement={stmt.label}
       statementSummary={stmt.summary}
       aggregatedTs={stmt.aggregatedTs}
@@ -134,6 +135,7 @@ export const StatementTableCell = {
 };
 
 type StatementLinkTargetProps = {
+  id: Long;
   statement: string;
   aggregatedTs?: number;
   aggregationInterval?: number;
@@ -149,7 +151,7 @@ export const StatementLinkTarget = (
   props: StatementLinkTargetProps,
 ): string => {
   const base = `/statement/${props.implicitTxn}`;
-  const linkStatement = props.statementNoConstants || props.statement;
+  const statementStatID = props.id.toString();
 
   const searchParams = propsToQueryString({
     [databaseAttr]: props.database,
@@ -158,10 +160,11 @@ export const StatementLinkTarget = (
     [aggregationIntervalAttr]: props.aggregationInterval,
   });
 
-  return `${base}/${encodeURIComponent(linkStatement)}?${searchParams}`;
+  return `${base}/${encodeURIComponent(statementStatID)}?${searchParams}`;
 };
 
 interface StatementLinkProps {
+  id: Long;
   aggregatedTs?: number;
   aggregationInterval?: number;
   statement: string;
@@ -175,6 +178,7 @@ interface StatementLinkProps {
 }
 
 export const StatementLink = ({
+  id,
   aggregatedTs,
   aggregationInterval,
   statement,
@@ -193,6 +197,7 @@ export const StatementLink = ({
   }, [onClick, statement]);
 
   const linkProps = {
+    id,
     aggregatedTs,
     aggregationInterval,
     statement,

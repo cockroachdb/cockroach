@@ -503,6 +503,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 	ctx context.Context,
 ) ([]roachpb.CollectedStatementStatistics, error) {
 	var stmtStats []roachpb.CollectedStatementStatistics
+
 	stmtStatsVisitor := func(_ context.Context, stat *roachpb.CollectedStatementStatistics) error {
 		stmtStats = append(stmtStats, *stat)
 		return nil

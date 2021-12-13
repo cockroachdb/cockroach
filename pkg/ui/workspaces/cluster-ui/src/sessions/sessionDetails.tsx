@@ -50,6 +50,7 @@ import statementsPageStyles from "src/statementsPage/statementsPage.module.scss"
 import styles from "./sessionDetails.module.scss";
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
+import Long from "long";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
@@ -323,6 +324,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 />
                 <Link
                   to={StatementLinkTarget({
+                    id: Long.fromString(stmt.id),
                     statement: stmt.sql,
                     statementNoConstants: stmt.sql_no_constants,
                     implicitTxn: session.active_txn?.implicit,

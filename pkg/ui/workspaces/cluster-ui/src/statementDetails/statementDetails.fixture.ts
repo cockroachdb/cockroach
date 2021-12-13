@@ -153,6 +153,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   },
   statement: {
     statement: "SELECT city, id FROM vehicles WHERE city = $1",
+    formattedStatement: "SELECT city, id FROM vehicles WHERE city = $1",
     stats: statementStats,
     database: "defaultdb",
     byNode: [
