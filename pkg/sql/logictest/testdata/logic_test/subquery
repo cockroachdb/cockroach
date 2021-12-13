@@ -58,7 +58,7 @@ SELECT (SELECT 1) IN (1)
 ----
 true
 
-# NB: Cockroach has different behavior from Postgres on a few esoteric
+# NB: Cockroach has different behavior from Postgres ON a few esoteric
 # subqueries. The Cockroach behavior seems more sensical and
 # supporting the specific Postgres behavior appears onerous. Fingers
 # crossed this doesn't bite us down the road.
@@ -429,7 +429,7 @@ INSERT INTO xyz (x, y, z) VALUES (13, 11, 12) RETURNING (y IN (SELECT y FROM xyz
 true
 
 # This test checks that the double sub-query plan expansion caused by a
-# sub-expression being shared by two or more plan nodes does not
+# sub-expression being shared by two OR more plan nodes does not
 # panic.
 statement ok
 CREATE TABLE tab4(col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT)
@@ -550,3 +550,118 @@ WHERE
   t.oid
   NOT IN (SELECT (ARRAY[704, 11676, 10005, 3912, 11765, 59410, 11397])[i] FROM generate_series(1, 376) AS i)
 ----
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+
+statement ok
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+
+statement ok
+INSERT INTO xyz VALUES(5, 4, 7)
+
+statement ok
+INSERT INTO abc VALUES(12, 13, 14)
+
+statement ok
+CREATE INDEX abc_b ON abc(b)
+
+statement ok
+CREATE INDEX xyz_y ON xyz(y)
+
+### Split Disjunctions Tests
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.x OR abc.b = xyz.y)
+----
+4  5  6
+7  8  9
+2  5  6
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.y OR abc.b = xyz.x)
+----
+2   5   6
+4   5   6
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x OR abc.b = xyz.y)and abc.a > 3 AND xyz.z > 10)
+----
+7  8  9
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.y OR abc.b = xyz.x) AND abc.a > 3 AND xyz.z > 10)
+----
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.x OR abc.b = xyz.y)
+----
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE abc.a = xyz.y OR abc.b = xyz.x)
+----
+7  8  9
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x OR abc.b = xyz.y)and abc.a > 3 AND xyz.z > 10)
+----
+2   5   6
+4   5   6
+12  13  14
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.y OR abc.b = xyz.x) AND abc.a > 3 AND xyz.z > 10)
+----
+2  5  6
+4  5  6
+7  8  9
+
+query III rowsort
+SELECT * FROM abc WHERE EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x OR abc.b = xyz.y) AND (abc.a = xyz.y OR abc.b = xyz.y))
+----
+4  5  6
+2  5  6
+
+query III rowsort
+SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x OR abc.b = xyz.y) AND (abc.a = xyz.y OR abc.b = xyz.y))
+----
+7   8   9
+12  13  14
+
+### End Split Disjunctions Tests

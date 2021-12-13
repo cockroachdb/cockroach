@@ -107,6 +107,56 @@ func (c *CustomFuncs) mapScalarExprCols(scalar opt.ScalarExpr, src, dst opt.ColS
 	return c.RemapCols(scalar, colMap)
 }
 
+// remapColSet builds a new ColSet from toMapColSet, having columns IDs mapped
+// from src to dst based on the relative position of both the src and dst
+// ColumnIDs in their respective ColSets.
+func (c *CustomFuncs) remapColSet(toMapColSet, src, dst opt.ColSet) opt.ColSet {
+	if src.Empty() {
+		return opt.ColSet{}
+	}
+
+	if src.Len() != dst.Len() {
+		panic(errors.AssertionFailedf(
+			"src and dst must have the same number of columns, src: %v, dst: %v",
+			src,
+			dst,
+		))
+	}
+
+	var srcColList = src.ToList()
+	var dstColList = dst.ToList()
+	var remappedColSet = opt.TranslateColSet(toMapColSet, srcColList, dstColList)
+	if remappedColSet.Len() != toMapColSet.Len() {
+		panic(errors.AssertionFailedf(
+			"Remapped ColSet must have the same number of columns as source ColSet, source: %v, remapped: %v",
+			toMapColSet,
+			remappedColSet,
+		))
+	}
+	return remappedColSet
+}
+
+// getfilteredScan looks at a *ScanExpr or *SelectExpr "relation" and returns
+// the input *ScanExpr, *ScanPrivate and FiltersExpr, along with ok=true. If
+// "relation" is a different type, or if it's a *SelectExpr with an Input other
+// than a *ScanExpr, ok=false is returned. Scans or Selects with no filters may
+// return filters as nil.
+func (c *CustomFuncs) getfilteredScan(
+	relation memo.RelExpr,
+) (scanExpr *memo.ScanExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr, ok bool) {
+	var selectExpr *memo.SelectExpr
+	if selectExpr, ok = relation.(*memo.SelectExpr); ok {
+		if scanExpr, ok = selectExpr.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, nil, false
+		}
+		filters = selectExpr.Filters
+	} else if scanExpr, ok = relation.(*memo.ScanExpr); !ok {
+		return nil, nil, nil, false
+	}
+	scanPrivate = &scanExpr.ScanPrivate
+	return scanExpr, scanPrivate, filters, true
+}
+
 // checkConstraintFilters generates all filters that we can derive from the
 // check constraints. These are constraints that have been validated and are
 // non-nullable. We only use non-nullable check constraints because they
