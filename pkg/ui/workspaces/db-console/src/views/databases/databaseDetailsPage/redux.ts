@@ -101,6 +101,9 @@ export const mapStateToProps = createSelector(
           _.flatMap(details?.data?.grants, "privileges"),
         );
         const nodes = stats?.data?.node_ids || [];
+        const numIndexes = _.uniq(
+          _.map(details?.data?.indexes, index => index.name),
+        ).length;
 
         return {
           name: table,
@@ -108,7 +111,7 @@ export const mapStateToProps = createSelector(
             loading: !!details?.inFlight,
             loaded: !!details?.valid,
             columnCount: details?.data?.columns?.length || 0,
-            indexCount: details?.data?.indexes?.length || 0,
+            indexCount: numIndexes,
             userCount: roles.length,
             roles: roles,
             grants: grants,
