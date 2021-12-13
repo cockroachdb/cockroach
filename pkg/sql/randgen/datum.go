@@ -244,6 +244,8 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			panic(err)
 		}
 		return d
+	case types.VoidFamily:
+		return tree.DVoidDatum
 	default:
 		panic(errors.AssertionFailedf("invalid type %v", typ.DebugString()))
 	}
