@@ -95,6 +95,7 @@ describe("Databases Page", function() {
       loading: false,
       loaded: false,
       databases: [],
+      sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
     });
   });
@@ -131,6 +132,7 @@ describe("Databases Page", function() {
           missingTables: [],
         },
       ],
+      sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
     });
   });
