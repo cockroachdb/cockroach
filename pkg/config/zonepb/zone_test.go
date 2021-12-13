@@ -490,6 +490,7 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		NullVoterConstraintsIsEmpty: true,
 		NumReplicas:                 proto.Int32(2),
 		NumVoters:                   proto.Int32(1),
+		IsEphemeral:                 proto.Bool(true),
 	}
 
 	testCases := []struct {
@@ -509,6 +510,7 @@ num_voters: 1
 constraints: []
 voter_constraints: []
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -544,6 +546,7 @@ num_voters: 1
 constraints: [+duck=foo]
 voter_constraints: [+foo=bar]
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -577,6 +580,7 @@ num_voters: 1
 constraints: [foo, +duck=foo, -duck=foo]
 voter_constraints: []
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -614,6 +618,7 @@ num_voters: 1
 constraints: {+duck=foo: 3}
 voter_constraints: {+duck=foo: 1}
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -648,6 +653,7 @@ num_voters: 1
 constraints: {'foo,+duck=foo,-duck=foo': 3}
 voter_constraints: []
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -715,6 +721,7 @@ num_voters: 1
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 voter_constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -729,6 +736,7 @@ num_voters: 1
 constraints: []
 voter_constraints: []
 lease_preferences: []
+is_ephemeral: true
 `,
 		},
 		{
@@ -753,6 +761,7 @@ num_voters: 1
 constraints: []
 voter_constraints: []
 lease_preferences: [[+duck=foo]]
+is_ephemeral: true
 `,
 		},
 		{
@@ -813,6 +822,7 @@ num_voters: 1
 constraints: [+duck=foo]
 voter_constraints: [-duck=bar]
 lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
+is_ephemeral: true
 `,
 		},
 	}
@@ -1202,6 +1212,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				GlobalReads: false,
 				NumVoters:   0,
 				NumReplicas: 3,
+				IsEphemeral: false,
 			},
 		},
 		{
@@ -1211,6 +1222,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes: proto.Int64(200000),
 				NumReplicas:   proto.Int32(3),
 				GlobalReads:   proto.Bool(true),
+				IsEphemeral:   proto.Bool(true),
 				GC: &GCPolicy{
 					TTLSeconds: 2400,
 				},
@@ -1222,6 +1234,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: true,
+				IsEphemeral: true,
 				NumVoters:   0,
 				NumReplicas: 3,
 			},
@@ -1233,6 +1246,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes: proto.Int64(200000),
 				NumReplicas:   proto.Int32(3),
 				GlobalReads:   proto.Bool(false),
+				IsEphemeral:   proto.Bool(false),
 				GC: &GCPolicy{
 					TTLSeconds: 2400,
 				},
@@ -1244,6 +1258,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: false,
+				IsEphemeral: false,
 				NumVoters:   0,
 				NumReplicas: 3,
 			},
@@ -1255,6 +1270,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 				RangeMaxBytes: proto.Int64(200000),
 				NumReplicas:   proto.Int32(3),
 				GlobalReads:   proto.Bool(false),
+				IsEphemeral:   proto.Bool(false),
 				GC: &GCPolicy{
 					TTLSeconds: 2400,
 				},
@@ -1299,6 +1315,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: false,
+				IsEphemeral: false,
 				NumVoters:   0,
 				NumReplicas: 3,
 				Constraints: []roachpb.ConstraintsConjunction{
@@ -1345,6 +1362,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: false,
+				IsEphemeral: false,
 				NumVoters:   0,
 				NumReplicas: 3,
 				VoterConstraints: []roachpb.ConstraintsConjunction{
@@ -1395,6 +1413,7 @@ func TestZoneConfigToSpanConfigConversion(t *testing.T) {
 					TTLSeconds: 2400,
 				},
 				GlobalReads: false,
+				IsEphemeral: false,
 				NumVoters:   0,
 				NumReplicas: 3,
 				LeasePreferences: []roachpb.LeasePreference{

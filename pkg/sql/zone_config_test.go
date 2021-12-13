@@ -452,16 +452,16 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 	// Now set some zone configs. We don't have a nice way of using table
 	// names for this, so we do raw puts.
-	// .default: has replciation factor of 1
+	// .default: has replication factor of 1
 	// db1: has replication factor of 5
 	//   tb1: inherits replication factor from db1
 	//   tb2: no zone config
 	// db2: no zone config
 	//   tb1: inherits replication factor from default
-	//     p1: true [1, 2), [6, 7) - Explicitly set replciation factor
-	//     p2: true [3, 5) - inherits repliaction factor from default
+	//     p1: true [1, 2), [6, 7) - Explicitly set replication factor
+	//     p2: true [3, 5) - inherits replication factor from default
 	//   tb2: no zone config
-	//     p1: true  [1, 255) - inherits replciation factor from default
+	//     p1: true  [1, 255) - inherits replication factor from default
 
 	makeConstraints := func(value string) []zonepb.ConstraintsConjunction {
 		return []zonepb.ConstraintsConjunction{

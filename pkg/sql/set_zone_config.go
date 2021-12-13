@@ -63,7 +63,7 @@ type setZoneConfigNode struct {
 var supportedZoneConfigOptions = map[tree.Name]struct {
 	requiredType *types.T
 	setter       func(*zonepb.ZoneConfig, tree.Datum)
-	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum) error // optional
+	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum, *tree.ZoneSpecifier) error // optional
 }{
 	"range_min_bytes": {
 		requiredType: types.Int,
@@ -76,7 +76,7 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	"global_reads": {
 		requiredType: types.Bool,
 		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
-		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
+		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum, _ *tree.ZoneSpecifier) error {
 			if !tree.MustBeDBool(d) {
 				// Always allow the value to be unset.
 				return nil
@@ -132,6 +132,18 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
 			loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
 			c.InheritedLeasePreferences = false
+		},
+	},
+	"is_ephemeral": {
+		requiredType: types.Bool,
+		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+			c.IsEphemeral = proto.Bool(bool(tree.MustBeDBool(d)))
+		},
+		checkAllowed: func(_ context.Context, _ *ExecutorConfig, _ tree.Datum, specifier *tree.ZoneSpecifier) error {
+			if specifier.TargetsIndex() || specifier.TargetsPartition() {
+				return errors.New("cannot set `is_ephemeral` on an index or partition zone configuration")
+			}
+			return nil
 		},
 	},
 }
@@ -379,7 +391,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			}
 			opt := supportedZoneConfigOptions[*name]
 			if opt.checkAllowed != nil {
-				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum); err != nil {
+				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum, &n.zoneSpecifier); err != nil {
 					return err
 				}
 			}

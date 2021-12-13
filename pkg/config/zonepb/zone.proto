@@ -183,6 +183,11 @@ message ZoneConfig {
   // TableDescriptor, but are denormalized here to make GetZoneConfigForKey
   // lookups efficient.
   repeated SubzoneSpan subzone_spans = 7 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
+
+  // IsEphemeral specifies if the range(s) contain ephemeral data. Ephemeral
+  // data is assumed to have a short GC.TTL, and is therefore not included in
+  // operations that rely on reading revisions. egs: BACKUP
+  optional bool is_ephemeral = 16 [(gogoproto.moretags) = "yaml:\"is_ephemeral\""];
 }
 
 message Subzone {

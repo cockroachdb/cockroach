@@ -580,6 +580,11 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 			z.InheritedLeasePreferences = false
 		}
 	}
+	if z.IsEphemeral == nil {
+		if parent.IsEphemeral != nil {
+			z.IsEphemeral = proto.Bool(*parent.IsEphemeral)
+		}
+	}
 }
 
 // CopyFromZone copies over the specified fields from the other zone.
@@ -626,6 +631,11 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 		case "lease_preferences":
 			z.LeasePreferences = other.LeasePreferences
 			z.InheritedLeasePreferences = other.InheritedLeasePreferences
+		case "is_ephemeral":
+			z.IsEphemeral = nil
+			if other.IsEphemeral != nil {
+				z.IsEphemeral = proto.Bool(*other.IsEphemeral)
+			}
 		}
 	}
 }
@@ -783,6 +793,16 @@ func (z *ZoneConfig) DiffWithZone(
 						}, nil
 					}
 				}
+			}
+		case "is_ephemeral":
+			if other.IsEphemeral == nil && z.IsEphemeral == nil {
+				continue
+			}
+			if z.IsEphemeral == nil || other.IsEphemeral == nil ||
+				*z.IsEphemeral != *other.IsEphemeral {
+				return false, DiffWithZoneMismatch{
+					Field: "is_ephemeral",
+				}, nil
 			}
 		default:
 			return false, DiffWithZoneMismatch{}, errors.AssertionFailedf("unknown zone configuration field %q", fieldName)
@@ -1248,6 +1268,10 @@ func (z *ZoneConfig) toSpanConfig() (roachpb.SpanConfig, error) {
 				return roachpb.SpanConfig{}, err
 			}
 		}
+	}
+	// IsEphemeral is false by default.
+	if z.IsEphemeral != nil {
+		sc.IsEphemeral = *z.IsEphemeral
 	}
 	return sc, nil
 }

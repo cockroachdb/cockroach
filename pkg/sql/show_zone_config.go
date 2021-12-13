@@ -250,6 +250,10 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		maybeWriteComma(f)
 		f.Printf("\tlease_preferences = %s", lexbase.EscapeSQLString(prefs))
 	}
+	if zone.IsEphemeral != nil {
+		maybeWriteComma(f)
+		f.Printf("\tis_ephemeral = %t", *zone.IsEphemeral)
+	}
 	return f.String(), nil
 }
 

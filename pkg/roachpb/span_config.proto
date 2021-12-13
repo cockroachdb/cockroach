@@ -140,6 +140,11 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // IsEphemeral specifies if the range(s) contain ephemeral data. Ephemeral
+  // data is assumed to have a short GC.TTL, and is therefore not included in
+  // operations that rely on reading revisions. egs: BACKUP
+  bool is_ephemeral = 16;
 }
 
 // SpanConfigEntry ties a span to its corresponding config.

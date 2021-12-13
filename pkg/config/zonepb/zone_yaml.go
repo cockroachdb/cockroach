@@ -211,6 +211,7 @@ type marshalableZoneConfig struct {
 	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
 	Subzones                     []Subzone         `json:"subzones" yaml:"-"`
 	SubzoneSpans                 []SubzoneSpan     `json:"subzone_spans" yaml:"-"`
+	IsEphemeral                  *bool             `json:"is_ephemeral" yaml:"is_ephemeral"`
 }
 
 func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
@@ -247,6 +248,9 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	// want to return yaml containing it.
 	m.Subzones = c.Subzones
 	m.SubzoneSpans = c.SubzoneSpans
+	if c.IsEphemeral != nil {
+		m.IsEphemeral = proto.Bool(*c.IsEphemeral)
+	}
 	return m
 }
 
@@ -295,6 +299,9 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig
 	}
 	c.Subzones = m.Subzones
 	c.SubzoneSpans = m.SubzoneSpans
+	if m.IsEphemeral != nil {
+		c.IsEphemeral = proto.Bool(*m.IsEphemeral)
+	}
 	return c
 }
 
