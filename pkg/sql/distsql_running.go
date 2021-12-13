@@ -86,6 +86,9 @@ func (req runnerRequest) run() {
 	} else {
 		client := execinfrapb.NewDistSQLClient(conn)
 		// TODO(radu): do we want a timeout here?
+		if sp := tracing.SpanFromContext(req.ctx); sp != nil && !sp.IsNoop() {
+			req.flowReq.TraceInfo = sp.Meta().ToProto()
+		}
 		resp, err := client.SetupFlow(req.ctx, req.flowReq)
 		if err != nil {
 			res.err = err

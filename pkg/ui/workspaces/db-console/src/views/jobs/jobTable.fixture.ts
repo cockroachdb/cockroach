@@ -272,7 +272,7 @@ export const allJobsFixture = [
 
 const getJobTableProps = (jobs: Array<Job>): JobTableProps => ({
   sort: {
-    sortKey: 3,
+    columnTitle: "creationTime",
     ascending: false,
   },
   isUsedFilter: false,

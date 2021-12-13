@@ -292,11 +292,6 @@ func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
 }
 
-// IsReservedID returns whether this ID is for any system object.
-func IsReservedID(id ID) bool {
-	return id > 0 && id <= keys.MaxReservedDescID
-}
-
 // AnonymousTable is the empty table name, used when a data source
 // has no own name, e.g. VALUES, subqueries or the empty source.
 var AnonymousTable = tree.TableName{}

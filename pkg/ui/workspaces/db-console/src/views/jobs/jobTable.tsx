@@ -13,7 +13,6 @@ import { cockroach } from "src/js/protos";
 import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { JobStatusCell } from "src/views/jobs/jobStatusCell";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { isEqual, map } from "lodash";
 import { JobDescriptionCell } from "src/views/jobs/jobDescriptionCell";
@@ -23,6 +22,7 @@ import {
   ColumnDescriptor,
   Pagination,
   ResultsPerPageLabel,
+  SortSetting,
 } from "@cockroachlabs/cluster-ui";
 import {
   jobsCancel,

@@ -295,6 +295,55 @@ func (sm SpanMeta) String() string {
 	return s.String()
 }
 
+// ToProto converts a SpanMeta to the TraceInfo proto.
+func (sm SpanMeta) ToProto() tracingpb.TraceInfo {
+	ti := tracingpb.TraceInfo{
+		TraceID:       sm.traceID,
+		ParentSpanID:  sm.spanID,
+		RecordingMode: sm.recordingType.ToProto(),
+	}
+	if sm.otelCtx.HasTraceID() {
+		var traceID [16]byte = sm.otelCtx.TraceID()
+		var spanID [8]byte = sm.otelCtx.SpanID()
+		ti.Otel = &tracingpb.TraceInfo_OtelInfo{
+			TraceID: traceID[:],
+			SpanID:  spanID[:],
+		}
+	}
+	return ti
+}
+
+// SpanMetaFromProto converts a TraceInfo proto to SpanMeta.
+func SpanMetaFromProto(info tracingpb.TraceInfo) SpanMeta {
+	var otelCtx oteltrace.SpanContext
+	if info.Otel != nil {
+		// NOTE: The ugly starry expressions below can be simplified once/if direct
+		// conversions from slices to arrays gets adopted:
+		// https://github.com/golang/go/issues/46505
+		traceID := *(*[16]byte)(info.Otel.TraceID)
+		spanID := *(*[8]byte)(info.Otel.SpanID)
+		otelCtx = otelCtx.WithRemote(true).WithTraceID(traceID).WithSpanID(spanID)
+	}
+
+	sm := SpanMeta{
+		traceID: info.TraceID,
+		spanID:  info.ParentSpanID,
+		otelCtx: otelCtx,
+		sterile: false,
+	}
+	switch info.RecordingMode {
+	case tracingpb.TraceInfo_NONE:
+		sm.recordingType = RecordingOff
+	case tracingpb.TraceInfo_STRUCTURED:
+		sm.recordingType = RecordingStructured
+	case tracingpb.TraceInfo_VERBOSE:
+		sm.recordingType = RecordingVerbose
+	default:
+		sm.recordingType = RecordingOff
+	}
+	return sm
+}
+
 // Structured is an opaque protobuf that can be attached to a trace via
 // `Span.RecordStructured`.
 type Structured interface {

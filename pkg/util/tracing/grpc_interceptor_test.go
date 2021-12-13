@@ -123,7 +123,9 @@ func TestGRPCInterceptors(t *testing.T) {
 	}))
 	conn, err := grpc.DialContext(context.Background(), ln.Addr().String(),
 		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil /* init */)),
+		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
+			func(_ context.Context) bool { return false }, /* compatibilityMode */
+		)),
 		grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
 	)
 	require.NoError(t, err)

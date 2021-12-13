@@ -1,0 +1,45 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.tracing.tracingpb;
+option go_package = "tracingpb";
+
+import "gogoproto/gogo.proto";
+
+// TraceInfo represents the tracing context of an operation. It is the proto
+// representation of tracing.SpanMeta. TraceInfos are passed around in RPC
+// payloads so that the server can create spans that are linked to the remote
+// parent.
+message TraceInfo {
+  uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "TraceID"];
+  // ID of the parent span.
+  uint64 parent_span_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
+
+  enum RecordingMode {
+    NONE = 0;
+    VERBOSE = 1;
+    STRUCTURED = 2;
+  }
+  // The type of recording, if any, that the parent span is doing. See
+  // tracing.RecordingType.
+  RecordingMode recording_mode = 3;
+
+  // OtelInfo contains the OpenTelemetry tracing context, if any.
+  message OtelInfo {
+    // trace_id will have exactly 16 bytes.
+    bytes trace_id = 1 [(gogoproto.customname) = "TraceID"];
+    // span_id will have exactly 8 bytes.
+    bytes span_id = 2 [(gogoproto.customname) = "SpanID"];
+  }
+
+  OtelInfo otel = 4;
+}
+

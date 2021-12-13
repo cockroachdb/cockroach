@@ -23,10 +23,10 @@ import {
 } from "./index";
 import { AdminUIState } from "src/redux/state";
 import { LocalSetting } from "src/redux/localsettings";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
 import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
+import { SortSetting } from "@cockroachlabs/cluster-ui";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 
