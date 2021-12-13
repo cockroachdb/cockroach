@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 )
+
+const rowfetcherCacheCap = 1024
 
 // rowFetcherCache maintains a cache of single table RowFetchers. Given a key
 // with an mvcc timestamp, it retrieves the correct TableDescriptor for that key
@@ -33,9 +36,10 @@ import (
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
 type rowFetcherCache struct {
-	codec    keys.SQLCodec
-	leaseMgr *lease.Manager
-	fetchers map[idVersion]*row.Fetcher
+	codec         keys.SQLCodec
+	leaseMgr      *lease.Manager
+	fetchers      map[idVersion]*row.Fetcher
+	fetcherBuffer ring.Buffer
 
 	collection *descs.Collection
 	db         *kv.DB
@@ -56,11 +60,12 @@ func newRowFetcherCache(
 	db *kv.DB,
 ) *rowFetcherCache {
 	return &rowFetcherCache{
-		codec:      codec,
-		leaseMgr:   leaseMgr,
-		collection: cf.NewCollection(nil /* TemporarySchemaProvider */),
-		db:         db,
-		fetchers:   make(map[idVersion]*row.Fetcher),
+		codec:         codec,
+		leaseMgr:      leaseMgr,
+		collection:    cf.NewCollection(nil /* TemporarySchemaProvider */),
+		db:            db,
+		fetchers:      make(map[idVersion]*row.Fetcher),
+		fetcherBuffer: ring.MakeBuffer(make([]interface{}, rowfetcherCacheCap)),
 	}
 }
 
@@ -138,10 +143,12 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
 	// guaranteed that the tables have the same version. Additionally, these
 	// fetchers are always initialized with a single tabledesc.Immutable.
-	if rf, ok := c.fetchers[idVer]; ok &&
+	existing := false
+	if rf, existing := c.fetchers[idVer]; existing &&
 		catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, rf.GetTable().(catalog.TableDescriptor)) {
 		return rf, nil
 	}
+
 	// TODO(dan): Allow for decoding a subset of the columns.
 	var colIdxMap catalog.TableColMap
 	var valNeededForCol util.FastIntSet
@@ -173,9 +180,16 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	); err != nil {
 		return nil, err
 	}
-	// TODO(dan): Bound the size of the cache. Resolved notifications will let
-	// us evict anything for timestamps entirely before the notification. Then
-	// probably an LRU just in case?
+
+	// If at capacity, evict the oldest rowFetcher. This should be rare.
+	if !existing {
+		if c.fetcherBuffer.Len() == c.fetcherBuffer.Cap() {
+			delete(c.fetchers, c.fetcherBuffer.GetLast().(idVersion))
+			c.fetcherBuffer.RemoveLast()
+		}
+		c.fetcherBuffer.AddFirst(idVer)
+	}
+
 	c.fetchers[idVer] = &rf
 	return &rf, nil
 }
