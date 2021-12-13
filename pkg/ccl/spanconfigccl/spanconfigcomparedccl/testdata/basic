@@ -19,23 +19,7 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters = 5;
 # - The gossip-backed system doesn't because it needs to gossips the entire
 #   range's contents whenever anything in it changes.
 # - The span configs infrastructure doesn't, at least for now, for
-#   inter-operability with the gossip-backed system. 
-#
-# Given that, what should we make of the "diff" below? It's actually benign:
-# - The old system splits on SystemSQLCodec.TablePrefix(0), pretty printed
-#   as /Table/SystemConfigSpan/Start.
-# - The new system splits on DescriptorTableID.
-# It's benign because there's no data under /Table/{0-2}. A listing of
-# descriptor IDs lower than MaxSystemConfigDescID is presented below:
-#
-#   SystemDatabaseID = 1  
-#   DeprecatedNamespaceTableID = 2
-#   DescriptorTableID          = 3
-#   UsersTableID               = 4
-#   ZonesTableID               = 5
-#   SettingsTableID            = 6
-#   DescIDSequenceID           = 7
-#   TenantsTableID             = 8
+#   inter-operability with the gossip-backed system.
 
 configs version=legacy offset=4 limit=3
 ----
@@ -49,20 +33,9 @@ configs version=current offset=4 limit=3
 ----
 ...
 /System/"tse"                              range system
-/Table/3                                   range system
+/Table/SystemConfigSpan/Start              range system
 /Table/11                                  range system
 ...
-
-diff offset=2 limit=4
-----
---- gossiped system config span (legacy)
-+++ span config infrastructure (current)
-...
- /System/"tse"                              range system
--/Table/SystemConfigSpan/Start              range system
-+/Table/3                                   range system
- /Table/11                                  range system
- ...
 
 # The gossiped system config span splits (needlessly) on pseudo table IDs; the
 # new subsystem doesn't.
@@ -74,7 +47,7 @@ diff offset=2 limit=4
 #   PublicSchemaID                       = 29 // pseudo
 #   TenantsRangesID                      = 38 // pseudo
 
-diff offset=9 limit=21
+diff offset=2 limit=21
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)

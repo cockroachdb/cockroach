@@ -20,7 +20,7 @@ configs version=current offset=37
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 
-diff offset=31
+diff offset=24
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
@@ -29,13 +29,13 @@ diff offset=31
 reconcile tenant=11
 ----
 
-# As soon as tenant11 starts reconciling, we should observe more fine-grained
-# span configs within its keyspan
+# As soon as tenant-11 starts reconciling, we should observe more fine-grained
+# span configs within its keyspan. This isn't true for the legacy system.
 configs version=current offset=37 limit=5
 ----
 ...
 /Tenant/10                                 range default
-/Tenant/11/Table/3                         range default
+/Tenant/11                                 range default
 /Tenant/11/Table/4                         range default
 /Tenant/11/Table/5                         range default
 /Tenant/11/Table/6                         range default
@@ -47,16 +47,40 @@ configs version=legacy offset=43
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 
-diff offset=31
+diff offset=24 limit=10
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -43,4 +37,37 @@
- /Table/47                                  range system
+@@ -44,3 +38,36 @@
  /Tenant/10                                 range default
--/Tenant/11                                 range default
-+/Tenant/11/Table/3                         range default
+ /Tenant/11                                 range default
++/Tenant/11/Table/4                         range default
++/Tenant/11/Table/5                         range default
++/Tenant/11/Table/6                         range default
++/Tenant/11/Table/7                         range default
++/Tenant/11/Table/11                        range default
++/Tenant/11/Table/12                        range default
++/Tenant/11/Table/13                        range default
+ ...
+
+# Sanity check that new tenant tables show up correctly.
+
+exec-sql tenant=11
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+ALTER TABLE db.t1 CONFIGURE ZONE using num_replicas = 42, gc.ttlseconds = 1000;
+----
+
+diff offset=24
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+@@ -44,3 +38,38 @@
+ /Tenant/10                                 range default
+ /Tenant/11                                 range default
 +/Tenant/11/Table/4                         range default
 +/Tenant/11/Table/5                         range default
 +/Tenant/11/Table/6                         range default
@@ -88,23 +112,6 @@ diff offset=31
 +/Tenant/11/Table/41                        range default
 +/Tenant/11/Table/42                        range default
 +/Tenant/11/Table/43                        range default
-+/Tenant/11/Table/44                        range default
-+/Tenant/11/Table/46                        range default
-
-# Sanity check that new tenant tables show up correctly.
-
-exec-sql tenant=11
-CREATE DATABASE db;
-CREATE TABLE db.t1();
-CREATE TABLE db.t2();
-ALTER TABLE db.t1 CONFIGURE ZONE using num_replicas = 42, gc.ttlseconds = 1000;
-----
-
-diff offset=67
-----
---- gossiped system config span (legacy)
-+++ span config infrastructure (current)
-...
 +/Tenant/11/Table/44                        range default
 +/Tenant/11/Table/46                        range default
 +/Tenant/11/Table/56                        ttl_seconds=1000 num_replicas=42
