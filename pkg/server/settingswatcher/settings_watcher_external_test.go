@@ -13,28 +13,32 @@ package settingswatcher_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// TestSettingsWatcher constructs a SettingsWatcher under a hypothetical tenant
-// and then copies some values over to that tenant. It then ensures that the
-// initial settings are picked up and that changes are also eventually picked
-// up.
-func TestSettingWatcher(t *testing.T) {
+// TestSettingsWatcherOnTenant constructs a SettingsWatcher under a hypothetical
+// tenant and then copies some values over to that tenant. It then ensures that
+// the initial settings are picked up and that changes are also eventually
+// picked up.
+func TestSettingWatcherOnTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -96,4 +100,161 @@ func TestSettingWatcher(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return checkSettingsValuesMatch(s0.ClusterSettings(), fakeSettings)
 	})
+}
+
+var strFoo = settings.RegisterStringSetting("str.foo", "desc", "")
+var strBar = settings.RegisterStringSetting("str.bar", "desc", "bar")
+var i0 = settings.RegisterIntSetting("i0", "desc", 0)
+var i1 = settings.RegisterIntSetting("i1", "desc", 1)
+
+func TestSettingsWatcherWithOverrides(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	// Set up a test cluster for the system table.
+	ts, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	stopper := ts.Stopper()
+	defer stopper.Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(db)
+	// Set some settings (to verify handling of existing rows).
+	r.Exec(t, "SET CLUSTER SETTING str.foo = 'foo'")
+	r.Exec(t, "SET CLUSTER SETTING i1 = 10")
+
+	m := newTestingOverrideMonitor()
+	// Set an override (to verify that it does work when it is already set).
+	m.set("str.foo", "override", "s")
+
+	st := cluster.MakeTestingClusterSettings()
+	f, err := rangefeed.NewFactory(stopper, kvDB, &rangefeed.TestingKnobs{})
+	require.NoError(t, err)
+	w := settingswatcher.NewWithOverrides(ts.Clock(), keys.SystemSQLCodec, st, f, stopper, m)
+	require.NoError(t, w.Start(ctx))
+
+	expect := func(setting, value string) {
+		t.Helper()
+		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess)
+		require.True(t, ok)
+		require.Equal(t, value, s.String(&st.SV))
+	}
+
+	expectSoon := func(setting, value string) {
+		t.Helper()
+		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess)
+		require.True(t, ok)
+		testutils.SucceedsSoon(t, func() error {
+			if actual := s.String(&st.SV); actual != value {
+				return errors.Errorf("expected '%s', got '%s'", value, actual)
+			}
+			return nil
+		})
+	}
+
+	expect("str.foo", "override")
+	expect("str.bar", "bar")
+	expect("i0", "0")
+	expect("i1", "10")
+
+	m.unset("str.foo")
+	m.set("str.bar", "override", "s")
+	m.notify()
+
+	expectSoon("str.bar", "override")
+	// str.foo should now be the value we set above.
+	expectSoon("str.foo", "foo")
+
+	// Verify that a new setting in the table does not affect the override.
+	r.Exec(t, "SET CLUSTER SETTING str.bar = 'baz'")
+	// Sleep a bit so the settings watcher has a chance to react.
+	time.Sleep(time.Millisecond)
+	expect("str.bar", "override")
+
+	m.set("i1", "15", "i")
+	m.set("i0", "20", "i")
+	m.notify()
+	expectSoon("i1", "15")
+	expectSoon("i0", "20")
+
+	m.unset("str.bar")
+	m.notify()
+	expectSoon("str.bar", "baz")
+
+	m.unset("i0")
+	m.unset("i1")
+	m.notify()
+
+	// i0 should revert to the default.
+	expectSoon("i0", "0")
+	// i1 should revert to value in the table.
+	expectSoon("i1", "10")
+
+	// Verify that version cannot be overridden.
+	version, ok := settings.Lookup("version", settings.LookupForLocalAccess)
+	require.True(t, ok)
+	versionValue := version.String(&st.SV)
+
+	m.set("version", "12345", "m")
+	m.notify()
+	// Sleep a bit so the settings watcher has a chance to react.
+	time.Sleep(time.Millisecond)
+	expect("version", versionValue)
+}
+
+// testingOverrideMonitor is a test-only implementation of OverrideMonitor.
+type testingOverrideMonitor struct {
+	ch chan struct{}
+
+	mu struct {
+		syncutil.Mutex
+		overrides map[string]settingswatcher.RawValue
+	}
+}
+
+var _ settingswatcher.OverridesMonitor = (*testingOverrideMonitor)(nil)
+
+func newTestingOverrideMonitor() *testingOverrideMonitor {
+	m := &testingOverrideMonitor{
+		ch: make(chan struct{}, 1),
+	}
+	m.mu.overrides = make(map[string]settingswatcher.RawValue)
+	return m
+}
+
+func (m *testingOverrideMonitor) notify() {
+	select {
+	case m.ch <- struct{}{}:
+	default:
+	}
+}
+
+func (m *testingOverrideMonitor) set(key string, val string, valType string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.mu.overrides[key] = settingswatcher.RawValue{
+		Value: val,
+		Type:  valType,
+	}
+}
+
+func (m *testingOverrideMonitor) unset(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.mu.overrides, key)
+}
+
+// NotifyCh is part of the settingswatcher.OverridesMonitor interface.
+func (m *testingOverrideMonitor) NotifyCh() <-chan struct{} {
+	return m.ch
+}
+
+// Overrides is part of the settingswatcher.OverridesMonitor interface.
+func (m *testingOverrideMonitor) Overrides() map[string]settingswatcher.RawValue {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	res := make(map[string]settingswatcher.RawValue)
+	for k, v := range m.mu.overrides {
+		res[k] = v
+	}
+	return res
 }
