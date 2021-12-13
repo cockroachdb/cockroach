@@ -33,6 +33,7 @@ func (s *Store) MergeRange(
 	rightClosedTS hlc.Timestamp,
 	rightReadSum *rspb.ReadSummary,
 ) error {
+	defer s.assertNoHole(ctx, leftRepl.Desc().EndKey, newLeftDesc.EndKey)()
 	if oldLeftDesc := leftRepl.Desc(); !oldLeftDesc.EndKey.Less(newLeftDesc.EndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
 			newLeftDesc.EndKey, oldLeftDesc.EndKey)
@@ -49,11 +50,16 @@ func (s *Store) MergeRange(
 	// Note that we were called (indirectly) from raft processing so we must
 	// call removeInitializedReplicaRaftMuLocked directly to avoid deadlocking
 	// on the right-hand replica's raftMu.
-	if err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
+	//
+	// We ask removeInitializedReplicaRaftMuLocked to install a placeholder which
+	// we'll drop atomically with extending the right-hand side down below.
+	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
 		// The replica was destroyed by the tombstones added to the batch in
 		// runPreApplyTriggersAfterStagingWriteBatch.
-		DestroyData: false,
-	}); err != nil {
+		DestroyData:       false,
+		InsertPlaceholder: true,
+	})
+	if err != nil {
 		return errors.Wrap(err, "cannot remove range")
 	}
 
@@ -116,7 +122,22 @@ func (s *Store) MergeRange(
 		applyReadSummaryToTimestampCache(s.tsCache, &rightDesc, sum)
 	}
 
-	// Update the subsuming range's descriptor.
-	leftRepl.setDescRaftMuLocked(ctx, &newLeftDesc)
+	// Update the subsuming range's descriptor, atomically widening it while
+	// dropping the placeholder representing the right-hand side.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	removed, err := s.removePlaceholderLocked(ctx, ph, removePlaceholderFilled)
+	if err != nil {
+		return err
+	}
+	if !removed {
+		return errors.AssertionFailedf("did not find placeholder %s", ph)
+	}
+	// NB: we have to be careful not to lock leftRepl before this step, as
+	// removePlaceholderLocked traverses the replicasByKey btree and may call
+	// leftRepl.Desc().
+	leftRepl.mu.Lock()
+	defer leftRepl.mu.Unlock()
+	leftRepl.setDescLockedRaftMuLocked(ctx, &newLeftDesc)
 	return nil
 }

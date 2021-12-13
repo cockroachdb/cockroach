@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -201,6 +203,39 @@ func (s *Store) ReservationCount() int {
 // RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
 func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
 	return s.scheduler.PriorityID()
+}
+
+func (s *Store) assertNoHole(ctx context.Context, from, to roachpb.RKey) func() {
+	caller := string(debug.Stack())
+	if from.Equal(roachpb.RKeyMax) {
+		// There will be a hole to the right of RKeyMax but it's just the end of
+		// the addressable keyspace.
+		return func() {}
+	}
+	// Check that there's never a gap to the right of the pre-merge LHS in replicasByKey.
+	ctx, stopAsserting := context.WithCancel(ctx)
+	_ = s.stopper.RunAsyncTask(ctx, "force-assertion", func(ctx context.Context) {
+		for ctx.Err() == nil {
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				var it replicaOrPlaceholder
+				if err := s.mu.replicasByKey.VisitKeyRange(
+					context.Background(), from, to, AscendingKeyOrder,
+					func(ctx context.Context, iit replicaOrPlaceholder) error {
+						it = iit
+						return iterutil.StopIteration()
+					}); err != nil {
+					log.Fatalf(ctx, "%v", err)
+				}
+				if it.item != nil {
+					return
+				}
+				log.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
+			}()
+		}
+	})
+	return stopAsserting
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {

@@ -23,6 +23,10 @@ import (
 type RemoveOptions struct {
 	// If true, the replica's destroyStatus must be marked as removed.
 	DestroyData bool
+	// InsertPlaceholder can be specified when removing an initialized Replica
+	// and will result in the insertion of a ReplicaPlaceholder covering the
+	// keyspace previously occupied by the (now deleted) Replica.
+	InsertPlaceholder bool
 }
 
 // RemoveReplica removes the replica from the store's replica map and from the
@@ -40,7 +44,11 @@ func (s *Store) RemoveReplica(
 ) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	return s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+	if opts.InsertPlaceholder {
+		return errors.Errorf("InsertPlaceholder not supported in RemoveReplica")
+	}
+	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+	return err
 }
 
 // removeReplicaRaftMuLocked removes the passed replica. If the replica is
@@ -50,7 +58,11 @@ func (s *Store) removeReplicaRaftMuLocked(
 ) error {
 	rep.raftMu.AssertHeld()
 	if rep.IsInitialized() {
-		return errors.Wrap(s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts),
+		if opts.InsertPlaceholder {
+			return errors.Errorf("InsertPlaceholder unsupported in removeReplicaRaftMuLocked")
+		}
+		_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+		return errors.Wrap(err,
 			"failed to remove replica")
 	}
 	s.removeUninitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID)
@@ -62,8 +74,17 @@ func (s *Store) removeReplicaRaftMuLocked(
 // It requires that Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeInitializedReplicaRaftMuLocked(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
-) error {
+) (*ReplicaPlaceholder, error) {
 	rep.raftMu.AssertHeld()
+
+	if opts.InsertPlaceholder {
+		if opts.DestroyData {
+			return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
+		}
+		if !rep.IsInitialized() {
+			return nil, errors.AssertionFailedf("cannot specify InsertPlaceholder for an uninitialized Replica %s", rep)
+		}
+	}
 
 	// Sanity checks before committing to the removal by setting the
 	// destroy status.
@@ -78,7 +99,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 			if rep.mu.destroyStatus.Removed() {
 				rep.mu.Unlock()
 				rep.readOnlyCmdMu.Unlock()
-				return nil // already removed, noop
+				return nil, nil // already removed, noop
 			}
 		} else {
 			// If the caller doesn't want to destroy the data because it already
@@ -158,11 +179,11 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	rep.disconnectReplicationRaftMuLocked(ctx)
 	if opts.DestroyData {
 		if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	func() {
+	ph := func() *ReplicaPlaceholder {
 		s.mu.Lock()
 		defer s.mu.Unlock() // must unlock before s.scanner.RemoveReplica(), to avoid deadlock
 
@@ -173,19 +194,39 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		if ph, ok := s.mu.replicaPlaceholders[rep.RangeID]; ok {
 			log.Fatalf(ctx, "initialized replica %s unexpectedly had a placeholder: %+v", rep, ph)
 		}
-		if it := s.mu.replicasByKey.DeleteReplica(ctx, rep); it.repl != rep {
+		desc := rep.Desc()
+		ph := &ReplicaPlaceholder{
+			rangeDesc: *roachpb.NewRangeDescriptor(desc.RangeID, desc.StartKey, desc.EndKey, desc.Replicas()),
+		}
+
+		if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(ctx, ph); it.repl != rep {
 			// We already checked that our replica was present in replicasByKey
 			// above. Nothing should have been able to change that.
 			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item)
 		}
-		if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+		if exPH, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
+			log.Fatalf(ctx, "cannot insert placeholder %s, already have %s", ph, exPH)
+		}
+		s.mu.replicaPlaceholders[desc.RangeID] = ph
+
+		if opts.InsertPlaceholder {
+			return ph
+		}
+		// If placeholder not desired, remove it now, otherwise, that's the caller's
+		// job. We could elide the placeholder altogether but wish to instead
+		// minimize the divergence between the two code paths.
+
+		s.mu.replicasByKey.DeletePlaceholder(ctx, ph)
+		delete(s.mu.replicaPlaceholders, desc.RangeID)
+		if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil && it.item != ph {
 			log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, it.item)
 		}
+		return nil
 	}()
 
 	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
 	s.scanner.RemoveReplica(rep)
-	return nil
+	return ph, nil
 }
 
 // removeUninitializedReplicaRaftMuLocked removes an uninitialized replica.

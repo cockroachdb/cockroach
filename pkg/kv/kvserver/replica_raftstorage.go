@@ -770,6 +770,25 @@ func (r *Replica) applySnapshot(
 	}
 
 	isInitialSnap := !r.IsInitialized()
+	{
+		var from, to roachpb.RKey
+		if isInitialSnap {
+			// For uninitialized replicas, there must be a placeholder that covers
+			// the snapshot's bounds, so basically check that. A synchronous check
+			// here would be simpler but this works well enough.
+			d := inSnap.placeholder.Desc()
+			from, to = d.StartKey, d.EndKey
+		} else {
+			// For snapshots to existing replicas, from and to usually match (i.e.
+			// nothing is asserted) but if the snapshot spans a merge then we're
+			// going to assert that we're transferring the keyspace from the subsumed
+			// replicas to this replica seamlessly.
+			d := r.Desc()
+			from, to = d.EndKey, inSnap.Desc.EndKey
+		}
+
+		defer r.store.assertNoHole(ctx, from, to)()
+	}
 	defer func() {
 		if e := recover(); e != nil {
 			// Re-panic to avoid the log.Fatal() below.
@@ -906,7 +925,8 @@ func (r *Replica) applySnapshot(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
-	if err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID); err != nil {
+	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID)
+	if err != nil {
 		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
 
@@ -925,13 +945,19 @@ func (r *Replica) applySnapshot(
 	// the on-disk state.
 
 	r.store.mu.Lock()
-	r.mu.Lock()
 	if inSnap.placeholder != nil {
-		_, err := r.store.removePlaceholderLocked(ctx, inSnap.placeholder, removePlaceholderFilled)
+		subPHs = append(subPHs, inSnap.placeholder)
+	}
+	for _, ph := range subPHs {
+		_, err := r.store.removePlaceholderLocked(ctx, ph, removePlaceholderFilled)
 		if err != nil {
-			log.Fatalf(ctx, "unable to remove placeholder: %s", err)
+			log.Fatalf(ctx, "unable to remove placeholder %s: %s", ph, err)
 		}
 	}
+
+	// NB: we lock `r.mu` only now because removePlaceholderLocked operates on
+	// replicasByKey and this may end up calling r.Desc().
+	r.mu.Lock()
 	r.setDescLockedRaftMuLocked(ctx, desc)
 	if err := r.store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
 		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
@@ -1136,7 +1162,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 // held.
 func (r *Replica) clearSubsumedReplicaInMemoryData(
 	ctx context.Context, subsumedRepls []*Replica, subsumedNextReplicaID roachpb.ReplicaID,
-) error {
+) ([]*ReplicaPlaceholder, error) {
+	//
+	var phs []*ReplicaPlaceholder
 	for _, sr := range subsumedRepls {
 		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
 		// Note that it's safe to update the store's metadata for sr's removal
@@ -1145,19 +1173,25 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// acquisition leaves the store in a consistent state, and access to the
 		// replicas themselves is protected by their raftMus, which are held from
 		// start to finish.
-		if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
+		//
+		// TODO(tbg): this leaves the RHS keyspace unprotected, isn't this a problem
+		// similar to #73721? This also needs to use the InsertPlaceholder option.
+		ph, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
 			// The data was already destroyed by clearSubsumedReplicaDiskData.
-			DestroyData: false,
-		}); err != nil {
-			return err
+			DestroyData:       false,
+			InsertPlaceholder: true,
+		})
+		if err != nil {
+			return nil, err
 		}
+		phs = append(phs, ph)
 		// We removed sr's data when we committed the batch. Finish subsumption by
 		// updating the in-memory bookkeping.
 		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return phs, nil
 }
 
 type raftCommandEncodingVersion byte
