@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "settingswatcher",
     srcs = [
+        "overrides.go",
         "row_decoder.go",
         "settings_watcher.go",
     ],
@@ -28,6 +29,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -43,6 +45,7 @@ go_test(
         ":settingswatcher",
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -56,6 +59,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],

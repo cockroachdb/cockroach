@@ -38,14 +38,14 @@ func processSystemConfigKVs(
 		if !bytes.HasPrefix(kv.Key, settingsTablePrefix) {
 			return nil
 		}
-		k, v, t, _, err := dec.DecodeRow(kv)
+		k, val, _, err := dec.DecodeRow(kv)
 		if err != nil {
 			return err
 		}
 		settingsKVs = append(settingsKVs, kv)
 
-		if err := u.Set(ctx, k, v, t); err != nil {
-			log.Warningf(ctx, "setting %q to %q failed: %+v", k, v, err)
+		if err := u.Set(ctx, k, val.Value, val.Type); err != nil {
+			log.Warningf(ctx, "setting %q to %q failed: %+v", k, val.Value, err)
 		}
 		return nil
 	}
