@@ -38,6 +38,7 @@ export * from "./sql";
 export * from "./table";
 export * from "./store";
 export * from "./transactionsPage";
+export * from "./transactionDetails";
 export * from "./text";
 export { util, api };
 export * from "./sessions";

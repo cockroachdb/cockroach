@@ -23,6 +23,7 @@ import {
   FixLong,
   longToInt,
   TimestampToNumber,
+  TimestampToString,
   addStatementStats,
   flattenStatementStats,
   DurationToNumber,
@@ -33,7 +34,6 @@ import {
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type Timestamp = protos.google.protobuf.ITimestamp;
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
@@ -54,14 +54,14 @@ export const collectStatementsText = (statements: Statement[]): string =>
 
 export const getStatementsByFingerprintIdAndTime = (
   statementFingerprintIds: Long[],
-  timestamp: Timestamp | null,
+  timestamp: string | null,
   statements: Statement[],
 ): Statement[] => {
-  return statements.filter(
+  return statements?.filter(
     s =>
       (timestamp == null ||
         (s.key?.aggregated_ts != null &&
-          timestamp.seconds.eq(s.key.aggregated_ts.seconds))) &&
+          timestamp == TimestampToString(s.key.aggregated_ts))) &&
       statementFingerprintIds.some(id => id.eq(s.id)),
   );
 };
@@ -127,7 +127,7 @@ export const searchTransactionsData = (
           collectStatementsText(
             getStatementsByFingerprintIdAndTime(
               t.stats_data.statement_fingerprint_ids,
-              t.stats_data.aggregated_ts,
+              TimestampToString(t.stats_data.aggregated_ts),
               statements,
             ),
           )
@@ -203,7 +203,7 @@ export const filterTransactions = (
 
       getStatementsByFingerprintIdAndTime(
         t.stats_data.statement_fingerprint_ids,
-        t.stats_data.aggregated_ts,
+        TimestampToString(t.stats_data.aggregated_ts),
         statements,
       ).some(stmt => {
         stmt.stats.nodes &&
@@ -248,7 +248,7 @@ export const generateRegionNode = (
   // E.g. {"gcp-us-east1" : [1,3,4]}
   getStatementsByFingerprintIdAndTime(
     transaction.stats_data.statement_fingerprint_ids,
-    transaction.stats_data.aggregated_ts,
+    TimestampToString(transaction.stats_data.aggregated_ts),
     statements,
   ).forEach(stmt => {
     stmt.stats.nodes &&
