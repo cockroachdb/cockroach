@@ -1,0 +1,968 @@
+# Test ORed ON clause predicates which may be split into unions or 
+# intersections.
+# Use tables both with and without a primary key, to test when PK columns are
+# not included and also to allow null values.
+
+statement ok
+CREATE TABLE A(a1 INT, a2 INT, a3 INT, a4 INT, PRIMARY KEY(a1, a2, a3, a4))
+
+statement ok
+CREATE TABLE B(b1 INT, b2 INT, b3 INT, b4 INT,
+               INDEX (b1, b2) STORING (b3, b4),
+               INDEX (b2) STORING (b1, b3, b4),
+               INDEX (b3) STORING (b1, b2, b4))
+
+statement ok
+CREATE TABLE C(c1 INT, c2 INT, c3 INT, c4 INT)
+
+statement ok
+CREATE TABLE D(d1 INT, d2 INT, d3 INT, d4 INT,
+               INDEX d (d1) STORING (d2, d3, d4))
+
+# shared column values
+statement ok
+INSERT INTO A VALUES (0, 0, 0, 0),(1, 10, 100, 1000);
+INSERT INTO B VALUES (0, 0, 0, 0),(1, 10, 100, 1000);
+INSERT INTO C VALUES (0, 0, 0, 0),(1, 10, 100, 1000);
+INSERT INTO D VALUES (0, 0, 0, 0),(1, 10, 100, 1000);
+
+# duplicate rows
+statement ok
+INSERT INTO A VALUES (11, 110, 1100, 11000);
+INSERT INTO B VALUES (11, 110, 1100, 11000), (11, 110, 1100, 11000);
+INSERT INTO C VALUES (11, 110, 1100, 11000), (11, 110, 1100, 11000), (11, 110, 1100, 11000);
+INSERT INTO D VALUES (11, 110, 1100, 11000), (11, 110, 1100, 11000), (11, 110, 1100, 11000), (11, 110, 1100, 11000);
+
+# null values
+statement ok
+INSERT INTO B VALUES (NULL, NULL, NULL, NULL), (NULL, NULL, NULL, NULL);
+INSERT INTO D VALUES (NULL, NULL, NULL, NULL), (NULL, NULL, NULL, NULL), (NULL, NULL, NULL, NULL), (NULL, NULL, NULL, NULL);
+
+# duplicates in first three columns
+statement ok
+INSERT INTO A VALUES (12, 120, 1200, 1), (12, 120, 1200, 2);
+INSERT INTO B VALUES (12, 120, 1200, 1), (12, 120, 1200, 2), (12, 120, 1200, 2);
+
+# nulls combined with the duplicates
+statement ok
+INSERT INTO B VALUES (NULL, 120, 1200, 1)   , (12, NULL, 1200, 2);
+INSERT INTO D VALUES (11, NULL, NULL, 11000), (NULL, 110, 1100, 11000);
+
+# partially shared combinations
+statement ok
+INSERT INTO A VALUES (2, 20, 200, 2000), (3, 30, 300, 3000), (4, 40, 400, 4000), (5, 50, 500, 5000), (6, 60, 600, 6000), (7, 70, 700, 7000);
+INSERT INTO B VALUES (2, 20, 200, 2000), (3, 30, 300, 3000),                     (5, 50, 500, 5000), (6, 60, 600, 6000)                    , (8, 80, 800, 8000), (9, 90, 900, 9000);
+INSERT INTO C VALUES (2, 20, 200, 2000),                                         (5, 50, 500, 5000)                                        , (8, 80, 800, 8000)                    , (10, 100, 1000, 10000);
+INSERT INTO D VALUES                                                             (5, 50, 500, 5000), (6, 60, 600, 6000), (7, 70, 700, 7000);
+
+# combinations with null values
+statement ok
+INSERT INTO B VALUES (2, NULL, 200, NULL), (3, 30, 300, NULL)    , (NULL, 40, 400, 4000)  , (NULL, NULL, NULL, 5000)                       , (7, NULL, 700, NULL);
+INSERT INTO B VALUES (2, 20, NULL, 200)  , (3, 30, 300, 3000)    , (4, NULL, NULL, NULL)  , (5, 50, NULL, 5000)                            , (7, NULL, 700, NULL);
+INSERT INTO C VALUES                       (3, 30, NULL, NULL)   , (NULL, NULL, 400, 4000), (5, 50, NULL, NULL), (6, NULL, NULL, 6000);
+INSERT INTO D VALUES                       (NULL, 30, NULL, 3000)                                                                                                , (NULL, 90, NULL, NULL);
+
+# combinations with null and unique values
+statement ok
+INSERT INTO B VALUES (82, NULL, 207, NULL), (NULL, 567, NULL, 789);
+INSERT INTO C VALUES (83, 208, NULL, NULL), (NULL, NULL, 84, 209);
+INSERT INTO D VALUES (85, NULL, NULL, 210), (NULL, 86, 211, NULL);
+
+# combinations with unique values
+statement ok
+INSERT INTO A VALUES (15,   55, 555, 5555), (15, 55,   500, 5555), (15, 50, 555,  5555);
+INSERT INTO B VALUES (17,   77, 777, 7777), (17, 77,   700, 7777), (17, 70, 777,  7777);
+INSERT INTO B VALUES (NULL, 77, 777, 7777), (17, NULL, 777, 7777), (17, 77, NULL, 7777);
+
+# cross column value matches (e.g. a1 = b2)
+statement ok
+INSERT INTO A VALUES (101, 200, 3000, 40);
+INSERT INTO A VALUES (102, 5, 60, 70);
+INSERT INTO A VALUES (103, 7, 8, 70);
+INSERT INTO A VALUES (104, 5, 5, 5);
+INSERT INTO A VALUES (50, 5, 5000, 500);
+INSERT INTO A VALUES (80, 11, 110, 11000);
+INSERT INTO B VALUES (30, 7, 40, 2);
+INSERT INTO B VALUES (120, 80, 90, 10);
+INSERT INTO C VALUES (1, 2, 3, 4);
+INSERT INTO D VALUES (5, 6, 7, 8), (9, 10, 11, 12);
+
+#############
+# InnerJoin #
+#############
+
+# The left AND right sides of the join already produce key columns
+query IIIIIIII rowsort
+SELECT t1.*, t2.* FROM A t1, A t2 WHERE t1.a1 = t2.a3 OR t1.a2 = t2.a4 OR t1.a1 = t2.a4
+----
+0    0   0     0     0    0    0     0
+1    10  100   1000  12   120  1200  1
+2    20  200   2000  12   120  1200  2
+4    40  400   4000  101  200  3000  40
+5    50  500   5000  104  5    5     5
+7    70  700   7000  102  5    60    70
+7    70  700   7000  103  7    8     70
+50   5   5000  500   104  5    5     5
+102  5   60    70    104  5    5     5
+104  5   5     5     104  5    5     5
+
+# Join of tables with compound primary keys
+query IIIIIIII rowsort
+SELECT * FROM A t1, A t2 WHERE (t1.a2 = t2.a2 OR t1.a3 = t2.a3) AND (t1.a1 = t2.a1 OR t1.a4 = t2.a4)
+----
+0    0    0     0      0    0    0     0
+1    10   100   1000   1    10   100   1000
+2    20   200   2000   2    20   200   2000
+3    30   300   3000   3    30   300   3000
+4    40   400   4000   4    40   400   4000
+5    50   500   5000   5    50   500   5000
+6    60   600   6000   6    60   600   6000
+7    70   700   7000   7    70   700   7000
+11   110  1100  11000  11   110  1100  11000
+12   120  1200  1      12   120  1200  1
+12   120  1200  1      12   120  1200  2
+12   120  1200  2      12   120  1200  1
+12   120  1200  2      12   120  1200  2
+15   50   555   5555   15   50   555   5555
+15   55   500   5555   15   55   500   5555
+15   55   500   5555   15   55   555   5555
+15   55   555   5555   15   55   500   5555
+15   55   555   5555   15   55   555   5555
+50   5    5000  500    50   5    5000  500
+80   11   110   11000  80   11   110   11000
+101  200  3000  40     101  200  3000  40
+102  5    60    70     102  5    60    70
+103  7    8     70     103  7    8     70
+104  5    5     5      104  5    5     5
+15   50   555   5555   15   55   555   5555
+15   55   555   5555   15   50   555   5555
+
+query IIIIIIII rowsort
+SELECT * FROM A, B WHERE (a2 = b2 OR a3 = b3) AND (a1 = b1 OR a4 = b4)
+----
+0   0    0     0      0     0     0     0
+1   10   100   1000   1     10    100   1000
+2   20   200   2000   2     20    200   2000
+2   20   200   2000   2     20    NULL  200
+3   30   300   3000   3     30    300   3000
+3   30   300   3000   3     30    300   3000
+3   30   300   3000   3     30    300   NULL
+4   40   400   4000   NULL  40    400   4000
+5   50   500   5000   5     50    500   5000
+5   50   500   5000   5     50    NULL  5000
+6   60   600   6000   6     60    600   6000
+11  110  1100  11000  11    110   1100  11000
+11  110  1100  11000  11    110   1100  11000
+12  120  1200  1      12    120   1200  1
+12  120  1200  1      NULL  120   1200  1
+12  120  1200  1      12    120   1200  2
+12  120  1200  1      12    120   1200  2
+12  120  1200  2      12    120   1200  1
+12  120  1200  2      12    120   1200  2
+12  120  1200  2      12    120   1200  2
+2   20   200   2000   2     NULL  200   NULL
+7   70   700   7000   7     NULL  700   NULL
+7   70   700   7000   7     NULL  700   NULL
+12  120  1200  1      12    NULL  1200  2
+12  120  1200  2      12    NULL  1200  2
+
+query III rowsort
+SELECT a1,a2,a3 FROM A,B WHERE (a1=b1 AND a2=b2 AND (a1=1 OR b1=1)) OR (a3=b3 AND a4=b4)
+----
+1   10   100
+0   0    0
+2   20   200
+3   30   300
+3   30   300
+4   40   400
+5   50   500
+6   60   600
+11  110  1100
+11  110  1100
+12  120  1200
+12  120  1200
+12  120  1200
+12  120  1200
+12  120  1200
+
+query III rowsort
+SELECT a1,a2,a3 FROM A,B WHERE a1=1 AND (a2=b2 OR a3=b3)
+----
+1  10  100
+
+# More than one disjunction in the filter
+query IIIIIIII rowsort
+SELECT * FROM A, C WHERE (a1 = c1 OR a2 = c2 OR a3 = c3 OR a4 = c4)
+----
+0   0    0     0      0     0     0     0
+1   10   100   1000   1     10    100   1000
+1   10   100   1000   1     2     3     4
+2   20   200   2000   2     20    200   2000
+3   30   300   3000   3     30    NULL  NULL
+4   40   400   4000   NULL  NULL  400   4000
+5   50   500   5000   5     50    500   5000
+5   50   500   5000   5     50    NULL  NULL
+6   60   600   6000   6     NULL  NULL  6000
+11  110  1100  11000  11    110   1100  11000
+11  110  1100  11000  11    110   1100  11000
+11  110  1100  11000  11    110   1100  11000
+15  50   555   5555   5     50    500   5000
+15  50   555   5555   5     50    NULL  NULL
+15  55   500   5555   5     50    500   5000
+80  11   110   11000  11    110   1100  11000
+80  11   110   11000  11    110   1100  11000
+80  11   110   11000  11    110   1100  11000
+
+query IIIIIIII rowsort
+SELECT * FROM A, C WHERE (a1 = c2 OR a2 = c1 OR a3 = c4 OR a3 = c4)
+----
+0    0   0     0      0   0    0     0
+1    10  100   1000   10  100  1000  10000
+2    20  200   2000   1   2    3     4
+50   5   5000  500    5   50   500   5000
+50   5   5000  500    5   50   NULL  NULL
+80   11  110   11000  11  110  1100  11000
+80   11  110   11000  11  110  1100  11000
+80   11  110   11000  11  110  1100  11000
+80   11  110   11000  8   80   800   8000
+102  5   60    70     5   50   500   5000
+102  5   60    70     5   50   NULL  NULL
+104  5   5     5      5   50   500   5000
+104  5   5     5      5   50   NULL  NULL
+
+# Equality filters that do not reference a column on each side of the join
+query IIIIIIII rowsort
+SELECT * FROM B, D WHERE (b1 = b2 OR b3 = d3)
+----
+0   0     0     0      0     0     0     0
+1   10    100   1000   1     10    100   1000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  NULL  110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  NULL  110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+11  110   1100  11000  11    110   1100  11000
+5   50    500   5000   5     50    500   5000
+6   60    600   6000   6     60    600   6000
+7   NULL  700   NULL   7     70    700   7000
+7   NULL  700   NULL   7     70    700   7000
+17  77    700   7777   7     70    700   7000
+0   0     0     0      1     10    100   1000
+0   0     0     0      11    110   1100  11000
+0   0     0     0      11    110   1100  11000
+0   0     0     0      11    110   1100  11000
+0   0     0     0      11    110   1100  11000
+0   0     0     0      NULL  NULL  NULL  NULL
+0   0     0     0      NULL  NULL  NULL  NULL
+0   0     0     0      NULL  NULL  NULL  NULL
+0   0     0     0      NULL  NULL  NULL  NULL
+0   0     0     0      11    NULL  NULL  11000
+0   0     0     0      NULL  110   1100  11000
+0   0     0     0      5     50    500   5000
+0   0     0     0      6     60    600   6000
+0   0     0     0      7     70    700   7000
+0   0     0     0      NULL  30    NULL  3000
+0   0     0     0      NULL  90    NULL  NULL
+0   0     0     0      85    NULL  NULL  210
+0   0     0     0      NULL  86    211   NULL
+0   0     0     0      5     6     7     8
+0   0     0     0      9     10    11    12
+
+query IIIIIIII rowsort
+SELECT * FROM B, D WHERE (b1 = b2 OR b3 = d3 OR b4 = d4 OR d1 = d2)
+----
+0     0     0     0      0     0     0     0
+0     0     0     0      1     10    100   1000
+0     0     0     0      11    110   1100  11000
+0     0     0     0      11    110   1100  11000
+0     0     0     0      11    110   1100  11000
+0     0     0     0      11    110   1100  11000
+0     0     0     0      NULL  NULL  NULL  NULL
+0     0     0     0      NULL  NULL  NULL  NULL
+0     0     0     0      NULL  NULL  NULL  NULL
+0     0     0     0      NULL  NULL  NULL  NULL
+0     0     0     0      11    NULL  NULL  11000
+0     0     0     0      NULL  110   1100  11000
+0     0     0     0      5     50    500   5000
+0     0     0     0      6     60    600   6000
+0     0     0     0      7     70    700   7000
+0     0     0     0      NULL  30    NULL  3000
+0     0     0     0      NULL  90    NULL  NULL
+0     0     0     0      85    NULL  NULL  210
+0     0     0     0      NULL  86    211   NULL
+0     0     0     0      5     6     7     8
+0     0     0     0      9     10    11    12
+1     10    100   1000   0     0     0     0
+1     10    100   1000   1     10    100   1000
+11    110   1100  11000  0     0     0     0
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    NULL  NULL  11000
+11    110   1100  11000  NULL  110   1100  11000
+11    110   1100  11000  0     0     0     0
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    110   1100  11000
+11    110   1100  11000  11    NULL  NULL  11000
+11    110   1100  11000  NULL  110   1100  11000
+NULL  NULL  NULL  NULL   0     0     0     0
+NULL  NULL  NULL  NULL   0     0     0     0
+12    120   1200  1      0     0     0     0
+12    120   1200  2      0     0     0     0
+12    120   1200  2      0     0     0     0
+NULL  120   1200  1      0     0     0     0
+12    NULL  1200  2      0     0     0     0
+2     20    200   2000   0     0     0     0
+3     30    300   3000   0     0     0     0
+3     30    300   3000   NULL  30    NULL  3000
+5     50    500   5000   0     0     0     0
+5     50    500   5000   5     50    500   5000
+6     60    600   6000   0     0     0     0
+6     60    600   6000   6     60    600   6000
+8     80    800   8000   0     0     0     0
+9     90    900   9000   0     0     0     0
+2     NULL  200   NULL   0     0     0     0
+3     30    300   NULL   0     0     0     0
+NULL  40    400   4000   0     0     0     0
+NULL  NULL  NULL  5000   0     0     0     0
+NULL  NULL  NULL  5000   5     50    500   5000
+7     NULL  700   NULL   0     0     0     0
+7     NULL  700   NULL   7     70    700   7000
+2     20    NULL  200    0     0     0     0
+3     30    300   3000   0     0     0     0
+3     30    300   3000   NULL  30    NULL  3000
+4     NULL  NULL  NULL   0     0     0     0
+5     50    NULL  5000   0     0     0     0
+5     50    NULL  5000   5     50    500   5000
+7     NULL  700   NULL   0     0     0     0
+7     NULL  700   NULL   7     70    700   7000
+82    NULL  207   NULL   0     0     0     0
+NULL  567   NULL  789    0     0     0     0
+17    77    777   7777   0     0     0     0
+17    77    700   7777   0     0     0     0
+17    77    700   7777   7     70    700   7000
+17    70    777   7777   0     0     0     0
+NULL  77    777   7777   0     0     0     0
+17    NULL  777   7777   0     0     0     0
+17    77    NULL  7777   0     0     0     0
+30    7     40    2      0     0     0     0
+120   80    90    10     0     0     0     0
+
+query IIIIIIII rowsort
+SELECT * FROM B, D WHERE (b1 = 0 OR b1 = d1)   AND
+                         (b1 = 0 OR b2 = 5)    AND
+                         (b2 = d1 OR b1 = d1)  AND
+                         (b2 = d1 OR b2 = 5)
+----
+0  0  0  0  0  0  0  0
+
+# ON filters that are a disjunction of equality filters AND And expressions
+query IIIIIIII rowsort
+SELECT * FROM C, D WHERE (c1 = d1 AND c2 = d2) OR c3 = d3
+----
+0   0    0     0      0     0    0     0
+1   10   100   1000   1     10   100   1000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+11  110  1100  11000  11    110  1100  11000
+5   50   500   5000   5     50   500   5000
+5   50   NULL  NULL   5     50   500   5000
+11  110  1100  11000  NULL  110  1100  11000
+11  110  1100  11000  NULL  110  1100  11000
+11  110  1100  11000  NULL  110  1100  11000
+
+query IIIIIIII rowsort
+SELECT * FROM A, D WHERE (a1 = d2 AND a2 = d1) OR (a3 = d4 AND a4 = d3)
+----
+0   0  0     0    0  0   0    0
+50  5  5000  500  5  50  500  5000
+
+#########################
+# Uncorrelated semijoin #
+#########################
+
+query IIII rowsort
+SELECT * FROM A WHERE EXISTS (SELECT 1 FROM D WHERE d1 = 4 OR d2 = 50)
+----
+0    0    0     0
+1    10   100   1000
+2    20   200   2000
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+11   110  1100  11000
+12   120  1200  1
+12   120  1200  2
+15   50   555   5555
+15   55   500   5555
+15   55   555   5555
+50   5    5000  500
+80   11   110   11000
+101  200  3000  40
+102  5    60    70
+103  7    8     70
+104  5    5     5
+
+query IIII rowsort
+SELECT * FROM A WHERE EXISTS (SELECT 1 FROM C, D WHERE d1 = 4 OR c2 = 50 HAVING sum(d4) > 40)
+----
+0    0    0     0
+1    10   100   1000
+2    20   200   2000
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+11   110  1100  11000
+12   120  1200  1
+12   120  1200  2
+15   50   555   5555
+15   55   500   5555
+15   55   555   5555
+50   5    5000  500
+80   11   110   11000
+101  200  3000  40
+102  5    60    70
+103  7    8     70
+104  5    5     5
+
+query IIII rowsort
+SELECT * FROM A WHERE EXISTS (SELECT 1 FROM C, D WHERE c1 = d2 or c2 = d1)
+----
+0    0    0     0
+1    10   100   1000
+2    20   200   2000
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+11   110  1100  11000
+12   120  1200  1
+12   120  1200  2
+15   50   555   5555
+15   55   500   5555
+15   55   555   5555
+50   5    5000  500
+80   11   110   11000
+101  200  3000  40
+102  5    60    70
+103  7    8     70
+104  5    5     5
+
+query IIII rowsort
+SELECT * FROM A WHERE (a1, a2) IN (SELECT C1, D1 FROM C, D WHERE c3 = d3 or c3 = d4)
+----
+0  0  0  0
+
+query IIII rowsort
+SELECT * FROM A WHERE (a1, a2) IN (SELECT C1, D1 FROM C, D WHERE c3 = d3 or c2 = d2 EXCEPT ALL
+                                   SELECT C1, D1 FROM C, D WHERE c3 = d3 or c2 = d2)
+----
+
+query IIII rowsort
+SELECT * FROM A WHERE (a1, a2) IN (SELECT C1, D1 FROM C, D WHERE c1 IS NULL OR c1 = d1)
+----
+0  0  0  0
+
+query IIII rowsort
+SELECT * FROM B WHERE b1 NOT IN (SELECT c1 FROM C, D WHERE c1 IS NULL OR c1 = d1)
+----
+
+query IIII rowsort
+SELECT * FROM B WHERE (b1, b2) NOT IN (SELECT c1, c2 FROM C, D WHERE c1 IS NULL OR c1 = d1)
+----
+
+#########################
+# Uncorrelated antijoin #
+#########################
+
+query IIII rowsort
+SELECT * FROM A WHERE NOT EXISTS (SELECT 1 FROM B WHERE b1 = 4 OR b2 = 50)
+----
+
+query IIII rowsort
+SELECT * FROM A WHERE NOT EXISTS (SELECT 1 FROM C, D WHERE d1 = 4 OR c2 = 50 or d2+c3 > 5)
+----
+
+query IIII rowsort
+SELECT * FROM A WHERE NOT EXISTS (SELECT 1 FROM C, D WHERE c3 = d4 or c4 = d3)
+----
+
+query IIII rowsort
+SELECT * FROM A WHERE (a1, a2) NOT IN (SELECT C1, D1 FROM C, D WHERE c3 = d3 or c3 = d4)
+----
+1    10   100   1000
+2    20   200   2000
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+12   120  1200  1
+12   120  1200  2
+15   50   555   5555
+15   55   500   5555
+15   55   555   5555
+50   5    5000  500
+80   11   110   11000
+101  200  3000  40
+102  5    60    70
+103  7    8     70
+104  5    5     5
+
+query IIII rowsort
+SELECT * FROM A WHERE (a1, a2) NOT IN (SELECT C1, D1 FROM C, D WHERE c3 = d3 or c2 = d2 EXCEPT ALL
+                                       SELECT C1, D1 FROM C, D WHERE c3 = d3 or c2 = d2)
+----
+0    0    0     0
+1    10   100   1000
+2    20   200   2000
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+11   110  1100  11000
+12   120  1200  1
+12   120  1200  2
+15   50   555   5555
+15   55   500   5555
+15   55   555   5555
+50   5    5000  500
+80   11   110   11000
+101  200  3000  40
+102  5    60    70
+103  7    8     70
+104  5    5     5
+
+query IIII rowsort
+SELECT * FROM A WHERE (a1, a2) NOT IN (SELECT C1, D1 FROM C, D WHERE c1 IS NULL OR c1 = d1)
+----
+
+#######################
+# Correlated semijoin #
+#######################
+
+query III rowsort
+SELECT a1,a2,a3 FROM A WHERE EXISTS (SELECT * FROM B WHERE a2 = b2 OR a3 = b3)
+----
+0    0    0
+1    10   100
+2    20   200
+3    30   300
+4    40   400
+5    50   500
+6    60   600
+7    70   700
+11   110  1100
+12   120  1200
+12   120  1200
+15   50   555
+103  7    8
+15   55   500
+
+query III rowsort
+SELECT a1,a2,a3 FROM A WHERE EXISTS (SELECT * FROM B WHERE a1 = b1 OR a1 = b2)
+----
+0   0    0
+1   10   100
+2   20   200
+3   30   300
+4   40   400
+5   50   500
+6   60   600
+7   70   700
+11  110  1100
+12  120  1200
+12  120  1200
+50  5    5000
+80  11   110
+
+# The left side of the join already produces key columns
+# TODO: Enable this test once issue #74554 is fixed.
+# query IIII rowsort
+# SELECT * FROM A WHERE EXISTS (SELECT * FROM B WHERE a1 = b1 OR a2 = b2 OR a3 = b3 OR a4 = b4)
+# ----
+# 0    0    0     0
+# 1    10   100   1000
+# 2    20   200   2000
+# 3    30   300   3000
+# 4    40   400   4000
+# 5    50   500   5000
+# 6    60   600   6000
+# 7    70   700   7000
+# 11   110  1100  11000
+# 12   120  1200  1
+# 12   120  1200  2
+# 80   11   110   11000
+# 15   50   555   5555
+# 103  7    8     70
+# 15   55   500   5555
+
+# More than one disjunction in the filter
+# TODO: Enable this test once issue #74554 is fixed.
+# query IIII rowsort
+# SELECT * FROM A WHERE EXISTS (SELECT * FROM C WHERE a1 = c1 OR a2 = c2 OR a3 = c3 OR a4 = c4)
+# ----
+# 0   0    0     0
+# 1   10   100   1000
+# 2   20   200   2000
+# 3   30   300   3000
+# 5   50   500   5000
+# 6   60   600   6000
+# 11  110  1100  11000
+# 4   40   400   4000
+# 80  11   110   11000
+# 15  50   555   5555
+# 15  55   500   5555
+
+# More than one disjunction in the filter
+# TODO: Enable this test once issue #74554 is fixed.
+# query IIII rowsort
+# SELECT * FROM A WHERE EXISTS (SELECT * FROM C WHERE a1 = c2 OR a2 = c1 OR a3 = c4 OR a3 = c4)
+# ----
+# 0    0   0     0
+# 2    20  200   2000
+# 50   5   5000  500
+# 80   11  110   11000
+# 1    10  100   1000
+# 102  5   60    70
+# 104  5   5     5
+
+# IN subquery
+query I rowsort
+SELECT a1+a3-a2 FROM A WHERE a1 IN (SELECT b1 FROM B WHERE EXISTS (SELECT 1 FROM C WHERE c2 IS NULL OR c2=b2 OR c2=b3))
+----
+0
+91
+182
+273
+364
+455
+546
+637
+1001
+1092
+1092
+
+# IN subquery, 2 columns
+query I rowsort
+SELECT a1+a3-a2 FROM A WHERE (a1,a2) IN (SELECT b1,b2 FROM B WHERE
+                                            EXISTS (SELECT 1 FROM C WHERE c2 IS NULL OR c2=b2 OR c2=b3))
+----
+0
+91
+182
+273
+455
+546
+1001
+1092
+1092
+
+# ANDed disjuncts
+query IIIIIII rowsort
+SELECT a1,a2,a3,C.* FROM A,C
+       WHERE a2 = c2 AND EXISTS (SELECT * FROM B WHERE (a1 = b1 OR a1 = a2) AND (a1 = c1 OR c1 = c2))
+----
+0   0    0     0   0    0     0
+1   10   100   1   10   100   1000
+11  110  1100  11  110  1100  11000
+11  110  1100  11  110  1100  11000
+11  110  1100  11  110  1100  11000
+2   20   200   2   20   200   2000
+3   30   300   3   30   NULL  NULL
+5   50   500   5   50   500   5000
+5   50   500   5   50   NULL  NULL
+
+query IIIIIII rowsort
+SELECT a1,a2,a3,C.* FROM A,C
+       WHERE a2 = c2 AND EXISTS (SELECT * FROM B WHERE (a1 = b1 OR a1 = b2) AND (c1 = b1 OR c1 = b2))
+----
+0   0    0     0   0    0     0
+1   10   100   1   10   100   1000
+2   20   200   2   20   200   2000
+3   30   300   3   30   NULL  NULL
+5   50   500   5   50   500   5000
+5   50   500   5   50   NULL  NULL
+11  110  1100  11  110  1100  11000
+11  110  1100  11  110  1100  11000
+11  110  1100  11  110  1100  11000
+
+query IIIIIII rowsort
+SELECT a1,a2,a3,C.* FROM A,C
+       WHERE a2 = c2 AND EXISTS (SELECT * FROM B WHERE (a1 = b1 OR a1 = b3) AND (a1 = c1 OR a1 = c3))
+----
+0   0    0     0   0    0     0
+1   10   100   1   10   100   1000
+11  110  1100  11  110  1100  11000
+11  110  1100  11  110  1100  11000
+11  110  1100  11  110  1100  11000
+2   20   200   2   20   200   2000
+3   30   300   3   30   NULL  NULL
+5   50   500   5   50   500   5000
+5   50   500   5   50   NULL  NULL
+
+# Nested EXISTS
+query II rowsort
+SELECT a2,a4 FROM A WHERE EXISTS(SELECT * FROM B WHERE (a1=b1 OR a1=b2) AND EXISTS(SELECT 1 FROM C WHERE b1=c1))
+----
+0    0
+10   1000
+110  11000
+20   2000
+50   5000
+5    500
+11   11000
+30   3000
+60   6000
+
+# Two EXISTS at same nesting level; only one disjuction pair can be optimized
+query II rowsort
+SELECT a2,a4 FROM A WHERE EXISTS(SELECT * FROM B WHERE a1=b1 OR a1=b2) AND
+                          EXISTS(SELECT * FROM C WHERE a1=c1 OR a1=c2)
+----
+0    0
+10   1000
+110  11000
+20   2000
+50   5000
+5    500
+11   11000
+30   3000
+60   6000
+
+# Two EXISTS at same nesting level; only one disjuction chain can be optimized
+# TODO: Enable this test once issue #74554 is fixed.
+# query II rowsort
+# SELECT a2,a4 FROM A WHERE EXISTS(SELECT * FROM B WHERE a1=b1 OR a1=b2 OR a1=b3 OR a1=b4) AND
+#                           EXISTS(SELECT * FROM C WHERE a1=c1 OR a1=c2 OR a1=c3 OR a1=c4)
+# ----
+# 0    0
+# 10   1000
+# 110  11000
+# 20   2000
+# 50   5000
+# 5    500
+# 11   11000
+# 30   3000
+# 60   6000
+# 40   4000
+
+# Outer Select is Join
+query IIIIIIII rowsort
+SELECT * FROM A JOIN (SELECT * FROM B WHERE b1 > 0 AND EXISTS (SELECT 1 FROM C WHERE c1=b1))
+                       AS foo on a1=foo.b1 OR a2=foo.b2
+----
+1   10   100   1000   1   10    100   1000
+11  110  1100  11000  11  110   1100  11000
+11  110  1100  11000  11  110   1100  11000
+2   20   200   2000   2   NULL  200   NULL
+2   20   200   2000   2   20    NULL  200
+2   20   200   2000   2   20    200   2000
+5   50   500   5000   5   50    500   5000
+15  50   555   5555   5   50    NULL  5000
+15  50   555   5555   5   50    500   5000
+5   50   500   5000   5   50    NULL  5000
+3   30   300   3000   3   30    300   3000
+3   30   300   3000   3   30    300   3000
+3   30   300   3000   3   30    300   NULL
+6   60   600   6000   6   60    600   6000
+
+query IIIIIIII rowsort
+SELECT * FROM A JOIN (SELECT * FROM B WHERE b1 > 0 AND EXISTS (SELECT 1 FROM C WHERE c1=b1 or c2=b2))
+                       AS foo on a1=foo.b1
+----
+1   10   100   1000   1   10    100   1000
+2   20   200   2000   2   NULL  200   NULL
+2   20   200   2000   2   20    NULL  200
+2   20   200   2000   2   20    200   2000
+3   30   300   3000   3   30    300   3000
+3   30   300   3000   3   30    300   3000
+3   30   300   3000   3   30    300   NULL
+5   50   500   5000   5   50    500   5000
+5   50   500   5000   5   50    NULL  5000
+6   60   600   6000   6   60    600   6000
+11  110  1100  11000  11  110   1100  11000
+11  110  1100  11000  11  110   1100  11000
+
+#######################
+# Correlated antijoin #
+#######################
+
+query III rowsort
+SELECT a1,a2,a3 FROM A WHERE NOT EXISTS (SELECT * FROM B WHERE a2 = b2 OR a3 = b3)
+----
+15   55   555
+50   5    5000
+80   11   110
+101  200  3000
+102  5    60
+104  5    5
+
+query III rowsort
+SELECT a1,a2,a3 FROM A WHERE NOT EXISTS (SELECT * FROM B WHERE a1 = b1 OR a1 = b2)
+----
+15   50   555
+15   55   500
+15   55   555
+101  200  3000
+102  5    60
+103  7    8
+104  5    5
+
+# The left side of the join already produces key columns
+query IIII rowsort
+SELECT * FROM A WHERE NOT EXISTS (SELECT * FROM B WHERE a1 = b1 OR a2 = b2 OR a3 = b3 OR a4 = b4)
+----
+15   55   555   5555
+50   5    5000  500
+101  200  3000  40
+102  5    60    70
+104  5    5     5
+
+# More than one disjunction in the filter
+query IIII rowsort
+SELECT * FROM A WHERE NOT EXISTS (SELECT * FROM C WHERE a1 = c1 OR a2 = c2 OR a3 = c3 OR a4 = c4)
+----
+7    70   700   7000
+12   120  1200  1
+12   120  1200  2
+15   55   555   5555
+50   5    5000  500
+101  200  3000  40
+102  5    60    70
+103  7    8     70
+104  5    5     5
+
+query IIII rowsort
+SELECT * FROM A WHERE NOT EXISTS (SELECT * FROM C WHERE a1 = c2 OR a2 = c1 OR a3 = c4 OR a3 = c4)
+----
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+11   110  1100  11000
+12   120  1200  1
+12   120  1200  2
+15   50   555   5555
+15   55   500   5555
+15   55   555   5555
+101  200  3000  40
+103  7    8     70
+
+# Nested NOT EXISTS
+query II rowsort
+SELECT a2,a4 FROM A WHERE NOT EXISTS(SELECT * FROM B WHERE (a1=b1 OR a1=b2) AND NOT EXISTS(SELECT 1 FROM C WHERE b1=c1))
+----
+0    0
+10   1000
+20   2000
+30   3000
+50   5000
+60   6000
+110  11000
+50   5555
+55   5555
+55   5555
+5    500
+200  40
+5    70
+7    70
+5    5
+
+# Two NOT EXISTS at same nesting level; only one disjuction pair can be optimized
+query II rowsort
+SELECT a2,a4 FROM A WHERE NOT EXISTS(SELECT * FROM B WHERE a1=b1 OR a1=b2) AND
+                          NOT EXISTS(SELECT * FROM C WHERE a1=c1 OR a1=c2)
+----
+50   5555
+55   5555
+55   5555
+200  40
+5    70
+7    70
+5    5
+
+# Outer Select is Join
+query IIIIIIII rowsort
+SELECT * FROM A JOIN (SELECT * FROM B WHERE b1 > 0 AND NOT EXISTS (SELECT 1 FROM C WHERE c1=b1))
+                       AS foo on a1=foo.b1 OR a2=foo.b2
+----
+4    40   400   4000  4   NULL  NULL  NULL
+7    70   700   7000  7   NULL  700   NULL
+7    70   700   7000  7   NULL  700   NULL
+7    70   700   7000  17  70    777   7777
+12   120  1200  1     12  NULL  1200  2
+12   120  1200  1     12  120   1200  1
+12   120  1200  1     12  120   1200  2
+12   120  1200  1     12  120   1200  2
+12   120  1200  2     12  NULL  1200  2
+12   120  1200  2     12  120   1200  1
+12   120  1200  2     12  120   1200  2
+12   120  1200  2     12  120   1200  2
+103  7    8     70    30  7     40    2
+
+query IIIIIIII rowsort
+SELECT * FROM A JOIN (SELECT * FROM B WHERE b1 > 0 AND NOT EXISTS (SELECT 1 FROM C WHERE c1=b1 or c2=b2))
+                       AS foo on a1=foo.b1
+----
+4   40   400   4000  4   NULL  NULL  NULL
+7   70   700   7000  7   NULL  700   NULL
+7   70   700   7000  7   NULL  700   NULL
+12  120  1200  1     12  NULL  1200  2
+12  120  1200  1     12  120   1200  1
+12  120  1200  1     12  120   1200  2
+12  120  1200  1     12  120   1200  2
+12  120  1200  2     12  NULL  1200  2
+12  120  1200  2     12  120   1200  1
+12  120  1200  2     12  120   1200  2
+12  120  1200  2     12  120   1200  2
+
+# NOT IN subquery
+query III rowsort
+SELECT d3,d1,d2 FROM D WHERE d1 NOT IN (SELECT b1 FROM B WHERE EXISTS (SELECT 1 FROM C WHERE c2=b2 OR c2=b3))
+----
+600   6   60
+700   7   70
+NULL  85  NULL
+11    9   10
+
+# NOT IN subquery, 2 columns
+query III rowsort
+SELECT d3,d1,d2 FROM D WHERE (d1,d3) NOT IN (SELECT b1,b2 FROM B WHERE EXISTS (SELECT 1 FROM C WHERE c2=b2 OR c2=b3))
+----
+100   1     10
+1100  11    110
+1100  11    110
+1100  11    110
+1100  11    110
+1100  NULL  110
+500   5     50
+600   6     60
+700   7     70
+NULL  85    NULL
+211   NULL  86
+7     5     6
+11    9     10

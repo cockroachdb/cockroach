@@ -61,6 +61,13 @@ func (s *Selectivity) Add(other Selectivity) {
 	s.selectivity = selectivityInRange(s.selectivity + other.selectivity)
 }
 
+// Subtract finds the difference of two selectivities in the valid range and
+// modifies the selectivity specified in the receiver to equal the receiver
+// minus the operand.
+func (s *Selectivity) Subtract(other Selectivity) {
+	s.selectivity = selectivityInRange(s.selectivity - other.selectivity)
+}
+
 // Divide finds the quotient of two selectivities in the valid range and
 // modifies the selectivity specified in the receiver to equal the quotient.
 func (s *Selectivity) Divide(other Selectivity) {
