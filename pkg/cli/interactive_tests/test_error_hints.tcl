@@ -30,8 +30,8 @@ end_test
 
 start_test "Connecting a SQL client to a non-started server"
 send "$argv sql -e 'select 1'\r"
-eexpect "ERROR: cannot load certificates.\r\nCheck your certificate settings"
-eexpect "or use --insecure"
+eexpect "ERROR: cannot dial server.\r\nIs the server running?"
+eexpect "connection refused"
 eexpect ":/# "
 
 send "$argv sql -e 'select 1' --certs-dir=$certs_dir\r"

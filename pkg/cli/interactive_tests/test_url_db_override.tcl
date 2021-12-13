@@ -15,7 +15,8 @@ start_test "Check that the SSL settings come from flags is URL does not set them
 set ::env(COCKROACH_INSECURE) "false"
 
 spawn $argv sql --url "postgresql://test@localhost:26257" -e "select 1"
-eexpect "cannot load certificates"
+eexpect "ERROR: cannot establish secure connection to insecure server."
+eexpect "Maybe use --insecure?"
 eexpect eof
 
 spawn $argv sql --url "postgresql://test@localhost:26257" --insecure -e "select 1"
