@@ -31,7 +31,8 @@ reconcile tenant=10
 
 mutations tenant=10
 ----
-upsert /Tenant/10/Table/{3-4}              range default
+delete /Tenant/10{-"\x00"}
+upsert /Tenant/10{-/Table/4}               range default
 upsert /Tenant/10/Table/{4-5}              range default
 upsert /Tenant/10/Table/{5-6}              range default
 upsert /Tenant/10/Table/{6-7}              range default
@@ -65,12 +66,11 @@ upsert /Tenant/10/Table/4{2-3}             range default
 upsert /Tenant/10/Table/4{3-4}             range default
 upsert /Tenant/10/Table/4{4-5}             range default
 upsert /Tenant/10/Table/4{6-7}             range default
-delete /Tenant/10{-"\x00"}
 
 state offset=41
 ----
 ...
-/Tenant/10/Table/{3-4}                     range default
+/Tenant/10{-/Table/4}                      range default
 /Tenant/10/Table/{4-5}                     range default
 /Tenant/10/Table/{5-6}                     range default
 /Tenant/10/Table/{6-7}                     range default
