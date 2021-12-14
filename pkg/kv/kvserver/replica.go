@@ -219,8 +219,18 @@ type Replica struct {
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
 	leaseholderStats *replicaStats
-	// writeStats tracks the number of keys written by applied raft commands
-	// in order to aid in replica rebalancing decisions.
+	// writeStats tracks the number of mutations (as counted by the pebble batch
+	// to be applied to the state machine), and additionally, the number of keys
+	// added to MVCCStats, which notably may be approximate in the case of an
+	// AddSSTable. In other words, writeStats should loosely track the write
+	// activity on the replica on a per-key basis, though in an inconsistent way
+	// that in particular may overcount by a factor of roughly two.
+	//
+	// Note that while writeStats were originally introduced to aid in rebalancing
+	// decisions in [1], at the time of writing they are not used for that
+	// purpose.
+	//
+	// [1]: https://github.com/cockroachdb/cockroach/pull/16664
 	writeStats *replicaStats
 
 	// creatingReplica is set when a replica is created as uninitialized
