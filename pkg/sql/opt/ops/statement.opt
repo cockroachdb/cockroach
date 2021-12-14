@@ -297,11 +297,12 @@ define CreateStatisticsPrivate {
 define AlterRangeRelocate {
     # The input expression provides range IDs as integers.
     Input RelExpr
-    # The origin store ID.
-    ToStoreID ScalarExpr
-    # The destination store ID.
-    FromStoreID ScalarExpr
 
+    # ToStoreID is the destination store ID.
+    ToStoreID ScalarExpr
+
+    # FromStoreID is the origin store ID, set to NULL when transfering the leaseholder (subject LEASE).
+    FromStoreID ScalarExpr
     _ AlterRangeRelocatePrivate
 }
 

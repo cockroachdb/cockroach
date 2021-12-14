@@ -26,6 +26,11 @@ alter-table-split abc
  └── '2200-01-01 00:00:00.0'
 
 build
+ALTER TABLE abc SPLIT AT VALUES (1), (2) WITH EXPIRATION unknown
+----
+error (42703): column "unknown" does not exist
+
+build
 ALTER TABLE abc SPLIT AT VALUES (1, 2), (3, 4)
 ----
 error (42601): too many columns in SPLIT AT data
