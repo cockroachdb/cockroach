@@ -12,6 +12,8 @@ package rttanalysis
 
 import (
 	"context"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -50,6 +53,7 @@ func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc Cluste
 // concurrency.
 func runRoundTripBenchmarkTest(
 	t *testing.T,
+	scope *log.TestLogScope,
 	results *resultSet,
 	tests []RoundTripBenchTestCase,
 	cc ClusterConstructor,
@@ -63,7 +67,7 @@ func runRoundTripBenchmarkTest(
 		go func(tc RoundTripBenchTestCase) {
 			defer wg.Done()
 			t.Run(tc.Name, func(t *testing.T) {
-				runRoundTripBenchmarkTestCase(t, results, tc, cc, numRuns, limit)
+				runRoundTripBenchmarkTestCase(t, scope, results, tc, cc, numRuns, limit)
 			})
 		}(tc)
 	}
@@ -72,6 +76,7 @@ func runRoundTripBenchmarkTest(
 
 func runRoundTripBenchmarkTestCase(
 	t *testing.T,
+	scope *log.TestLogScope,
 	results *resultSet,
 	tc RoundTripBenchTestCase,
 	cc ClusterConstructor,
@@ -86,7 +91,9 @@ func runRoundTripBenchmarkTestCase(
 		go func() {
 			defer wg.Done()
 			defer alloc.Release()
-			executeRoundTripTest(tShim{T: t, results: results}, tc, cc)
+			executeRoundTripTest(tShim{
+				T: t, results: results, scope: scope,
+			}, tc, cc)
 		}()
 	}
 	wg.Wait()
@@ -94,7 +101,8 @@ func runRoundTripBenchmarkTestCase(
 
 // executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
 func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor) {
-	defer b.logScope()()
+	getDir, cleanup := b.logScope()
+	defer cleanup()
 
 	cluster := cc(b)
 	defer cluster.close()
@@ -139,11 +147,15 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	}
 
 	res := float64(roundTrips) / float64(b.N())
+
 	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
-		b.Errorf(`got %v, expected %v. trace:
-%v
-(above trace from test %s. got %v, expected %v)
-`, res, exp, r, b.Name(), res, exp)
+		b.Errorf(`%s: got %v, expected %v`, b.Name(), res, exp)
+		dir := getDir()
+		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
+		require.NoError(b, err)
+		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
+		require.NoError(b, ioutil.WriteFile(path, []byte(jaegerJSON), 0666))
+		b.Errorf("wrote jaeger trace to %s", path)
 	}
 	b.ReportMetric(res, roundTripsMetric)
 }
