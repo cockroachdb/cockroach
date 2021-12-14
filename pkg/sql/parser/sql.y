@@ -903,7 +903,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
-%type <tree.Statement> alter_range_relocate_lease_stmt
 %type <tree.Statement> alter_range_relocate_stmt
 
 // ALTER TABLE
@@ -913,7 +912,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_rename_table_stmt
 %type <tree.Statement> alter_scatter_stmt
 %type <tree.Statement> alter_relocate_stmt
-%type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
 %type <tree.Statement> alter_table_locality_stmt
@@ -941,7 +939,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_unsplit_index_stmt
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
-%type <tree.Statement> alter_relocate_index_lease_stmt
 %type <tree.Statement> alter_zone_index_stmt
 
 // ALTER VIEW
@@ -1577,7 +1574,6 @@ alter_ddl_stmt:
 alter_table_stmt:
   alter_onetable_stmt
 | alter_relocate_stmt
-| alter_relocate_lease_stmt
 | alter_split_stmt
 | alter_unsplit_stmt
 | alter_scatter_stmt
@@ -1796,7 +1792,6 @@ alter_database_primary_region_stmt:
 // %SeeAlso: ALTER TABLE
 alter_range_stmt:
   alter_zone_range_stmt
-| alter_range_relocate_lease_stmt
 | alter_range_relocate_stmt
 | ALTER RANGE error // SHOW HELP: ALTER RANGE
 
@@ -1823,7 +1818,6 @@ alter_range_stmt:
 alter_index_stmt:
   alter_oneindex_stmt
 | alter_relocate_index_stmt
-| alter_relocate_index_lease_stmt
 | alter_split_index_stmt
 | alter_unsplit_index_stmt
 | alter_scatter_index_stmt
@@ -1940,6 +1934,16 @@ alter_relocate_stmt:
       RelocateNonVoters: true,
     }
   }
+| ALTER TABLE table_name relocate_kw LEASE select_stmt
+  {
+    /* SKIP DOC */
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Relocate{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+      RelocateLease: true,
+    }
+  }
 
 alter_relocate_index_stmt:
   ALTER INDEX table_index_name relocate_kw voters_kw select_stmt
@@ -1952,21 +1956,7 @@ alter_relocate_index_stmt:
     /* SKIP DOC */
     $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateNonVoters: true}
   }
-
-alter_relocate_lease_stmt:
-  ALTER TABLE table_name relocate_kw LEASE select_stmt
-  {
-    /* SKIP DOC */
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Relocate{
-      TableOrIndex: tree.TableIndexName{Table: name},
-      Rows: $6.slct(),
-      RelocateLease: true,
-    }
-  }
-
-alter_relocate_index_lease_stmt:
-  ALTER INDEX table_index_name relocate_kw LEASE select_stmt
+| ALTER INDEX table_index_name relocate_kw LEASE select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateLease: true}
@@ -1980,7 +1970,7 @@ alter_zone_range_stmt:
      $$.val = s
   }
 
-alter_range_relocate_lease_stmt:
+alter_range_relocate_stmt:
   ALTER RANGE relocate_kw LEASE TO iconst64 FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
@@ -2001,9 +1991,7 @@ alter_range_relocate_lease_stmt:
         RelocateNonVoters: false,
       }
     }
-
-alter_range_relocate_stmt:
-ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
+| ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $10.slct(),
