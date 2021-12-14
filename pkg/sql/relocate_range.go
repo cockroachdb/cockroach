@@ -23,12 +23,11 @@ import (
 type relocateRange struct {
 	optColumnsSlot
 
-	rows              planNode
-	relocateLease     bool
-	relocateNonVoters bool
-	toStoreID         roachpb.StoreID
-	fromStoreID       roachpb.StoreID
-	run               relocateRunState
+	rows            planNode
+	subjectReplicas tree.RelocateSubject
+	toStoreID       roachpb.StoreID
+	fromStoreID     roachpb.StoreID
+	run             relocateRunState
 }
 
 // relocateRunState contains the run-time state of
@@ -48,18 +47,17 @@ type relocateResults struct {
 
 // relocateRequest is an internal data structure that describes a relocation.
 type relocateRequest struct {
-	rangeID           roachpb.RangeID
-	relocateLease     bool
-	relocateNonVoters bool
-	toStoreDesc       *roachpb.StoreDescriptor
-	fromStoreDesc     *roachpb.StoreDescriptor
+	rangeID         roachpb.RangeID
+	subjectReplicas tree.RelocateSubject
+	toStoreDesc     *roachpb.StoreDescriptor
+	fromStoreDesc   *roachpb.StoreDescriptor
 }
 
 func (n *relocateRange) startExec(params runParams) error {
 	if n.toStoreID <= 0 {
 		return errors.Errorf("invalid target to store ID %d for RELOCATE", n.toStoreID)
 	}
-	if !n.relocateLease && n.fromStoreID <= 0 {
+	if n.subjectReplicas != tree.RelocateLease && n.fromStoreID <= 0 {
 		return errors.Errorf("invalid target from store ID %d for RELOCATE", n.fromStoreID)
 	}
 	// Lookup all the store descriptors upfront, so we dont have to do it for each
@@ -69,7 +67,7 @@ func (n *relocateRange) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	if !n.relocateLease {
+	if n.subjectReplicas != tree.RelocateLease {
 		n.run.fromStoreDesc, err = lookupStoreDesc(n.fromStoreID, params)
 		if err != nil {
 			return err
@@ -89,11 +87,10 @@ func (n *relocateRange) Next(params runParams) (bool, error) {
 	rangeID := roachpb.RangeID(tree.MustBeDInt(datum))
 
 	rangeDesc, err := relocate(params, relocateRequest{
-		rangeID:           rangeID,
-		relocateLease:     n.relocateLease,
-		relocateNonVoters: n.relocateNonVoters,
-		fromStoreDesc:     n.run.fromStoreDesc,
-		toStoreDesc:       n.run.toStoreDesc,
+		rangeID:         rangeID,
+		subjectReplicas: n.subjectReplicas,
+		fromStoreDesc:   n.run.fromStoreDesc,
+		toStoreDesc:     n.run.toStoreDesc,
 	})
 
 	// record the results of the relocation run, so we can output it.
@@ -131,14 +128,14 @@ func relocate(params runParams, req relocateRequest) (*roachpb.RangeDescriptor, 
 		return nil, errors.Wrapf(err, "error looking up range descriptor")
 	}
 
-	if req.relocateLease {
+	if req.subjectReplicas == tree.RelocateLease {
 		err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rangeDesc.StartKey, req.toStoreDesc.StoreID)
 		return rangeDesc, err
 	}
 
 	toTarget := roachpb.ReplicationTarget{NodeID: req.toStoreDesc.Node.NodeID, StoreID: req.toStoreDesc.StoreID}
 	fromTarget := roachpb.ReplicationTarget{NodeID: req.fromStoreDesc.Node.NodeID, StoreID: req.fromStoreDesc.StoreID}
-	if req.relocateNonVoters {
+	if req.subjectReplicas == tree.RelocateNonVoters {
 		_, err := params.p.ExecCfg().DB.AdminChangeReplicas(
 			params.ctx, rangeDesc.StartKey, *rangeDesc, []roachpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: toTarget},
