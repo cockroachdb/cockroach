@@ -10,6 +10,7 @@ package cdctest
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"gocloud.dev/pubsub"
