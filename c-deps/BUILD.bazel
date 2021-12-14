@@ -6,10 +6,6 @@ load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 configure_make(
     name = "libjemalloc",
     autoconf = True,
-    configure_env_vars = select({
-        "//build/toolchains:dev": {"AR": ""},
-        "//conditions:default": {},
-    }),
     configure_in_place = True,
     configure_options = [
         "--enable-prof",
@@ -19,20 +15,20 @@ configure_make(
         "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
         "//conditions:default": [],
     }),
+    env = select({
+        "//build/toolchains:dev": {"AR": ""},
+        "//conditions:default": {},
+    }),
     lib_source = "@jemalloc//:all",
-    make_commands = [
-        "make build_lib_static",
-        "mkdir -p libjemalloc/lib",
-    ] + select({
-        "@io_bazel_rules_go//go/platform:windows": ["cp lib/jemalloc.lib libjemalloc/lib"],
-        "//conditions:default": ["cp lib/libjemalloc.a libjemalloc/lib"],
-    }) + [
-        "cp -r include libjemalloc",
-    ],
     out_static_libs = select({
         "@io_bazel_rules_go//go/platform:windows": ["jemalloc.lib"],
         "//conditions:default": ["libjemalloc.a"],
     }),
+    targets = [
+        "build_lib_static",
+        "install_lib",
+        "install_include",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -58,9 +54,7 @@ cmake(
             "CMAKE_BUILD_TYPE": "Release",
         },
     }),
-    # As of this writing (2021-05-05), foreign_cc
-    # only knows about windows, darwin and linux.
-    cmake_options = ["-GUnix Makefiles"],
+    generate_args = ["-GUnix Makefiles"],
     lib_source = "@proj//:all",
     out_static_libs = ["libproj.a"],
     visibility = ["//visibility:public"],
@@ -88,7 +82,6 @@ cmake(
             "CMAKE_CXX_FLAGS": "-fPIC",
         },
     }),
-    cmake_options = ["-GUnix Makefiles"],
     data = select({
         "//build/toolchains:is_cross_macos": [
             "@toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-install_name_tool",
@@ -103,39 +96,11 @@ cmake(
         },
         "//conditions:default": {},
     }),
+    generate_args = ["-GUnix Makefiles"],
     lib_source = "@geos//:all",
-    make_commands = [
-        "mkdir -p libgeos/lib",
-        "make --no-print-directory geos_c",
-    ] + select({
-        "//build/toolchains:is_cross_macos": [
-            "cp -L lib/libgeos.dylib libgeos/lib",
-            "cp -L lib/libgeos_c.dylib libgeos/lib",
-            "PREFIX=$($OTOOL -D lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)",
-            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.8.1.dylib libgeos/lib/libgeos.dylib",
-            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib libgeos/lib/libgeos_c.dylib",
-            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.8.1.dylib @rpath/libgeos.3.8.1.dylib libgeos/lib/libgeos_c.dylib",
-        ],
-        "@io_bazel_rules_go//go/platform:darwin": [
-            "cp -L lib/libgeos.dylib libgeos/lib",
-            "cp -L lib/libgeos_c.dylib libgeos/lib",
-        ],
-        "@io_bazel_rules_go//go/platform:windows": [
-            # NOTE: Windows ends up in bin/ on the BUILD_TMPDIR.
-            "cp -L bin/libgeos.dll libgeos/lib",
-            "cp -L bin/libgeos_c.dll libgeos/lib",
-        ],
-        "//build/toolchains:is_cross_linux": [
-            "cp -L lib/libgeos.so libgeos/lib",
-            "cp -L lib/libgeos_c.so libgeos/lib",
-            "patchelf --set-rpath /usr/local/lib/cockroach/ libgeos/lib/libgeos_c.so",
-            "patchelf --set-soname libgeos.so libgeos/lib/libgeos.so",
-            "patchelf --replace-needed libgeos.so.3.8.1 libgeos.so libgeos/lib/libgeos_c.so",
-        ],
-        "//conditions:default": [
-            "cp -L lib/libgeos.so libgeos/lib",
-            "cp -L lib/libgeos_c.so libgeos/lib",
-        ],
+    out_lib_dir = select({
+        "@io_bazel_rules_go//go/platform:windows": "bin",
+        "//conditions:default": "lib",
     }),
     out_shared_libs = select({
         "@io_bazel_rules_go//go/platform:darwin": [
@@ -151,6 +116,25 @@ cmake(
             "libgeos.so",
         ],
     }),
+    postfix_script = "mkdir -p libgeos/lib\n" + select({
+        "//build/toolchains:is_cross_macos": (
+            "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "PREFIX=$($OTOOL -D $INSTALLDIR/lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.8.1.dylib @rpath/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
+        ),
+        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib",
+        "@io_bazel_rules_go//go/platform:windows": "",
+        "//build/toolchains:is_cross_linux": (
+            "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so\n" +
+            "patchelf --set-rpath /usr/local/lib/cockroach/ $INSTALLDIR/lib/libgeos_c.so\n" +
+            "patchelf --set-soname libgeos.so $INSTALLDIR/lib/libgeos.so\n" +
+            "patchelf --replace-needed libgeos.so.3.8.1 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
+        ),
+        "//conditions:default": "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so",
+    }),
+    targets = ["geos_c"],
     visibility = ["//visibility:public"],
 )
 
@@ -165,22 +149,13 @@ configure_make(
         "--enable-static",
         "--disable-shared",
     ],
+    # We specify -fcommon to get around duplicate definition errors in recent gcc.
+    copts = ["-fcommon"],
     data = [":autom4te"],
     env = {
         "AUTOM4TE": "$(execpath :autom4te)",
     },
     lib_source = "@krb5//:all",
-    make_commands = [
-        "make",
-        "mkdir -p libkrb5/lib",
-        "cp lib/libcom_err.a libkrb5/lib",
-        "cp lib/libgssapi_krb5.a libkrb5/lib",
-        "cp lib/libkrb5.a libkrb5/lib",
-        "cp lib/libkrb5support.a libkrb5/lib",
-        "cp lib/libk5crypto.a libkrb5/lib",
-        "mkdir -p libkrb5/include/gssapi",
-        "cp include/gssapi/gssapi.h libkrb5/include/gssapi",
-    ],
     out_static_libs = [
         "libgssapi_krb5.a",
         "libkrb5.a",
@@ -188,6 +163,14 @@ configure_make(
         "libk5crypto.a",
         "libcom_err.a",
     ],
+    postfix_script = ("""mkdir -p libkrb5/lib
+cp lib/libcom_err.a libkrb5/lib
+cp lib/libgssapi_krb5.a libkrb5/lib
+cp lib/libkrb5.a libkrb5/lib
+cp lib/libkrb5support.a libkrb5/lib
+cp lib/libk5crypto.a libkrb5/lib
+mkdir -p libkrb5/include/gssapi
+cp include/gssapi/gssapi.h libkrb5/include/gssapi"""),
     visibility = ["//visibility:public"],
 )
 
