@@ -55,7 +55,7 @@ import (
 // would be relegated to a guardrail that protects against unbounded resource
 // utilization and runaway queuing for misbehaving clients, a role it is well
 // positioned to serve.
-var MaxLockWaitQueueLength = settings.RegisterIntSetting(
+var MaxLockWaitQueueLength = settings.TenantWritable.RegisterIntSetting(
 	"kv.lock_table.maximum_lock_wait_queue_length",
 	"the maximum length of a lock wait-queue that read-write requests are willing "+
 		"to enter and wait in. The setting can be used to ensure some level of quality-of-service "+
@@ -87,7 +87,7 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 // much against the capacity, which is desirable. We have seen examples with
 // discoveredCount > 100,000, caused by stats collection, where we definitely
 // want to avoid adding these locks to the lock table, if possible.
-var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.RegisterIntSetting(
+var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.TenantWritable.RegisterIntSetting(
 	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
 	"the maximum number of discovered locks by a waiter, above which the finalized txn cache"+
 		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+

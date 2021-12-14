@@ -58,7 +58,7 @@ import (
 //
 // The "results_buffer_size" connection parameter can be used to override this
 // default for an individual connection.
-var connResultsBufferSize = settings.RegisterByteSizeSetting(
+var connResultsBufferSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"sql.defaults.results_buffer.size",
 	"default size of the buffer that accumulates results for a statement or a batch "+
 		"of statements before they are sent to the client. This can be overridden on "+
@@ -72,12 +72,12 @@ var connResultsBufferSize = settings.RegisterByteSizeSetting(
 	16<<10, // 16 KiB
 ).WithPublic()
 
-var logConnAuth = settings.RegisterBoolSetting(
+var logConnAuth = settings.TenantWritable.RegisterBoolSetting(
 	sql.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
-var logSessionAuth = settings.RegisterBoolSetting(
+var logSessionAuth = settings.TenantWritable.RegisterBoolSetting(
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()

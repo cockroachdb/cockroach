@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var consistencyCheckInterval = settings.RegisterDurationSetting(
+var consistencyCheckInterval = settings.TenantWritable.RegisterDurationSetting(
 	"server.consistency_check.interval",
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
@@ -31,7 +31,7 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
-var consistencyCheckRate = settings.RegisterByteSizeSetting(
+var consistencyCheckRate = settings.TenantWritable.RegisterByteSizeSetting(
 	"server.consistency_check.max_rate",
 	"the rate limit (bytes/sec) to use for consistency checks; used in "+
 		"conjunction with server.consistency_check.interval to control the "+

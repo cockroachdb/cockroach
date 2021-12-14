@@ -29,12 +29,12 @@ import (
 // The degree of the inFlightWrites btree.
 const txnPipelinerBtreeDegree = 32
 
-var pipelinedWritesEnabled = settings.RegisterBoolSetting(
+var pipelinedWritesEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"kv.transaction.write_pipelining_enabled",
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
 )
-var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
+var pipelinedWritesMaxBatchSize = settings.TenantWritable.RegisterIntSetting(
 	"kv.transaction.write_pipelining_max_batch_size",
 	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
 	// NB: there is a tradeoff between the overhead of synchronously waiting for
@@ -72,7 +72,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 // because it needs to hold broad latches and iterate through the range to
 // find matching intents.
 // See #54029 for more details.
-var trackedWritesMaxSize = settings.RegisterIntSetting(
+var trackedWritesMaxSize = settings.TenantWritable.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
 	1<<22, /* 4 MB */
@@ -80,7 +80,7 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 
 // rejectTxnOverTrackedWritesBudget dictates what happens when a txn exceeds
 // kv.transaction.max_intents_bytes.
-var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
+var rejectTxnOverTrackedWritesBudget = settings.TenantWritable.RegisterBoolSetting(
 	"kv.transaction.reject_over_max_intents_budget.enabled",
 	"if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) "+
 		"are rejected instead of having their lock spans imprecisely compressed",

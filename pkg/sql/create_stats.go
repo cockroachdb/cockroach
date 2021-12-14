@@ -45,7 +45,7 @@ import (
 
 // createStatsPostEvents controls the cluster setting for logging
 // automatic table statistics collection to the event log.
-var createStatsPostEvents = settings.RegisterBoolSetting(
+var createStatsPostEvents = settings.TenantWritable.RegisterBoolSetting(
 	"sql.stats.post_events.enabled",
 	"if set, an event is logged for every CREATE STATISTICS job",
 	false,
@@ -53,7 +53,7 @@ var createStatsPostEvents = settings.RegisterBoolSetting(
 
 // featureStatsEnabled is used to enable and disable the CREATE STATISTICS and
 // ANALYZE features.
-var featureStatsEnabled = settings.RegisterBoolSetting(
+var featureStatsEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"feature.stats.enabled",
 	"set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

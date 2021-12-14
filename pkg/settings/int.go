@@ -102,8 +102,8 @@ func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 
 // RegisterIntSetting defines a new setting with type int with a
 // validation function.
-func RegisterIntSetting(
-	key, desc string, defaultValue int64, validateFns ...func(int64) error,
+func registerIntSetting(
+	class Class, key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *IntSetting {
 	var composed func(int64) error
 	if len(validateFns) > 0 {
@@ -125,7 +125,7 @@ func RegisterIntSetting(
 		defaultValue: defaultValue,
 		validateFn:   composed,
 	}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 
@@ -134,15 +134,6 @@ func (i *IntSetting) WithPublic() *IntSetting {
 	i.SetVisibility(Public)
 	return i
 }
-
-// WithSystemOnly system-only usage and can be chained.
-func (i *IntSetting) WithSystemOnly() *IntSetting {
-	i.common.systemOnly = true
-	return i
-}
-
-// Defeat the linter.
-var _ = (*IntSetting).WithSystemOnly
 
 // PositiveInt can be passed to RegisterIntSetting
 func PositiveInt(v int64) error {

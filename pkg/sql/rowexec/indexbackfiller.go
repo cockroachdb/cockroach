@@ -57,19 +57,19 @@ type indexBackfiller struct {
 
 var _ execinfra.Processor = &indexBackfiller{}
 
-var backfillerBufferSize = settings.RegisterByteSizeSetting(
+var backfillerBufferSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
 )
 
-var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
+var backfillerMaxBufferSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
 )
 
-var backfillerBufferIncrementSize = settings.RegisterByteSizeSetting(
+var backfillerBufferIncrementSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"schemachanger.backfiller.buffer_increment", "the size by which the BulkAdder attempts to grow its buffer before flushing", 32<<20,
 )
 
-var backillerSSTSize = settings.RegisterByteSizeSetting(
+var backillerSSTSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"schemachanger.backfiller.max_sst_size", "target size for ingested files during backfills", 16<<20,
 )
 

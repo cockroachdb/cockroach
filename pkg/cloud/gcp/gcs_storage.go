@@ -46,7 +46,7 @@ const (
 
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
 // Google Cloud Storage.
-var gcsChunkingEnabled = settings.RegisterBoolSetting(
+var gcsChunkingEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"cloudstorage.gs.chunking.enabled",
 	"enable chunking of file upload to Google Cloud Storage",
 	true, /* default */

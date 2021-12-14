@@ -90,7 +90,7 @@ const (
 // TODO(davidh): Once performance issues around redaction are
 // resolved via #58610, this setting can be removed so that all traces
 // have redactability enabled.
-var enableTraceRedactable = settings.RegisterBoolSetting(
+var enableTraceRedactable = settings.TenantWritable.RegisterBoolSetting(
 	"trace.redactable.enabled",
 	"set to true to enable redactability for unstructured events "+
 		"in traces and to redact traces sent to tenants. "+
@@ -99,13 +99,13 @@ var enableTraceRedactable = settings.RegisterBoolSetting(
 	false,
 )
 
-var enableNetTrace = settings.RegisterBoolSetting(
+var enableNetTrace = settings.TenantWritable.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
 ).WithPublic()
 
-var openTelemetryCollector = settings.RegisterValidatedStringSetting(
+var openTelemetryCollector = settings.TenantWritable.RegisterValidatedStringSetting(
 	"trace.opentelemetry.collector",
 	"address of an OpenTelemetry trace collector to receive "+
 		"traces using the otel gRPC protocol, as <host>:<port>. "+
@@ -120,7 +120,7 @@ var openTelemetryCollector = settings.RegisterValidatedStringSetting(
 	},
 ).WithPublic()
 
-var jaegerAgent = settings.RegisterValidatedStringSetting(
+var jaegerAgent = settings.TenantWritable.RegisterValidatedStringSetting(
 	"trace.jaeger.agent",
 	"the address of a Jaeger agent to receive traces using the "+
 		"Jaeger UDP Thrift protocol, as <host>:<port>. "+
@@ -137,7 +137,7 @@ var jaegerAgent = settings.RegisterValidatedStringSetting(
 
 // ZipkinCollector is the cluster setting that specifies the Zipkin instance
 // to send traces to, if any.
-var ZipkinCollector = settings.RegisterValidatedStringSetting(
+var ZipkinCollector = settings.TenantWritable.RegisterValidatedStringSetting(
 	"trace.zipkin.collector",
 	"the address of a Zipkin instance to receive traces, as <host>:<port>. "+
 		"If no port is specified, 9411 will be used.",

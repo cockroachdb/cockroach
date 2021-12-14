@@ -39,16 +39,8 @@ func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
 	return b
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (b *ByteSizeSetting) WithSystemOnly() *ByteSizeSetting {
-	b.common.systemOnly = true
-	return b
-}
-
-// RegisterByteSizeSetting defines a new setting with type bytesize and any
-// supplied validation function(s).
-func RegisterByteSizeSetting(
-	key, desc string, defaultValue int64, validateFns ...func(int64) error,
+func registerByteSizeSetting(
+	class Class, key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *ByteSizeSetting {
 
 	var validateFn func(int64) error
@@ -72,6 +64,6 @@ func RegisterByteSizeSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }

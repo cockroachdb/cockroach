@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-var showEstimatedRowCountClusterSetting = settings.RegisterBoolSetting(
+var showEstimatedRowCountClusterSetting = settings.TenantWritable.RegisterBoolSetting(
 	"sql.show_tables.estimated_row_count.enabled",
 	"whether the estimated_row_count is shown on SHOW TABLES. Turning this off "+
 		"will improve SHOW TABLES performance.",

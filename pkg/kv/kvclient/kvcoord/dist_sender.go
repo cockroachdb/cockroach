@@ -165,13 +165,13 @@ const (
 	sameReplicaRetryLimit = 10
 )
 
-var rangeDescriptorCacheSize = settings.RegisterIntSetting(
+var rangeDescriptorCacheSize = settings.TenantWritable.RegisterIntSetting(
 	"kv.range_descriptor_cache.size",
 	"maximum number of entries in the range descriptor cache",
 	1e6,
 )
 
-var senderConcurrencyLimit = settings.RegisterIntSetting(
+var senderConcurrencyLimit = settings.TenantWritable.RegisterIntSetting(
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
 	max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),

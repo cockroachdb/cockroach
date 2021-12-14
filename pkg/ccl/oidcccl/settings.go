@@ -37,7 +37,7 @@ const (
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
 var OIDCEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
+	s := settings.TenantWritable.RegisterBoolSetting(
 		OIDCEnabledSettingName,
 		"enables or disabled OIDC login for the DB Console",
 		false,
@@ -48,7 +48,7 @@ var OIDCEnabled = func() *settings.BoolSetting {
 
 // OIDCClientID is the OIDC client id.
 var OIDCClientID = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
+	s := settings.TenantWritable.RegisterStringSetting(
 		OIDCClientIDSettingName,
 		"sets OIDC client id",
 		"",
@@ -59,7 +59,7 @@ var OIDCClientID = func() *settings.StringSetting {
 
 // OIDCClientSecret is the OIDC client secret.
 var OIDCClientSecret = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
+	s := settings.TenantWritable.RegisterStringSetting(
 		OIDCClientSecretSettingName,
 		"sets OIDC client secret",
 		"",
@@ -169,7 +169,7 @@ func validateOIDCRedirectURL(values *settings.Values, s string) error {
 // where the cluster's region is not listed in the `redirect_urls` object, we
 // will use the required `default_url` callback URL.
 var OIDCRedirectURL = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		OIDCRedirectURLSettingName,
 		"sets OIDC redirect URL via a URL string or a JSON string containing a required "+
 			"`redirect_urls` key with an object that maps from region keys to URL strings "+
@@ -185,7 +185,7 @@ var OIDCRedirectURL = func() *settings.StringSetting {
 // OIDCProviderURL is the location of the OIDC discovery document for the auth
 // provider.
 var OIDCProviderURL = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		OIDCProviderURLSettingName,
 		"sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)",
 		"",
@@ -203,7 +203,7 @@ var OIDCProviderURL = func() *settings.StringSetting {
 
 // OIDCScopes contains the list of scopes to request from the auth provider.
 var OIDCScopes = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		OIDCScopesSettingName,
 		"sets OIDC scopes to include with authentication request "+
 			"(space delimited list of strings, required to start with `openid`)",
@@ -222,7 +222,7 @@ var OIDCScopes = func() *settings.StringSetting {
 
 // OIDCClaimJSONKey is the key of the claim to extract from the OIDC id_token.
 var OIDCClaimJSONKey = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
+	s := settings.TenantWritable.RegisterStringSetting(
 		OIDCClaimJSONKeySettingName,
 		"sets JSON key of principal to extract from payload after OIDC authentication completes "+
 			"(usually email or sid)",
@@ -234,7 +234,7 @@ var OIDCClaimJSONKey = func() *settings.StringSetting {
 // OIDCPrincipalRegex is a regular expression to apply to the OIDC id_token
 // claim value to conver it to a DB principal.
 var OIDCPrincipalRegex = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		OIDCPrincipalRegexSettingName,
 		"regular expression to apply to extracted principal (see claim_json_key setting) to "+
 			"translate to SQL user (golang regex format, must include 1 grouping to extract)",
@@ -254,7 +254,7 @@ var OIDCPrincipalRegex = func() *settings.StringSetting {
 // OIDCButtonText is a string to display on the button in the DB Console to
 // login with OIDC.
 var OIDCButtonText = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
+	s := settings.TenantWritable.RegisterStringSetting(
 		OIDCButtonTextSettingName,
 		"text to show on button on DB Console login page to login with your OIDC provider "+
 			"(only shown if OIDC is enabled)",
@@ -266,7 +266,7 @@ var OIDCButtonText = func() *settings.StringSetting {
 // OIDCAutoLogin is a boolean that enables automatic redirection to OIDC auth in
 // the DB Console.
 var OIDCAutoLogin = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
+	s := settings.TenantWritable.RegisterBoolSetting(
 		OIDCAutoLoginSettingName,
 		"if true, logged-out visitors to the DB Console will be "+
 			"automatically redirected to the OIDC login endpoint",

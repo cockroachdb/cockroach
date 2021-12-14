@@ -1356,7 +1356,7 @@ const defaultLocalScansConcurrencyLimit = 1024
 // that can be used to run parallel TableReaders when the plans are local. By
 // "additional" we mean having more processors than one in the same stage of the
 // physical plan.
-var localScansConcurrencyLimit = settings.RegisterIntSetting(
+var localScansConcurrencyLimit = settings.TenantWritable.RegisterIntSetting(
 	"sql.local_scans.concurrency_limit",
 	"maximum number of additional goroutines for performing scans in local plans",
 	defaultLocalScansConcurrencyLimit,

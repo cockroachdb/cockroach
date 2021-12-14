@@ -39,7 +39,7 @@ import (
 
 // GCInterval specifies duration between attempts to delete extant
 // sessions that have expired.
-var GCInterval = settings.RegisterDurationSetting(
+var GCInterval = settings.TenantWritable.RegisterDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	20*time.Second,
@@ -50,7 +50,7 @@ var GCInterval = settings.RegisterDurationSetting(
 // delete extant sessions that have expired.
 //
 // [(1-GCJitter) * GCInterval, (1+GCJitter) * GCInterval]
-var GCJitter = settings.RegisterFloatSetting(
+var GCJitter = settings.TenantWritable.RegisterFloatSetting(
 	"server.sqlliveness.gc_jitter",
 	"jitter fraction on the duration between attempts to delete extant sessions that have expired",
 	.15,
@@ -68,7 +68,7 @@ var GCJitter = settings.RegisterFloatSetting(
 // TODO(ajwerner): thread memory monitoring to this level and consider
 // increasing the cache size dynamically. The entries are just bytes each so
 // this should not be a big deal.
-var CacheSize = settings.RegisterIntSetting(
+var CacheSize = settings.TenantWritable.RegisterIntSetting(
 	"server.sqlliveness.storage_session_cache_size",
 	"number of session entries to store in the LRU",
 	1024)

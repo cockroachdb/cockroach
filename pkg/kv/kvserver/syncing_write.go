@@ -62,7 +62,7 @@ func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) erro
 }
 
 // sstWriteSyncRate wraps "kv.bulk_sst.sync_size". 0 disables syncing.
-var sstWriteSyncRate = settings.RegisterByteSizeSetting(
+var sstWriteSyncRate = settings.TenantWritable.RegisterByteSizeSetting(
 	"kv.bulk_sst.sync_size",
 	"threshold after which non-Rocks SST writes must fsync (0 disables)",
 	bulkIOWriteBurst,

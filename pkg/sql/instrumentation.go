@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
+var collectTxnStatsSampleRate = settings.TenantWritable.RegisterFloatSetting(
 	"sql.txn_stats.sample_rate",
 	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
 	0.01,

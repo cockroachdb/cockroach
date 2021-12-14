@@ -26,7 +26,7 @@ save the accessor created by the register function in the package where the
 setting is to be used. For example, to add an "enterprise" flag, adding into
 license_check.go:
 
-var enterpriseEnabled = settings.RegisterBoolSetting(
+var enterpriseEnabled = settings.TenantWritable.RegisterBoolSetting(
   "enterprise.enabled", "some doc for the setting", false,
 )
 

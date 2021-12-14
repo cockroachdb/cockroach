@@ -92,7 +92,7 @@ const csvSuffix = "csv"
 const parquetSuffix = "parquet"
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
-var featureExportEnabled = settings.RegisterBoolSetting(
+var featureExportEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"feature.export.enabled",
 	"set to true to enable exports, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

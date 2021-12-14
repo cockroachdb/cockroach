@@ -72,14 +72,14 @@ const (
 )
 
 var (
-	intervalBaseSetting = settings.RegisterFloatSetting(
+	intervalBaseSetting = settings.TenantWritable.RegisterFloatSetting(
 		intervalBaseSettingKey,
 		"the base multiplier for other intervals such as adopt, cancel, and gc",
 		defaultIntervalBase,
 		settings.PositiveFloat,
 	)
 
-	adoptIntervalSetting = settings.RegisterDurationSetting(
+	adoptIntervalSetting = settings.TenantWritable.RegisterDurationSetting(
 		adoptIntervalSettingKey,
 		"the interval at which a node (a) claims some of the pending jobs and "+
 			"(b) restart its already claimed jobs that are in running or reverting "+
@@ -88,7 +88,7 @@ var (
 		settings.PositiveDuration,
 	)
 
-	cancelIntervalSetting = settings.RegisterDurationSetting(
+	cancelIntervalSetting = settings.TenantWritable.RegisterDurationSetting(
 		cancelIntervalSettingKey,
 		"the interval at which a node cancels the jobs belonging to the known "+
 			"dead sessions",
@@ -96,7 +96,7 @@ var (
 		settings.PositiveDuration,
 	)
 
-	gcIntervalSetting = settings.RegisterDurationSetting(
+	gcIntervalSetting = settings.TenantWritable.RegisterDurationSetting(
 		gcIntervalSettingKey,
 		"the interval a node deletes expired job records that have exceeded their "+
 			"retention duration",
@@ -104,21 +104,21 @@ var (
 		settings.PositiveDuration,
 	)
 
-	retentionTimeSetting = settings.RegisterDurationSetting(
+	retentionTimeSetting = settings.TenantWritable.RegisterDurationSetting(
 		retentionTimeSettingKey,
 		"the amount of time to retain records for completed jobs before",
 		defaultRetentionTime,
 		settings.PositiveDuration,
 	).WithPublic()
 
-	cancellationsUpdateLimitSetting = settings.RegisterIntSetting(
+	cancellationsUpdateLimitSetting = settings.TenantWritable.RegisterIntSetting(
 		cancelUpdateLimitKey,
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
 		settings.NonNegativeInt,
 	)
 
-	retryInitialDelaySetting = settings.RegisterDurationSetting(
+	retryInitialDelaySetting = settings.TenantWritable.RegisterDurationSetting(
 		retryInitialDelaySettingKey,
 		"the starting duration of exponential-backoff delay"+
 			" to retry a job which encountered a retryable error or had its coordinator"+
@@ -127,21 +127,21 @@ var (
 		settings.NonNegativeDuration,
 	)
 
-	retryMaxDelaySetting = settings.RegisterDurationSetting(
+	retryMaxDelaySetting = settings.TenantWritable.RegisterDurationSetting(
 		retryMaxDelaySettingKey,
 		"the maximum duration by which a job can be delayed to retry",
 		defaultRetryMaxDelay,
 		settings.PositiveDuration,
 	)
 
-	executionErrorsMaxEntriesSetting = settings.RegisterIntSetting(
+	executionErrorsMaxEntriesSetting = settings.TenantWritable.RegisterIntSetting(
 		executionErrorsMaxEntriesKey,
 		"the maximum number of retriable error entries which will be stored for introspection",
 		defaultExecutionErrorsMaxEntries,
 		settings.NonNegativeInt,
 	)
 
-	executionErrorsMaxEntrySize = settings.RegisterByteSizeSetting(
+	executionErrorsMaxEntrySize = settings.TenantWritable.RegisterByteSizeSetting(
 		executionErrorsMaxEntrySizeKey,
 		"the maximum byte size of individual error entries which will be stored"+
 			" for introspection",

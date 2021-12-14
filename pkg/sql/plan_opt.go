@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var queryCacheEnabled = settings.RegisterBoolSetting(
+var queryCacheEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 

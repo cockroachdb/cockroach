@@ -21,7 +21,7 @@ import (
 //
 // NB: The more generic name of this setting precedes its current
 // interpretation. It used to control additional polling rates.
-var TableDescriptorPollInterval = settings.RegisterDurationSetting(
+var TableDescriptorPollInterval = settings.TenantWritable.RegisterDurationSetting(
 	"changefeed.experimental_poll_interval",
 	"polling interval for the table descriptors",
 	1*time.Second,
@@ -42,14 +42,14 @@ func TestingSetDefaultMinCheckpointFrequency(f time.Duration) func() {
 
 // PerChangefeedMemLimit controls how much data can be buffered by
 // a single changefeed.
-var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
+var PerChangefeedMemLimit = settings.TenantWritable.RegisterByteSizeSetting(
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
 	1<<30,
 )
 
 // SlowSpanLogThreshold controls when we will log slow spans.
-var SlowSpanLogThreshold = settings.RegisterDurationSetting(
+var SlowSpanLogThreshold = settings.TenantWritable.RegisterDurationSetting(
 	"changefeed.slow_span_log_threshold",
 	"a changefeed will log spans with resolved timestamps this far behind the current wall-clock time; if 0, a default value is calculated based on other cluster settings",
 	0,
@@ -57,7 +57,7 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 )
 
 // FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
-var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
+var FrontierCheckpointFrequency = settings.TenantWritable.RegisterDurationSetting(
 	"changefeed.frontier_checkpoint_frequency",
 	"controls the frequency with which span level checkpoints will be written; if 0, disabled.",
 	10*time.Minute,
@@ -77,7 +77,7 @@ var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 //   * Assume we want to have at most 150MB worth of checkpoints in the job record.
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
 // FrontierCheckpointFrequency setting, 1 MB per checkpoint.
-var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
+var FrontierCheckpointMaxBytes = settings.TenantWritable.RegisterByteSizeSetting(
 	"changefeed.frontier_checkpoint_max_bytes",
 	"controls the maximum size of the checkpoint as a total size of key bytes",
 	1<<20,
@@ -86,7 +86,7 @@ var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 // ScanRequestLimit is the number of Scan requests that can run at once.
 // Scan requests are issued when changefeed performs the backfill.
 // If set to 0, a reasonable default will be chosen.
-var ScanRequestLimit = settings.RegisterIntSetting(
+var ScanRequestLimit = settings.TenantWritable.RegisterIntSetting(
 	"changefeed.backfill.concurrent_scan_requests",
 	"number of concurrent scan requests per node issued during a backfill",
 	0,
@@ -111,7 +111,7 @@ type SinkThrottleConfig struct {
 
 // NodeSinkThrottleConfig is the node wide throttling configuration for changefeeds.
 var NodeSinkThrottleConfig = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		"changefeed.node_throttle_config",
 		"specifies node level throttling configuration for all changefeeeds",
 		"",
@@ -132,7 +132,7 @@ func validateSinkThrottleConfig(values *settings.Values, configStr string) error
 
 // MinHighWaterMarkCheckpointAdvance specifies the minimum amount of time the
 // changefeed high water mark must advance for it to be eligible for checkpointing.
-var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
+var MinHighWaterMarkCheckpointAdvance = settings.TenantWritable.RegisterDurationSetting(
 	"changefeed.min_highwater_advance",
 	"minimum amount of time the changefeed high water mark must advance "+
 		"for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier "+
@@ -147,7 +147,7 @@ var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 // amount of resources used to process such event varies. So, instead of coming up
 // with complex schemes to accurately measure and adjust current memory usage,
 // we'll request the amount of memory multiplied by this fudge factor.
-var EventMemoryMultiplier = settings.RegisterFloatSetting(
+var EventMemoryMultiplier = settings.TenantWritable.RegisterFloatSetting(
 	"changefeed.event_memory_multiplier",
 	"the amount of memory required to process an event is multiplied by this factor",
 	3,

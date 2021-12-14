@@ -84,7 +84,7 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 
 // AutoDetectPasswordHashes is the cluster setting that configures whether
 // the server recognizes pre-hashed passwords.
-var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
+var AutoDetectPasswordHashes = settings.TenantWritable.RegisterBoolSetting(
 	"server.user_login.store_client_pre_hashed_passwords.enabled",
 	"whether the server accepts to store passwords pre-hashed by clients",
 	true,
@@ -158,7 +158,7 @@ func CheckPasswordHashValidity(
 
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
-var MinPasswordLength = settings.RegisterIntSetting(
+var MinPasswordLength = settings.TenantWritable.RegisterIntSetting(
 	"server.user_login.min_password_length",
 	"the minimum length accepted for passwords set in cleartext via SQL. "+
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",

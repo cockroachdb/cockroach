@@ -33,7 +33,7 @@ import (
 )
 
 var enterpriseLicense = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		"enterprise.license",
 		"the encoded cluster license",
 		"",

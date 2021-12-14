@@ -93,7 +93,7 @@ var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 //
 // The maximum is not enforced since if the maximum is reduced in the future that
 // may cause the cluster setting to fail.
-var numRestoreWorkers = settings.RegisterIntSetting(
+var numRestoreWorkers = settings.TenantWritable.RegisterIntSetting(
 	"kv.bulk_io_write.restore_node_concurrency",
 	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
 		maxConcurrentRestoreWorkers),

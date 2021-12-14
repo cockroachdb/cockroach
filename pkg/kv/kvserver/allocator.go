@@ -58,7 +58,7 @@ var MinLeaseTransferStatsDuration = 30 * time.Second
 // enableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 // via the new heuristic based on request load and latency or via the simpler
 // approach that purely seeks to balance the number of leases per node evenly.
-var enableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
+var enableLoadBasedLeaseRebalancing = settings.TenantWritable.RegisterBoolSetting(
 	"kv.allocator.load_based_lease_rebalancing.enabled",
 	"set to enable rebalancing of range leases based on load and latency",
 	true,
@@ -72,7 +72,7 @@ var enableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 //
 // Setting this to 0 effectively disables load-based lease rebalancing, and
 // settings less than 0 are disallowed.
-var leaseRebalancingAggressiveness = settings.RegisterFloatSetting(
+var leaseRebalancingAggressiveness = settings.TenantWritable.RegisterFloatSetting(
 	"kv.allocator.lease_rebalancing_aggressiveness",
 	"set greater than 1.0 to rebalance leases toward load more aggressively, "+
 		"or between 0 and 1.0 to be more conservative about rebalancing leases",

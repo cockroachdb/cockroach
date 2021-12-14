@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
+var minimumFlushInterval = settings.TenantWritable.RegisterPublicDurationSettingWithExplicitUnit(
 	"bulkio.stream_ingestion.minimum_flush_interval",
 	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
 	5*time.Second,
@@ -48,7 +48,7 @@ var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUni
 // checkForCutoverSignalFrequency is the frequency at which the resumer polls
 // the system.jobs table to check whether the stream ingestion job has been
 // signaled to cutover.
-var cutoverSignalPollInterval = settings.RegisterDurationSetting(
+var cutoverSignalPollInterval = settings.TenantWritable.RegisterDurationSetting(
 	"bulkio.stream_ingestion.cutover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	30*time.Second,

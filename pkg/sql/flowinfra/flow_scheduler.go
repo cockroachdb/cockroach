@@ -41,7 +41,7 @@ const flowDoneChanSize = 8
 // pretty close to the old default.
 // TODO(yuzefovich): we probably want to remove / disable this limit completely
 // when we enable the admission control.
-var settingMaxRunningFlows = settings.RegisterIntSetting(
+var settingMaxRunningFlows = settings.TenantWritable.RegisterIntSetting(
 	"sql.distsql.max_running_flows",
 	"the value - when positive - used as is, or the value - when negative - "+
 		"multiplied by the number of CPUs on a node, to determine the "+

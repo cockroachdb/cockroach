@@ -20,7 +20,7 @@ import (
 // IngestBatchSize is a cluster setting that controls the maximum size of the
 // payload in an AddSSTable request.
 var IngestBatchSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+	s := settings.TenantWritable.RegisterByteSizeSetting(
 		"kv.bulk_ingest.batch_size",
 		"the maximum size of the payload in an AddSSTable request",
 		16<<20,

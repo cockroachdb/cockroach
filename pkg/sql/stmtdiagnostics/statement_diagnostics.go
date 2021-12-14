@@ -35,12 +35,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var pollingInterval = settings.RegisterDurationSetting(
+var pollingInterval = settings.TenantWritable.RegisterDurationSetting(
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second)
 
-var bundleChunkSize = settings.RegisterByteSizeSetting(
+var bundleChunkSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"sql.stmt_diagnostics.bundle_chunk_size",
 	"chunk size for statement diagnostic bundles",
 	1024*1024,

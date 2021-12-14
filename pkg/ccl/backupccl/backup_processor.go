@@ -48,43 +48,43 @@ import (
 var backupOutputTypes = []*types.T{}
 
 var (
-	useTBI = settings.RegisterBoolSetting(
+	useTBI = settings.TenantWritable.RegisterBoolSetting(
 		"kv.bulk_io_write.experimental_incremental_export_enabled",
 		"use experimental time-bound file filter when exporting in BACKUP",
 		true,
 	)
-	priorityAfter = settings.RegisterDurationSetting(
+	priorityAfter = settings.TenantWritable.RegisterDurationSetting(
 		"bulkio.backup.read_with_priority_after",
 		"amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads",
 		time.Minute,
 		settings.NonNegativeDuration,
 	).WithPublic()
-	delayPerAttmpt = settings.RegisterDurationSetting(
+	delayPerAttmpt = settings.TenantWritable.RegisterDurationSetting(
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
 		settings.NonNegativeDuration,
 	)
-	timeoutPerAttempt = settings.RegisterDurationSetting(
+	timeoutPerAttempt = settings.TenantWritable.RegisterDurationSetting(
 		"bulkio.backup.read_timeout",
 		"amount of time after which a read attempt is considered timed out, which causes the backup to fail",
 		time.Minute*5,
 		settings.NonNegativeDuration,
 	).WithPublic()
-	targetFileSize = settings.RegisterByteSizeSetting(
+	targetFileSize = settings.TenantWritable.RegisterByteSizeSetting(
 		"bulkio.backup.file_size",
 		"target size for individual data files produced during BACKUP",
 		128<<20,
 	).WithPublic()
 
-	smallFileBuffer = settings.RegisterByteSizeSetting(
+	smallFileBuffer = settings.TenantWritable.RegisterByteSizeSetting(
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
 		16<<20,
 		settings.NonNegativeInt,
 	)
 
-	splitKeysOnTimestamps = settings.RegisterBoolSetting(
+	splitKeysOnTimestamps = settings.TenantWritable.RegisterBoolSetting(
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
 		false,

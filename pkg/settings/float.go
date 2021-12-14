@@ -109,18 +109,8 @@ func (f *FloatSetting) WithPublic() *FloatSetting {
 	return f
 }
 
-// WithSystemOnly indicates system-usage only and can be chained.
-func (f *FloatSetting) WithSystemOnly() *FloatSetting {
-	f.common.systemOnly = true
-	return f
-}
-
-// Defeat the linter.
-var _ = (*FloatSetting).WithSystemOnly
-
-// RegisterFloatSetting defines a new setting with type float.
-func RegisterFloatSetting(
-	key, desc string, defaultValue float64, validateFns ...func(float64) error,
+func registerFloatSetting(
+	class Class, key, desc string, defaultValue float64, validateFns ...func(float64) error,
 ) *FloatSetting {
 	var validateFn func(float64) error
 	if len(validateFns) > 0 {
@@ -143,7 +133,7 @@ func RegisterFloatSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 

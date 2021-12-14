@@ -44,7 +44,7 @@ const (
 // FailedReservationsTimeout specifies a duration during which the local
 // replicate queue will not consider stores which have failed a reservation a
 // viable target.
-var FailedReservationsTimeout = settings.RegisterDurationSetting(
+var FailedReservationsTimeout = settings.TenantWritable.RegisterDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
@@ -55,7 +55,7 @@ const timeAfterStoreSuspectSettingName = "server.time_after_store_suspect"
 
 // TimeAfterStoreSuspect measures how long we consider a store suspect since
 // it's last failure.
-var TimeAfterStoreSuspect = settings.RegisterDurationSetting(
+var TimeAfterStoreSuspect = settings.TenantWritable.RegisterDurationSetting(
 	timeAfterStoreSuspectSettingName,
 	"the amount of time we consider a store suspect for after it fails a node liveness heartbeat."+
 		" A suspect node would not receive any new replicas or lease transfers, but will keep the replicas it has.",
@@ -78,7 +78,7 @@ const timeUntilStoreDeadSettingName = "server.time_until_store_dead"
 
 // TimeUntilStoreDead wraps "server.time_until_store_dead".
 var TimeUntilStoreDead = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
+	s := settings.TenantWritable.RegisterDurationSetting(
 		timeUntilStoreDeadSettingName,
 		"the time after which if there is no new gossiped information about a store, it is considered dead",
 		5*time.Minute,

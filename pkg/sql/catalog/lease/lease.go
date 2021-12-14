@@ -54,7 +54,7 @@ var errRenewLease = errors.New("renew lease on id")
 var errReadOlderVersion = errors.New("read older descriptor version from store")
 
 // LeaseDuration controls the duration of sql descriptor leases.
-var LeaseDuration = settings.RegisterDurationSetting(
+var LeaseDuration = settings.TenantWritable.RegisterDurationSetting(
 	"sql.catalog.descriptor_lease_duration",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseDuration)
@@ -67,7 +67,7 @@ func between0and1inclusive(f float64) error {
 }
 
 // LeaseJitterFraction controls the percent jitter around sql lease durations
-var LeaseJitterFraction = settings.RegisterFloatSetting(
+var LeaseJitterFraction = settings.TenantWritable.RegisterFloatSetting(
 	"sql.catalog.descriptor_lease_jitter_fraction",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseJitterFraction,
@@ -1134,7 +1134,7 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- *desc
 
 // leaseRefreshLimit is the upper-limit on the number of descriptor leases
 // that will continuously have their lease refreshed.
-var leaseRefreshLimit = settings.RegisterIntSetting(
+var leaseRefreshLimit = settings.TenantWritable.RegisterIntSetting(
 	"sql.tablecache.lease.refresh_limit",
 	"maximum number of descriptors to periodically refresh leases for",
 	500,

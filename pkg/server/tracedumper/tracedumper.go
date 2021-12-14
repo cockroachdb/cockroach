@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	totalDumpSizeLimit = settings.RegisterByteSizeSetting(
+	totalDumpSizeLimit = settings.TenantWritable.RegisterByteSizeSetting(
 		"server.job_trace.total_dump_size_limit",
 		"total size of job trace dumps to be kept. "+
 			"Dumps are GC'ed in the order of creation time. The latest dump is "+

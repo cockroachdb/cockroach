@@ -33,13 +33,13 @@ const (
 )
 
 var (
-	numGoroutinesThreshold = settings.RegisterIntSetting(
+	numGoroutinesThreshold = settings.TenantWritable.RegisterIntSetting(
 		"server.goroutine_dump.num_goroutines_threshold",
 		"a threshold beyond which if number of goroutines increases, "+
 			"then goroutine dump can be triggered",
 		1000,
 	)
-	totalDumpSizeLimit = settings.RegisterByteSizeSetting(
+	totalDumpSizeLimit = settings.TenantWritable.RegisterByteSizeSetting(
 		"server.goroutine_dump.total_dump_size_limit",
 		"total size of goroutine dumps to be kept. "+
 			"Dumps are GC'ed in the order of creation time. The latest dump is "+

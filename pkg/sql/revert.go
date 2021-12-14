@@ -31,7 +31,7 @@ const RevertTableDefaultBatchSize = 500000
 
 // useTBIForRevertRange is a cluster setting that controls if the time-bound
 // iterator optimization is used when processing a revert range request.
-var useTBIForRevertRange = settings.RegisterBoolSetting(
+var useTBIForRevertRange = settings.TenantWritable.RegisterBoolSetting(
 	"kv.bulk_io_write.revert_range_time_bound_iterator.enabled",
 	"use the time-bound iterator optimization when processing a revert range request",
 	true,

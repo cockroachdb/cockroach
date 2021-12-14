@@ -25,7 +25,7 @@ import (
 const serverIdentityMapSetting = "server.identity_map.configuration"
 
 var connIdentityMapConf = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		serverIdentityMapSetting,
 		"system-identity to database-username mappings",
 		"",

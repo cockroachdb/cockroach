@@ -27,14 +27,14 @@ import (
 )
 
 var (
-	maxProfiles = settings.RegisterIntSetting(
+	maxProfiles = settings.TenantWritable.RegisterIntSetting(
 		"server.mem_profile.max_profiles",
 		"maximum number of profiles to be kept per ramp-up of memory usage. "+
 			"A ramp-up is defined as a sequence of profiles with increasing usage.",
 		5,
 	)
 
-	maxCombinedFileSize = settings.RegisterByteSizeSetting(
+	maxCombinedFileSize = settings.TenantWritable.RegisterByteSizeSetting(
 		"server.mem_profile.total_dump_size_limit",
 		"maximum combined disk size of preserved memory profiles",
 		128<<20, // 128MiB
@@ -42,11 +42,11 @@ var (
 )
 
 func init() {
-	s := settings.RegisterIntSetting(
+	s := settings.TenantWritable.RegisterIntSetting(
 		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5)
 	s.SetRetired()
 
-	b := settings.RegisterByteSizeSetting(
+	b := settings.TenantWritable.RegisterByteSizeSetting(
 		"server.heap_profile.total_dump_size_limit",
 		"use server.mem_profile.total_dump_size_limit instead",
 		128<<20, // 128MiB

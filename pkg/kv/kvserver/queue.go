@@ -50,7 +50,7 @@ const (
 // queueGuaranteedProcessingTimeBudget is the smallest amount of time before
 // which the processing of a queue may time out. It is an escape hatch to raise
 // the timeout for queues.
-var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
+var queueGuaranteedProcessingTimeBudget = settings.TenantWritable.RegisterDurationSetting(
 	"kv.queue.process.guaranteed_time_budget",
 	"the guaranteed duration before which the processing of a queue may "+
 		"time out",

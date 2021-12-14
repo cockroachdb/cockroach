@@ -83,7 +83,7 @@ var allowedDebugPauseOnValues = map[string]struct{}{
 }
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
-var featureRestoreEnabled = settings.RegisterBoolSetting(
+var featureRestoreEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"feature.restore.enabled",
 	"set to true to enable restore, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

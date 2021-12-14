@@ -80,7 +80,7 @@ type backupKMSEnv struct {
 var _ cloud.KMSEnv = &backupKMSEnv{}
 
 // featureBackupEnabled is used to enable and disable the BACKUP feature.
-var featureBackupEnabled = settings.RegisterBoolSetting(
+var featureBackupEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

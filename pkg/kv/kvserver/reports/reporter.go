@@ -42,7 +42,7 @@ import (
 
 // ReporterInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
-var ReporterInterval = settings.RegisterDurationSetting(
+var ReporterInterval = settings.TenantWritable.RegisterDurationSetting(
 	"kv.replication_reports.interval",
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
