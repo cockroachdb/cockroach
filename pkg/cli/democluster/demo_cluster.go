@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -407,7 +406,6 @@ func (c *transientCluster) Start(
 					StartingHTTPPort: c.demoCtx.HTTPPort - 2,
 					Locality:         c.demoCtx.Localities[i],
 					TestingKnobs: base.TestingKnobs{
-						TenantTestingKnobs: &sql.TenantTestingKnobs{DisableLogTags: true},
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
 								ArtificialLatencyMap: latencyMap,

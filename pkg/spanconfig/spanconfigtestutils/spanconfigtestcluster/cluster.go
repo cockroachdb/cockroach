@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,10 +45,6 @@ func NewHandle(t *testing.T, tc *testcluster.TestCluster) *Handle {
 // InitializeTenant initializes a tenant with the given ID, returning the
 // relevant tenant state.
 func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *Tenant {
-	// Prevent a logging assertion that the server ID is initialized multiple
-	// times.
-	log.TestingClearServerIdentifiers()
-
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t}
 	if tenID == roachpb.SystemTenantID {
