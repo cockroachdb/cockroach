@@ -131,6 +131,10 @@ message ResponseHeader {
   // TargetBytes is exactly satisfied by a result that exhausted a range scan,
   // or by a response from a multi-request batch, we won't do additional work
   // (e.g. send another RPC to the next range) only to obtain resume_next_bytes.
+  //
+  // Also note that this is unaffected by whole_rows_of_size. The client may
+  // care about whole rows, but we'll only return the size of the next KV pair
+  // (which may just be part of the row), to avoid the cost of additional IO.
   int64 resume_next_bytes = 9;
 
   // The number of keys operated on.
@@ -2256,6 +2260,19 @@ message Header {
   // TargetBytesAvoidExcess version gate enabled. Only supported by Get, Scan,
   // and ReverseScan.
   bool allow_empty = 23;
+  // If positive, Scan and ReverseScan requests with limits (MaxSpanRequestKeys
+  // or TargetBytes) will not return results with partial SQL rows at the end
+  // (recall that SQL rows can span multiple keys). Such partial rows will be
+  // removed from the result, unless AllowEmpty is false and the partial row is
+  // the first result row, in which case additional keys will be fetched to
+  // complete the row.
+  //
+  // The given value specifies the maximum number of keys in a row (i.e. the
+  // number of column families). If any larger rows are found at the end of the
+  // result, an error is returned.
+  //
+  // Added in 22.1, callers must check the ScanWholeRows version gate first.
+  int32 whole_rows_of_size = 26;
   // If true, DistSender returns partial non-empty results when encountering a
   // range boundary, with an appropriate resume span and reason
   // RESUME_RANGE_BOUNDARY. This will disable parallelism of DistSender

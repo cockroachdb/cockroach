@@ -874,7 +874,7 @@ func mvccGet(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty)
+	mvccScanner.init(opts.Txn, opts.Uncertainty, 0)
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
@@ -2367,6 +2367,7 @@ func mvccScanToBytes(
 		targetBytes:            opts.TargetBytes,
 		targetBytesAvoidExcess: opts.TargetBytesAvoidExcess,
 		allowEmpty:             opts.AllowEmpty,
+		wholeRows:              opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
 		maxIntents:             opts.MaxIntents,
 		inconsistent:           opts.Inconsistent,
 		tombstones:             opts.Tombstones,
@@ -2374,7 +2375,11 @@ func mvccScanToBytes(
 		keyBuf:                 mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty)
+	var trackLastOffsets int
+	if opts.WholeRowsOfSize > 1 {
+		trackLastOffsets = int(opts.WholeRowsOfSize)
+	}
+	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
 
 	var res MVCCScanResult
 	var err error
@@ -2499,6 +2504,13 @@ type MVCCScanOptions struct {
 	// AllowEmpty will return an empty result if the first kv pair exceeds the
 	// TargetBytes limit and TargetBytesAvoidExcess is set.
 	AllowEmpty bool
+	// WholeRowsOfSize will prevent returning partial rows when limits (MaxKeys or
+	// TargetBytes) are set. The value indicates the max number of keys per row.
+	// If the last KV pair(s) belong to a partial row, they will be removed from
+	// the result -- except if the result only consists of a single partial row
+	// and AllowEmpty is false, in which case the remaining KV pairs of the row
+	// will be fetched and returned too.
+	WholeRowsOfSize int32
 	// MaxIntents is a maximum number of intents collected by scanner in
 	// consistent mode before returning WriteIntentError.
 	//
