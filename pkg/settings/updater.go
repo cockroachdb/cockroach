@@ -98,12 +98,14 @@ func (u updater) Set(ctx context.Context, key, rawValue string, vt string) error
 		}
 		setting.set(ctx, u.sv, b)
 		return nil
-	case numericSetting: // includes *EnumSetting
+	case *IntSetting, *ByteSizeSetting, *EnumSetting:
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err
 		}
-		return setting.set(ctx, u.sv, int64(i))
+		return setting.(interface {
+			set(context.Context, *Values, int64) error
+		}).set(ctx, u.sv, int64(i))
 	case *FloatSetting:
 		f, err := strconv.ParseFloat(rawValue, 64)
 		if err != nil {

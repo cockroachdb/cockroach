@@ -27,7 +27,7 @@ type EnumSetting struct {
 	enumValues map[int64]string
 }
 
-var _ extendedSetting = &EnumSetting{}
+var _ internalSetting = &EnumSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (e *EnumSetting) Typ() string {
