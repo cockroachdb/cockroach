@@ -148,7 +148,16 @@ func (p *provider) initialize(ctx context.Context) error {
 	}
 	p.sessionID = session.ID()
 	p.instanceID = instanceID
-	session.RegisterCallbackForSessionExpiry(p.shutdownSQLInstance)
+
+	session.RegisterCallbackForSessionExpiry(func(_ context.Context) {
+		// Stop the instance asynchronously. This callback runs in a stopper task,
+		// so it can't do the shutdown (as the shutdown stops the stopper).
+		go func() {
+			ctx, sp := p.stopper.Tracer().StartSpanCtx(context.Background(), "instance shutdown")
+			defer sp.Finish()
+			p.shutdownSQLInstance(ctx)
+		}()
+	})
 	return nil
 }
 
