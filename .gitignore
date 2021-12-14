@@ -42,3 +42,7 @@ build/Railroad.jar
 
 # Local disk buffers for "roachprod logs" command
 /*.logs
+
+.idea/*
+c-deps/*
+

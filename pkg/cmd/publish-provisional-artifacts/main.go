@@ -12,6 +12,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"go/build"
@@ -26,6 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	crdbbuild "github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/kr/pretty"
@@ -34,6 +36,7 @@ import (
 const (
 	awsAccessKeyIDKey      = "AWS_ACCESS_KEY_ID"
 	awsSecretAccessKeyKey  = "AWS_SECRET_ACCESS_KEY"
+	// TC_BUILD_BRANCH is what we use as a tag we push to release-staging
 	teamcityBuildBranchKey = "TC_BUILD_BRANCH"
 )
 
@@ -217,6 +220,7 @@ func run(svc s3I, execFn release.ExecFn, flags runFlags) {
 		}
 		if flags.isRelease {
 			buildAndPutArchive(svc, execFn, archiveBuildOpts)
+			buildAndPutMetadata(svc, archiveBuildOpts)
 		}
 	}
 	if flags.doBless {
@@ -267,8 +271,47 @@ func buildAndPutArchive(svc s3I, execFn release.ExecFn, o opts) {
 	if _, err := svc.PutObject(&putObjectInput); err != nil {
 		log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
 	}
+
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func buildAndPutMetadata(svc s3I, o opts) {
+	log.Printf("building and uploading metadata %s", pretty.Sprint(o))
+	defer func() {
+		log.Printf("done building and uploading metadata: %s", pretty.Sprint(o))
+	}()
+
+	// TODO: use predictable unique file name
+	// TODO: publish this file even the build is failed,
+	//  including the status (fail/success) to make sure we can check the status.
+	// buildInfo.Tag => build ID in the release docs
+	// buildInfo.Revision => sha
+	// TODO: figure out if we need to include teamcity build URL for posterity (low priority)
+	// TODO: change build/release/teamcity-mark-build-qualified.sh
+	//   to publish another status file with qualification results
+
+	buildInfo := crdbbuild.GetInfo()
+	log.Printf("Generating JSON metadata")
+	//TODO: add `o.VersionStr` to JSON
+	buildInfoJson, err := json.MarshalIndent(crdbbuild.GetInfo(), "", "  ")
+	if err != nil {
+		log.Fatal("Cannot marshall build info")
+	}
+
+	// TODO - buildInfo.Revision might be hard to extract for unit test? should this be based on o.VersionStr instead?
+	srcMetadata := aws.String(fmt.Sprintf("cockroach-buildinfo-%s.json", buildInfo.Revision))
+
+	log.Printf("Uploading to s3://%s/%s", o.BucketName, srcMetadata)
+	putObjectInput := s3.PutObjectInput{
+		Bucket:       &o.BucketName,
+		Key:          srcMetadata,
+		Body:         bytes.NewReader(buildInfoJson),
+		CacheControl: &release.NoCache,
+	}
+	if _, err := svc.PutObject(&putObjectInput); err != nil {
+		log.Fatalf("s3 upload %s: %s", srcMetadata, err)
 	}
 }
 

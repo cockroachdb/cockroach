@@ -145,6 +145,9 @@ func TestProvisional(t *testing.T) {
 					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.src.tgz " +
 					"CONTENTS env=[] args=[make archive ARCHIVE_BASE=cockroach-v0.0.1-alpha ARCHIVE=cockroach-v0.0.1-alpha.src.tgz BUILDINFO_TAG=v0.0.1-alpha]",
+				// TODO - will BUILD_REVISION be hard to extract for unit test? if so, should this be based on `o.VersionStr` instead?
+				"s3://binaries.cockroachdb.com/cockroach-buildinfo-{BUILD_REVISION}.json " +
+					"CONTENTS <binary stuff>", // TODO - will this be binary stuff or JSON stuff?
 			},
 		},
 		{

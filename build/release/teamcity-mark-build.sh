@@ -30,4 +30,11 @@ mark_build() {
   log_into_gcloud
   gcloud container images add-tag "${gcr_repository}:${TC_BUILD_BRANCH}" "${gcr_repository}:latest-${release_branch}-${build_label}-build"
   tc_end_block "Push new docker image tag"
+  # TODO: change this script to publish qualification status to some
+  # predictable location in gcs/s3. Also make sure that the upstream job of
+  # this script doesn't block publishing. Figure out how to do this in
+  # teamcity. We need to pass the result of the upstream job as an input to
+  # this one. Or as an alternative publish the results from the upstream job.
+  # Right now it's only one job, so shouldn't be an issue, but this can change
+  # in the future.
 }
