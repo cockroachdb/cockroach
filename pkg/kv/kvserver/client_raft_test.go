@@ -1163,7 +1163,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// Make sure this replica has not inadvertently quiesced. We need the
 		// replica ticking so that it campaigns.
 		if otherRepl.IsQuiescent() {
-			otherRepl.UnquiesceAndWakeLeader()
+			otherRepl.MaybeUnquiesceAndWakeLeader()
 		}
 		lead := otherRepl.RaftStatus().Lead
 		if lead == raft.None {
@@ -3654,7 +3654,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 		} else if replica != nil {
 			// Make sure the replica is unquiesced so that it will tick and
 			// contact the leader to discover it's no longer part of the range.
-			replica.UnquiesceAndWakeLeader()
+			replica.MaybeUnquiesceAndWakeLeader()
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})
@@ -4088,6 +4088,78 @@ func TestRangeQuiescence(t *testing.T) {
 	if state := leader.RaftStatus().SoftState.RaftState; state != raft.StateLeader {
 		t.Fatalf("%s should be the leader: %s", leader, state)
 	}
+}
+
+// TestUninitializedReplicaRemainsQuiesced verifies that an uninitialized
+// replica remains quiesced until it receives the snapshot that initializes it.
+func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, desc, err := tc.Servers[0].ScratchRangeEx()
+	key := desc.StartKey.AsRawKey()
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+
+	// Block incoming snapshots on s2 until channel is signaled.
+	blockSnapshot := make(chan struct{})
+	handlerFuncs := noopRaftHandlerFuncs()
+	handlerFuncs.snapErr = func(header *kvserver.SnapshotRequest_Header) error {
+		select {
+		case <-blockSnapshot:
+		case <-tc.Stopper().ShouldQuiesce():
+		}
+		return nil
+	}
+	s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	tc.Servers[1].RaftTransport().Listen(s2.StoreID(), &unreliableRaftHandler{
+		rangeID:                    desc.RangeID,
+		RaftMessageHandler:         s2,
+		unreliableRaftHandlerFuncs: handlerFuncs,
+	})
+
+	// Try to up-replicate to s2. Should block on a learner snapshot after the new
+	// replica on s2 has been created, but before it has been initialized. While
+	// the replica is uninitialized, it should remain quiesced, even while it is
+	// receiving Raft traffic from the leader.
+	replicateErrChan := make(chan error)
+	go func() {
+		_, err := tc.AddVoters(key, tc.Target(1))
+		select {
+		case replicateErrChan <- err:
+		case <-tc.Stopper().ShouldQuiesce():
+		}
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := s2.GetReplica(desc.RangeID)
+		if err == nil {
+			// IMPORTANT: the replica should always be quiescent while uninitialized.
+			require.False(t, repl.IsInitialized())
+			require.True(t, repl.IsQuiescent())
+		}
+		return err
+	})
+
+	// Let the snapshot through. The up-replication attempt should succeed, the
+	// replica should now be initialized, and the replica should quiesce again.
+	close(blockSnapshot)
+	require.NoError(t, <-replicateErrChan)
+	repl, err := s2.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	require.True(t, repl.IsInitialized())
+	testutils.SucceedsSoon(t, func() error {
+		if !repl.IsQuiescent() {
+			return errors.Errorf("%s not quiescent", repl)
+		}
+		return nil
+	})
 }
 
 // TestInitRaftGroupOnRequest verifies that an uninitialized Raft group

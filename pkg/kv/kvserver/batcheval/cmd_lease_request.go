@@ -26,7 +26,7 @@ func init() {
 }
 
 func declareKeysRequestLease(
-	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// NOTE: RequestLease is run on replicas that do not hold the lease, so
 	// acquiring latches would not help synchronize with other requests. As

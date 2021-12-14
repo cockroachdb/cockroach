@@ -30,7 +30,7 @@ func init() {
 }
 
 func declareKeysPushTransaction(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ *roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	pr := req.(*roachpb.PushTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})

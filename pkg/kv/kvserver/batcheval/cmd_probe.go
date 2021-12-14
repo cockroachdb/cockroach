@@ -21,7 +21,7 @@ import (
 )
 
 func declareKeysProbe(
-	_ ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, _, _ *spanset.SpanSet,
+	_ ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, _, _ *spanset.SpanSet,
 ) {
 	// Declare no keys. This means that we're not even serializing with splits
 	// (i.e. a probe could be directed at a key that will become the right-hand
