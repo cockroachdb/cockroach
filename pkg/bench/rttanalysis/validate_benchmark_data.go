@@ -66,7 +66,8 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 	}
 
 	// Only create the scope after we've checked if we need to exec the subprocess.
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	defer func() {
 		if t.Failed() {
@@ -88,7 +89,7 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 				if isRewrite {
 					runs = *rewriteIterations
 				}
-				runRoundTripBenchmarkTest(t, &results, cases, r.cc, runs, limiter)
+				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs, limiter)
 			})
 		}(b, cases)
 	}
