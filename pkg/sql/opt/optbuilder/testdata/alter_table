@@ -137,7 +137,7 @@ alter-table-relocate abc [voters]
       └── (ARRAY[4], 2)
 
 build
-ALTER TABLE abc EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
+ALTER TABLE abc EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
 ----
 alter-table-relocate abc [non-voters]
  ├── columns: key:1 pretty:2
@@ -167,7 +167,7 @@ alter-table-relocate abc@bc [voters]
       └── (ARRAY[6,7,8], 2, 'bar')
 
 build
-ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
 ----
 alter-table-relocate abc@bc [non-voters]
  ├── columns: key:1 pretty:2

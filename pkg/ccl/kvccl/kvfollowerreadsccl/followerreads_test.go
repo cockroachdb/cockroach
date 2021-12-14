@@ -642,7 +642,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Remove the follower and add a new non-voter to n3. n2 will no longer have a
 	// replica.
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 1)`)
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[3], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[3], 1)`)
 
 	// Execute the query again and assert the cache is updated. This query will
 	// not be executed as a follower read since it attempts to use n2 which

@@ -33,7 +33,7 @@ ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT c from abc
 error (42601): RELOCATE data column 1 (range ids) must be of type int, not type string
 
 build
-ALTER RANGE 1 RELOCATE NON_VOTERS FROM 1 TO 2
+ALTER RANGE 1 RELOCATE NONVOTERS FROM 1 TO 2
 ----
 alter-range-relocate &{false true 2 1 [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
@@ -42,7 +42,7 @@ alter-range-relocate &{false true 2 1 [3 4 5] []}
       └── (1,)
 
 build
-ALTER RANGE RELOCATE NON_VOTERS FROM 1 TO 2 FOR SELECT a from abc
+ALTER RANGE RELOCATE NONVOTERS FROM 1 TO 2 FOR SELECT a from abc
 ----
 alter-range-relocate &{false true 2 1 [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5

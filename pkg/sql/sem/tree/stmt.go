@@ -972,7 +972,7 @@ func (n *Relocate) StatementTag() string {
 	if n.RelocateLease {
 		return "EXPERIMENTAL_RELOCATE LEASE"
 	} else if n.RelocateNonVoters {
-		return "EXPERIMENTAL_RELOCATE NON_VOTERS"
+		return "EXPERIMENTAL_RELOCATE NONVOTERS"
 	}
 	return "EXPERIMENTAL_RELOCATE VOTERS"
 }
@@ -988,7 +988,7 @@ func (n *RelocateRange) StatementTag() string {
 	if n.RelocateLease {
 		return "RELOCATE LEASE"
 	} else if n.RelocateNonVoters {
-		return "RELOCATE NON_VOTERS"
+		return "RELOCATE NONVOTERS"
 	}
 	return "RELOCATE VOTERS"
 }
