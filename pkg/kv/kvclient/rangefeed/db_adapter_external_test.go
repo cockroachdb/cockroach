@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -124,6 +125,10 @@ func TestDBClientScan(t *testing.T) {
 	t.Run("parallel scan requests", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
+		defer func() {
+			sqlDB.Exec(t, `DROP TABLE foo`)
+		}()
+
 		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (250), (500), (750)")
 
@@ -143,9 +148,10 @@ func TestDBClientScan(t *testing.T) {
 			return dba.ScanWithOptions(ctx, []roachpb.Span{fooSpan}, db.Clock().Now(),
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
-				rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) {
+				rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) error {
 					atomic.AddInt32(&barrier, 1)
 					<-proceed
+					return nil
 				}),
 			)
 		})
@@ -158,5 +164,95 @@ func TestDBClientScan(t *testing.T) {
 		})
 		close(proceed)
 		require.NoError(t, g.Wait())
+	})
+
+	// Verify when errors occur during scan, only the failed spans are retried.
+	t.Run("scan retries failed spans", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
+		defer func() {
+			sqlDB.Exec(t, `DROP TABLE foo`)
+		}()
+
+		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
+		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100))")
+
+		fooDesc := catalogkv.TestingGetTableDescriptor(
+			db, keys.SystemSQLCodec, "defaultdb", "foo")
+		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+		scanData := struct {
+			syncutil.Mutex
+			numSucceeded int
+			failedSpan   roachpb.Span
+			succeeded    roachpb.SpanGroup
+		}{}
+
+		// We expect 11 splits.
+		// One span will fail.  Verify we retry only the spans that we have not attempted before.
+		var parallelism = 6
+		f := rangefeed.NewFactoryWithDB(tc.Server(0).Stopper(), dba, nil /* knobs */)
+		scanComplete := make(chan struct{})
+		scanErr := make(chan error, 1)
+		retryScanErr := errors.New("retry scan")
+
+		feed, err := f.RangeFeed(ctx, "foo-feed", []roachpb.Span{fooSpan}, db.Clock().Now(),
+			func(ctx context.Context, value *roachpb.RangeFeedValue) {},
+
+			rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
+
+			rangefeed.WithInitialScan(func(ctx context.Context) {
+				close(scanComplete)
+			}),
+
+			rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
+				if errors.Is(err, retryScanErr) {
+					// If we see retry marker -- then retry.
+					shouldFail = false
+				} else {
+					// Otherwise, fail the scan.
+					shouldFail = true
+					select {
+					case scanErr <- err:
+					default:
+					}
+				}
+				return shouldFail
+			}),
+
+			rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) error {
+				scanData.Lock()
+				defer scanData.Unlock()
+
+				if scanData.failedSpan.Key.Equal(scanData.failedSpan.EndKey) && scanData.numSucceeded == 7 {
+					scanData.failedSpan = sp
+					return retryScanErr
+				} else {
+					// Verify we do not retry spans we've seen before.
+					if scanData.succeeded.Contains(sp.Key) {
+						return errors.Newf("span %s already scanned", sp)
+					} else {
+						scanData.succeeded.Add(sp)
+						scanData.numSucceeded++
+					}
+				}
+				return nil
+			}),
+		)
+
+		require.NoError(t, err)
+		defer feed.Close()
+
+		select {
+		case <-scanComplete:
+		case err := <-scanErr:
+			t.Fatalf("scan terminated in error: %v", err)
+		}
+
+		// Verify we have scanned entire table.
+		require.Equal(t, 1, scanData.succeeded.Len(),
+			"scanned spans: %v failed: %s", scanData.succeeded.Slice(), scanData.failedSpan)
+		require.True(t, fooSpan.Equal(scanData.succeeded.Slice()[0]),
+			"table=%s slice=%s", fooSpan, scanData.succeeded.Slice()[0])
 	})
 }

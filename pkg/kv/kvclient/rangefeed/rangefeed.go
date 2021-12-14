@@ -188,9 +188,12 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	if err != nil {
 		return err
 	}
-	for _, sp := range spans {
-		if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
-			return err
+
+	if !f.withInitialScan {
+		for _, sp := range spans {
+			if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -249,7 +252,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 	restartLogEvery := log.Every(10 * time.Second)
 
 	if f.withInitialScan {
-		if done := f.runInitialScan(ctx, &restartLogEvery, &r); done {
+		if done := f.runInitialScan(ctx, frontier, &restartLogEvery, &r); done {
 			return
 		}
 	}

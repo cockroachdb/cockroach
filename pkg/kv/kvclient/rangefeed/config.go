@@ -178,7 +178,7 @@ func WithMemoryMonitor(mon *mon.BytesMonitor) Option {
 
 // OnScanCompleted is called when the rangefeed initial scan completes scanning
 // the span.
-type OnScanCompleted func(ctx context.Context, sp roachpb.Span)
+type OnScanCompleted func(ctx context.Context, sp roachpb.Span) error
 
 // WithOnScanCompleted sets up a callback which is invoked when a span (or part of the span)
 // have been completed when performing an initial scan.
