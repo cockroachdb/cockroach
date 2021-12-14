@@ -1311,3 +1311,24 @@ func (e *MinTimestampBoundUnsatisfiableError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
+
+func NewRefreshFailedError(
+	reason RefreshFailedError_Reason, key Key, ts hlc.Timestamp,
+) RefreshFailedError {
+	return RefreshFailedError{
+		Reason:    reason,
+		Key:       key,
+		Timestamp: ts,
+	}
+}
+
+func (e RefreshFailedError) Error() string {
+	var reason string
+	switch e.Reason {
+	case RefreshFailedError_REASON_KEY:
+		reason = "key"
+	case RefreshFailedError_REASON_INTENT:
+		reason = "intent"
+	}
+	return fmt.Sprintf("encountered recently written %s: %s %s", reason, e.Key, e.Timestamp)
+}

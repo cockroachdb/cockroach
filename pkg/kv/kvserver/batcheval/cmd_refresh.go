@@ -18,10 +18,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	proto "github.com/gogo/protobuf/proto"
 )
 
 func init() {
 	RegisterReadOnlyCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
+	pKey := errors.GetTypeKey(roachpb.RefreshFailedError{})
+	errors.RegisterLeafEncoder(pKey, encodeRefreshFailedError)
+	errors.RegisterLeafDecoder(pKey, decodeRefreshFailedError)
+}
+
+func encodeRefreshFailedError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	details = err.(*roachpb.RefreshFailedError)
+	return "", nil, details
+}
+
+func decodeRefreshFailedError(
+	_ context.Context, msgPrefix string, safeDetails []string, payload proto.Message,
+) error {
+	return payload.(*roachpb.RefreshFailedError)
 }
 
 // Refresh checks whether the key has any values written in the interval
@@ -63,14 +80,14 @@ func Refresh(
 		return result.Result{}, err
 	} else if val != nil {
 		if ts := val.Timestamp; refreshFrom.LessEq(ts) {
-			return result.Result{}, errors.Errorf("encountered recently written key %s @%s", args.Key, ts)
+			return result.Result{}, roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_KEY, args.Key, ts)
 		}
 	}
 
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
+		return result.Result{}, roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
 			intent.Key, intent.Txn.WriteTimestamp)
 	}
 

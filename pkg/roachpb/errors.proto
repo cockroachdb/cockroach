@@ -660,3 +660,17 @@ message Error {
 
   reserved 2;
 }
+
+// A RefreshFailedError indicates that a refresh or a range refresh failed because
+// of a recently written key or intent.
+message RefreshFailedError {
+  enum Reason {
+    REASON_KEY = 0;
+    REASON_INTENT = 1;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
+
+  // The timestamp the key/intent was last updated.
+  optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
