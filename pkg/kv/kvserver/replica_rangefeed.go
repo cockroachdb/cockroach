@@ -59,7 +59,7 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 var RangefeedTBIEnabled = settings.RegisterBoolSetting(
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
 	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
-	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", false),
+	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", true),
 )
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
