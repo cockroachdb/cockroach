@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -307,7 +308,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		return nil
 	}
 
-	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s) (dry-run %v)", entry.Span.Key, entry.Span.EndKey, rd.spec.DryRun)
 
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
@@ -365,6 +366,30 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 	})
 }
 
+type noopSender struct{}
+
+func (noopSender) AddSSTable(
+	ctx context.Context,
+	begin interface{},
+	end interface{},
+	data []byte,
+	disallowConflicts bool,
+	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
+	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
+	writeAtBatchTs bool,
+) error {
+	return nil
+}
+
+func (noopSender) SplitAndScatter(
+	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,
+) error {
+	return nil
+}
+
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	sst mergedSST,
 ) (roachpb.BulkOpSummary, error) {
@@ -385,7 +410,13 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// this comes at the cost of said overlap check, but in the common case of
 	// non-overlapping ingestion into empty spans, that is just one seek.
 	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
+
+	var sender bulk.SSTSender = db
+	if rd.spec.DryRun {
+		sender = noopSender{}
+	}
+
+	batcher, err := bulk.MakeSSTBatcher(ctx, sender, evalCtx.Settings,
 		func() int64 { return rd.flushBytes }, disallowShadowingBelow)
 	if err != nil {
 		return summary, err

@@ -1,0 +1,1 @@
+roachprod sql $CLUSTER:1 -- -e "RESTORE DATABASE bank FROM 'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=1000000,seed=1/bank?AUTH=implicit'"

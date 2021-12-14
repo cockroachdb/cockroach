@@ -913,6 +913,7 @@ unreserved_keyword ::=
 	| 'DOMAIN'
 	| 'DOUBLE'
 	| 'DROP'
+	| 'DRY_RUN'
 	| 'ENCODING'
 	| 'ENCRYPTED'
 	| 'ENCRYPTION_PASSPHRASE'
@@ -2115,6 +2116,7 @@ restore_options ::=
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
+	| 'DRY_RUN'
 	| 'NEW_DB_NAME' '=' string_or_placeholder
 	| 'INCREMENTAL_STORAGE' '=' string_or_placeholder_opt_list
 
