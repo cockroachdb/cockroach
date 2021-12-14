@@ -114,6 +114,9 @@ type backupDataProcessor struct {
 	cancelAndWaitForWorker func()
 	progCh                 chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	backupErr              error
+
+	// Memory accumulator that reserves the memory usage of the backup processor.
+	backupMem *memoryAccumulator
 }
 
 var _ execinfra.Processor = &backupDataProcessor{}
@@ -126,11 +129,18 @@ func newBackupDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+	memMonitor := flowCtx.Cfg.BackupMonitor
+	if knobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		if knobs.BackupMemMonitor != nil {
+			memMonitor = knobs.BackupMemMonitor
+		}
+	}
 	bp := &backupDataProcessor{
-		flowCtx: flowCtx,
-		spec:    spec,
-		output:  output,
-		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+		flowCtx:   flowCtx,
+		spec:      spec,
+		output:    output,
+		progCh:    make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+		backupMem: newMemoryAccumulator(memMonitor),
 	}
 	if err := bp.Init(bp, post, backupOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -159,7 +169,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		TaskName: "backup-worker",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
+		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.backupMem)
 		cancel()
 		close(bp.progCh)
 	}); err != nil {
@@ -195,6 +205,9 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	bp.ProcessorBase.InternalClose()
+	if bp.backupMem != nil {
+		bp.backupMem.close(bp.Ctx)
+	}
 }
 
 // ConsumerClosed is part of the RowSource interface. We have to override the
@@ -226,6 +239,7 @@ func runBackupProcessor(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	backupMem *memoryAccumulator,
 ) error {
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
@@ -524,7 +538,7 @@ func runBackupProcessor(
 			return err
 		}
 
-		sink := &sstSink{conf: sinkConf, dest: storage}
+		sink := &sstSink{conf: sinkConf, dest: storage, backupMem: backupMem}
 
 		defer func() {
 			err := sink.Close()
@@ -578,6 +592,8 @@ type sstSink struct {
 		sizeFlushes int
 		spanGrows   int
 	}
+
+	backupMem *memoryAccumulator
 }
 
 func (s *sstSink) Close() error {
@@ -612,16 +628,19 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 		if drain < 1 {
 			drain = 1
 		}
+		var drainedByteSize int
 		for i := range s.queue[:drain] {
 			if err := s.write(ctx, s.queue[i]); err != nil {
 				return err
 			}
 			s.queueSize -= len(s.queue[i].sst)
+			drainedByteSize += len(s.queue[i].sst)
 		}
 
 		// Shift down the remainder of the queue and slice off the tail.
 		copy(s.queue, s.queue[drain:])
 		s.queue = s.queue[:len(s.queue)-drain]
+		s.backupMem.release(int64(drainedByteSize))
 	}
 	return nil
 }
@@ -694,6 +713,12 @@ func (s *sstSink) open(ctx context.Context) error {
 	}
 	s.out = w
 	s.sst = storage.MakeBackupSSTWriter(s.out)
+
+	// Reserve the queue that will be used to buffer writes before flushing.
+	if err := s.backupMem.request(ctx, smallFileBuffer.Get(s.conf.settings)); err != nil {
+		return errors.Wrap(err, "failed to reserve memory for sstSink queue")
+	}
+
 	return nil
 }
 

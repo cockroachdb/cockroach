@@ -17,6 +17,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -74,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -9011,4 +9013,47 @@ CREATE SCHEMA db.s;
 `)
 
 	sqlDB.Exec(t, `BACKUP DATABASE db TO 'nodelocal://0/test/2'`)
+}
+
+func TestBackupMemMonitorSSTSinkQueueSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	memoryMonitor := mon.NewMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
+	)
+	ctx := context.Background()
+	byteLimit := MultiNode * (14 << 20) // 14 MiB
+	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(int64(byteLimit)))
+	defer memoryMonitor.Stop(ctx)
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				BackupMemMonitor: memoryMonitor,
+			}},
+	}
+	params.ServerArgs.Knobs = knobs
+
+	const numAccounts = 100
+
+	_, _, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, MultiNode, numAccounts,
+		InitManualReplication, params)
+	defer cleanup()
+
+	// Run a backup and expect the Grow() for the sstSink to return a memory error
+	// since the default queue byte size is 16MiB.
+	sqlDB.ExpectErr(t, "failed to reserve memory for sstSink queue", `BACKUP INTO 'nodelocal://0/foo'`)
+
+	// Reduce the queue byte size cluster setting.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '5MiB'`)
+
+	// Now the backup should succeed because it is below the `byteLimit`.
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://0/bar'`)
 }
