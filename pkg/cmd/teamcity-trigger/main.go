@@ -116,7 +116,7 @@ func runTC(queueBuild func(string, map[string]string)) {
 		}
 
 		if bazel.BuiltWithBazel() {
-			opts["env.TESTTIMEOUTSECS"] = testTimeout.String()
+			opts["env.TESTTIMEOUTSECS"] = fmt.Sprintf("%.0f", testTimeout.Seconds())
 		} else {
 			opts["env.TESTTIMEOUT"] = testTimeout.String()
 		}
