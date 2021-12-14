@@ -88,11 +88,9 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	tenantID := roachpb.MakeTenantID(details.TenantID)
-
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	err := ingest(resumeCtx, p, streamAddress, tenantID, details.StartTime, s.job.Progress(), s.job.ID())
+	err := ingest(resumeCtx, p, streamAddress, details.TenantID, details.StartTime, s.job.Progress(), s.job.ID())
 	if err != nil {
 		return err
 	}

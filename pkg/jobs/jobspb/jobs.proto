@@ -88,7 +88,10 @@ message StreamIngestionDetails {
   // The job will ingest events from StartTime onwards.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   
-  uint64 tenant_id = 5 [(gogoproto.customname) = "TenantID"];
+  reserved 5;
+  roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+
+  // NEXT ID: 7.
 }
 
 message StreamIngestionProgress {
