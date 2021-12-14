@@ -56,6 +56,8 @@ func (noopSyncCloser) Close() error {
 // are typically only ever iterated in their entirety.
 func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
+	// Don't need BlockPropertyCollectors for backups.
+	opts.BlockPropertyCollectors = nil
 	opts.TableFormat = sstable.TableFormatRocksDBv2
 
 	// Disable bloom filters since we only ever iterate backups.
@@ -75,6 +77,10 @@ func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 // format set to RocksDBv2.
 func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
+	// TODO(sumeer): we should use BlockPropertyCollectors here if the cluster
+	// version permits (which is also reflected in the store's roachpb.Version
+	// and pebble.FormatMajorVersion).
+	opts.BlockPropertyCollectors = nil
 	opts.TableFormat = sstable.TableFormatRocksDBv2
 	opts.MergerName = "nullptr"
 	sst := sstable.NewWriter(f, opts)
