@@ -40,12 +40,33 @@ type splitAndScatterer interface {
 	scatter(ctx context.Context, codec keys.SQLCodec, scatterKey roachpb.Key) (roachpb.NodeID, error)
 }
 
-type noopSplitAndScatterer struct{}
+type noopSplitAndScatterer struct {
+	scatterNode roachpb.NodeID
+	kr          *KeyRewriter
+}
 
 var _ splitAndScatterer = noopSplitAndScatterer{}
 
 // split implements splitAndScatterer.
-func (n noopSplitAndScatterer) split(_ context.Context, _ keys.SQLCodec, _ roachpb.Key) error {
+func (n noopSplitAndScatterer) split(
+	ctx context.Context, codec keys.SQLCodec, splitKey roachpb.Key,
+) error {
+	if n.kr == nil {
+		return errors.AssertionFailedf("KeyRewriter was not set when expected to be")
+	}
+	/*if s.db == nil {
+		return errors.AssertionFailedf("split and scatterer's database was not set when expected")
+	}*/
+
+	newSplitKey, err := rewriteBackupSpanKey(codec, n.kr, splitKey)
+	if err != nil {
+		return err
+	}
+	if splitAt, err := keys.EnsureSafeSplitKey(newSplitKey); err != nil {
+		// Ignore the error, not all keys are table keys.
+	} else if len(splitAt) != 0 {
+		newSplitKey = splitAt
+	}
 	return nil
 }
 
@@ -53,7 +74,7 @@ func (n noopSplitAndScatterer) split(_ context.Context, _ keys.SQLCodec, _ roach
 func (n noopSplitAndScatterer) scatter(
 	_ context.Context, _ keys.SQLCodec, _ roachpb.Key,
 ) (roachpb.NodeID, error) {
-	return 0, nil
+	return n.scatterNode, nil
 }
 
 // dbSplitAndScatter is the production implementation of this processor's
@@ -220,6 +241,10 @@ func newSplitAndScatterProcessor(
 	}
 
 	scatterer := makeSplitAndScatterer(db, kr)
+	/*if spec.DryRun {
+		nodeID, _ := flowCtx.NodeID.OptionalNodeID()
+		scatterer = noopSplitAndScatterer{nodeID, kr}
+	}*/
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
 		spec:      spec,

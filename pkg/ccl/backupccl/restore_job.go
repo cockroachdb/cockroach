@@ -257,7 +257,11 @@ func restore(
 		// There are no files to restore.
 		return emptyRowCount, nil
 	}
-
+	if details.DryRun == "short" {
+		return emptyRowCount, shortDryRunValidation(restoreCtx,
+			execCtx.ExecCfg().DistSQLSrv.ExternalStorage,
+			importSpans)
+	}
 	for i := range importSpans {
 		importSpans[i].ProgressIdx = int64(i)
 	}
@@ -364,6 +368,7 @@ func restore(
 			dataToRestore.getTenantRekeys(),
 			endTime,
 			progCh,
+			details.DryRun,
 		)
 	}
 	tasks = append(tasks, runRestore)
@@ -428,6 +433,56 @@ func loadBackupSQLDescs(
 	}
 
 	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
+}
+
+// shortDryRunValidation checks that every SST file is in its expected
+// directory.
+func shortDryRunValidation(
+	ctx context.Context,
+	makeCloudStorage cloud.ExternalStorageFactory,
+	spans []execinfrapb.RestoreSpanEntry,
+) error {
+	checkedFiles := make(map[string]bool)
+	stores := make(map[roachpb.ExternalStorage]cloud.ExternalStorage)
+
+	defer func() {
+		for _, store := range stores {
+			if err := store.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed %v", err)
+			}
+		}
+	}()
+
+	for _, span := range spans {
+		for _, file := range span.Files {
+			if _, skip := checkedFiles[file.Path]; !skip {
+				var (
+					store cloud.ExternalStorage
+					ok    bool
+					err   error
+				)
+				if store, ok = stores[file.Dir]; !ok {
+					store, err = makeCloudStorage(ctx, file.Dir)
+					if err != nil {
+						return err
+					}
+					stores[file.Dir] = store
+				}
+				f, err := store.ReadFile(ctx, file.Path)
+
+				if closeErr := f.Close(ctx); closeErr != nil {
+					log.Warningf(ctx, "close file failed %v", closeErr)
+				}
+				if err != nil {
+					return err
+				}
+				checkedFiles[file.Path] = true
+			}
+		}
+		return nil
+	}
+
+	return nil
 }
 
 // restoreResumer should only store a reference to the job it's running. State
@@ -830,6 +885,8 @@ func createImportingDescriptors(
 	}
 
 	if !details.PrepareCompleted {
+
+		// Create new descriptors for the data we're restoring.
 		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
@@ -1192,8 +1249,8 @@ func remapPublicSchemas(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
 	if err := r.doResume(ctx, execCtx); err != nil {
-		details := r.job.Details().(jobspb.RestoreDetails)
 		if details.DebugPauseOn == "error" {
 			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
 			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
@@ -1204,6 +1261,14 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		}
 		return err
 	}
+	if details.DryRun != "" {
+		// Revert test cluster to state before dry run.
+		err := r.OnFailOrCancel(ctx, execCtx)
+		if err != nil {
+			return err
+		}
+	}
+	emitRestoreJobEvent(ctx, execCtx.(sql.JobExecContext), jobs.StatusSucceeded, r.job)
 
 	return nil
 }
@@ -1320,7 +1385,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
 			err.Error())
 	}
-
 	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
@@ -1330,6 +1394,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// public.
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
+
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
 			return r.publishDescriptors(ctx, txn, p.ExecCfg(), p.User(), descsCol, details, nil)
 		}
@@ -1343,7 +1408,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
-		emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 		return nil
 	}
 
@@ -1384,7 +1448,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 		resTotal.Add(res)
 
-		if details.DescriptorCoverage == tree.AllDescriptors {
+		if details.DescriptorCoverage == tree.AllDescriptors && details.DryRun == "nil" {
 			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, preData.systemTables); err != nil {
 				return err
 			}
@@ -1449,7 +1513,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	details = r.job.Details().(jobspb.RestoreDetails)
 	p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
 
-	if details.DescriptorCoverage == tree.AllDescriptors {
+	if details.DescriptorCoverage == tree.AllDescriptors && details.DryRun == "" {
 		// We restore the system tables from the main data bundle so late because it
 		// includes the jobs that are being restored. As soon as we restore these
 		// jobs, they become accessible to the user, and may start executing. We
@@ -1483,9 +1547,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	r.notifyStatsRefresherOfNewTables()
 
 	r.restoreStats = resTotal
-
-	// Emit an event now that the restore job has completed.
-	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 
 	// Collect telemetry.
 	{
@@ -1920,17 +1981,26 @@ func emitRestoreJobEvent(
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
+//
+// During a Dry Run Restore, OnFailOrCancel ensures that no changes to on disk
+// data persists.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
-	// Emit to the event log that the job has started reverting.
-	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
-	telemetry.Count("restore.total.failed")
-	telemetry.CountBucketed("restore.duration-sec.failed",
-		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
+	// NB: a dry run restore job will never emit job.StatusReverting or
+	// jobs.StatusFailed job events, even if the dry run failed during execution.
+	trueFailOrCancel := r.job.Details().(jobspb.RestoreDetails).DryRun != ""
+
+	if trueFailOrCancel {
+		// Emit to the event log that the job has started reverting.
+		emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
+
+		telemetry.Count("restore.total.failed")
+		telemetry.CountBucketed("restore.duration-sec.failed",
+			int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
+	}
 
 	details := r.job.Details().(jobspb.RestoreDetails)
-
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	if err := sql.DescsTxn(ctx, execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
@@ -1975,8 +2045,10 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		}
 	}
 
-	// Emit to the event log that the job has completed reverting.
-	emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	if trueFailOrCancel {
+		// Emit to the event log that the job has completed reverting.
+		emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	}
 	return nil
 }
 

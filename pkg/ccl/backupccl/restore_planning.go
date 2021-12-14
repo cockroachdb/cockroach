@@ -403,6 +403,11 @@ func allocateDescriptorRewrites(
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
 			dbID, err := col.Direct().LookupDatabaseID(ctx, txn, name)
+			/*if opts.DryRun && (name == "defaultdb" || name == "postgres") && descriptorCoverage== tree.AllDescriptors {
+				// During a full cluster dry run, we do not delete the default user databases, so we
+				// shouldn't fail when we find these db's in the target cluster.
+				continue
+			}*/
 			if err != nil {
 				return err
 			}
@@ -938,6 +943,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequences:      opts.SkipMissingSequences,
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
+		DryRun:                    opts.DryRun,
 		Detached:                  opts.Detached,
 	}
 
@@ -1657,6 +1663,21 @@ func doRestorePlan(
 			return errors.Newf("%s cannot be set with the value %s", restoreOptDebugPauseOn, debugPauseOn)
 		}
 	}
+	var dryRun string
+	if restoreStmt.Options.DryRun != nil {
+		dryRunFn, err := p.TypeAsString(ctx, restoreStmt.Options.DryRun, "RESTORE")
+		if err != nil {
+			return err
+		}
+
+		dryRun, err = dryRunFn()
+		if err != nil {
+			return err
+		}
+		if dryRun != "short" && dryRun != "long" {
+			return errors.New("dry_run can only get set to 'short' or 'long'")
+		}
+	}
 
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
@@ -1773,6 +1794,7 @@ func doRestorePlan(
 			DebugPauseOn:       debugPauseOn,
 			RestoreSystemUsers: restoreStmt.SystemUsers,
 			PreRewriteTenantId: oldTenantID,
+			DryRun:             dryRun,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

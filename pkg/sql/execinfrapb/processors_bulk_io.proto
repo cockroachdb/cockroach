@@ -270,7 +270,9 @@ message RestoreDataSpec {
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
-  // NEXT ID: 6.
+  optional string dry_run = 6 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 7.
 }
 
 message SplitAndScatterSpec {
@@ -281,6 +283,7 @@ message SplitAndScatterSpec {
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
   repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
   repeated TenantRekey tenant_rekeys = 3 [(gogoproto.nullable) = false];
+  optional string dry_run = 4 [(gogoproto.nullable) = false];
 }
 
 // ExporterSpec is the specification for a processor that consumes rows and
