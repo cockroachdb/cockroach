@@ -16,28 +16,61 @@ import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
 import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
 
+import * as H from "history";
+const history = H.createHashHistory();
+
 const withLoadingIndicator: DatabasesPageProps = {
   loading: true,
   loaded: false,
   databases: [],
+  sortSetting: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  onSortingChange: () => {},
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
 };
 
 const withoutData: DatabasesPageProps = {
   loading: false,
   loaded: true,
   databases: [],
+  sortSetting: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  onSortingChange: () => {},
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
 };
 
 const withData: DatabasesPageProps = {
   loading: false,
   loaded: true,
   showNodeRegionsColumn: true,
+  sortSetting: {
+    ascending: false,
+    columnTitle: "name",
+  },
   databases: _.map(Array(42), _item => {
     return {
       loading: false,
@@ -51,10 +84,18 @@ const withData: DatabasesPageProps = {
         "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
     };
   }),
-
+  onSortingChange: () => {},
   refreshDatabases: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableStats: () => {},
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
 };
 
 storiesOf("Databases Page", module)
