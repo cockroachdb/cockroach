@@ -286,35 +286,35 @@ func generateSplitCACerts(certsDir string) error {
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
 		testKeySize, time.Hour*96, true, true,
 	); err != nil {
-		return errors.Errorf("could not generate client CA pair: %v", err)
+		return errors.Wrap(err, "could not generate client CA pair")
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
 		testKeySize, time.Hour*48, true, security.NodeUserName(), false,
 	); err != nil {
-		return errors.Errorf("could not generate Client pair: %v", err)
+		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
 		testKeySize, time.Hour*48, true, security.RootUserName(), false,
 	); err != nil {
-		return errors.Errorf("could not generate Client pair: %v", err)
+		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateUICAPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
 		testKeySize, time.Hour*96, true, true,
 	); err != nil {
-		return errors.Errorf("could not generate UI CA pair: %v", err)
+		return errors.Wrap(err, "could not generate UI CA pair")
 	}
 
 	if err := security.CreateUIPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
 		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
 	); err != nil {
-		return errors.Errorf("could not generate UI pair: %v", err)
+		return errors.Wrap(err, "could not generate UI pair")
 	}
 
 	return nil

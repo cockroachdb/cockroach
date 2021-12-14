@@ -436,14 +436,14 @@ func (n *Node) start(
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
 	if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+		return errors.Wrapf(err, "couldn't gossip descriptor for node %d", n.Descriptor.NodeID)
 	}
 
 	// Create stores from the engines that were already initialized.
 	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
-			return errors.Errorf("failed to start store: %s", err)
+			return errors.Wrap(err, "failed to start store")
 		}
 
 		n.addStore(ctx, s)
@@ -618,7 +618,7 @@ func (n *Node) initializeAdditionalStores(
 		storeIDAlloc := int64(len(engines))
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
 		if err != nil {
-			return errors.Errorf("error allocating store ids: %s", err)
+			return errors.Wrap(err, "error allocating store ids")
 		}
 
 		sIdent := roachpb.StoreIdent{

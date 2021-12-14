@@ -1643,7 +1643,7 @@ func (s *statusServer) nodeStatus(
 
 	var nodeStatus statuspb.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
-		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
+		err = errors.Wrapf(err, "could not unmarshal NodeStatus from %s", key)
 		log.Errorf(ctx, "%v", err)
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
@@ -2749,7 +2749,7 @@ func marshalToJSON(value interface{}) ([]byte, error) {
 	}
 	body, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		return nil, errors.Errorf("unable to marshal %+v to json: %s", value, err)
+		return nil, errors.Wrapf(err, "unable to marshal %+v to json", value)
 	}
 	return body, nil
 }
