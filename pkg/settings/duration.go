@@ -32,9 +32,9 @@ type DurationSettingWithExplicitUnit struct {
 	DurationSetting
 }
 
-var _ extendedSetting = &DurationSetting{}
+var _ internalSetting = &DurationSetting{}
 
-var _ extendedSetting = &DurationSettingWithExplicitUnit{}
+var _ internalSetting = &DurationSettingWithExplicitUnit{}
 
 // ErrorHint returns a hint message to be displayed on error to the user.
 func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {

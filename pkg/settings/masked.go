@@ -13,13 +13,13 @@ package settings
 // MaskedSetting is a pseudo-variable constructed on-the-fly by Lookup
 // when the actual setting is non-reportable.
 type MaskedSetting struct {
-	setting WritableSetting
+	setting NonMaskedSetting
 }
 
 var _ Setting = &MaskedSetting{}
 
 // UnderlyingSetting retrieves the actual setting object.
-func (s *MaskedSetting) UnderlyingSetting() WritableSetting {
+func (s *MaskedSetting) UnderlyingSetting() NonMaskedSetting {
 	return s.setting
 }
 
@@ -51,4 +51,15 @@ func (s *MaskedSetting) Typ() string {
 // SystemOnly returns the underlying setting's SystemOnly.
 func (s *MaskedSetting) SystemOnly() bool {
 	return s.setting.SystemOnly()
+}
+
+// TestingIsReportable is used in testing for reportability.
+func TestingIsReportable(s Setting) bool {
+	if _, ok := s.(*MaskedSetting); ok {
+		return false
+	}
+	if e, ok := s.(internalSetting); ok {
+		return e.isReportable()
+	}
+	return true
 }

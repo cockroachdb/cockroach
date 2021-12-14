@@ -121,12 +121,12 @@ func (v *VersionSetting) String(sv *Values) string {
 	return cv.String()
 }
 
-// Encoded is part of the WritableSetting interface.
+// Encoded is part of the NonMaskedSetting interface.
 func (v *VersionSetting) Encoded(sv *Values) string {
 	return v.Get(sv)
 }
 
-// EncodedDefault is part of the WritableSetting interface.
+// EncodedDefault is part of the NonMaskedSetting interface.
 func (v *VersionSetting) EncodedDefault() string {
 	return "unsupported"
 }

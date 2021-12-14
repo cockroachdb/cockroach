@@ -90,7 +90,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 					log.Safe(k))
 				return
 			}
-			ws, ok := s.(settings.WritableSetting)
+			ws, ok := s.(settings.NonMaskedSetting)
 			if !ok {
 				log.Fatalf(ctx, "expected writable setting, got %T", s)
 			}
