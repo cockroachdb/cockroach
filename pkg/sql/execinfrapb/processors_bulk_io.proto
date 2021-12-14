@@ -244,6 +244,7 @@ message RestoreDataSpec {
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
+  optional bool dry_run = 5 [(gogoproto.nullable) = false];
 }
 
 message SplitAndScatterSpec {
@@ -253,6 +254,7 @@ message SplitAndScatterSpec {
 
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
   repeated TableRekey rekeys = 2 [(gogoproto.nullable) = false];
+  optional bool dry_run = 3 [(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently

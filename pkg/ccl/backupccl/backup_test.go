@@ -6069,6 +6069,7 @@ func TestBackupRestoreEmptyDB(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE empty`)
 	sqlDB.Exec(t, `BACKUP DATABASE empty TO $1`, LocalFoo)
 	sqlDB.Exec(t, `DROP DATABASE empty`)
+	sqlDB.Exec(t, `RESTORE DATABASE empty FROM $1 WITH dry_run`, LocalFoo)
 	sqlDB.Exec(t, `RESTORE DATABASE empty FROM $1`, LocalFoo)
 	sqlDB.CheckQueryResults(t, `USE empty; SHOW TABLES;`, [][]string{})
 }
@@ -9156,5 +9157,50 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE fkdb")
 		sqlDB.Exec(t, "DROP DATABASE trad_fkdb;")
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
+	}
+}
+
+// TestDryRestore tests that table, database and cluster level dry run restores
+// do not alter the descriptors in the target cluster. This ensures that the dry run
+// did not write any new data to disk.
+func TestDryRunRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts,
+		InitManualReplication)
+	defer cleanupFn()
+	dest := "nodelocal://0/a"
+	sqlDB.Exec(t, `
+		CREATE DATABASE fkdb; 
+		CREATE TABLE fkdb.fk (ind INT)`)
+
+	for i := 0; i < 10; i++ {
+		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
+	}
+
+	sqlDB.Exec(t, `BACKUP INTO $1`, dest)
+	sqlDB.Exec(t, `ALTER TABLE fkdb.fk RENAME TO fkdb.fk_original`)
+
+	descriptorsQuery := `SELECT * FROM system.descriptor`
+	descriptors := sqlDB.QueryStr(t, descriptorsQuery)
+
+	{
+		sqlDB.Exec(t, `RESTORE DATABASE fkdb FROM LATEST IN $1 WITH dry_run, new_db_name = fkdb2`, dest)
+		sqlDB.CheckQueryResults(t, descriptorsQuery, descriptors)
+
+		sqlDB.Exec(t, `RESTORE TABLE fkdb.fk FROM LATEST IN $1 WITH dry_run`, dest)
+		sqlDB.CheckQueryResults(t, descriptorsQuery, descriptors)
+	}
+
+	{
+		_, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, MultiNode, dir, InitManualReplication, base.TestClusterArgs{})
+		defer cleanupRestore()
+		descriptorsCluster := sqlDBRestore.QueryStr(t, descriptorsQuery)
+		sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1 WITH dry_run`, dest)
+		descriptorsClusterPost := sqlDBRestore.QueryStr(t, descriptorsQuery)
+		fmt.Println(descriptorsClusterPost)
+		sqlDBRestore.CheckQueryResults(t, descriptorsQuery, descriptorsCluster)
 	}
 }

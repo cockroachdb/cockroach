@@ -764,6 +764,7 @@ func restore(
 			dataToRestore.getRekeys(),
 			endTime,
 			progCh,
+			details.DryRun,
 		)
 	}
 	tasks = append(tasks, runRestore)
@@ -1237,7 +1238,9 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
-	if !details.PrepareCompleted {
+	if !details.PrepareCompleted && !details.DryRun {
+
+		// Create new descriptors for the data we're restoring.
 		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
@@ -1597,8 +1600,8 @@ func remapPublicSchemas(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
 	if err := r.doResume(ctx, execCtx); err != nil {
-		details := r.job.Details().(jobspb.RestoreDetails)
 		if details.DebugPauseOn == "error" {
 			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
 			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
@@ -1608,6 +1611,10 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 				restoreOptDebugPauseOn, details.DebugPauseOn))
 		}
 		return err
+	}
+	if details.DryRun {
+		r.OnFailOrCancel(ctx, execCtx)
+		emitRestoreJobEvent(ctx, execCtx.(sql.JobExecContext), jobs.StatusSucceeded, r.job)
 	}
 
 	return nil
@@ -1692,7 +1699,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
 			err.Error())
 	}
-
 	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
@@ -1702,6 +1708,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// public.
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
+
+		if details.DryRun {
+			return nil
+		}
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
 			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
 		}
@@ -1749,6 +1759,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 
+		if details.DryRun {
+			return nil
+		}
+
 		resTotal.add(res)
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
@@ -1782,6 +1796,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		)
 		if err != nil {
 			return err
+		}
+
+		if details.DryRun {
+			return nil
 		}
 
 		resTotal.add(res)
@@ -2023,6 +2041,9 @@ func (r *restoreResumer) publishDescriptors(
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,
 ) (err error) {
+	if details.DryRun {
+		return errors.AssertionFailedf("Cannot publish descriptors during a dry run restore")
+	}
 	if details.DescriptorsPublished {
 		return nil
 	}
@@ -2189,14 +2210,21 @@ func emitRestoreJobEvent(
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
+//
+// During a Dry Run Restore, OnFailOrCancel ensures that no changes to on disk
+// data persists.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
-	// Emit to the event log that the job has started reverting.
-	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
+	trueFailOrCancel := !r.job.Details().(jobspb.RestoreDetails).DryRun
 
-	telemetry.Count("restore.total.failed")
-	telemetry.CountBucketed("restore.duration-sec.failed",
-		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
+	if trueFailOrCancel {
+		// Emit to the event log that the job has started reverting.
+		emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
+
+		telemetry.Count("restore.total.failed")
+		telemetry.CountBucketed("restore.duration-sec.failed",
+			int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
+	}
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -2244,8 +2272,10 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		}
 	}
 
-	// Emit to the event log that the job has completed reverting.
-	emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	if trueFailOrCancel {
+		// Emit to the event log that the job has completed reverting.
+		emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	}
 	return nil
 }
 
