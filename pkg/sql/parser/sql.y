@@ -1782,10 +1782,10 @@ alter_database_primary_region_stmt:
 //
 // Commands:
 //   ALTER RANGE ... CONFIGURE ZONE <zoneconfig>
-//   ALTER RANGE   RELOCATE { VOTERS | NONVOTERS } FROM <store_id> TO <store_id> FOR <selectclause>
-//   ALTER RANGE r RELOCATE { VOTERS | NONVOTERS } FROM <store_id> TO <store_id>
-//   ALTER RANGE   RELOCATE LEASE                                  TO <store_id> FOR <selectclause>
-//   ALTER RANGE r RELOCATE LEASE                                  TO <store_id>
+//   ALTER RANGE   RELOCATE { VOTERS | NONVOTERS } TO <store_id> FROM <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE { VOTERS | NONVOTERS } TO <store_id> FROM <store_id>
+//   ALTER RANGE   RELOCATE LEASE                  TO <store_id>                 FOR <selectclause>
+//   ALTER RANGE r RELOCATE LEASE                  TO <store_id>
 //
 // Zone configurations:
 //   DISCARD
@@ -1968,41 +1968,43 @@ alter_zone_range_stmt:
   }
 
 alter_range_relocate_stmt:
-  ALTER RANGE relocate_kw LEASE TO iconst64 FOR select_stmt
+  ALTER RANGE relocate_kw LEASE TO a_expr FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $8.slct(),
-      ToStoreID: $6.int64(),
+      FromStoreID: tree.DNull,
+      ToStoreID: $6.expr(),
       SubjectReplicas: tree.RelocateLease,
     }
   }
-| ALTER RANGE iconst64 relocate_kw LEASE TO iconst64
+| ALTER RANGE iconst64 relocate_kw LEASE TO a_expr
     {
       $$.val = &tree.RelocateRange{
         Rows: &tree.Select{
           Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
         },
-        ToStoreID: $7.int64(),
+        FromStoreID: tree.DNull,
+        ToStoreID: $7.expr(),
         SubjectReplicas: tree.RelocateLease,
       }
     }
-| ALTER RANGE relocate_kw relocate_subject_nonlease FROM iconst64 TO iconst64 FOR select_stmt
+| ALTER RANGE relocate_kw relocate_subject_nonlease TO a_expr FROM a_expr FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $10.slct(),
-      FromStoreID: $6.int64(),
-      ToStoreID: $8.int64(),
+      FromStoreID: $8.expr(),
+      ToStoreID: $6.expr(),
       SubjectReplicas: $4.relocateSubject(),
     }
   }
-| ALTER RANGE iconst64 relocate_kw relocate_subject_nonlease FROM iconst64 TO iconst64
+| ALTER RANGE iconst64 relocate_kw relocate_subject_nonlease TO a_expr FROM a_expr
   {
     $$.val = &tree.RelocateRange{
       Rows: &tree.Select{
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
       },
-      FromStoreID: $7.int64(),
-      ToStoreID: $9.int64(),
+      FromStoreID: $9.expr(),
+      ToStoreID: $7.expr(),
       SubjectReplicas: $5.relocateSubject(),
     }
   }

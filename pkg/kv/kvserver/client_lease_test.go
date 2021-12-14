@@ -969,7 +969,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	// We start with having the range under test on (1,2,3).
 	db := tc.ServerConn(0)
 	// Move 2 -> 4.
-	_, err := db.Exec("ALTER RANGE " + rhsDesc.RangeID.String() + " RELOCATE FROM 2 TO 4")
+	_, err := db.Exec("ALTER RANGE " + rhsDesc.RangeID.String() + " RELOCATE TO 4 FROM 2")
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 2, 3)...))
 	// Move lease 1 -> 4.
@@ -988,7 +988,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	})
 
 	// Move lease 3 -> 5.
-	_, err = db.Exec("ALTER RANGE RELOCATE FROM 3 TO 5 FOR (SELECT range_id from crdb_internal.ranges where range_id = " + rhsDesc.RangeID.String() + ")")
+	_, err = db.Exec("ALTER RANGE RELOCATE TO 5 FROM 3 FOR (SELECT range_id from crdb_internal.ranges where range_id = " + rhsDesc.RangeID.String() + ")")
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
 }

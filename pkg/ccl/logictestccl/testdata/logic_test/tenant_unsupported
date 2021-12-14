@@ -73,10 +73,10 @@ statement error operation is unsupported in multi-tenancy mode
 ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
 
 statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE 1 RELOCATE FROM 1 TO 2
+ALTER RANGE 1 RELOCATE TO 2 FROM 1
 
 statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
+ALTER RANGE RELOCATE TO 2 FROM 1 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
 
 # Can not query inflight traces on sql pods
 
