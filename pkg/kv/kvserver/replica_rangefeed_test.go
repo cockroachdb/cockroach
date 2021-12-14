@@ -672,7 +672,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1))
-			return errors.Errorf("not raft follower: %+v, transferred lease: %v", raftStatus, err)
+			return errors.Wrapf(err, "not raft follower: %+v, transferred lease", raftStatus)
 		})
 
 		// Partition the replica from the rest of its range.

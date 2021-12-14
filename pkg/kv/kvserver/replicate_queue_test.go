@@ -917,7 +917,7 @@ func queryRangeLog(
 			}
 			var info kvserverpb.RangeLogEvent_Info
 			if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
-				return errors.Errorf("error unmarshaling info string %q: %s", infoStr, err)
+				return errors.Wrapf(err, "error unmarshaling info string %q", infoStr)
 			}
 			events = append(events, info)
 		}

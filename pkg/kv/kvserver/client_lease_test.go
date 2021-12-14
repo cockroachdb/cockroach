@@ -666,6 +666,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			if err == nil {
 				wait(timetoDie.Nanoseconds())
 			}
+			// nolint:errwrap
 			return errors.Errorf("expected server 2 to be dead, instead err=%v, dead=%v", err, dead)
 		}
 		return nil
