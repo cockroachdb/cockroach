@@ -57,7 +57,7 @@ type FlowScheduler struct {
 		//
 		// The memory usage of this map is not accounted for because it is
 		// limited by maxRunningFlows in size.
-		runningFlows map[execinfrapb.FlowID]time.Time
+		runningFlows map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo
 	}
 
 	atomics struct {
@@ -95,7 +95,7 @@ func NewFlowScheduler(
 	}
 	fs.mu.queue = list.New()
 	maxRunningFlows := settingMaxRunningFlows.Get(&settings.SV)
-	fs.mu.runningFlows = make(map[execinfrapb.FlowID]time.Time, maxRunningFlows)
+	fs.mu.runningFlows = make(map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo, maxRunningFlows)
 	fs.atomics.maxRunningFlows = int32(maxRunningFlows)
 	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
@@ -135,7 +135,11 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 	if !locked {
 		fs.mu.Lock()
 	}
-	fs.mu.runningFlows[f.GetID()] = timeutil.Now()
+	fs.mu.runningFlows[f.GetID()] = execinfrapb.DistSQLRemoteFlowInfo{
+		FlowID:       f.GetID(),
+		Timestamp:    timeutil.Now(),
+		StatementSQL: f.StatementSQL(),
+	}
 	if !locked {
 		fs.mu.Unlock()
 	}
@@ -309,27 +313,25 @@ func (fs *FlowScheduler) Start() {
 // "local" flows from the perspective of the gateway node of the query because
 // such flows don't go through the flow scheduler.
 func (fs *FlowScheduler) Serialize() (
-	running []execinfrapb.FlowID,
-	runningSince []time.Time,
-	queued []execinfrapb.FlowID,
-	queuedSince []time.Time,
+	running []execinfrapb.DistSQLRemoteFlowInfo,
+	queued []execinfrapb.DistSQLRemoteFlowInfo,
 ) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	running = make([]execinfrapb.FlowID, 0, len(fs.mu.runningFlows))
-	runningSince = make([]time.Time, 0, len(fs.mu.runningFlows))
-	for f, ts := range fs.mu.runningFlows {
-		running = append(running, f)
-		runningSince = append(runningSince, ts)
+	running = make([]execinfrapb.DistSQLRemoteFlowInfo, 0, len(fs.mu.runningFlows))
+	for _, info := range fs.mu.runningFlows {
+		running = append(running, info)
 	}
 	if fs.mu.queue.Len() > 0 {
-		queued = make([]execinfrapb.FlowID, 0, fs.mu.queue.Len())
-		queuedSince = make([]time.Time, 0, fs.mu.queue.Len())
+		queued = make([]execinfrapb.DistSQLRemoteFlowInfo, 0, fs.mu.queue.Len())
 		for e := fs.mu.queue.Front(); e != nil; e = e.Next() {
 			f := e.Value.(*flowWithCtx)
-			queued = append(queued, f.flow.GetID())
-			queuedSince = append(queuedSince, f.enqueueTime)
+			queued = append(queued, execinfrapb.DistSQLRemoteFlowInfo{
+				FlowID:       f.flow.GetID(),
+				Timestamp:    f.enqueueTime,
+				StatementSQL: f.flow.StatementSQL(),
+			})
 		}
 	}
-	return running, runningSince, queued, queuedSince
+	return running, queued
 }

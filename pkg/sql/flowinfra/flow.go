@@ -104,6 +104,11 @@ type Flow interface {
 	// IsVectorized returns whether this flow will run with vectorized execution.
 	IsVectorized() bool
 
+	// StatementSQL is the SQL statement for which this flow is executing. It is
+	// populated on a best effort basis (only available for user-issued queries
+	// that are also not like BulkIO/CDC related).
+	StatementSQL() string
+
 	// GetFlowCtx returns the flow context of this flow.
 	GetFlowCtx() *execinfra.FlowCtx
 
@@ -163,6 +168,8 @@ type FlowBase struct {
 
 	onFlowCleanup func()
 
+	statementSQL string
+
 	doneFn func()
 
 	status flowStatus
@@ -215,6 +222,7 @@ func NewFlowBase(
 	syncFlowConsumer execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	onFlowCleanup func(),
+	statementSQL string,
 ) *FlowBase {
 	base := &FlowBase{
 		FlowCtx:          flowCtx,
@@ -222,9 +230,15 @@ func NewFlowBase(
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
 		onFlowCleanup:    onFlowCleanup,
+		statementSQL:     statementSQL,
 	}
 	base.status = FlowNotStarted
 	return base
+}
+
+// StatementSQL is part of the Flow interface.
+func (f *FlowBase) StatementSQL() string {
+	return f.statementSQL
 }
 
 // GetFlowCtx is part of the Flow interface.
