@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
+	proto "github.com/gogo/protobuf/proto"
 )
 
 // ClientVisibleRetryError is to be implemented by errors visible by
@@ -1311,3 +1312,43 @@ func (e *MinTimestampBoundUnsatisfiableError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
+
+func NewRefreshFailedError(
+	reason RefreshFailedError_Reason, key Key, ts hlc.Timestamp,
+) *RefreshFailedError {
+	return &RefreshFailedError{
+		Reason:    reason,
+		Key:       key,
+		Timestamp: ts,
+	}
+}
+
+func (e RefreshFailedError) Error() string {
+	var reason string
+	switch e.Reason {
+	case RefreshFailedError_REASON_KEY:
+		reason = "key"
+	case RefreshFailedError_REASON_INTENT:
+		reason = "intent"
+	}
+	return fmt.Sprintf("encountered recently written %s %s @%s", reason, e.Key, e.Timestamp)
+}
+
+func encodeRefreshFailedError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	details = err.(*RefreshFailedError)
+	return "", nil, details
+}
+
+func decodeRefreshFailedError(
+	_ context.Context, msgPrefix string, safeDetails []string, payload proto.Message,
+) error {
+	return payload.(*RefreshFailedError)
+}
+
+func init() {
+	pKey := errors.GetTypeKey(RefreshFailedError{})
+	errors.RegisterLeafEncoder(pKey, encodeRefreshFailedError)
+	errors.RegisterLeafDecoder(pKey, decodeRefreshFailedError)
+}
