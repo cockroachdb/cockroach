@@ -739,3 +739,15 @@ message RangeInfo {
   Lease lease = 2 [(gogoproto.nullable) = false];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
 }
+
+// A TenantID is a unique ID associated with a tenant in a multi-tenant cluster.
+// Each tenant is granted exclusive access to a portion of the keyspace and a
+// collection of SQL tables in that keyspace which comprise a "logical" cluster.
+//
+// It should be treated as opaque by users, and only created/accessed using the
+// public methods MakeTenantID, ToUint64, etc.
+message TenantID {
+  option (gogoproto.goproto_stringer) = false;
+  // InternalValue should not be set or accessed directly; use ToUint64.
+  uint64 id = 1 [(gogoproto.customname) = "InternalValue"];
+}
