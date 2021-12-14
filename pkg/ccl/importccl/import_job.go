@@ -1215,7 +1215,7 @@ func ingestWithRetry(
 
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, reloadErr := execCtx.ExecCfg().JobRegistry.LoadJob(ctx, job.ID())
+		reloadedJob, reloadErr := execCtx.ExecCfg().JobRegistry.LoadClaimedJob(ctx, job.ID())
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return res, ctx.Err()
