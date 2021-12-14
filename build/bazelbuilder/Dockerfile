@@ -92,3 +92,4 @@ RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/au
 
 ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home"]
 CMD ["/usr/bin/bash"]
+ENV CRDB_BAZEL_BUILDER=1
