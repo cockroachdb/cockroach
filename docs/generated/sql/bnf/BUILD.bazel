@@ -18,7 +18,6 @@ FILES = [
     "alter_index_stmt",
     "alter_partition_stmt",
     "alter_primary_key",
-    "alter_range_relocate_lease_stmt",
     "alter_range_relocate_stmt",
     "alter_range_stmt",
     "alter_rename_view_stmt",
