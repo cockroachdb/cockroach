@@ -50,6 +50,7 @@ func ReverseScan(
 		TargetBytes:            h.TargetBytes,
 		TargetBytesAvoidExcess: h.AllowEmpty || avoidExcess, // AllowEmpty takes precedence
 		AllowEmpty:             h.AllowEmpty,
+		WholeRowsOfSize:        h.WholeRowsOfSize,
 		FailOnMoreRecent:       args.KeyLocking != lock.None,
 		Reverse:                true,
 		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),

@@ -90,15 +90,20 @@ func BenchmarkMVCCScan_PebbleSQLRows(b *testing.B) {
 						b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 							for _, valueSize := range []int{8, 64, 512} {
 								b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
-										benchDataOptions: benchDataOptions{
-											numColumnFamilies: numColumnFamilies,
-											numVersions:       numVersions,
-											valueBytes:        valueSize,
-										},
-										numRows: numRows,
-										reverse: false,
-									})
+									for _, wholeRows := range []bool{false, true} {
+										b.Run(fmt.Sprintf("wholeRows=%t", wholeRows), func(b *testing.B) {
+											runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+												benchDataOptions: benchDataOptions{
+													numColumnFamilies: numColumnFamilies,
+													numVersions:       numVersions,
+													valueBytes:        valueSize,
+												},
+												numRows:   numRows,
+												reverse:   false,
+												wholeRows: wholeRows,
+											})
+										})
+									}
 								})
 							}
 						})
