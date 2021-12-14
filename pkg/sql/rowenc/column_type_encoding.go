@@ -98,6 +98,8 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *tree.DVoid:
+		return encoding.EncodeVoidAscendingOrDescending(b), nil
 	case *tree.DBox2D:
 		if dir == encoding.Ascending {
 			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox.BoundingBox)
@@ -312,6 +314,9 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
+	case types.VoidFamily:
+		rkey, err = encoding.DecodeVoidAscendingOrDescending(key)
+		return a.NewDVoid(), rkey, err
 	case types.Box2DFamily:
 		var r geopb.BoundingBox
 		if dir == encoding.Ascending {
@@ -523,6 +528,8 @@ func EncodeTableValue(
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
 	case *tree.DEnum:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), nil
+	case *tree.DVoid:
+		return encoding.EncodeVoidValue(appendTo, uint32(colID)), nil
 	default:
 		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}
@@ -700,6 +707,8 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 			return nil, nil, err
 		}
 		return a.NewDEnum(tree.DEnum{EnumTyp: t, PhysicalRep: phys, LogicalRep: log}), b, nil
+	case types.VoidFamily:
+		return a.NewDVoid(), buf, nil
 	default:
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}

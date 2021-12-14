@@ -2775,6 +2775,8 @@ func addPGTypeRow(
 			builtinPrefix = "array_"
 			typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
 		}
+	case types.VoidFamily:
+		// void does not have an array type.
 	default:
 		typArray = tree.NewDOid(tree.DInt(types.CalcArrayOid(typ)))
 	}
@@ -3952,6 +3954,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.UuidFamily:        typCategoryUserDefined,
 	types.INetFamily:        typCategoryNetworkAddr,
 	types.UnknownFamily:     typCategoryUnknown,
+	types.VoidFamily:        typCategoryPseudo,
 }
 
 func typCategory(typ *types.T) tree.Datum {

@@ -50,6 +50,7 @@ type DatumAlloc struct {
 	djsonAlloc        []tree.DJSON
 	dtupleAlloc       []tree.DTuple
 	doidAlloc         []tree.DOid
+	dvoidAlloc        []tree.DVoid
 	scratch           []byte
 	env               tree.CollationEnvironment
 
@@ -233,6 +234,20 @@ func (a *DatumAlloc) NewDGeography(v tree.DGeography) *tree.DGeography {
 	}
 	r := &(*buf)[0]
 	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDVoid allocates a new DVoid.
+func (a *DatumAlloc) NewDVoid() *tree.DVoid {
+	if a.AllocSize == 0 {
+		a.AllocSize = defaultDatumAllocSize
+	}
+	buf := &a.dvoidAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DVoid, a.AllocSize)
+	}
+	r := &(*buf)[0]
 	*buf = (*buf)[1:]
 	return r
 }

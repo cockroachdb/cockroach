@@ -636,4 +636,4 @@ statement notice NOTICE: upgrading the column id to INT8 to utilize the session 
 CREATE TABLE serial_test4 (id SERIAL4, temp string)
 
 statement ok
-CREATE TABLE regression_73498 AS select * from [SHOW CLUSTER QUERIES]
+CREATE TABLE regression_73648 AS select * from [SHOW CLUSTER QUERIES]
