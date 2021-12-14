@@ -229,6 +229,9 @@ const (
 	// system.protected_ts_records table that describes what is protected by the
 	// record.
 	AlterSystemProtectedTimestampAddColumn
+	// ScanWholeRows is the version at which the Header.WholeRowsOfSize parameter
+	// was introduced, preventing limited scans from returning partial rows.
+	ScanWholeRows
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -336,6 +339,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemProtectedTimestampAddColumn,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
+	},
+	{
+		Key:     ScanWholeRows,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 38},
 	},
 
 	// *************************************************
