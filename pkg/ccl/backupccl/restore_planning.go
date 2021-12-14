@@ -518,6 +518,11 @@ func allocateDescriptorRewrites(
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
+			if (name == "defaultdb" || name == "postgres") && opts.DryRun && descriptorCoverage == tree.AllDescriptors {
+				// During a full cluster dry run, we do not delete the default user databases, so we
+				// shouldn't fail when we find these db's in the target cluster.
+				continue
+			}
 			found, _, err := catalogkv.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, name)
 			if err != nil {
 				return err
@@ -1384,6 +1389,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequences:      opts.SkipMissingSequences,
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
+		DryRun:                    opts.DryRun,
 		Detached:                  opts.Detached,
 	}
 
@@ -2024,10 +2030,10 @@ func doRestorePlan(
 	}
 
 	// When running a full cluster restore, we drop the defaultdb and postgres
-	// databases that are present in a new cluster.
+	// databases that are present in a new cluster, unless we're doing a dry run.
 	// This is done so that they can be restored the same way any other user
 	// defined database would be restored from the backup.
-	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && !restoreStmt.Options.DryRun {
 		if err := dropDefaultUserDBs(ctx, p.ExecCfg()); err != nil {
 			return err
 		}
@@ -2127,6 +2133,7 @@ func doRestorePlan(
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
 			DebugPauseOn:       debugPauseOn,
+			DryRun:             restoreStmt.Options.DryRun,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
