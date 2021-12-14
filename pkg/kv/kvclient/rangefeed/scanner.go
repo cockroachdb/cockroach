@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // runInitialScan will attempt to perform an initial data scan.
@@ -26,7 +28,7 @@ import (
 // was canceled or if the OnInitialScanError function indicated that the
 // RangeFeed should stop.
 func (f *RangeFeed) runInitialScan(
-	ctx context.Context, n *log.EveryN, r *retry.Retry,
+	ctx context.Context, frontier *span.Frontier, n *log.EveryN, r *retry.Retry,
 ) (canceled bool) {
 	onValue := func(kv roachpb.KeyValue) {
 		v := roachpb.RangeFeedValue{
@@ -51,9 +53,24 @@ func (f *RangeFeed) runInitialScan(
 		f.onValue(ctx, &v)
 	}
 
+	var fm syncutil.Mutex
+	userSpanDoneCallback := f.onSpanDone
+	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
+		if userSpanDoneCallback != nil {
+			if err := userSpanDoneCallback(ctx, sp); err != nil {
+				return err
+			}
+		}
+		fm.Lock()
+		defer fm.Unlock()
+		_, err := frontier.Forward(sp, f.initialTimestamp)
+		return err
+	}
+
+	spansToScan := f.spans
 	r.Reset()
 	for r.Next() {
-		if err := f.client.Scan(ctx, f.spans, f.initialTimestamp, onValue, f.scanConfig); err != nil {
+		if err := f.client.Scan(ctx, spansToScan, f.initialTimestamp, onValue, f.scanConfig); err != nil {
 			if f.onInitialScanError != nil {
 				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
 					log.VEventf(ctx, 1, "stopping due to error: %v", err)
@@ -63,6 +80,17 @@ func (f *RangeFeed) runInitialScan(
 			if n.ShouldLog() {
 				log.Warningf(ctx, "failed to perform initial scan: %v", err)
 			}
+
+			// Recompute the set of spans to scan -- those are the spans that still have
+			// their timestamp at 0.
+			spansToScan = spansToScan[:0]
+			frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				if ts.IsEmpty() {
+					spansToScan = append(spansToScan, sp)
+				}
+				return span.ContinueMatch
+			})
+
 		} else /* err == nil */ {
 			if f.onInitialScanDone != nil {
 				f.onInitialScanDone(ctx)
