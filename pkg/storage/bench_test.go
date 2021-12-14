@@ -824,8 +824,9 @@ func setupMVCCData(
 
 type benchScanOptions struct {
 	benchDataOptions
-	numRows int
-	reverse bool
+	numRows   int
+	reverse   bool
+	wholeRows bool
 }
 
 // runMVCCScan first creates test data (and resets the benchmarking
@@ -841,6 +842,9 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		b.Fatal("test error: cannot call runMVCCScan with non-zero numKeys")
 	}
 	opts.numKeys = 100000
+	if opts.wholeRows && opts.numColumnFamilies == 0 {
+		b.Fatal("test error: wholeRows requires numColumnFamilies > 0")
+	}
 
 	eng, _ := setupMVCCData(ctx, b, emk, opts.benchDataOptions)
 	defer eng.Close()
@@ -875,15 +879,25 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		}
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
+		var wholeRowsOfSize int32
+		if opts.wholeRows {
+			wholeRowsOfSize = int32(opts.numColumnFamilies)
+		}
 		res, err := MVCCScan(ctx, eng, startKey, endKey, ts, MVCCScanOptions{
-			MaxKeys: int64(opts.numRows),
-			Reverse: opts.reverse,
+			MaxKeys:         int64(opts.numRows),
+			WholeRowsOfSize: wholeRowsOfSize,
+			AllowEmpty:      wholeRowsOfSize != 0,
+			Reverse:         opts.reverse,
 		})
 		if err != nil {
 			b.Fatalf("failed scan: %+v", err)
 		}
-		if len(res.KVs) != opts.numRows {
-			b.Fatalf("failed to scan: %d != %d", len(res.KVs), opts.numRows)
+		expectKVs := opts.numRows
+		if opts.wholeRows {
+			expectKVs -= opts.numRows % opts.numColumnFamilies
+		}
+		if len(res.KVs) != expectKVs {
+			b.Fatalf("failed to scan: %d != %d", len(res.KVs), expectKVs)
 		}
 	}
 

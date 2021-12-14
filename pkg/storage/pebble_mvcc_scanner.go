@@ -17,6 +17,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -41,6 +42,32 @@ type pebbleResults struct {
 	bytes int64
 	repr  []byte
 	bufs  [][]byte
+
+	// lastOffsets is a ring buffer that keeps track of byte offsets for the last
+	// N KV pairs. It is used to discard a partial SQL row at the end of the
+	// result via maybeTrimPartialLastRows() -- such rows can span multiple KV
+	// pairs. The length of lastOffsets is interpreted as the maximum expected SQL
+	// row size (i.e.  number of column families).
+	//
+	// lastOffsets is initialized with a fixed length giving the N number of last
+	// KV pair offsets to track. lastOffsetIdx contains the index in lastOffsets
+	// where the next KV byte offset will be written, wrapping around to 0 when it
+	// reaches the end of lastOffsets.
+	//
+	// The lastOffsets values are byte offsets in p.repr and p.bufs. The latest
+	// lastOffset (i.e. the one at lastOffsetIdx-1) will be an offset in p.repr.
+	// When iterating backwards through the ring buffer and crossing a byte offset
+	// of 0, the next iterated byte offset in the ring buffer (at i-1) will then
+	// point to the previous buffer in p.bufs.
+	//
+	// Actual and default 0 values in the slice are disambiguated when iterating
+	// backwards through p.repr and p.bufs. If we iterate to the start of all byte
+	// buffers without iterating through all of lastOffsets (i.e. when there are
+	// fewer KV pairs than the length of lastOffsets), then we must be at the start
+	// of lastOffsets, and any 0 values at the end are of no interest.
+	lastOffsetsEnabled bool // NB: significantly faster than checking lastOffsets != nil
+	lastOffsets        []int
+	lastOffsetIdx      int
 }
 
 func (p *pebbleResults) clear() {
@@ -96,11 +123,150 @@ func (p *pebbleResults) put(
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
 	p.bytes += int64(lenToAdd)
+
+	// If we're tracking KV offsets, update the ring buffer.
+	if p.lastOffsetsEnabled {
+		p.lastOffsets[p.lastOffsetIdx] = startIdx
+		p.lastOffsetIdx++
+		// NB: Branching is significantly faster than modulo in benchmarks, likely
+		// because of a high branch prediction hit rate.
+		if p.lastOffsetIdx == len(p.lastOffsets) {
+			p.lastOffsetIdx = 0
+		}
+	}
+
 	return nil
 }
 
 func (p *pebbleResults) sizeOf(lenKey, lenValue int) int {
 	return kvLenSize + lenKey + lenValue
+}
+
+// extractKey takes in a binary KV representation, finds the raw key, decodes it
+// as an MVCC key, and returns the key (without timestamp). Returns nil if the
+// key could not be decoded. repr must be a valid, non-empty KV representation,
+// otherwise this may panic.
+func (p *pebbleResults) extractKey(repr []byte) roachpb.Key {
+	keyLen := binary.LittleEndian.Uint32(repr[4:8])
+	key, _, ok := enginepb.SplitMVCCKey(repr[8 : 8+keyLen])
+	if !ok {
+		return nil
+	}
+	return key
+}
+
+// getRowPrefix decodes a SQL row prefix from the given key. Returns nil if the
+// key is not a valid SQL row, or if the prefix is the entire key.
+func (p *pebbleResults) getRowPrefix(key roachpb.Key) []byte {
+	if len(key) == 0 {
+		return nil
+	}
+	n, err := keys.GetRowPrefixLength(key)
+	if err != nil || n <= 0 || n >= len(key) {
+		return nil
+	}
+	return key[:n]
+}
+
+// continuesFirstRow returns true if the given key belongs to the same SQL row
+// as the first KV pair in the result (or if the result is empty). If either
+// key is not a valid SQL row key, returns false.
+func (p *pebbleResults) continuesFirstRow(key roachpb.Key) bool {
+	repr := p.repr
+	if len(p.bufs) > 0 {
+		repr = p.bufs[0]
+	}
+	if len(repr) == 0 {
+		return true // no rows in the result
+	}
+
+	rowPrefix := p.getRowPrefix(key)
+	if rowPrefix == nil {
+		return false
+	}
+	return bytes.Equal(rowPrefix, p.getRowPrefix(p.extractKey(repr)))
+}
+
+// lastRowHasFinalColumnFamily returns true if the last key in the result is the
+// maximum column family ID of the row (i.e. when it equals len(lastOffsets)-1).
+// If so, we know that the row is complete. However, the inverse is not true:
+// the final column families of the row may be omitted, in which case the caller
+// has to scan to the next key to find out whether the row is complete.
+func (p *pebbleResults) lastRowHasFinalColumnFamily() bool {
+	if !p.lastOffsetsEnabled || p.count == 0 {
+		return false
+	}
+
+	lastOffsetIdx := p.lastOffsetIdx - 1 // p.lastOffsetIdx is where next offset would be stored
+	if lastOffsetIdx < 0 {
+		lastOffsetIdx = len(p.lastOffsets) - 1
+	}
+	lastOffset := p.lastOffsets[lastOffsetIdx]
+
+	key := p.extractKey(p.repr[lastOffset:])
+	colFamilyID, err := keys.DecodeFamilyKey(key)
+	if err != nil {
+		return false
+	}
+	return int(colFamilyID) == len(p.lastOffsets)-1
+}
+
+// maybeTrimPartialLastRow removes the last KV pairs from the result that are part
+// of the same SQL row as the given key, returning the earliest key removed. The
+// row cannot be made up of more KV pairs than given by len(lastOffsets),
+// otherwise an error is returned. Must be called before finish().
+func (p *pebbleResults) maybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error) {
+	if !p.lastOffsetsEnabled || len(p.repr) == 0 {
+		return nil, nil
+	}
+	trimRowPrefix := p.getRowPrefix(nextKey)
+	if trimRowPrefix == nil {
+		return nil, nil
+	}
+
+	var firstTrimmedKey roachpb.Key
+
+	// We're iterating backwards through the p.lastOffsets ring buffer, starting
+	// at p.lastOffsetIdx-1 (which is where the last KV was stored). The loop
+	// condition simply makes sure we limit the number of iterations to the size
+	// of the ring buffer, to prevent wrapping around.
+	for i := 0; i < len(p.lastOffsets); i++ {
+		lastOffsetIdx := p.lastOffsetIdx - 1 // p.lastOffsetIdx is where next offset would be stored
+		if lastOffsetIdx < 0 {
+			lastOffsetIdx = len(p.lastOffsets) - 1
+		}
+		lastOffset := p.lastOffsets[lastOffsetIdx]
+
+		// The remainder of repr from the offset is now a single KV.
+		repr := p.repr[lastOffset:]
+		key := p.extractKey(repr)
+		rowPrefix := p.getRowPrefix(key)
+
+		// If the prefix belongs to a different row, we're done trimming.
+		if !bytes.Equal(rowPrefix, trimRowPrefix) {
+			return firstTrimmedKey, nil
+		}
+
+		// Remove this KV pair.
+		p.repr = p.repr[:lastOffset]
+		p.count--
+		p.bytes -= int64(len(repr))
+		firstTrimmedKey = key
+
+		p.lastOffsetIdx = lastOffsetIdx
+		p.lastOffsets[lastOffsetIdx] = 0
+
+		if len(p.repr) == 0 {
+			if len(p.bufs) == 0 {
+				// The entire result set was trimmed, so we're done.
+				return firstTrimmedKey, nil
+			}
+			// Pop the last buf back into repr.
+			p.repr = p.bufs[len(p.bufs)-1]
+			p.bufs = p.bufs[:len(p.bufs)-1]
+		}
+	}
+	return nil, errors.Errorf("row exceeds expected max size (%d): %s", len(p.lastOffsets), nextKey)
 }
 
 func (p *pebbleResults) finish() [][]byte {
@@ -136,15 +302,25 @@ type pebbleMVCCScanner struct {
 	// If true, return an empty result if the first result exceeds targetBytes
 	// and targetBytesAvoidExcess is true.
 	allowEmpty bool
+	// If set, don't return partial SQL rows (spanning multiple KV pairs) when
+	// hitting a limit. Partial rows at the end of the result will be trimmed. If
+	// allowEmpty is false, and the partial row is the first row in the result,
+	// the row will instead be completed by fetching additional KV pairs.
+	//
+	// Requires init() to have been called with trackLastOffsets set to the
+	// maximum number of KV pairs in a row.
+	wholeRows bool
 	// Stop adding intents and abort scan once maxIntents threshold is reached.
 	// This limit is only applicable to consistent scans since they return
 	// intents as an error.
 	// Not used in inconsistent scans.
 	// Ignored if zero.
 	maxIntents int64
-	// resumeReason contains the reason why an iteration was ended prematurely,
-	// i.e. which of the above limits were exceeded.
-	resumeReason roachpb.ResumeReason
+	// Resume fields describe the resume span to return. resumeReason must be set
+	// to a non-zero value to return a resume span, the others are optional.
+	resumeReason    roachpb.ResumeReason
+	resumeKey       roachpb.Key // if unset, falls back to p.advanceKey()
+	resumeNextBytes int64       // set when targetBytes is exceeded
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -168,7 +344,6 @@ type pebbleMVCCScanner struct {
 	curUnsafeKey MVCCKey
 	curRawKey    []byte
 	curValue     []byte
-	curExcluded  bool
 	results      pebbleResults
 	intents      pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
@@ -202,9 +377,14 @@ func (p *pebbleMVCCScanner) release() {
 
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
-func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, ui uncertainty.Interval) {
+func (p *pebbleMVCCScanner) init(
+	txn *roachpb.Transaction, ui uncertainty.Interval, trackLastOffsets int,
+) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
-	p.curExcluded = false
+	if trackLastOffsets > 0 {
+		p.results.lastOffsetsEnabled = true
+		p.results.lastOffsets = make([]int, trackLastOffsets)
+	}
 
 	if txn != nil {
 		p.txn = txn
@@ -237,6 +417,10 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 func (p *pebbleMVCCScanner) scan(
 	ctx context.Context,
 ) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
+	if p.wholeRows && !p.results.lastOffsetsEnabled {
+		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
+	}
+
 	p.isGet = false
 	if p.reverse {
 		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
@@ -256,32 +440,33 @@ func (p *pebbleMVCCScanner) scan(
 		return nil, 0, 0, p.err
 	}
 
-	if p.resumeReason != 0 && (p.curExcluded || p.advanceKey()) {
+	if p.resumeReason != 0 {
+		resumeKey := p.resumeKey
+		if len(resumeKey) == 0 {
+			if !p.advanceKey() {
+				return nil, 0, 0, nil // nothing to resume
+			}
+			resumeKey = p.curUnsafeKey.Key
+		}
+
 		var resumeSpan *roachpb.Span
-		// curKey was not added to results, so it needs to be included in the
-		// resume span.
 		if p.reverse {
 			// NB: this is equivalent to:
-			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
+			//  append(roachpb.Key(nil), resumeKey...).Next()
 			// but with half the allocations.
-			curKey := p.curUnsafeKey.Key
-			curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
-			copy(curKeyCopy, curKey)
+			resumeKeyCopy := make(roachpb.Key, len(resumeKey), len(resumeKey)+1)
+			copy(resumeKeyCopy, resumeKey)
 			resumeSpan = &roachpb.Span{
 				Key:    p.start,
-				EndKey: curKeyCopy.Next(),
+				EndKey: resumeKeyCopy.Next(),
 			}
 		} else {
 			resumeSpan = &roachpb.Span{
-				Key:    append(roachpb.Key(nil), p.curUnsafeKey.Key...),
+				Key:    append(roachpb.Key(nil), resumeKey...),
 				EndKey: p.end,
 			}
 		}
-		var resumeNextBytes int64
-		if p.resumeReason == roachpb.RESUME_BYTE_LIMIT && p.curExcluded {
-			resumeNextBytes = int64(p.results.sizeOf(len(p.curRawKey), len(p.curValue)))
-		}
-		return resumeSpan, p.resumeReason, resumeNextBytes, nil
+		return resumeSpan, p.resumeReason, p.resumeNextBytes, nil
 	}
 	return nil, 0, 0, nil
 }
@@ -362,7 +547,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
-			return p.addAndAdvance(ctx, p.curRawKey, p.curValue)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
 		}
 
 		// ts == read_ts
@@ -383,7 +568,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 
 			// 3. There is no intent and our read timestamp is equal to the most
 			// recent version's timestamp.
-			return p.addAndAdvance(ctx, p.curRawKey, p.curValue)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
 		}
 
 		// ts > read_ts
@@ -434,7 +619,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 	}
 	if len(p.meta.RawBytes) != 0 {
 		// 7. Emit immediately if the value is inline.
-		return p.addAndAdvance(ctx, p.curRawKey, p.meta.RawBytes)
+		return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.meta.RawBytes)
 	}
 
 	if p.meta.Txn == nil {
@@ -559,7 +744,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// addAndAdvance to take an MVCCKey explicitly.
 			p.curUnsafeKey.Timestamp = metaTS
 			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
-			return p.addAndAdvance(ctx, p.keyBuf, value)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.keyBuf, value)
 		}
 		// 13. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
@@ -710,28 +895,68 @@ func (p *pebbleMVCCScanner) advanceKeyAtNewKey(key []byte) bool {
 // Adds the specified key and value to the result set, excluding tombstones unless
 // p.tombstones is true. Advances to the next key unless we've reached the max
 // results limit.
-func (p *pebbleMVCCScanner) addAndAdvance(ctx context.Context, rawKey []byte, val []byte) bool {
+func (p *pebbleMVCCScanner) addAndAdvance(
+	ctx context.Context, key roachpb.Key, rawKey []byte, val []byte,
+) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
-	if len(val) > 0 || p.tombstones {
-		// Check if we should apply the targetBytes limit at all. We do this either
-		// if this is not the first result or if allowEmpty is true.
-		if p.targetBytes > 0 && (p.results.count > 0 || p.allowEmpty) {
-			size := p.results.bytes
-			nextSize := int64(p.results.sizeOf(len(rawKey), len(val)))
-			// Check if we actually exceeded the limit.
-			if size >= p.targetBytes || (p.targetBytesAvoidExcess && size+nextSize > p.targetBytes) {
-				p.curExcluded = true
-				p.resumeReason = roachpb.RESUME_BYTE_LIMIT
-				return false
+	if len(val) == 0 && !p.tombstones {
+		return p.advanceKey()
+	}
+
+	// Check if adding the key would exceed a limit.
+	if p.targetBytes > 0 && (p.results.bytes >= p.targetBytes || (p.targetBytesAvoidExcess &&
+		p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(val))) > p.targetBytes)) {
+		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
+		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(val)))
+
+	} else if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+		p.resumeReason = roachpb.RESUME_KEY_LIMIT
+	}
+
+	if p.resumeReason != 0 {
+		// If we exceeded a limit, but we're not allowed to return an empty result,
+		// then make sure we include the first key in the result. If wholeRows is
+		// enabled, then also make sure we complete the first SQL row.
+		if !p.allowEmpty &&
+			(p.results.count == 0 || (p.wholeRows && p.results.continuesFirstRow(key))) {
+			p.resumeReason = 0
+			p.resumeNextBytes = 0
+		} else {
+			p.resumeKey = key
+
+			// If requested, remove any partial SQL rows from the end of the result.
+			if p.wholeRows {
+				trimmedKey, err := p.results.maybeTrimPartialLastRow(key)
+				if err != nil {
+					p.err = err
+					return false
+				}
+				if trimmedKey != nil {
+					p.resumeKey = trimmedKey
+				}
 			}
-		}
-		if err := p.results.put(ctx, rawKey, val, p.memAccount); err != nil {
-			p.err = errors.Wrapf(err, "scan with start key %s", p.start)
 			return false
 		}
-		if p.maxKeys > 0 && p.results.count >= p.maxKeys {
-			p.curExcluded = false
+	}
+
+	if err := p.results.put(ctx, rawKey, val, p.memAccount); err != nil {
+		p.err = errors.Wrapf(err, "scan with start key %s", p.start)
+		return false
+	}
+
+	// Check if we hit the key limit just now to avoid scanning further before
+	// checking the key limit above on the next iteration. This has a small cost
+	// (~0.5% for large scans), but avoids the potentially large cost of scanning
+	// lots of garbage before the next key -- especially when maxKeys is small.
+	if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+		// If we're not allowed to return partial SQL rows, check whether the last
+		// KV pair in the result has the maximum column family ID of the row. If so,
+		// we can return early. However, if it doesn't then we can't know yet
+		// whether the row is complete or not, because the final column families of
+		// the row may have been omitted (if they are all NULL values) -- to find
+		// out, we must continue scanning to the next key and handle it above.
+		if !p.wholeRows || p.results.lastRowHasFinalColumnFamily() {
 			p.resumeReason = roachpb.RESUME_KEY_LIMIT
 			return false
 		}
@@ -765,7 +990,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 		if p.curUnsafeKey.Timestamp.LessEq(seekTS) {
 			p.incrementItersBeforeSeek()
 			if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
-				return p.addAndAdvance(ctx, p.curRawKey, p.curValue)
+				return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
 			}
 			// Iterate through uncertainty interval. Though we found a value in
 			// the interval, it may not be uncertainty. This is because seekTS
@@ -790,7 +1015,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 			return p.advanceKeyAtNewKey(origKey)
 		}
 		if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
-			return p.addAndAdvance(ctx, p.curRawKey, p.curValue)
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curValue)
 		}
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty
