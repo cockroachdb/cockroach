@@ -227,9 +227,10 @@ func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
 			nt = 1
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
+
+		enableRedactable := enableTraceRedactable.Get(sv)
+		t.SetRedactable(enableRedactable)
 	}
-	enableRedactable := enableTraceRedactable.Get(sv)
-	t.SetRedactable(enableRedactable)
 
 	reconfigure(ctx)
 
