@@ -10,7 +10,6 @@ package cdctest
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"gocloud.dev/pubsub"
@@ -18,8 +17,8 @@ import (
 
 // MockPubsubSink is the Webhook sink used in tests.
 type MockPubsubSink struct {
-	subChan  chan *pubsub.Subscription
 	sub      *pubsub.Subscription
+	topic    *pubsub.Topic
 	ctx      context.Context
 	groupCtx ctxgroup.Group
 	errChan  chan error
@@ -38,7 +37,7 @@ func MakeMockPubsubSink(url string) (*MockPubsubSink, error) {
 	groupCtx := ctxgroup.WithContext(ctx)
 	p := &MockPubsubSink{
 		ctx: ctx, errChan: make(chan error, 1), url: url, shutdown: shutdown,
-		groupCtx: groupCtx, subChan: make(chan *pubsub.Subscription, 1),
+		groupCtx: groupCtx,
 	}
 	return p, nil
 }
@@ -51,15 +50,20 @@ func (p *MockPubsubSink) Close() {
 	p.shutdown()
 	_ = p.groupCtx.Wait()
 	close(p.errChan)
-	close(p.subChan)
 }
 
 // Dial opens a subscriber using the url of the MockPubsubSink
 func (p *MockPubsubSink) Dial() error {
-	p.groupCtx.GoCtx(func(ctx context.Context) error {
-		p.lazyDial()
-		return nil
-	})
+	topic, err := pubsub.OpenTopic(p.ctx, p.url)
+	if err != nil {
+		return err
+	}
+	p.topic = topic
+	sub, err := pubsub.OpenSubscription(p.ctx, p.url)
+	if err != nil {
+		return err
+	}
+	p.sub = sub
 	p.groupCtx.GoCtx(func(ctx context.Context) error {
 		p.receive()
 		return nil
@@ -67,28 +71,8 @@ func (p *MockPubsubSink) Dial() error {
 	return nil
 }
 
-func (p *MockPubsubSink) lazyDial() {
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		default:
-		}
-		sub, err := pubsub.OpenSubscription(p.ctx, p.url)
-		if err == nil {
-			p.subChan <- sub
-			return
-		}
-	}
-}
-
 // receive loops to read in messages
 func (p *MockPubsubSink) receive() {
-	select {
-	case <-p.ctx.Done():
-		return
-	case p.sub = <-p.subChan:
-	}
 	for {
 		select {
 		case <-p.ctx.Done():

@@ -1495,11 +1495,12 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		ss:             ss,
 		mockSink:       sinkDest,
 	}
+	err = c.mockSink.Dial()
 	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
 		sinkDest.Close()
 		return nil, err
 	}
-	err = c.mockSink.Dial()
+
 	if err != nil {
 		return nil, err
 	}
@@ -1550,12 +1551,14 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 // Next implements TestFeed
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
+		log.Info(context.Background(), "next loop start")
 		err := p.mockSink.CheckSinkError()
 		if err != nil {
 			return nil, err
 		}
 		msg := p.mockSink.Pop()
 		if msg != nil {
+			log.Info(context.Background(), "there is message")
 			m := &cdctest.TestFeedMessage{}
 			resolved, err := isResolvedTimestamp([]byte(*msg))
 			if err != nil {
@@ -1575,9 +1578,11 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 			}
 			return m, nil
 		}
-
+		log.Info(context.Background(), "next select statement")
 		select {
 		case <-p.ss.eventReady():
+			log.Info(context.Background(), "eventReady")
+			println("eventReady")
 		case <-p.shutdown:
 			return nil, p.terminalJobError()
 		}

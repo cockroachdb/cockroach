@@ -320,7 +320,9 @@ func (p *pubsubSink) close() error {
 		}
 	}
 	p.exitWorkers()
+	log.Info(p.workerCtx, "workers cancelled")
 	_ = p.workerGroup.Wait()
+	log.Info(p.workerCtx, "done waiting for workers")
 	if p.errChan != nil {
 		close(p.errChan)
 	}
