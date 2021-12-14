@@ -969,12 +969,11 @@ func (*Relocate) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *Relocate) StatementTag() string {
-	if n.RelocateLease {
-		return "EXPERIMENTAL_RELOCATE LEASE"
-	} else if n.RelocateNonVoters {
-		return "EXPERIMENTAL_RELOCATE NONVOTERS"
+	name := "RELOCATE TABLE "
+	if n.TableOrIndex.Index != "" {
+		name = "RELOCATE INDEX "
 	}
-	return "EXPERIMENTAL_RELOCATE VOTERS"
+	return name + n.SubjectReplicas.String()
 }
 
 // StatementReturnType implements the Statement interface.
@@ -985,12 +984,7 @@ func (*RelocateRange) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *RelocateRange) StatementTag() string {
-	if n.RelocateLease {
-		return "RELOCATE LEASE"
-	} else if n.RelocateNonVoters {
-		return "RELOCATE NONVOTERS"
-	}
-	return "RELOCATE VOTERS"
+	return "RELOCATE RANGE " + n.SubjectReplicas.String()
 }
 
 // StatementReturnType implements the Statement interface.

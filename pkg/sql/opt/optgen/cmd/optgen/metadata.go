@@ -238,6 +238,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ScheduleCommand":     {fullName: "tree.ScheduleCommand", passByVal: true},
 		"IndexOrdinal":        {fullName: "cat.IndexOrdinal", passByVal: true},
 		"IndexOrdinals":       {fullName: "cat.IndexOrdinals", passByVal: true},
+		"RelocateSubject":     {fullName: "tree.RelocateSubject", passByVal: true},
 		"UniqueOrdinals":      {fullName: "cat.UniqueOrdinals", passByVal: true},
 		"ViewDeps":            {fullName: "opt.ViewDeps", passByVal: true},
 		"ViewTypeDeps":        {fullName: "opt.ViewTypeDeps", passByVal: true},

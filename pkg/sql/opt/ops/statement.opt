@@ -191,8 +191,7 @@ define AlterTableRelocate {
 
 [Private]
 define AlterTableRelocatePrivate {
-    RelocateLease bool
-    RelocateNonVoters bool
+    SubjectReplicas RelocateSubject
     _ AlterTableSplitPrivate
 }
 
@@ -303,8 +302,7 @@ define AlterRangeRelocate {
 
 [Private]
 define AlterRangeRelocatePrivate {
-    RelocateLease bool
-    RelocateNonVoters bool
+    SubjectReplicas RelocateSubject
     ToStoreID int64
     FromStoreID int64
 

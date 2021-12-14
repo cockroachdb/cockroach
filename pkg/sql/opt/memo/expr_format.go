@@ -1502,11 +1502,12 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *AlterTableRelocatePrivate:
 		FormatPrivate(f, &t.AlterTableSplitPrivate, nil)
-		if t.RelocateLease {
+		switch t.SubjectReplicas {
+		case tree.RelocateLease:
 			f.Buffer.WriteString(" [lease]")
-		} else if t.RelocateNonVoters {
+		case tree.RelocateNonVoters:
 			f.Buffer.WriteString(" [non-voters]")
-		} else {
+		case tree.RelocateVoters:
 			f.Buffer.WriteString(" [voters]")
 		}
 
