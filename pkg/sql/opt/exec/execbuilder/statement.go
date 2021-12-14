@@ -235,11 +235,20 @@ func (b *Builder) buildAlterRangeRelocate(relocate *memo.AlterRangeRelocateExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
+	scalarCtx := buildScalarCtx{}
+	toStoreID, err := b.buildScalar(&scalarCtx, relocate.ToStoreID)
+	if err != nil {
+		return execPlan{}, err
+	}
+	fromStoreID, err := b.buildScalar(&scalarCtx, relocate.FromStoreID)
+	if err != nil {
+		return execPlan{}, err
+	}
 	node, err := b.factory.ConstructAlterRangeRelocate(
 		input.root,
 		relocate.SubjectReplicas,
-		relocate.ToStoreID,
-		relocate.FromStoreID,
+		toStoreID,
+		fromStoreID,
 	)
 	if err != nil {
 		return execPlan{}, err
