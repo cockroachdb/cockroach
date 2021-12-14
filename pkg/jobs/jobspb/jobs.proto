@@ -219,7 +219,7 @@ message BackupProgress {
 }
 
 // DescriptorRewrite specifies a remapping from one descriptor ID to another for
-// use in rewritting descriptors themselves or things that reference them such 
+// use in rewritting descriptors themselves or things that reference them such
 // as is done during RESTORE or IMPORT.
 message DescriptorRewrite {
   uint32 id = 1 [
@@ -276,6 +276,9 @@ message RestoreDetails {
 
   // The restore job has several atomic stages. For now, we keep track of which
   // stages have completed via these flags.
+
+  // PrepareCompleted: indicates that the updated descriptors have been written to disk in
+  // offline state
   bool prepare_completed = 8;
   bool stats_inserted = 9;
   // SystemTablesMigrated keeps track of which system tables data have been
@@ -325,9 +328,12 @@ message RestoreDetails {
 
   // PreRewrittenTenantID is the ID of tenants[0] in the backup, aka its old ID;
   // it is only valid to set this if len(tenants) == 1.
-  roachpb.TenantID pre_rewrite_tenant_id = 23; 
+  roachpb.TenantID pre_rewrite_tenant_id = 23;
 
-  // NEXT ID: 24.
+  // DryRun indicates the restore job will not actually write data to disk
+  bool dry_run = 24;
+
+  // NEXT ID: 25
 }
 
 message RestoreProgress {

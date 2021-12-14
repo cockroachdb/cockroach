@@ -133,6 +133,7 @@ type RestoreOptions struct {
 	NewDBName                 Expr
 	IncrementalStorage        StringOrPlaceholderOptList
 	AsTenant                  Expr
+	DryRun                    bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -404,6 +405,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("tenant = ")
 		ctx.FormatNode(o.AsTenant)
 	}
+
+	if o.DryRun {
+		maybeAddSep()
+		ctx.WriteString("dry_run")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -499,6 +505,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("tenant option specified multiple times")
 	}
 
+	if o.DryRun {
+		if other.DryRun {
+			return errors.New("dry run option specified multiple times")
+		}
+	} else {
+		o.DryRun = other.DryRun
+	}
+
 	return nil
 }
 
@@ -517,5 +531,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.DebugPauseOn == options.DebugPauseOn &&
 		o.NewDBName == options.NewDBName &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
-		o.AsTenant == options.AsTenant
+		o.AsTenant == options.AsTenant &&
+		o.DryRun == options.DryRun
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -328,7 +329,8 @@ func (rd *restoreDataProcessor) openSSTs(
 		return nil
 	}
 
-	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s) (dry-run %v)", entry.Span.Key,
+		entry.Span.EndKey, rd.spec.DryRun)
 
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
@@ -390,6 +392,50 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan
 	})
 }
 
+type noopSender struct{
+	clock   *hlc.Clock
+}
+
+func (ns noopSender) AddSSTable(
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowConflicts bool,
+	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
+	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
+) error {
+	return nil
+}
+
+func (ns noopSender) AddSSTableAtBatchTimestamp(
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowConflicts bool,
+	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
+	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
+) (hlc.Timestamp, error) {
+	return hlc.Timestamp{}, nil
+}
+
+func (ns noopSender) SplitAndScatter(
+	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key,
+) error {
+	return nil
+}
+func (ns noopSender) Clock() *hlc.Clock{
+	return ns.clock
+}
+
+var _ bulk.SSTSender = &noopSender{}
+
+
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
 ) (roachpb.BulkOpSummary, error) {
@@ -426,8 +472,14 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// this comes at the cost of said overlap check, but in the common case of
 	// non-overlapping ingestion into empty spans, that is just one seek.
 	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
+
+	var sender bulk.SSTSender = db
+	if rd.spec.DryRun {
+		sender = noopSender{db.Clock()}
+	}
+
 	batcher, err := bulk.MakeSSTBatcher(ctx,
-		db,
+		sender,
 		evalCtx.Settings,
 		func() int64 { return rd.flushBytes },
 		disallowShadowingBelow,
