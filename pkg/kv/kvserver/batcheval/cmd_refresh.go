@@ -64,14 +64,14 @@ func Refresh(
 	} else if val != nil {
 		if ts := val.Timestamp; refreshFrom.LessEq(ts) {
 			return result.Result{},
-				roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
+				roachpb.NewRefreshFailedErrorV2(roachpb.RefreshFailedErrorV2_REASON_COMMITTED_VALUE, args.Key, ts)
 		}
 	}
 
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
+		return result.Result{}, roachpb.NewRefreshFailedErrorV2(roachpb.RefreshFailedErrorV2_REASON_INTENT,
 			intent.Key, intent.Txn.WriteTimestamp)
 	}
 

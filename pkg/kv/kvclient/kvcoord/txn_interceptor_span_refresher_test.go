@@ -478,8 +478,8 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 		require.Equal(t, scanArgs.Span(), refReq.Span())
 		require.Equal(t, origReadTs, refReq.RefreshFrom)
 
-		return nil, roachpb.NewError(roachpb.NewRefreshFailedError(
-			roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
+		return nil, roachpb.NewError(roachpb.NewRefreshFailedErrorV2(
+			roachpb.RefreshFailedErrorV2_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 	}
 	unexpected := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Fail(t, "unexpected")

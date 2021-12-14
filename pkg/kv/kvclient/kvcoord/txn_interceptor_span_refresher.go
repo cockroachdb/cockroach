@@ -486,8 +486,8 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	}
 	msg := "failed preemptive refresh"
 	if refreshErr != nil {
-		if refreshErr, ok := refreshErr.GetDetail().(*roachpb.RefreshFailedError); ok {
-			msg = fmt.Sprintf("%s due to a conflict: %s on key %s", msg, refreshErr.FailureReason(), refreshErr.Key)
+		if rErr := (*roachpb.RefreshFailedErrorV2)(nil); errors.As(refreshErr.GoError(), &rErr) {
+			msg = fmt.Sprintf("%s due to a conflict: %s on key %s", msg, rErr.FailureReason(), rErr.Key)
 		} else {
 			msg = fmt.Sprintf("%s - unknown error: %s", msg, refreshErr)
 		}

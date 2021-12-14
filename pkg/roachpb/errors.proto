@@ -552,9 +552,9 @@ message MinTimestampBoundUnsatisfiableError {
   optional util.hlc.Timestamp resolved_timestamp  = 2 [(gogoproto.nullable) = false];
 }
 
-// A RefreshFailedError indicates that a refresh or a range refresh failed because
+// A RefreshFailedErrorV2 indicates that a refresh or a range refresh failed because
 // of a recently written key or intent.
-message RefreshFailedError {
+message RefreshFailedErrorV2 {
   enum Reason {
     REASON_COMMITTED_VALUE = 0;
     REASON_INTENT = 1;
@@ -606,7 +606,6 @@ message ErrorDetail {
     InvalidLeaseError invalid_lease_error = 40;
     OptimisticEvalConflictsError optimistic_eval_conflicts = 41;
     MinTimestampBoundUnsatisfiableError min_timestamp_bound_unsatisfiable = 42;
-    RefreshFailedError refresh_failed_error = 43;
   }
 }
 

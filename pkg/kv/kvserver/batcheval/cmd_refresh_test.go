@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -91,11 +92,14 @@ func TestRefreshError(t *testing.T) {
 				Timestamp: ts3,
 			},
 		}, &resp)
-		require.IsType(t, &roachpb.RefreshFailedError{}, err)
+		e := (*roachpb.RefreshFailedErrorV2)(nil)
+		require.True(t, errors.As(err, &e))
 		if resolveIntent {
+			require.Equal(t, roachpb.Key("resolved_key"), e.Key)
 			require.Equal(t, "encountered recently written committed value \"resolved_key\" @0.000000002,0",
 				err.Error())
 		} else {
+			require.Equal(t, roachpb.Key("unresolved_key"), e.Key)
 			require.Equal(t, "encountered recently written intent \"unresolved_key\" @0.000000002,0",
 				err.Error())
 		}

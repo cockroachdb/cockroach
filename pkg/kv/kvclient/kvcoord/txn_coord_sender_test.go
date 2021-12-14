@@ -2701,8 +2701,8 @@ func TestTxnManualRefresh(t *testing.T) {
 					_, ok := r.ba.GetArg(roachpb.Refresh)
 					require.True(t, ok)
 					// Rejects the refresh due to a conflicting write.
-					pErr := roachpb.NewError(roachpb.NewRefreshFailedError(
-						roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
+					pErr := roachpb.NewError(roachpb.NewRefreshFailedErrorV2(
+						roachpb.RefreshFailedErrorV2_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 					r.respCh <- resp{pErr: pErr}
 				}
 				require.Regexp(t, "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive "+

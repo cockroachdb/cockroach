@@ -1327,44 +1327,33 @@ func (e *MinTimestampBoundUnsatisfiableError) Type() ErrorDetailType {
 
 var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 
-// NewRefreshFailedError initializes a new RefreshFailedError. reason can be 'committed value'
+// NewRefreshFailedErrorV2 initializes a new RefreshFailedErrorV2. reason can be 'committed value'
 // or 'intent' which caused the failed refresh, key is the key that we failed
 // refreshing, and ts is the timestamp of the committed value or intent that was written.
-func NewRefreshFailedError(
-	reason RefreshFailedError_Reason, key Key, ts hlc.Timestamp,
-) *RefreshFailedError {
-	return &RefreshFailedError{
+func NewRefreshFailedErrorV2(
+	reason RefreshFailedErrorV2_Reason, key Key, ts hlc.Timestamp,
+) *RefreshFailedErrorV2 {
+	return &RefreshFailedErrorV2{
 		Reason:    reason,
 		Key:       key,
 		Timestamp: ts,
 	}
 }
 
-func (e *RefreshFailedError) Error() string {
-	return e.message(nil)
+func (e RefreshFailedErrorV2) Error() string {
+	return fmt.Sprintf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
 }
 
 // FailureReason returns the failure reason as a string.
-func (e *RefreshFailedError) FailureReason() string {
+func (e RefreshFailedErrorV2) FailureReason() string {
 	var r string
 	switch e.Reason {
-	case RefreshFailedError_REASON_COMMITTED_VALUE:
+	case RefreshFailedErrorV2_REASON_COMMITTED_VALUE:
 		r = "committed value"
-	case RefreshFailedError_REASON_INTENT:
+	case RefreshFailedErrorV2_REASON_INTENT:
 		r = "intent"
 	default:
 		r = "UNKNOWN"
 	}
 	return r
 }
-
-func (e *RefreshFailedError) message(_ *Error) string {
-	return fmt.Sprintf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
-}
-
-// Type is part of the ErrorDetailInterface.
-func (e *RefreshFailedError) Type() ErrorDetailType {
-	return RefreshFailedErrType
-}
-
-var _ ErrorDetailInterface = &RefreshFailedError{}
