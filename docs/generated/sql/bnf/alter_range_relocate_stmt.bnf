@@ -1,5 +1,5 @@
 alter_range_relocate_stmt ::=
-	'ALTER' 'RANGE' relocate_kw 'LEASE' 'TO' iconst64 'FOR' select_stmt
-	| 'ALTER' 'RANGE' iconst64 relocate_kw 'LEASE' 'TO' iconst64
-	| 'ALTER' 'RANGE' relocate_kw relocate_subject_nonlease 'FROM' iconst64 'TO' iconst64 'FOR' select_stmt
-	| 'ALTER' 'RANGE' iconst64 relocate_kw relocate_subject_nonlease 'FROM' iconst64 'TO' iconst64
+	'ALTER' 'RANGE' relocate_kw 'LEASE' 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' iconst64 relocate_kw 'LEASE' 'TO' a_expr
+	| 'ALTER' 'RANGE' relocate_kw relocate_subject_nonlease 'FROM' a_expr 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' iconst64 relocate_kw relocate_subject_nonlease 'FROM' a_expr 'TO' a_expr

@@ -292,19 +292,23 @@ define CreateStatisticsPrivate {
     Syntax CreateStats
 }
 
-# AlterTableRelocateRange represents an `ALTER RANGE .. RELOCATE ..` statement.
+# AlterRangeRelocate represents an `ALTER RANGE .. RELOCATE ..` statement.
 [Relational, Mutation]
 define AlterRangeRelocate {
     # The input expression provides range IDs as integers.
     Input RelExpr
+    # The origin store ID.
+    ToStoreID ScalarExpr
+    # The destination store ID.
+    FromStoreID ScalarExpr
+
     _ AlterRangeRelocatePrivate
 }
 
 [Private]
 define AlterRangeRelocatePrivate {
+    # The subject indicates which replicas will be relocated.
     SubjectReplicas RelocateSubject
-    ToStoreID int64
-    FromStoreID int64
 
     # Columns stores the column IDs for the statement result columns.
     Columns ColList

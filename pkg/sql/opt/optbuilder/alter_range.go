@@ -27,6 +27,13 @@ func (b *Builder) buildAlterRangeRelocate(
 		panic(err)
 	}
 
+	toStoreID := b.resolveAndBuildScalar(
+		relocate.ToStoreID, types.Int, exprKindStoreID, tree.RejectSpecial, inScope,
+	)
+	fromStoreID := b.resolveAndBuildScalar(
+		relocate.FromStoreID, types.Int, exprKindStoreID, tree.RejectSpecial, inScope,
+	)
+
 	// Disable optimizer caching, as we do for other ALTER statements.
 	b.DisableMemoReuse = true
 
@@ -47,10 +54,10 @@ func (b *Builder) buildAlterRangeRelocate(
 
 	outScope.expr = b.factory.ConstructAlterRangeRelocate(
 		inputScope.expr,
+		toStoreID,
+		fromStoreID,
 		&memo.AlterRangeRelocatePrivate{
 			SubjectReplicas: relocate.SubjectReplicas,
-			ToStoreID:       relocate.ToStoreID,
-			FromStoreID:     relocate.FromStoreID,
 			Columns:         colsToColList(outScope.cols),
 			Props:           physical.MinRequired,
 		},

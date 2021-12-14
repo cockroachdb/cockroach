@@ -1457,6 +1457,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
+%left      INTERVAL_SIMPLE   // sets precedence for interval syntax
+%left      TO                // sets precedence for interval syntax
 // Unary Operators
 %left      AT                // sets precedence for AT TIME ZONE
 %left      COLLATE
@@ -1968,41 +1970,43 @@ alter_zone_range_stmt:
   }
 
 alter_range_relocate_stmt:
-  ALTER RANGE relocate_kw LEASE TO iconst64 FOR select_stmt
+  ALTER RANGE relocate_kw LEASE TO a_expr FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $8.slct(),
-      ToStoreID: $6.int64(),
+      FromStoreID: tree.DNull,
+      ToStoreID: $6.expr(),
       SubjectReplicas: tree.RelocateLease,
     }
   }
-| ALTER RANGE iconst64 relocate_kw LEASE TO iconst64
+| ALTER RANGE iconst64 relocate_kw LEASE TO a_expr
     {
       $$.val = &tree.RelocateRange{
         Rows: &tree.Select{
           Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
         },
-        ToStoreID: $7.int64(),
+        FromStoreID: tree.DNull,
+        ToStoreID: $7.expr(),
         SubjectReplicas: tree.RelocateLease,
       }
     }
-| ALTER RANGE relocate_kw relocate_subject_nonlease FROM iconst64 TO iconst64 FOR select_stmt
+| ALTER RANGE relocate_kw relocate_subject_nonlease FROM a_expr TO a_expr FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $10.slct(),
-      FromStoreID: $6.int64(),
-      ToStoreID: $8.int64(),
+      FromStoreID: $6.expr(),
+      ToStoreID: $8.expr(),
       SubjectReplicas: $4.relocateSubject(),
     }
   }
-| ALTER RANGE iconst64 relocate_kw relocate_subject_nonlease FROM iconst64 TO iconst64
+| ALTER RANGE iconst64 relocate_kw relocate_subject_nonlease FROM a_expr TO a_expr
   {
     $$.val = &tree.RelocateRange{
       Rows: &tree.Select{
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
       },
-      FromStoreID: $7.int64(),
-      ToStoreID: $9.int64(),
+      FromStoreID: $7.expr(),
+      ToStoreID: $9.expr(),
       SubjectReplicas: $5.relocateSubject(),
     }
   }
@@ -10825,7 +10829,7 @@ interval_type:
   }
 
 interval_qualifier:
-  YEAR
+  YEAR %prec INTERVAL_SIMPLE
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10833,7 +10837,7 @@ interval_qualifier:
       },
     }
   }
-| MONTH
+| MONTH %prec INTERVAL_SIMPLE
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10841,7 +10845,7 @@ interval_qualifier:
       },
     }
   }
-| DAY
+| DAY %prec INTERVAL_SIMPLE
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10849,7 +10853,7 @@ interval_qualifier:
       },
     }
   }
-| HOUR
+| HOUR %prec INTERVAL_SIMPLE
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10857,7 +10861,7 @@ interval_qualifier:
       },
     }
   }
-| MINUTE
+| MINUTE %prec INTERVAL_SIMPLE
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10871,7 +10875,7 @@ interval_qualifier:
   }
 // Like Postgres, we ignore the left duration field. See explanation:
 // https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net
-| YEAR TO MONTH
+| YEAR TO MONTH %prec TO
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10880,7 +10884,7 @@ interval_qualifier:
       },
     }
   }
-| DAY TO HOUR
+| DAY TO HOUR %prec TO
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10889,7 +10893,7 @@ interval_qualifier:
       },
     }
   }
-| DAY TO MINUTE
+| DAY TO MINUTE %prec TO
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10898,13 +10902,13 @@ interval_qualifier:
       },
     }
   }
-| DAY TO interval_second
+| DAY TO interval_second %prec TO
   {
     ret := $3.intervalTypeMetadata()
     ret.DurationField.FromDurationType = types.IntervalDurationType_DAY
     $$.val = ret
   }
-| HOUR TO MINUTE
+| HOUR TO MINUTE %prec TO
   {
     $$.val = types.IntervalTypeMetadata{
       DurationField: types.IntervalDurationField{
@@ -10913,13 +10917,13 @@ interval_qualifier:
       },
     }
   }
-| HOUR TO interval_second
+| HOUR TO interval_second %prec TO
   {
     ret := $3.intervalTypeMetadata()
     ret.DurationField.FromDurationType = types.IntervalDurationType_HOUR
     $$.val = ret
   }
-| MINUTE TO interval_second
+| MINUTE TO interval_second %prec TO
   {
     $$.val = $3.intervalTypeMetadata()
     ret := $3.intervalTypeMetadata()

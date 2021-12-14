@@ -736,6 +736,6 @@ define Export {
 define AlterRangeRelocate {
     input exec.Node
     subjectReplicas tree.RelocateSubject
-    toStoreID int64
-    fromStoreID int64
+    toStoreID tree.TypedExpr
+    fromStoreID tree.TypedExpr
 }
