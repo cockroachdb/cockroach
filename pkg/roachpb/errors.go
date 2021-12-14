@@ -322,7 +322,6 @@ const (
 	InvalidLeaseErrType                     ErrorDetailType = 40
 	OptimisticEvalConflictsErrType          ErrorDetailType = 41
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
-	RefreshFailedErrType                    ErrorDetailType = 43
 	MVCCHistoryMutationErrType              ErrorDetailType = 44
 	// When adding new error types, don't forget to update NumErrors below.
 
@@ -1415,12 +1414,12 @@ func NewRefreshFailedError(
 	}
 }
 
-func (e *RefreshFailedError) Error() string {
-	return e.message(nil)
+func (e RefreshFailedError) Error() string {
+	return fmt.Sprintf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
 }
 
 // FailureReason returns the failure reason as a string.
-func (e *RefreshFailedError) FailureReason() string {
+func (e RefreshFailedError) FailureReason() string {
 	var r string
 	switch e.Reason {
 	case RefreshFailedError_REASON_COMMITTED_VALUE:
@@ -1432,14 +1431,3 @@ func (e *RefreshFailedError) FailureReason() string {
 	}
 	return r
 }
-
-func (e *RefreshFailedError) message(_ *Error) string {
-	return fmt.Sprintf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
-}
-
-// Type is part of the ErrorDetailInterface.
-func (e *RefreshFailedError) Type() ErrorDetailType {
-	return RefreshFailedErrType
-}
-
-var _ ErrorDetailInterface = &RefreshFailedError{}
