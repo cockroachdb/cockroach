@@ -53,32 +53,23 @@ DROP DATABASE db1 CASCADE
 StatementPhase stage 1 of 1 with 14 MutationType ops
   transitions:
     [Sequence:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
     [Column:{DescID: 60, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 60, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 60, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [Locality:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
     [Column:{DescID: 59, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 59, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 59, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 62}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 64}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 64}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 67}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 67}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 65}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 66}, PUBLIC, DROP] -> TXN_DROPPED
     [Schema:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
@@ -120,6 +111,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
     [DefaultExpression:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
@@ -128,6 +120,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 60, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [Sequence:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
@@ -136,6 +129,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [DefaultExpression:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
@@ -144,6 +138,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 59, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 61, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -151,6 +146,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 61, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 61, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 61, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 62}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 61, ReferencedDescID: 63}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 62}, TXN_DROPPED, DROP] -> DROPPED
@@ -159,6 +155,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 62, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 62, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 62, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 62}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 62, ReferencedDescID: 63}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 62, ReferencedDescID: 64}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, TXN_DROPPED, DROP] -> DROPPED
@@ -167,12 +164,14 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 63, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 63, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 63, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 64}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 64, Name: v4}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 64}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 64, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 64, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 64, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 64}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 64, ReferencedDescID: 67}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 67}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 67, Name: v5}, PUBLIC, DROP] -> ABSENT
@@ -182,6 +181,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 41 MutationType ops
     [UserPrivileges:{DescID: 67, Username: root}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 67, ReferencedDescID: 65}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 67, ReferencedDescID: 66}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 67}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 65}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 65, Name: typ}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 66}, TXN_DROPPED, DROP] -> DROPPED
@@ -614,6 +614,10 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [Sequence:{DescID: 57}, DROPPED]
+  to:   [Locality:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [Sequence:{DescID: 57}, DROPPED]
   to:   [Namespace:{DescID: 57, Name: sq1}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -641,6 +645,10 @@ DROP DATABASE db1 CASCADE
   to:   [Schema:{DescID: 56}, ABSENT]
   kind: Precedence
   rule: parent dependencies
+- from: [Sequence:{DescID: 58}, DROPPED]
+  to:   [Locality:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 58}, DROPPED]
   to:   [Namespace:{DescID: 58, Name: sq1}, ABSENT]
   kind: Precedence
@@ -673,6 +681,10 @@ DROP DATABASE db1 CASCADE
   to:   [DefaultExpression:{DescID: 59, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [Table:{DescID: 59}, DROPPED]
+  to:   [Locality:{DescID: 59}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 59}, DROPPED]
   to:   [Namespace:{DescID: 59, Name: t1}, ABSENT]
   kind: Precedence
@@ -709,6 +721,10 @@ DROP DATABASE db1 CASCADE
   to:   [DefaultExpression:{DescID: 60, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [Table:{DescID: 60}, DROPPED]
+  to:   [Locality:{DescID: 60}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 60}, DROPPED]
   to:   [Namespace:{DescID: 60, Name: t1}, ABSENT]
   kind: Precedence
@@ -762,6 +778,10 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [View:{DescID: 61}, DROPPED]
+  to:   [Locality:{DescID: 61}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 61}, DROPPED]
   to:   [Namespace:{DescID: 61, Name: v1}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -797,6 +817,10 @@ DROP DATABASE db1 CASCADE
   to:   [Schema:{DescID: 56}, ABSENT]
   kind: Precedence
   rule: parent dependencies
+- from: [View:{DescID: 62}, DROPPED]
+  to:   [Locality:{DescID: 62}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 62}, DROPPED]
   to:   [Namespace:{DescID: 62, Name: v2}, ABSENT]
   kind: Precedence
@@ -834,6 +858,10 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [View:{DescID: 63}, DROPPED]
+  to:   [Locality:{DescID: 63}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 63}, DROPPED]
   to:   [Namespace:{DescID: 63, Name: v3}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -866,6 +894,10 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [View:{DescID: 64}, DROPPED]
+  to:   [Locality:{DescID: 64}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 64}, DROPPED]
   to:   [Namespace:{DescID: 64, Name: v4}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -897,6 +929,10 @@ DROP DATABASE db1 CASCADE
   to:   [Schema:{DescID: 56}, ABSENT]
   kind: Precedence
   rule: parent dependencies
+- from: [View:{DescID: 67}, DROPPED]
+  to:   [Locality:{DescID: 67}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 67}, DROPPED]
   to:   [Namespace:{DescID: 67, Name: v5}, ABSENT]
   kind: Precedence
