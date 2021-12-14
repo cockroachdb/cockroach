@@ -114,7 +114,7 @@ func ingestionPlanHook(
 
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
-			TenantID:      ingestionStmt.Targets.Tenant.ToUint64(),
+			TenantID:      ingestionStmt.Targets.Tenant,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
 		}
