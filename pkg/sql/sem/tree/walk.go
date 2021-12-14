@@ -670,6 +670,9 @@ func (expr *Array) Walk(v Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
+func (expr *DVoid) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *ArrayFlatten) Walk(v Visitor) Expr {
 	if sq, changed := WalkExpr(v, expr.Subquery); changed {
 		exprCopy := *expr
