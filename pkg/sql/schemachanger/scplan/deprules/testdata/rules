@@ -322,7 +322,7 @@ rules
   from: table-drop-node
   to: dep-drop-node
   query:
-    - $dep-drop[Type] IN ['*scpb.Owner', '*scpb.UserPrivileges']
+    - $dep-drop[Type] IN ['*scpb.Owner', '*scpb.UserPrivileges', '*scpb.Locality']
     - $table-drop[Type] IN ['*scpb.Table', '*scpb.Sequence', '*scpb.View']
     - $table-drop[DescID] = $table-id
     - $dep-drop[DescID] = $table-id
