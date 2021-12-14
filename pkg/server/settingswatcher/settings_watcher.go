@@ -72,7 +72,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	u := s.settings.MakeUpdater()
 	initialScanDone := make(chan struct{})
 	var initialScanErr error
-	rf, err := s.f.RangeFeed(ctx, "settings", settingsTableSpan, now, func(
+	rf, err := s.f.RangeFeed(ctx, "settings", []roachpb.Span{settingsTableSpan}, now, func(
 		ctx context.Context, kv *roachpb.RangeFeedValue,
 	) {
 		k, val, valType, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{

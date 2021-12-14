@@ -90,7 +90,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
+	rf, err := rangefeed.NewFactory(stopper, kvDB, execCfg.Settings, nil /* knobs */)
 	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},

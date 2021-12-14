@@ -835,7 +835,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 			span := roachpb.Span{
 				Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 			}
-			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
+			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, false /* withDiff */, rangeFeedCh)
 		}()
 	}
 
@@ -984,7 +984,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 		span := roachpb.Span{
 			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 		}
-		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, false /* withDiff */, rangeFeedCh)
 	}()
 
 	// Wait for a checkpoint above ts.
@@ -1147,7 +1147,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 		span := roachpb.Span{
 			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 		}
-		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, false /* withDiff */, rangeFeedCh)
 	}
 
 	// Wait for a checkpoint above ts.

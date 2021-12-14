@@ -49,21 +49,20 @@ type singleRangeInfo struct {
 // may be lower than the timestamp given here.
 func (ds *DistSender) RangeFeed(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
+	if len(spans) == 0 {
+		return errors.AssertionFailedf("expected at least 1 span, got none")
+	}
+
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	rs, err := keys.SpanAddr(span)
-	if err != nil {
-		return err
-	}
-
-	rr := newRangeFeedRegistry(ctx, span, startFrom, withDiff)
+	rr := newRangeFeedRegistry(ctx, startFrom, withDiff)
 	ds.activeRangeFeeds.Store(rr, nil)
 	defer ds.activeRangeFeeds.Delete(rr)
 
@@ -86,10 +85,15 @@ func (ds *DistSender) RangeFeed(
 	})
 
 	// Kick off the initial set of ranges.
-	g.GoCtx(func(ctx context.Context) error {
-		return ds.divideAndSendRangeFeedToRanges(ctx, rs, startFrom, rangeCh)
-	})
-
+	for _, span := range spans {
+		rs, err := keys.SpanAddr(span)
+		if err != nil {
+			return err
+		}
+		g.GoCtx(func(ctx context.Context) error {
+			return ds.divideAndSendRangeFeedToRanges(ctx, rs, startFrom, rangeCh)
+		})
+	}
 	return g.Wait()
 }
 
@@ -99,8 +103,7 @@ type RangeFeedContext struct {
 	ID      int64  // unique ID identifying range feed.
 	CtxTags string // context tags
 
-	// Span, timestamp and withDiff options passed to RangeFeed call.
-	Span      roachpb.Span
+	// StartFrom and withDiff options passed to RangeFeed call.
 	StartFrom hlc.Timestamp
 	WithDiff  bool
 }
@@ -180,11 +183,10 @@ type rangeFeedRegistry struct {
 }
 
 func newRangeFeedRegistry(
-	ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool,
+	ctx context.Context, startFrom hlc.Timestamp, withDiff bool,
 ) *rangeFeedRegistry {
 	rr := &rangeFeedRegistry{
 		RangeFeedContext: RangeFeedContext{
-			Span:      span,
 			StartFrom: startFrom,
 			WithDiff:  withDiff,
 		},
