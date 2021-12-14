@@ -69,9 +69,6 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
 `)
 	require.NoError(t, err)
 
-	// Prevent a logging assertion that the server ID is initialized multiple times.
-	log.TestingClearServerIdentifiers()
-
 	// Start the destination server.
 	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
 	defer cleanupDest()

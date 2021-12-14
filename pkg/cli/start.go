@@ -682,12 +682,6 @@ If problems persist, please see %s.`
 				return err
 			}
 
-			// Remember the server identifiers for logging.
-			// TODO(knz): Remove this.
-			nodeID := s.NodeID()
-			clusterID := s.ClusterID().String()
-			log.SetNodeIDs(clusterID, int32(nodeID))
-
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(), true /* isHostNode */, initialStart)

@@ -30,7 +30,6 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/cloudinfo",
-        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_datadriven//:datadriven",

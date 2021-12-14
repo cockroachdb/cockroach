@@ -6875,9 +6875,6 @@ func TestImportInTenant(t *testing.T) {
 	defer conn10.Close()
 	t10 := sqlutils.MakeSQLRunner(conn10)
 
-	// Prevent a logging assertion that the server ID is initialized multiple times.
-	log.TestingClearServerIdentifiers()
-
 	// Setup a few tenants, each with a different table.
 	_, conn11 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)})
 	defer conn11.Close()
