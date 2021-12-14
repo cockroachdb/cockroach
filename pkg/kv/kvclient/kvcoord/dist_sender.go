@@ -1369,11 +1369,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				// might be passed recursively to further divideAndSendBatchToRanges()
 				// calls.
 				if ba.MaxSpanRequestKeys > 0 {
-					if replyKeys > ba.MaxSpanRequestKeys {
-						log.Fatalf(ctx, "received %d results, limit was %d", replyKeys, ba.MaxSpanRequestKeys)
-					}
 					ba.MaxSpanRequestKeys -= replyKeys
-					if ba.MaxSpanRequestKeys == 0 {
+					if ba.MaxSpanRequestKeys <= 0 {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
 						return

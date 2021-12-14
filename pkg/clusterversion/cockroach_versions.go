@@ -239,6 +239,9 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
+	// ScanWholeRows is the version at which the Header.WholeRowsOfSize parameter
+	// was introduced, preventing limited scans from returning partial rows.
+	ScanWholeRows
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -358,6 +361,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 42},
+	},
+	{
+		Key:     ScanWholeRows,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 44},
 	},
 
 	// *************************************************
