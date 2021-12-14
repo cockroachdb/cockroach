@@ -1174,6 +1174,20 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
 		testingPushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
 	}
+
+	evalCtx := planner.ExtendedEvalContext()
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	ctx = planCtx.ctx
+	evalCtx.Context = ctx
+	planCtx.stmtType = stmtType
+	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
+		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
+	} else if planner.instrumentation.ShouldSaveFlows() {
+		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
+	}
+	planCtx.traceMetadata = planner.instrumentation.traceMetadata
+	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
@@ -1185,17 +1199,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	)
 	recv.progressAtomic = progressAtomic
 	defer recv.Release()
-
-	evalCtx := planner.ExtendedEvalContext()
-	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
-	planCtx.stmtType = recv.stmtType
-	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
-		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-	} else if planner.instrumentation.ShouldSaveFlows() {
-		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
-	}
-	planCtx.traceMetadata = planner.instrumentation.traceMetadata
-	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
 	var evalCtxFactory func() *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||

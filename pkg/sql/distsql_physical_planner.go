@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -3664,12 +3665,12 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	// Tenants can not distribute plans.
 	distribute = distribute && evalCtx.Codec.ForSystemTenant()
 	planCtx := &PlanningCtx{
-		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
 		infra:           physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewayNodeID),
 		isLocal:         !distribute,
 		planner:         planner,
 	}
+	planCtx.ctx = logtags.AddTag(ctx, "flowID", planCtx.infra.FlowID)
 	if !distribute {
 		return planCtx
 	}
