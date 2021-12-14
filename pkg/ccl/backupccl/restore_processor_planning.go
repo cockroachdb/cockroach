@@ -48,6 +48,7 @@ func distRestore(
 	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	dryRun string,
 ) error {
 	ctx = logtags.AddTag(ctx, "restore-distsql", nil)
 	defer close(progCh)
@@ -83,7 +84,8 @@ func distRestore(
 		return err
 	}
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys, tenantRekeys)
+	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys,
+		tenantRekeys, dryRun)
 	if err != nil {
 		return err
 	}
@@ -94,6 +96,7 @@ func distRestore(
 		TableRekeys:  tableRekeys,
 		TenantRekeys: tenantRekeys,
 		PKIDs:        pkIDs,
+		DryRun:       dryRun,
 	}
 
 	if len(splitAndScatterSpecs) == 0 {
@@ -243,6 +246,7 @@ func makeSplitAndScatterSpecs(
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	tableRekeys []execinfrapb.TableRekey,
 	tenantRekeys []execinfrapb.TenantRekey,
+	dryRun string,
 ) (map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsBySQLInstanceID := make(map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
@@ -258,6 +262,7 @@ func makeSplitAndScatterSpecs(
 				}},
 				TableRekeys:  tableRekeys,
 				TenantRekeys: tenantRekeys,
+				DryRun:       dryRun,
 			}
 		}
 	}

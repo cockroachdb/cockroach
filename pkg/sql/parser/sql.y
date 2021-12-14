@@ -809,7 +809,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
-%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
+%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP DRY_RUN
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
@@ -2868,7 +2868,6 @@ backup_options:
   $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
 
-
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
@@ -3055,6 +3054,7 @@ opt_with_schedule_options:
 //    detached: execute restore job asynchronously, without waiting for its completion
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
 //    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
+//    dry_run: go through the motions of restoring to verify the backup's contents could be used to restore but do not restore the actual data.
 //    new_db_name: renames the restored database. only applies to database restores
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
@@ -3215,6 +3215,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{DebugPauseOn: $3.expr()}
   }
+ | DRY_RUN '=' string_or_placeholder
+ 	{
+ 		$$.val = &tree.RestoreOptions{DryRun: $3.expr()}
+ 	}
 | NEW_DB_NAME '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
@@ -13848,6 +13852,7 @@ unreserved_keyword:
 | DOMAIN
 | DOUBLE
 | DROP
+| DRY_RUN
 | ENCODING
 | ENCRYPTED
 | ENCRYPTION_PASSPHRASE
