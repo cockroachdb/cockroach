@@ -42,7 +42,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t (b);
+   SQL command: CREATE INDEX ON t (b DESC);
 
 # TODO(radu): Should set "strategy top 2" on sort node
 query T
@@ -1125,7 +1125,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON kv (v, k DESC);
+   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
@@ -1145,7 +1145,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON kv (v, k DESC);
+   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
@@ -1185,7 +1185,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON kv (v, k DESC);
+   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 # Check the syntax can be used with joins.
 #
@@ -1262,6 +1262,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: kv@foo
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
@@ -1400,7 +1404,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t (b);
+   SQL command: CREATE INDEX ON t (b DESC);
 
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST, c NULLS LAST

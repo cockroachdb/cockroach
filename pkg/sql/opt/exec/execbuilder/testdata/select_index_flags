@@ -34,6 +34,10 @@ vectorized: true
   missing stats
   table: abcd@abcd_pkey
   spans: [/20 - /30]
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (a DESC) STORING (b, c, d);
 
 # Force primary
 query T
@@ -139,8 +143,8 @@ vectorized: true
       limit: 5
 ·
 index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX abcd@b; CREATE INDEX ON abcd (b) STORING (c, d);
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (b DESC) STORING (c, d);
 
 # Force index b, reverse scan.
 query T
@@ -159,8 +163,8 @@ vectorized: true
       limit: 5
 ·
 index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX abcd@b; CREATE INDEX ON abcd (b) STORING (c, d);
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (b DESC) STORING (c, d);
 
 
 # Force index b, forward scan.
@@ -183,8 +187,8 @@ vectorized: true
           spans: FULL SCAN
 ·
 index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX abcd@b; CREATE INDEX ON abcd (b) STORING (c, d);
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (b DESC) STORING (c, d);
 
 # Force index cd
 query T
