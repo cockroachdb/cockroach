@@ -98,13 +98,13 @@ func Subsume(
 	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
-		return result.Result{}, errors.Errorf("fetching local range descriptor: %s", err)
+		return result.Result{}, errors.Wrap(err, "fetching local range descriptor")
 	} else if intent == nil {
 		return result.Result{}, errors.Errorf("range missing intent on its local descriptor")
 	}
 	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, intent.Txn.WriteTimestamp, intent.Txn)
 	if err != nil {
-		return result.Result{}, errors.Errorf("fetching local range descriptor as txn: %s", err)
+		return result.Result{}, errors.Wrap(err, "fetching local range descriptor as txn")
 	} else if val != nil {
 		return result.Result{}, errors.Errorf("non-deletion intent on local range descriptor")
 	}
