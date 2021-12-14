@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -108,6 +109,9 @@ type backupDataProcessor struct {
 
 	progCh    chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	backupErr error
+
+	// BoundAccount to track memory usage of the backup processor.
+	memAcc *mon.BoundAccount
 }
 
 var _ execinfra.Processor = &backupDataProcessor{}
@@ -120,16 +124,28 @@ func newBackupDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+	memMonitor := flowCtx.Cfg.BackupMonitor
+	if knobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		if knobs.BackupMemMonitor != nil {
+			memMonitor = knobs.BackupMemMonitor
+		}
+	}
+	ba := memMonitor.MakeBoundAccount()
 	bp := &backupDataProcessor{
 		flowCtx: flowCtx,
 		spec:    spec,
 		output:  output,
 		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+		memAcc:  &ba,
 	}
 	if err := bp.Init(bp, post, backupOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				bp.close()
+				return nil
+			},
 		}); err != nil {
 		return nil, err
 	}
@@ -141,7 +157,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = bp.StartInternal(ctx, backupProcessorName)
 	go func() {
 		defer close(bp.progCh)
-		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh)
+		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
 	}()
 }
 
@@ -167,6 +183,17 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	return nil, bp.DrainHelper()
 }
 
+func (bp *backupDataProcessor) close() {
+	bp.ProcessorBase.InternalClose()
+	bp.memAcc.Close(bp.Ctx)
+}
+
+// ConsumerClosed is part of the RowSource interface. We have to override the
+// implementation provided by ProcessorBase.
+func (bp *backupDataProcessor) ConsumerClosed() {
+	bp.close()
+}
+
 type spanAndTime struct {
 	// spanIdx is a unique identifier of this object.
 	spanIdx    int
@@ -190,6 +217,7 @@ func runBackupProcessor(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	memAcc *mon.BoundAccount,
 ) error {
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
@@ -476,7 +504,10 @@ func runBackupProcessor(
 			return err
 		}
 
-		sink := &sstSink{conf: sinkConf, dest: storage}
+		sink, err := makeSSTSink(ctx, sinkConf, storage, memAcc)
+		if err != nil {
+			return err
+		}
 
 		defer func() {
 			err := sink.Close()
@@ -530,6 +561,26 @@ type sstSink struct {
 		sizeFlushes int
 		spanGrows   int
 	}
+
+	memAcc struct {
+		ba            *mon.BoundAccount
+		reservedBytes int64
+	}
+}
+
+func makeSSTSink(
+	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, memAcc *mon.BoundAccount,
+) (*sstSink, error) {
+	s := &sstSink{conf: conf, dest: dest}
+	s.memAcc.ba = memAcc
+
+	bufSize := smallFileBuffer.Get(s.conf.settings)
+	// Reserve memory for the file buffer.
+	if err := s.memAcc.ba.Grow(ctx, bufSize); err != nil {
+		return nil, errors.Wrap(err, "failed to reserve memory for sstSink queue")
+	}
+	s.memAcc.reservedBytes += bufSize
+	return s, nil
 }
 
 func (s *sstSink) Close() error {
@@ -540,6 +591,11 @@ func (s *sstSink) Close() error {
 	if s.cancel != nil {
 		s.cancel()
 	}
+
+	// Release the memory reserved for the file buffer back to the memory
+	// accumulator.
+	s.memAcc.ba.Shrink(s.ctx, s.memAcc.reservedBytes)
+	s.memAcc.reservedBytes = 0
 	if s.out != nil {
 		return s.out.Close()
 	}
