@@ -764,6 +764,7 @@ func restore(
 			dataToRestore.getRekeys(),
 			endTime,
 			progCh,
+			details.DryRun,
 		)
 	}
 	tasks = append(tasks, runRestore)
@@ -1237,7 +1238,9 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
-	if !details.PrepareCompleted {
+	if !details.PrepareCompleted && !details.DryRun {
+
+		// Create new descriptors for the data we're restoring.
 		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
@@ -1692,7 +1695,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
 			err.Error())
 	}
-
 	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
@@ -1702,6 +1704,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// public.
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
+
+		if details.DryRun {
+			emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+			return nil
+		}
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
 			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
 		}
@@ -1751,6 +1758,14 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 		resTotal.add(res)
 
+		if details.DryRun {
+			// Dry Run Job has completed. No need to update stats, revalidate indices,
+			// restore system tables or publish descriptors, since no data were
+			// actually written to disk.
+			emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+			return nil
+		}
+
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, preData.systemTables); err != nil {
 				return err
@@ -1785,6 +1800,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.add(res)
+
+		if details.DryRun {
+			emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+			return nil
+		}
 	}
 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
