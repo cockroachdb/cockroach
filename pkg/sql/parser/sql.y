@@ -1553,6 +1553,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... UNSPLIT ALL
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
+//   ALTER TABLE ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] FOR <selectclause>  (experimental)
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
@@ -1781,10 +1782,10 @@ alter_database_primary_region_stmt:
 //
 // Commands:
 //   ALTER RANGE ... CONFIGURE ZONE <zoneconfig>
-//   ALTER RANGE RELOCATE from <store_id> to <store_id> FOR <selectclause>
-//   ALTER RANGE r RELOCATE from <store_id> to <store_id>
-//   ALTER RANGE RELOCATE LEASE to <store_id> FOR <selectclause>
-//   ALTER RANGE r RELOCATE LEASE to <store_id>
+//   ALTER RANGE   RELOCATE { VOTERS | NONVOTERS } FROM <store_id> TO <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE { VOTERS | NONVOTERS } FROM <store_id> TO <store_id>
+//   ALTER RANGE   RELOCATE LEASE                                  TO <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE LEASE                                  TO <store_id>
 //
 // Zone configurations:
 //   DISCARD
@@ -1810,6 +1811,7 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//   ALTER INDEX ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] FOR <selectclause>
 //
 // Zone configurations:
 //   DISCARD
