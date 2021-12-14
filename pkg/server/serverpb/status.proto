@@ -914,6 +914,9 @@ message DistSQLRemoteFlows {
 
     // Status is the current status of this remote flow.
     Status status = 3;
+
+    // Stmt is the SQL statement for which this flow is executing.
+    string stmt = 4;
   }
 
   // FlowID is the unique identifier of the physical plan shared by all remote
