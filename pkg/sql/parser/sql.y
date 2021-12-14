@@ -1961,11 +1961,33 @@ alter_relocate_index_stmt:
     }
   }
 
+// Note: even though the ALTER RANGE ... CONFIGURE ZONE syntax only
+// accepts unrestricted names in the 3rd position, such that we could
+// write:
+//     ALTER RANGE zone_name set_zone_config
+// we have to parse a full d_expr there instead, for otherwise we get
+// a reduce/reduce conflict with the ALTER RANGE ... RELOCATE variants
+// below.
+//
+// TODO(knz): Would it make sense to extend the semantics to enable
+// zone configurations on arbitrary range IDs?
 alter_zone_range_stmt:
-  ALTER RANGE zone_name set_zone_config
+  ALTER RANGE a_expr set_zone_config
   {
+      var zoneName string
+      switch e := $3.expr().(type) {
+      case *tree.UnresolvedName:
+          if e.NumParts != 1 {
+              return setErr(sqllex, errors.New("only simple names are supported in ALTER RANGE ... CONFIGURE ZONE"))
+          }
+          zoneName = e.Parts[0]
+      case tree.DefaultVal:
+          zoneName = "default"
+      default:
+          return setErr(sqllex, errors.New("only simple names are supported in ALTER RANGE ... CONFIGURE ZONE"))
+     }
      s := $4.setZoneConfig()
-     s.ZoneSpecifier = tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)}
+     s.ZoneSpecifier = tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName(zoneName)}
      $$.val = s
   }
 
@@ -1979,11 +2001,11 @@ alter_range_relocate_stmt:
       SubjectReplicas: tree.RelocateLease,
     }
   }
-| ALTER RANGE iconst64 relocate_kw LEASE TO a_expr
+| ALTER RANGE a_expr relocate_kw LEASE TO a_expr
     {
       $$.val = &tree.RelocateRange{
         Rows: &tree.Select{
-          Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
+          Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
         },
         FromStoreID: tree.DNull,
         ToStoreID: $7.expr(),
@@ -1999,11 +2021,11 @@ alter_range_relocate_stmt:
       SubjectReplicas: $4.relocateSubject(),
     }
   }
-| ALTER RANGE iconst64 relocate_kw relocate_subject_nonlease FROM a_expr TO a_expr
+| ALTER RANGE a_expr relocate_kw relocate_subject_nonlease FROM a_expr TO a_expr
   {
     $$.val = &tree.RelocateRange{
       Rows: &tree.Select{
-        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       FromStoreID: $7.expr(),
       ToStoreID: $9.expr(),
