@@ -137,7 +137,7 @@ alter-table-relocate abc [voters]
       └── (ARRAY[4], 2)
 
 build
-ALTER TABLE abc EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
+ALTER TABLE abc EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
 ----
 alter-table-relocate abc [non-voters]
  ├── columns: key:1 pretty:2
@@ -149,12 +149,12 @@ alter-table-relocate abc [non-voters]
 build
 ALTER TABLE abc EXPERIMENTAL_RELOCATE LEASE VALUES (10), (11)
 ----
-error (42601): less than 2 columns in EXPERIMENTAL_RELOCATE LEASE data
+error (42601): less than 2 columns in RELOCATE LEASE data
 
 build
 ALTER TABLE abc EXPERIMENTAL_RELOCATE LEASE VALUES (10, 1, 2), (11, 3, 4)
 ----
-error (42601): too many columns in EXPERIMENTAL_RELOCATE LEASE data
+error (42601): too many columns in RELOCATE LEASE data
 
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
@@ -167,7 +167,7 @@ alter-table-relocate abc@bc [voters]
       └── (ARRAY[6,7,8], 2, 'bar')
 
 build
-ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
 ----
 alter-table-relocate abc@bc [non-voters]
  ├── columns: key:1 pretty:2
@@ -179,22 +179,22 @@ alter-table-relocate abc@bc [non-voters]
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (5, 1, 'foo'), (6, 2, 'bar')
 ----
-error (42601): EXPERIMENTAL_RELOCATE data column 1 (relocation array) must be of type int[], not type int
+error (42601): RELOCATE data column 1 (relocation array) must be of type int[], not type int
 
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE LEASE VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
 ----
-error (42601): EXPERIMENTAL_RELOCATE LEASE data column 1 (target leaseholder) must be of type int, not type int[]
+error (42601): RELOCATE LEASE data column 1 (target leaseholder) must be of type int, not type int[]
 
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (1, 2), (3, 4)
 ----
-error (42601): EXPERIMENTAL_RELOCATE data column 1 (relocation array) must be of type int[], not type int
+error (42601): RELOCATE data column 1 (relocation array) must be of type int[], not type int
 
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1, 2), (ARRAY[3,4], 3, 4)
 ----
-error (42601): EXPERIMENTAL_RELOCATE data column 3 (c) must be of type string, not type int
+error (42601): RELOCATE data column 3 (c) must be of type string, not type int
 
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE LEASE VALUES (10, 1, 'foo'), (11, 3, 'bar')

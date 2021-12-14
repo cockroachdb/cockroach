@@ -597,6 +597,9 @@ func (u *sqlSymUnion) rangePartition() tree.RangePartition {
 func (u *sqlSymUnion) rangePartitions() []tree.RangePartition {
     return u.val.([]tree.RangePartition)
 }
+func (u *sqlSymUnion) relocateSubject() tree.RelocateSubject {
+    return u.val.(tree.RelocateSubject)
+}
 func (u *sqlSymUnion) setZoneConfig() *tree.SetZoneConfig {
     return u.val.(*tree.SetZoneConfig)
 }
@@ -815,7 +818,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
-%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL
+%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
 %token <str> NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -903,7 +906,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
-%type <tree.Statement> alter_range_relocate_lease_stmt
 %type <tree.Statement> alter_range_relocate_stmt
 
 // ALTER TABLE
@@ -913,7 +915,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_rename_table_stmt
 %type <tree.Statement> alter_scatter_stmt
 %type <tree.Statement> alter_relocate_stmt
-%type <tree.Statement> alter_relocate_lease_stmt
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
 %type <tree.Statement> alter_table_locality_stmt
@@ -941,7 +942,6 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_unsplit_index_stmt
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
-%type <tree.Statement> alter_relocate_index_lease_stmt
 %type <tree.Statement> alter_zone_index_stmt
 
 // ALTER VIEW
@@ -1384,6 +1384,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <*tree.ReplicationOptions> opt_with_replication_options replication_options replication_options_list
 
 %type <str> relocate_kw
+%type <tree.RelocateSubject> relocate_subject relocate_subject_nonlease
 
 %type <*tree.SetZoneConfig> set_zone_config
 
@@ -1553,6 +1554,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... UNSPLIT ALL
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
+//   ALTER TABLE ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] FOR <selectclause>  (experimental)
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
@@ -1576,7 +1578,6 @@ alter_ddl_stmt:
 alter_table_stmt:
   alter_onetable_stmt
 | alter_relocate_stmt
-| alter_relocate_lease_stmt
 | alter_split_stmt
 | alter_unsplit_stmt
 | alter_scatter_stmt
@@ -1781,10 +1782,10 @@ alter_database_primary_region_stmt:
 //
 // Commands:
 //   ALTER RANGE ... CONFIGURE ZONE <zoneconfig>
-//   ALTER RANGE RELOCATE from <store_id> to <store_id> FOR <selectclause>
-//   ALTER RANGE r RELOCATE from <store_id> to <store_id>
-//   ALTER RANGE RELOCATE LEASE to <store_id> FOR <selectclause>
-//   ALTER RANGE r RELOCATE LEASE to <store_id>
+//   ALTER RANGE   RELOCATE { VOTERS | NONVOTERS } FROM <store_id> TO <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE { VOTERS | NONVOTERS } FROM <store_id> TO <store_id>
+//   ALTER RANGE   RELOCATE LEASE                                  TO <store_id> FOR <selectclause>
+//   ALTER RANGE r RELOCATE LEASE                                  TO <store_id>
 //
 // Zone configurations:
 //   DISCARD
@@ -1795,7 +1796,6 @@ alter_database_primary_region_stmt:
 // %SeeAlso: ALTER TABLE
 alter_range_stmt:
   alter_zone_range_stmt
-| alter_range_relocate_lease_stmt
 | alter_range_relocate_stmt
 | ALTER RANGE error // SHOW HELP: ALTER RANGE
 
@@ -1810,6 +1810,7 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//   ALTER INDEX ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] FOR <selectclause>
 //
 // Zone configurations:
 //   DISCARD
@@ -1821,7 +1822,6 @@ alter_range_stmt:
 alter_index_stmt:
   alter_oneindex_stmt
 | alter_relocate_index_stmt
-| alter_relocate_index_lease_stmt
 | alter_split_index_stmt
 | alter_unsplit_index_stmt
 | alter_scatter_index_stmt
@@ -1914,60 +1914,49 @@ relocate_kw:
 | EXPERIMENTAL_RELOCATE
 | RELOCATE
 
-voters_kw:
-  VOTERS {}
-| /* EMPTY */ {}
+relocate_subject:
+  relocate_subject_nonlease
+| LEASE
+  {
+    $$.val = tree.RelocateLease
+  }
+
+relocate_subject_nonlease:
+  VOTERS
+  {
+    $$.val = tree.RelocateVoters
+  }
+| /* EMPTY */
+  {
+    // No keyword is an alias for VOTERS.
+    $$.val = tree.RelocateVoters
+  }
+| NONVOTERS
+  {
+    $$.val = tree.RelocateNonVoters
+  }
 
 alter_relocate_stmt:
-  ALTER TABLE table_name relocate_kw voters_kw select_stmt
+  ALTER TABLE table_name relocate_kw relocate_subject select_stmt
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Relocate{
       TableOrIndex: tree.TableIndexName{Table: name},
       Rows: $6.slct(),
-    }
-  }
-| ALTER TABLE table_name relocate_kw NON_VOTERS select_stmt
-  {
-    /* SKIP DOC */
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Relocate{
-      TableOrIndex: tree.TableIndexName{Table: name},
-      Rows: $6.slct(),
-      RelocateNonVoters: true,
+      SubjectReplicas: $5.relocateSubject(),
     }
   }
 
 alter_relocate_index_stmt:
-  ALTER INDEX table_index_name relocate_kw voters_kw select_stmt
+  ALTER INDEX table_index_name relocate_kw relocate_subject select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
-  }
-| ALTER INDEX table_index_name relocate_kw NON_VOTERS select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateNonVoters: true}
-  }
-
-alter_relocate_lease_stmt:
-  ALTER TABLE table_name relocate_kw LEASE select_stmt
-  {
-    /* SKIP DOC */
-    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Relocate{
-      TableOrIndex: tree.TableIndexName{Table: name},
+      TableOrIndex: $3.tableIndexName(),
       Rows: $6.slct(),
-      RelocateLease: true,
+      SubjectReplicas: $5.relocateSubject(),
     }
-  }
-
-alter_relocate_index_lease_stmt:
-  ALTER INDEX table_index_name relocate_kw LEASE select_stmt
-  {
-    /* SKIP DOC */
-    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateLease: true}
   }
 
 alter_zone_range_stmt:
@@ -1978,14 +1967,13 @@ alter_zone_range_stmt:
      $$.val = s
   }
 
-alter_range_relocate_lease_stmt:
+alter_range_relocate_stmt:
   ALTER RANGE relocate_kw LEASE TO iconst64 FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $8.slct(),
       ToStoreID: $6.int64(),
-      RelocateLease: true,
-      RelocateNonVoters: false,
+      SubjectReplicas: tree.RelocateLease,
     }
   }
 | ALTER RANGE iconst64 relocate_kw LEASE TO iconst64
@@ -1995,23 +1983,19 @@ alter_range_relocate_lease_stmt:
           Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
         },
         ToStoreID: $7.int64(),
-        RelocateLease: true,
-        RelocateNonVoters: false,
+        SubjectReplicas: tree.RelocateLease,
       }
     }
-
-alter_range_relocate_stmt:
-ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
+| ALTER RANGE relocate_kw relocate_subject_nonlease FROM iconst64 TO iconst64 FOR select_stmt
   {
     $$.val = &tree.RelocateRange{
       Rows: $10.slct(),
       FromStoreID: $6.int64(),
       ToStoreID: $8.int64(),
-      RelocateLease: false,
-      RelocateNonVoters: false,
+      SubjectReplicas: $4.relocateSubject(),
     }
   }
-| ALTER RANGE iconst64 relocate_kw voters_kw FROM iconst64 TO iconst64
+| ALTER RANGE iconst64 relocate_kw relocate_subject_nonlease FROM iconst64 TO iconst64
   {
     $$.val = &tree.RelocateRange{
       Rows: &tree.Select{
@@ -2019,32 +2003,9 @@ ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
       },
       FromStoreID: $7.int64(),
       ToStoreID: $9.int64(),
-      RelocateLease: false,
-      RelocateNonVoters: false,
+      SubjectReplicas: $5.relocateSubject(),
     }
   }
-| ALTER RANGE relocate_kw NON_VOTERS FROM iconst64 TO iconst64 FOR select_stmt
-    {
-      $$.val = &tree.RelocateRange{
-        Rows: $10.slct(),
-        FromStoreID: $6.int64(),
-        ToStoreID: $8.int64(),
-        RelocateLease: false,
-        RelocateNonVoters: true,
-      }
-    }
-| ALTER RANGE iconst64 relocate_kw NON_VOTERS FROM iconst64 TO iconst64
-  {
-    $$.val = &tree.RelocateRange{
-      Rows: &tree.Select{
-        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{tree.NewDInt(tree.DInt($3.int64()))}}},
-      },
-      FromStoreID: $7.int64(),
-      ToStoreID: $9.int64(),
-      RelocateLease: false,
-      RelocateNonVoters: true,
-  }
-}
 
 set_zone_config:
   CONFIGURE ZONE to_or_eq a_expr
@@ -13445,7 +13406,7 @@ unreserved_keyword:
 | NOCONTROLJOB
 | NOLOGIN
 | NOMODIFYCLUSTERSETTING
-| NON_VOTERS
+| NONVOTERS
 | NOVIEWACTIVITY
 | NOWAIT
 | NULLS

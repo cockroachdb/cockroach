@@ -33,10 +33,7 @@ func (b *Builder) buildAlterRangeRelocate(
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, colinfo.AlterTableRelocateColumns)
 
-	cmdName := "RELOCATE"
-	if relocate.RelocateLease {
-		cmdName += " LEASE"
-	}
+	cmdName := "RELOCATE " + relocate.SubjectReplicas.String()
 	colNames := []string{"range ids"}
 	colTypes := []*types.T{types.Int}
 
@@ -51,12 +48,11 @@ func (b *Builder) buildAlterRangeRelocate(
 	outScope.expr = b.factory.ConstructAlterRangeRelocate(
 		inputScope.expr,
 		&memo.AlterRangeRelocatePrivate{
-			RelocateLease:     relocate.RelocateLease,
-			RelocateNonVoters: relocate.RelocateNonVoters,
-			ToStoreID:         relocate.ToStoreID,
-			FromStoreID:       relocate.FromStoreID,
-			Columns:           colsToColList(outScope.cols),
-			Props:             physical.MinRequired,
+			SubjectReplicas: relocate.SubjectReplicas,
+			ToStoreID:       relocate.ToStoreID,
+			FromStoreID:     relocate.FromStoreID,
+			Columns:         colsToColList(outScope.cols),
+			Props:           physical.MinRequired,
 		},
 	)
 	return outScope

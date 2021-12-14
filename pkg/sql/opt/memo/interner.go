@@ -568,6 +568,10 @@ func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
 }
 
+func (h *hasher) HashRelocateSubject(val tree.RelocateSubject) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashIndexOrdinals(val cat.IndexOrdinals) {
 	hash := h.hash
 	for _, ord := range val {
@@ -975,6 +979,10 @@ func (h *hasher) IsScheduleCommandEqual(l, r tree.ScheduleCommand) bool {
 }
 
 func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
+	return l == r
+}
+
+func (h *hasher) IsRelocateSubjectEqual(l, r tree.RelocateSubject) bool {
 	return l == r
 }
 
