@@ -21,6 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -69,6 +73,7 @@ import (
 // - `+foo` means `Key(foo).Next()`
 // - `-foo` means `Key(foo).PrefixEnd()`
 // - `%foo` means `append(LocalRangePrefix, "foo")`
+// - `/foo/7` means SQL row with key foo, optional column family 7 (system tenant, table/index 1).
 //
 // Additionally, the pseudo-command `with` enables sharing
 // a group of arguments between multiple commands, for example:
@@ -793,6 +798,9 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("allowEmpty") {
 		opts.AllowEmpty = true
 	}
+	if e.hasArg("wholeRows") {
+		opts.WholeRowsOfSize = 10 // arbitrary, must be greater than largest column family in tests
+	}
 	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intents when an error
@@ -1026,15 +1034,44 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 }
 
 func toKey(s string) roachpb.Key {
-	switch {
-	case len(s) > 0 && s[0] == '+':
+	if len(s) == 0 {
+		return roachpb.Key(s)
+	}
+	switch s[0] {
+	case '+':
 		return roachpb.Key(s[1:]).Next()
-	case len(s) > 0 && s[0] == '=':
+	case '=':
 		return roachpb.Key(s[1:])
-	case len(s) > 0 && s[0] == '-':
+	case '-':
 		return roachpb.Key(s[1:]).PrefixEnd()
-	case len(s) > 0 && s[0] == '%':
+	case '%':
 		return append(keys.LocalRangePrefix, s[1:]...)
+	case '/':
+		var pk string
+		var columnFamilyID uint64
+		var err error
+		parts := strings.Split(s[1:], "/")
+		switch len(parts) {
+		case 2:
+			if columnFamilyID, err = strconv.ParseUint(parts[1], 10, 32); err != nil {
+				panic(fmt.Sprintf("invalid column family ID %s in row key %s: %s", parts[1], s, err))
+			}
+			fallthrough
+		case 1:
+			pk = parts[0]
+		default:
+			panic(fmt.Sprintf("expected at most one / separator in row key %s", s))
+		}
+
+		var colMap catalog.TableColMap
+		colMap.Set(0, 0)
+		key := keys.SystemSQLCodec.IndexPrefix(1, 1)
+		key, _, err = rowenc.EncodeColumns([]descpb.ColumnID{0}, nil /* directions */, colMap, []tree.Datum{tree.NewDString(pk)}, key)
+		if err != nil {
+			panic(err)
+		}
+		key = keys.MakeFamilyKey(key, uint32(columnFamilyID))
+		return key
 	default:
 		return roachpb.Key(s)
 	}

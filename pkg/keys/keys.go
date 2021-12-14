@@ -13,6 +13,7 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -747,6 +748,26 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	// single byte by EncodeUvarint. This is currently always true because the
 	// varint encoding will encode 1-9 bytes.
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
+}
+
+// DecodeFamilyKey returns the family ID in the given row key. Returns an error
+// if the key does not contain a family ID.
+func DecodeFamilyKey(key []byte) (uint32, error) {
+	n, err := GetRowPrefixLength(key)
+	if err != nil {
+		return 0, err
+	}
+	if n <= 0 || n >= len(key) {
+		return 0, errors.Errorf("invalid row prefix, got prefix length %d for key %s", n, key)
+	}
+	_, colFamilyID, err := encoding.DecodeUvarintAscending(key[n:])
+	if err != nil {
+		return 0, err
+	}
+	if colFamilyID > math.MaxUint32 {
+		return 0, errors.Errorf("column family ID overflow, got %d", colFamilyID)
+	}
+	return uint32(colFamilyID), nil
 }
 
 // DecodeTableIDIndexID decodes a table id followed by an index id from the
