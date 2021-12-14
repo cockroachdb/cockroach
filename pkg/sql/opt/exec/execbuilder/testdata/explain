@@ -177,12 +177,126 @@ vectorized: true
       row 0, expr 0: 42
 
 query T
+EXPLAIN ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│
+└── • values
+      size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│ columns: (key, pretty)
+│ estimated row count: 10 (missing stats)
+│
+└── • values
+      columns: (column1, column2)
+      size: 2 columns, 1 row
+      row 0, expr 0: ARRAY[1]
+      row 0, expr 1: 1
+
+query T
+EXPLAIN ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│
+└── • values
+      size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│ columns: (key, pretty)
+│ estimated row count: 10 (missing stats)
+│
+└── • values
+      columns: (column1, column2)
+      size: 2 columns, 1 row
+      row 0, expr 0: ARRAY[1]
+      row 0, expr 1: 1
+
+query T
 EXPLAIN DROP TABLE foo
 ----
 distribution: local
 vectorized: true
 ·
 • drop table
+
+query T
+EXPLAIN ALTER RANGE 22 RELOCATE FROM 30+3 TO 40+4
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ to: 44
+│ from: 33
+│
+└── • values
+      size: 1 column, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER RANGE 22 RELOCATE FROM 30+3 TO 40+4
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ columns: (range_id, pretty, result)
+│ estimated row count: 10 (missing stats)
+│ to: 44
+│ from: 33
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 1 row
+      row 0, expr 0: 22
+
+query T
+EXPLAIN ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ to: 44
+│ from: 33
+│
+└── • values
+      size: 1 column, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ columns: (range_id, pretty, result)
+│ estimated row count: 10 (missing stats)
+│ to: 44
+│ from: 33
+│
+└── • values
+      columns: ("?column?")
+      size: 1 column, 1 row
+      row 0, expr 0: 22
 
 query T
 EXPLAIN SHOW DATABASES

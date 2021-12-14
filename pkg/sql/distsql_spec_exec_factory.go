@@ -1076,7 +1076,10 @@ func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterRangeRelocate(
-	input exec.Node, relocateSubject tree.RelocateSubject, toStoreID int64, fromStoreID int64,
+	input exec.Node,
+	relocateSubject tree.RelocateSubject,
+	toStoreID tree.TypedExpr,
+	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter range relocate")
 }
