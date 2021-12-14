@@ -32,7 +32,8 @@ type MockPubsubSink struct {
 }
 
 // MakeMockPubsubSink returns a MockPubsubSink object initialized with the given url and context
-func MakeMockPubsubSink(ctx context.Context, url string) (*MockPubsubSink, error) {
+func MakeMockPubsubSink(url string) (*MockPubsubSink, error) {
+	ctx := context.Background()
 	ctx, shutdown := context.WithCancel(ctx)
 	groupCtx := ctxgroup.WithContext(ctx)
 	p := &MockPubsubSink{
