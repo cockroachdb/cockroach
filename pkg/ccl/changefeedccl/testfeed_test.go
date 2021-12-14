@@ -1479,11 +1479,8 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 			memPubsubURL)
 	}
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	sinkDest, err := cdctest.MakeMockPubsubSink(ctx, memPubsubURL)
+	sinkDest, err := cdctest.MakeMockPubsubSink(memPubsubURL)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
@@ -1497,17 +1494,13 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
 		mockSink:       sinkDest,
-		ctx:            ctx,
-		cancel:         cancel,
 	}
 	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
 		sinkDest.Close()
-		cancel()
 		return nil, err
 	}
 	err = c.mockSink.Dial()
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 	return c, nil
@@ -1523,8 +1516,6 @@ type pubsubFeed struct {
 	seenTrackerMap
 	ss       *sinkSynchronizer
 	mockSink *cdctest.MockPubsubSink
-	ctx      context.Context
-	cancel   func()
 }
 
 var _ cdctest.TestFeed = (*pubsubFeed)(nil)
@@ -1599,7 +1590,6 @@ func (p *pubsubFeed) Close() error {
 	if err != nil {
 		return err
 	}
-	p.cancel()
 	p.mockSink.Close()
 	return nil
 }

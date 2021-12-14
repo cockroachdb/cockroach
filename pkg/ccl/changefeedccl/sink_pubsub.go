@@ -346,7 +346,7 @@ func (p *pubsubSink) sendMessage(m []byte, topicID descpb.ID, key string) error 
 		gcpMessage := &pbapi.PublishRequest{Topic: p.topics[topicID].pathName}
 		ts := timestamppb.Now()
 		gcpMessage.Messages = append(gcpMessage.Messages, &pbapi.PubsubMessage{Data: m, OrderingKey: key, PublishTime: ts})
-		_, err = c.Publish(context.Background(), gcpMessage)
+		_, err = c.Publish(p.workerCtx, gcpMessage)
 	} else {
 		// this is for mempubsub since As() on mempubsub returns an unexported topic type that we cannot interact with
 		// https://github.com/google/go-cloud/blob/master/pubsub/mempubsub/mem.go#L185-L188
