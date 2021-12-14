@@ -10,7 +10,6 @@ package kvtenantccl_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"strings"
 	"testing"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -47,28 +47,30 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 		visibleString   = "tenant-can-see-this"
 	)
 
-	getTrace := func(t *testing.T, db *gosql.DB) [][]string {
-		runner := sqlutils.MakeSQLRunner(db)
-		runner.Exec(t, `CREATE TABLE kv(k STRING PRIMARY KEY, v STRING)`)
-		runner.Exec(t, `
-SET tracing = on;
-INSERT INTO kv VALUES('k', 'v');
-SELECT * FROM kv;
-SET tracing = off;
-`)
-		sl := runner.QueryStr(t, `SELECT * FROM [ SHOW TRACE FOR SESSION ]`)
-		t.Log(sqlutils.MatrixToStr(sl))
-		return sl
-	}
+	recCh := make(chan tracing.Recording, 1)
 
-	knobs := &kvserver.StoreTestingKnobs{}
-	knobs.EvalKnobs.TestingEvalFilter = func(args kvserverbase.FilterArgs) *roachpb.Error {
-		log.Eventf(args.Ctx, "%v", sensitiveString)
-		log.Eventf(args.Ctx, "%v", log.Safe(visibleString))
-		return nil
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
+							log.Eventf(args.Ctx, "%v", sensitiveString)
+							log.Eventf(args.Ctx, "%v", log.Safe(visibleString))
+							return nil
+						},
+					},
+				},
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					WithStatementTrace: func(trace tracing.Recording, stmt string) {
+						if stmt == "CREATE TABLE kv(k STRING PRIMARY KEY, v STRING)" {
+							recCh <- trace
+						}
+					},
+				},
+			},
+		},
 	}
-	var args base.TestClusterArgs
-	args.ServerArgs.Knobs.Store = knobs
 	tc := serverutils.StartNewTestCluster(t, 1, args)
 	tc.Server(0).TracerI().(*tracing.Tracer).SetRedactable(redactable)
 	defer tc.Stopper().Stop(ctx)
@@ -78,42 +80,49 @@ SET tracing = off;
 	t.Run("system-tenant", func(t *testing.T) {
 		db := tc.ServerConn(0)
 		defer db.Close()
-		results := getTrace(t, db)
+		runner := sqlutils.MakeSQLRunner(db)
+		runner.Exec(t, `CREATE TABLE kv(k STRING PRIMARY KEY, v STRING)`)
+		trace := <-recCh
 
+		require.NotEmpty(t, trace)
 		var found bool
-		for _, sl := range results {
-			for _, s := range sl {
-				if strings.Contains(s, sensitiveString) {
+		for _, rs := range trace {
+			for _, s := range rs.Logs {
+				if strings.Contains(s.Msg().StripMarkers(), sensitiveString) {
 					found = true
 				}
 			}
 		}
 		require.True(t, found, "did not find '%q' in trace:\n%s",
-			sensitiveString, sqlutils.MatrixToStr(results),
+			sensitiveString, trace,
 		)
 	})
 
 	t.Run("regular-tenant", func(t *testing.T) {
 		_, tenDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-			TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+			TenantID:     roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+			TestingKnobs: args.ServerArgs.Knobs,
 		})
 		defer tenDB.Close()
-		results := getTrace(t, tenDB)
+		runner := sqlutils.MakeSQLRunner(tenDB)
+		runner.Exec(t, `CREATE TABLE kv(k STRING PRIMARY KEY, v STRING)`)
+		trace := <-recCh
 
+		require.NotEmpty(t, trace)
 		var found bool
 		var foundRedactedMarker bool
-		for _, sl := range results {
-			for _, s := range sl {
-				if strings.Contains(s, sensitiveString) {
+		for _, rs := range trace {
+			for _, s := range rs.Logs {
+				if strings.Contains(s.Msg().StripMarkers(), sensitiveString) {
 					t.Fatalf(
 						"trace for tenant contained KV-level trace message '%q':\n%s",
-						sensitiveString, sqlutils.MatrixToStr(results),
+						sensitiveString, trace,
 					)
 				}
-				if strings.Contains(s, visibleString) {
+				if strings.Contains(s.Msg().StripMarkers(), visibleString) {
 					found = true
 				}
-				if strings.Contains(s, string(server.TraceRedactedMarker)) {
+				if strings.Contains(s.Msg().StripMarkers(), string(server.TraceRedactedMarker)) {
 					foundRedactedMarker = true
 				}
 			}
@@ -126,16 +135,16 @@ SET tracing = off;
 			// If redaction was on, we expect the tenant to see safe information in its
 			// trace.
 			require.True(t, found, "did not see expected trace message '%q':\n%s",
-				visibleString, sqlutils.MatrixToStr(results))
+				visibleString, trace)
 			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
-				string(server.TraceRedactedMarker), sqlutils.MatrixToStr(results))
+				string(server.TraceRedactedMarker), trace)
 		} else {
 			// Otherwise, expect the opposite: not even safe information makes it through,
 			// because it gets replaced with foundRedactedMarker.
 			require.False(t, found, "unexpectedly saw message '%q':\n%s",
-				visibleString, sqlutils.MatrixToStr(results))
+				visibleString, trace)
 			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
-				string(server.TraceRedactedMarker), sqlutils.MatrixToStr(results))
+				string(server.TraceRedactedMarker), trace)
 		}
 	})
 }
