@@ -29,7 +29,7 @@ alter-range-relocate &{VOTERS [3 4 5] []}
 build
 ALTER RANGE a RELOCATE FROM 1+2 TO 3+4
 ----
-error (42601): at or near "relocate": syntax error
+error (42703): column "a" does not exist
 
 build
 ALTER RANGE RELOCATE FROM 1+2 TO 3+4 FOR SELECT c FROM abc
