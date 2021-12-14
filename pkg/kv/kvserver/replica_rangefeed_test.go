@@ -672,6 +672,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1))
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("not raft follower: %+v, transferred lease: %v", raftStatus, err)
 		})
 

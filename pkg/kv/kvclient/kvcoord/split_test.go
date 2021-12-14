@@ -115,7 +115,7 @@ func TestRangeSplitMeta(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
-			return errors.Errorf("failed to verify no dangling intents: %s", err)
+			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
 	})
@@ -208,7 +208,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		// Scan the txn records.
 		rows, err := s.DB.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
-			return errors.Errorf("failed to scan meta2 keys: %s", err)
+			return errors.Wrap(err, "failed to scan meta2 keys")
 		}
 		if lr := len(rows); lr < 5 {
 			return errors.Errorf("expected >= 5 scans; got %d", lr)
@@ -227,7 +227,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// asynchronous split.
 	testutils.SucceedsSoon(t, func() error {
 		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
-			return errors.Errorf("failed to verify no dangling intents: %s", err)
+			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
 	})

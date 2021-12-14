@@ -323,7 +323,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
-				return reply, errors.Errorf("unable to determine split key: %s", err)
+				return reply, errors.Wrap(err, "unable to determine split key")
 			}
 			if foundSplitKey == nil {
 				// No suitable split key could be found.

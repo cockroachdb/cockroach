@@ -556,7 +556,7 @@ func snapshot(
 	ok, err := storage.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
 		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
-		return OutgoingSnapshot{}, errors.Errorf("failed to get desc: %s", err)
+		return OutgoingSnapshot{}, errors.Wrap(err, "failed to get desc")
 	}
 	if !ok {
 		return OutgoingSnapshot{}, errors.Mark(errors.Errorf("couldn't find range descriptor"), errMarkSnapshotError)
@@ -569,7 +569,7 @@ func snapshot(
 
 	term, err := term(ctx, rsl, snap, rangeID, eCache, state.RaftAppliedIndex)
 	if err != nil {
-		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", state.RaftAppliedIndex, err)
+		return OutgoingSnapshot{}, errors.Wrapf(err, "failed to fetch term of %d", state.RaftAppliedIndex)
 	}
 
 	// Intentionally let this iterator and the snapshot escape so that the
@@ -698,7 +698,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	// Find span config for this range.
 	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
-		return errors.Errorf("%s: failed to lookup span config: %s", r, err)
+		return errors.Wrapf(err, "%s: failed to lookup span config", r)
 	}
 
 	r.SetSpanConfig(conf)
