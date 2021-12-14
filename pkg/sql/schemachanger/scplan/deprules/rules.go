@@ -458,7 +458,7 @@ func init() {
 		scgraph.Precedence,
 		tblNode, depNode,
 		screl.MustQuery(
-			dep.Type((*scpb.Owner)(nil), (*scpb.UserPrivileges)(nil)),
+			dep.Type((*scpb.Owner)(nil), (*scpb.UserPrivileges)(nil), (*scpb.Locality)(nil)),
 			tbl.Type((*scpb.Table)(nil), (*scpb.Sequence)(nil), (*scpb.View)(nil)),
 
 			tableID.Entities(screl.DescID, tbl, dep),

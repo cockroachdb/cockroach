@@ -47,11 +47,8 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
     [Column:{DescID: 57, ColumnID: 4}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 57, ColumnID: 5}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 57, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
@@ -73,6 +70,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 15 MutationType ops
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [ForeignKey:{DescID: 57, ReferencedDescID: 54, Name: fk_customers}, PUBLIC, DROP] -> ABSENT
     [ForeignKey:{DescID: 57, ReferencedDescID: 55, Name: fk_orders}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 59, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -80,6 +78,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 15 MutationType ops
     [UserPrivileges:{DescID: 59, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [ForeignKeyBackReference:{DescID: 54, ReferencedDescID: 57, Name: fk_customers}, PUBLIC, DROP] -> ABSENT
     [ForeignKeyBackReference:{DescID: 55, ReferencedDescID: 57, Name: fk_orders}, PUBLIC, DROP] -> ABSENT
     [Sequence:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
@@ -88,6 +87,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 15 MutationType ops
     [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 57
@@ -202,6 +202,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
 - from: [Sequence:{DescID: 58}, DROPPED]
+  to:   [Locality:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [Sequence:{DescID: 58}, DROPPED]
   to:   [Namespace:{DescID: 58, Name: sq1}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -250,6 +254,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
 - from: [Table:{DescID: 57}, DROPPED]
+  to:   [Locality:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [Table:{DescID: 57}, DROPPED]
   to:   [Namespace:{DescID: 57, Name: shipments}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -275,6 +283,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 57}, DROPPED]
   to:   [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 59}, DROPPED]
+  to:   [Locality:{DescID: 59}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 59}, DROPPED]

@@ -8,7 +8,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
@@ -20,6 +19,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
     [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
@@ -58,7 +58,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
@@ -70,6 +69,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
     [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
@@ -122,6 +122,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   to:   [Sequence:{DescID: 54}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [Locality:{DescID: 54}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 54}, DROPPED]
   to:   [Namespace:{DescID: 54, Name: sq1}, ABSENT]
   kind: Precedence
