@@ -481,6 +481,7 @@ func (dsp *DistSQLPlanner) Run(
 				log.Infof(ctx, "error generating diagram: %s", err)
 			} else {
 				log.Infof(ctx, "plan diagram URL:\n%s", url.String())
+				log.Infof(ctx, "placeholder values: %s", evalCtx.Placeholders.Values)
 			}
 		}
 	}
