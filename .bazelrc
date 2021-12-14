@@ -1,6 +1,6 @@
 try-import %workspace%/.bazelrc.user
 
-build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,gss --experimental_proto_descriptor_sets_include_source_info --incompatible_strict_action_env
+build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,gss --experimental_proto_descriptor_sets_include_source_info --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
 test --config=test
 build:with_ui --define cockroach_with_ui=y
 build:test --define crdb_test=y
@@ -20,26 +20,19 @@ test:ci --test_output=errors
 test:ci --test_tmpdir=/artifacts/tmp
 
 build:cross --stamp
-build:cross --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 build:cross --define cockroach_cross=y
 
-# cross-compilation configurations. Add e.g. --config=crosslinux to turn these on
-# TODO(ricky): Having to specify both the `platform` and the `crosstool_top` is
-# weird, but I think `rules_foreign_cc` doesn't play too nicely with `--platforms`?
+# cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
 build:crosslinux --platforms=//build/toolchains:cross_linux
-build:crosslinux --crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
 build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
 build:crosslinux --config=cross
 build:crosswindows --platforms=//build/toolchains:cross_windows
-build:crosswindows --crosstool_top=@toolchain_cross_x86_64-w64-mingw32//:suite
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
 build:crosswindows --config=cross
 build:crossmacos --platforms=//build/toolchains:cross_macos
-build:crossmacos --crosstool_top=@toolchain_cross_x86_64-apple-darwin19//:suite
 build:crossmacos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19'
 build:crossmacos --config=cross
 build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
-build:crosslinuxarm --crosstool_top=@toolchain_cross_aarch64-unknown-linux-gnu//:suite
 build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
 build:crosslinuxarm --config=cross
 
