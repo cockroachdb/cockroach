@@ -4,74 +4,86 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX b (b), UNIQUE INDEX 
 
 # Tests for ALTER RANGE RELOCATE.
 build
-ALTER RANGE 1 RELOCATE FROM 1 TO 2
+ALTER RANGE 1 RELOCATE FROM 1+2 TO 3+4
 ----
-alter-range-relocate &{VOTERS 2 1 [3 4 5] []}
+alter-range-relocate &{VOTERS [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
- └── values
-      ├── columns: column1:6!null
-      └── (1,)
+ ├── values
+ │    ├── columns: column1:6!null
+ │    └── (1,)
+ ├── 3 + 4
+ └── 1 + 2
 
 build
-ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT a from abc
+ALTER RANGE RELOCATE FROM 1+2 TO 3+4 FOR SELECT a FROM abc
 ----
-alter-range-relocate &{VOTERS 2 1 [3 4 5] []}
+alter-range-relocate &{VOTERS [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
- └── project
-      ├── columns: a:6!null
-      └── scan abc
-           └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ ├── project
+ │    ├── columns: a:6!null
+ │    └── scan abc
+ │         └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ ├── 3 + 4
+ └── 1 + 2
 
 build
-ALTER RANGE a RELOCATE FROM 1 TO 2
+ALTER RANGE a RELOCATE FROM 1+2 TO 3+4
 ----
 error (42601): at or near "relocate": syntax error
 
 build
-ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT c from abc
+ALTER RANGE RELOCATE FROM 1+2 TO 3+4 FOR SELECT c FROM abc
 ----
 error (42601): RELOCATE VOTERS data column 1 (range ids) must be of type int, not type string
 
 build
-ALTER RANGE 1 RELOCATE NONVOTERS FROM 1 TO 2
+ALTER RANGE 1 RELOCATE NONVOTERS FROM 1+2 TO 3+4
 ----
-alter-range-relocate &{NONVOTERS 2 1 [3 4 5] []}
+alter-range-relocate &{NONVOTERS [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
- └── values
-      ├── columns: column1:6!null
-      └── (1,)
+ ├── values
+ │    ├── columns: column1:6!null
+ │    └── (1,)
+ ├── 3 + 4
+ └── 1 + 2
 
 build
-ALTER RANGE RELOCATE NONVOTERS FROM 1 TO 2 FOR SELECT a from abc
+ALTER RANGE RELOCATE NONVOTERS FROM 1+2 TO 3+4 FOR SELECT a FROM abc
 ----
-alter-range-relocate &{NONVOTERS 2 1 [3 4 5] []}
+alter-range-relocate &{NONVOTERS [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
- └── project
-      ├── columns: a:6!null
-      └── scan abc
-           └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ ├── project
+ │    ├── columns: a:6!null
+ │    └── scan abc
+ │         └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ ├── 3 + 4
+ └── 1 + 2
 
 # Tests for ALTER RANGE RELOCATE LEASE.
 build
-ALTER RANGE 1 RELOCATE LEASE TO 2
+ALTER RANGE 1 RELOCATE LEASE TO 1+2
 ----
-alter-range-relocate &{LEASE 2 0 [3 4 5] []}
+alter-range-relocate &{LEASE [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
- └── values
-      ├── columns: column1:6!null
-      └── (1,)
+ ├── values
+ │    ├── columns: column1:6!null
+ │    └── (1,)
+ ├── 1 + 2
+ └── NULL::INT8
 
 build
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT a from abc
+ALTER RANGE RELOCATE LEASE TO 1+2 FOR SELECT a FROM abc
 ----
-alter-range-relocate &{LEASE 2 0 [3 4 5] []}
+alter-range-relocate &{LEASE [3 4 5] []}
  ├── columns: range_id:3 pretty:4 result:5
- └── project
-      ├── columns: a:6!null
-      └── scan abc
-           └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ ├── project
+ │    ├── columns: a:6!null
+ │    └── scan abc
+ │         └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ ├── 1 + 2
+ └── NULL::INT8
 
 build
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT c from abc
+ALTER RANGE RELOCATE LEASE TO 1+2 FOR SELECT c FROM abc
 ----
 error (42601): RELOCATE LEASE data column 1 (range ids) must be of type int, not type string
