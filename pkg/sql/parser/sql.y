@@ -815,7 +815,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
-%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL
+%token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
 %token <str> NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -1928,7 +1928,7 @@ alter_relocate_stmt:
       Rows: $6.slct(),
     }
   }
-| ALTER TABLE table_name relocate_kw NON_VOTERS select_stmt
+| ALTER TABLE table_name relocate_kw NONVOTERS select_stmt
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
@@ -1945,7 +1945,7 @@ alter_relocate_index_stmt:
     /* SKIP DOC */
     $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
   }
-| ALTER INDEX table_index_name relocate_kw NON_VOTERS select_stmt
+| ALTER INDEX table_index_name relocate_kw NONVOTERS select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateNonVoters: true}
@@ -2023,7 +2023,7 @@ ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
       RelocateNonVoters: false,
     }
   }
-| ALTER RANGE relocate_kw NON_VOTERS FROM iconst64 TO iconst64 FOR select_stmt
+| ALTER RANGE relocate_kw NONVOTERS FROM iconst64 TO iconst64 FOR select_stmt
     {
       $$.val = &tree.RelocateRange{
         Rows: $10.slct(),
@@ -2033,7 +2033,7 @@ ALTER RANGE relocate_kw voters_kw FROM iconst64 TO iconst64 FOR select_stmt
         RelocateNonVoters: true,
       }
     }
-| ALTER RANGE iconst64 relocate_kw NON_VOTERS FROM iconst64 TO iconst64
+| ALTER RANGE iconst64 relocate_kw NONVOTERS FROM iconst64 TO iconst64
   {
     $$.val = &tree.RelocateRange{
       Rows: &tree.Select{
@@ -13445,7 +13445,7 @@ unreserved_keyword:
 | NOCONTROLJOB
 | NOLOGIN
 | NOMODIFYCLUSTERSETTING
-| NON_VOTERS
+| NONVOTERS
 | NOVIEWACTIVITY
 | NOWAIT
 | NULLS

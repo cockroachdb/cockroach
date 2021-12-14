@@ -91,7 +91,7 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 	if node.RelocateLease {
 		ctx.WriteString("LEASE ")
 	} else if node.RelocateNonVoters {
-		ctx.WriteString("NON_VOTERS ")
+		ctx.WriteString("NONVOTERS ")
 	} else {
 		ctx.WriteString("VOTERS ")
 	}
