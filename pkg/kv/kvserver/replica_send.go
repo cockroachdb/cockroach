@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
+var optimisticEvalLimitedScans = settings.TenantWritable.RegisterBoolSetting(
 	"kv.concurrency.optimistic_eval_limited_scans.enabled",
 	"when true, limited scans are optimistically evaluated in the sense of not checking for "+
 		"conflicting latches or locks up front for the full key range of the scan, and instead "+

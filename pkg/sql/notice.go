@@ -21,7 +21,7 @@ import (
 
 // NoticesEnabled is the cluster setting that allows users
 // to enable notices.
-var NoticesEnabled = settings.RegisterBoolSetting(
+var NoticesEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"sql.notices.enabled",
 	"enable notices in the server/client protocol being sent",
 	true,

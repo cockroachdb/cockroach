@@ -31,7 +31,7 @@ type instance struct {
 
 // Note: the "four" in the description comes from
 //   tenantcostclient.extendedReportingPeriodFactor.
-var instanceInactivity = settings.RegisterDurationSetting(
+var instanceInactivity = settings.TenantWritable.RegisterDurationSetting(
 	"tenant_usage_instance_inactivity",
 	"instances that have not reported consumption for longer than this value are cleaned up; "+
 		"should be at least four times higher than the tenant_cost_control_period of any tenant",

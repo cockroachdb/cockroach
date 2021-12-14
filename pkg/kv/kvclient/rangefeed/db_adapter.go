@@ -38,7 +38,7 @@ type dbAdapter struct {
 
 var _ kvDB = (*dbAdapter)(nil)
 
-var maxScanParallelism = settings.RegisterIntSetting(
+var maxScanParallelism = settings.TenantWritable.RegisterIntSetting(
 	"kv.rangefeed.max_scan_parallelism",
 	"maximum number of concurrent scan requests that can be issued during initial scan",
 	64,

@@ -190,7 +190,7 @@ var allowedIntoFormats = map[string]struct{}{
 }
 
 // featureImportEnabled is used to enable and disable the IMPORT feature.
-var featureImportEnabled = settings.RegisterBoolSetting(
+var featureImportEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"feature.import.enabled",
 	"set to true to enable imports, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

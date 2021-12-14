@@ -117,13 +117,13 @@ var (
 	// Allocation pool for gzipResponseWriters.
 	gzipResponseWriterPool sync.Pool
 
-	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
+	forwardClockJumpCheckEnabled = settings.TenantWritable.RegisterBoolSetting(
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
 		false,
 	).WithPublic()
 
-	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
+	persistHLCUpperBoundInterval = settings.TenantWritable.RegisterDurationSetting(
 		"server.clock.persist_upper_bound_interval",
 		"the interval between persisting the wall time upper bound of the clock. The clock "+
 			"does not generate a wall time greater than the persisted timestamp and will panic if "+

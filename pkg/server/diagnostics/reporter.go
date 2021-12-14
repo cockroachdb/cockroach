@@ -56,7 +56,7 @@ type NodeStatusGenerator interface {
 	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
 }
 
-var reportFrequency = settings.RegisterDurationSetting(
+var reportFrequency = settings.TenantWritable.RegisterDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,

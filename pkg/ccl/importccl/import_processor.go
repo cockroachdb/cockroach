@@ -46,7 +46,7 @@ var csvOutputTypes = []*types.T{
 const readImportDataProcessorName = "readImportDataProcessor"
 
 var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+	s := settings.TenantWritable.RegisterByteSizeSetting(
 		"kv.bulk_ingest.pk_buffer_size",
 		"the initial size of the BulkAdder buffer handling primary index imports",
 		32<<20,
@@ -55,7 +55,7 @@ var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
 }()
 
 var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+	s := settings.TenantWritable.RegisterByteSizeSetting(
 		"kv.bulk_ingest.max_pk_buffer_size",
 		"the maximum size of the BulkAdder buffer handling primary index imports",
 		128<<20,
@@ -64,7 +64,7 @@ var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 }()
 
 var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+	s := settings.TenantWritable.RegisterByteSizeSetting(
 		"kv.bulk_ingest.index_buffer_size",
 		"the initial size of the BulkAdder buffer handling secondary index imports",
 		32<<20,
@@ -73,7 +73,7 @@ var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
 }()
 
 var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+	s := settings.TenantWritable.RegisterByteSizeSetting(
 		"kv.bulk_ingest.max_index_buffer_size",
 		"the maximum size of the BulkAdder buffer handling secondary index imports",
 		512<<20,
@@ -82,7 +82,7 @@ var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 }()
 
 var importBufferIncrementSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
+	s := settings.TenantWritable.RegisterByteSizeSetting(
 		"kv.bulk_ingest.buffer_increment",
 		"the size by which the BulkAdder attempts to grow its buffer before flushing",
 		32<<20,

@@ -16,7 +16,7 @@ import (
 
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
-var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
+var StreamReplicationStreamLivenessTrackFrequency = settings.TenantWritable.RegisterDurationSetting(
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
@@ -24,7 +24,7 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.
-var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
+var StreamReplicationJobLivenessTimeout = settings.TenantWritable.RegisterDurationSetting(
 	"stream_replication.job_liveness_timeout",
 	"controls how long we wait for to kill an inactive producer job",
 	time.Minute,

@@ -23,7 +23,7 @@ import (
 // are logged to the telemetry channel.
 const defaultMaxEventFrequency = 10
 
-var telemetryMaxEventFrequency = settings.RegisterIntSetting(
+var telemetryMaxEventFrequency = settings.TenantWritable.RegisterIntSetting(
 	"sql.telemetry.query_sampling.max_event_frequency",
 	"the max event frequency at which we sample queries for telemetry",
 	defaultMaxEventFrequency,

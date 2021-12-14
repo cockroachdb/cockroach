@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
+var maxCombinedCPUProfFileSize = settings.TenantWritable.RegisterByteSizeSetting(
 	"server.cpu_profile.total_dump_size_limit",
 	"maximum combined disk size of preserved CPU profiles",
 	128<<20, // 128MiB

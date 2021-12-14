@@ -39,7 +39,7 @@ import (
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
-var RangefeedEnabled = settings.RegisterBoolSetting(
+var RangefeedEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
@@ -47,7 +47,7 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 
 // RangeFeedRefreshInterval controls the frequency with which we deliver closed
 // timestamp updates to rangefeeds.
-var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
+var RangeFeedRefreshInterval = settings.TenantWritable.RegisterDurationSetting(
 	"kv.rangefeed.closed_timestamp_refresh_interval",
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
@@ -56,7 +56,7 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 )
 
 // RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
-var RangefeedTBIEnabled = settings.RegisterBoolSetting(
+var RangefeedTBIEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
 	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
 	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", true),

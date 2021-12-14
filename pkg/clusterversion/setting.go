@@ -61,7 +61,7 @@ var _ settings.VersionSettingImpl = &clusterVersionSetting{}
 func registerClusterVersionSetting() *clusterVersionSetting {
 	s := &clusterVersionSetting{}
 	s.VersionSetting = settings.MakeVersionSetting(s)
-	settings.RegisterVersionSetting(
+	settings.TenantWritable.RegisterVersionSetting(
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
 		&s.VersionSetting)
@@ -240,7 +240,7 @@ func (cv *clusterVersionSetting) validateBinaryVersions(
 var preserveDowngradeVersion = registerPreserveDowngradeVersionSetting()
 
 func registerPreserveDowngradeVersionSetting() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
+	s := settings.TenantWritable.RegisterValidatedStringSetting(
 		"cluster.preserve_downgrade_option",
 		"disable (automatic or manual) cluster version upgrade from the specified version until reset",
 		"",

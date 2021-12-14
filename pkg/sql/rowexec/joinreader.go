@@ -207,7 +207,7 @@ const joinReaderProcName = "join reader"
 
 // ParallelizeMultiKeyLookupJoinsEnabled determines whether the joinReader
 // parallelizes KV batches in all cases.
-var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
+var ParallelizeMultiKeyLookupJoinsEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"sql.distsql.parallelize_multi_key_lookup_joins.enabled",
 	"determines whether KV batches are executed in parallel for lookup joins in all cases. "+
 		"Enabling this will increase the speed of lookup joins when each input row might get "+

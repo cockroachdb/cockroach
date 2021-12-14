@@ -353,7 +353,7 @@ var InitializeMultiRegionMetadataCCL = func(
 const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
 
 // DefaultPrimaryRegion is a cluster setting that contains the default primary region.
-var DefaultPrimaryRegion = settings.RegisterStringSetting(
+var DefaultPrimaryRegion = settings.TenantWritable.RegisterStringSetting(
 	DefaultPrimaryRegionClusterSettingName,
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,

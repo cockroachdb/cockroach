@@ -51,21 +51,21 @@ var (
 	//
 	// Doing this, rather than just using a default of `true`, means that a node
 	// will not errantly send a report using a default before loading settings.
-	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
+	DiagnosticsReportingEnabled = settings.TenantWritable.RegisterBoolSetting(
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
 	).WithPublic()
 
 	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
-	CrashReports = settings.RegisterBoolSetting(
+	CrashReports = settings.TenantWritable.RegisterBoolSetting(
 		"diagnostics.reporting.send_crash_reports",
 		"send crash and panic reports",
 		true,
 	)
 
 	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
-	PanicOnAssertions = settings.RegisterBoolSetting(
+	PanicOnAssertions = settings.TenantWritable.RegisterBoolSetting(
 		"debug.panic_on_failed_assertions",
 		"panic when an assertion fails rather than reporting",
 		false,

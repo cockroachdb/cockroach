@@ -48,7 +48,7 @@ const (
 	dumpOnStop
 )
 
-var traceableJobDumpTraceMode = settings.RegisterEnumSetting(
+var traceableJobDumpTraceMode = settings.TenantWritable.RegisterEnumSetting(
 	"jobs.trace.force_dump_mode",
 	"determines the state in which all traceable jobs will dump their cluster wide, inflight, "+
 		"trace recordings. Traces may be dumped never, on fail, "+

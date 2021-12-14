@@ -46,7 +46,7 @@ const histogramSamples = 10000
 //
 // The lowest TTL we recommend is 10 minutes. This value must be lower than
 // that.
-var maxTimestampAge = settings.RegisterDurationSetting(
+var maxTimestampAge = settings.TenantWritable.RegisterDurationSetting(
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,

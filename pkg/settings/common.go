@@ -18,19 +18,17 @@ import (
 // common implements basic functionality used by all setting types.
 type common struct {
 	description string
+	class       Class
 	visibility  Visibility
-	systemOnly  bool
 	// Each setting has a slotIdx which is used as a handle with Values.
 	slotIdx       int
 	nonReportable bool
 	retired       bool
 }
 
-func (i *common) isRetired() bool {
-	return i.retired
-}
-
-func (i *common) setSlotIdx(slotIdx int) {
+// init must be called to initialize the fields that don't have defaults.
+func (i *common) init(class Class, slotIdx int, description string) {
+	i.class = class
 	if slotIdx < 1 {
 		panic(fmt.Sprintf("Invalid slot index %d", slotIdx))
 	}
@@ -38,25 +36,27 @@ func (i *common) setSlotIdx(slotIdx int) {
 		panic("too many settings; increase MaxSettings")
 	}
 	i.slotIdx = slotIdx
-}
-func (i *common) getSlotIdx() int {
-	return i.slotIdx
+	i.description = description
 }
 
-func (i *common) setDescription(s string) {
-	i.description = s
+func (i *common) isRetired() bool {
+	return i.retired
+}
+
+func (i *common) getSlotIdx() int {
+	return i.slotIdx
 }
 
 func (i common) Description() string {
 	return i.description
 }
 
-func (i common) Visibility() Visibility {
-	return i.visibility
+func (i common) Class() Class {
+	return i.class
 }
 
-func (i common) SystemOnly() bool {
-	return i.systemOnly
+func (i common) Visibility() Visibility {
+	return i.visibility
 }
 
 func (i common) isReportable() bool {
@@ -103,10 +103,9 @@ func (i *common) SetOnChange(sv *Values, fn func(ctx context.Context)) {
 type internalSetting interface {
 	NonMaskedSetting
 
+	init(class Class, slotIdx int, desc string)
 	isRetired() bool
 	setToDefault(ctx context.Context, sv *Values)
-	setDescription(desc string)
-	setSlotIdx(slotIdx int)
 	getSlotIdx() int
 	// isReportable indicates whether the value of the setting can be
 	// included in user-facing reports such as that produced by SHOW ALL

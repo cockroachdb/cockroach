@@ -17,14 +17,14 @@ import (
 )
 
 // StmtStatsEnable determines whether to collect per-statement statistics.
-var StmtStatsEnable = settings.RegisterBoolSetting(
+var StmtStatsEnable = settings.TenantWritable.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
 ).WithPublic()
 
 // TxnStatsNumStmtFingerprintIDsToRecord limits the number of statementFingerprintIDs stored in
 // transactions statistics for a single transaction. This defaults to 1000, and
 // currently is non-configurable (hidden setting).
-var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
+var TxnStatsNumStmtFingerprintIDsToRecord = settings.TenantWritable.RegisterIntSetting(
 	"sql.metrics.transaction_details.max_statement_ids",
 	"max number of statement fingerprint IDs to store for transaction statistics",
 	1000,
@@ -33,13 +33,13 @@ var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 
 // TxnStatsEnable determines whether to collect per-application transaction
 // statistics.
-var TxnStatsEnable = settings.RegisterBoolSetting(
+var TxnStatsEnable = settings.TenantWritable.RegisterBoolSetting(
 	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,
 ).WithPublic()
 
 // StatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
-var StatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+var StatsCollectionLatencyThreshold = settings.TenantWritable.RegisterDurationSetting(
 	"sql.metrics.statement_details.threshold",
 	"minimum execution time to cause statement statistics to be collected. "+
 		"If configured, no transaction stats are collected.",
@@ -48,7 +48,7 @@ var StatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 
 // DumpStmtStatsToLogBeforeReset specifies whether we dump the statements
 // statistics to logs before being reset.
-var DumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
+var DumpStmtStatsToLogBeforeReset = settings.TenantWritable.RegisterBoolSetting(
 	"sql.metrics.statement_details.dump_to_logs",
 	"dump collected statement statistics to node logs when periodically cleared",
 	false,
@@ -56,7 +56,7 @@ var DumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 
 // SampleLogicalPlans specifies whether we periodically sample the logical plan
 // for each fingerprint.
-var SampleLogicalPlans = settings.RegisterBoolSetting(
+var SampleLogicalPlans = settings.TenantWritable.RegisterBoolSetting(
 	"sql.metrics.statement_details.plan_collection.enabled",
 	"periodically save a logical plan for each fingerprint",
 	true,
@@ -64,7 +64,7 @@ var SampleLogicalPlans = settings.RegisterBoolSetting(
 
 // LogicalPlanCollectionPeriod specifies the interval between collections of
 // logical plans for each fingerprint.
-var LogicalPlanCollectionPeriod = settings.RegisterDurationSetting(
+var LogicalPlanCollectionPeriod = settings.TenantWritable.RegisterDurationSetting(
 	"sql.metrics.statement_details.plan_collection.period",
 	"the time until a new logical plan is collected",
 	5*time.Minute,
@@ -73,7 +73,7 @@ var LogicalPlanCollectionPeriod = settings.RegisterDurationSetting(
 
 // MaxMemSQLStatsStmtFingerprints specifies the maximum of unique statement
 // fingerprints we store in memory.
-var MaxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
+var MaxMemSQLStatsStmtFingerprints = settings.TenantWritable.RegisterIntSetting(
 	"sql.metrics.max_mem_stmt_fingerprints",
 	"the maximum number of statement fingerprints stored in memory",
 	100000,
@@ -81,7 +81,7 @@ var MaxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
 
 // MaxMemSQLStatsTxnFingerprints specifies the maximum of unique transaction
 // fingerprints we store in memory.
-var MaxMemSQLStatsTxnFingerprints = settings.RegisterIntSetting(
+var MaxMemSQLStatsTxnFingerprints = settings.TenantWritable.RegisterIntSetting(
 	"sql.metrics.max_mem_txn_fingerprints",
 	"the maximum number of transaction fingerprints stored in memory",
 	100000,
@@ -89,7 +89,7 @@ var MaxMemSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 
 // MaxMemReportedSQLStatsStmtFingerprints specifies the maximum of unique statement
 // fingerprints we store in memory.
-var MaxMemReportedSQLStatsStmtFingerprints = settings.RegisterIntSetting(
+var MaxMemReportedSQLStatsStmtFingerprints = settings.TenantWritable.RegisterIntSetting(
 	"sql.metrics.max_mem_reported_stmt_fingerprints",
 	"the maximum number of reported statement fingerprints stored in memory",
 	100000,
@@ -97,7 +97,7 @@ var MaxMemReportedSQLStatsStmtFingerprints = settings.RegisterIntSetting(
 
 // MaxMemReportedSQLStatsTxnFingerprints specifies the maximum of unique transaction
 // fingerprints we store in memory.
-var MaxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
+var MaxMemReportedSQLStatsTxnFingerprints = settings.TenantWritable.RegisterIntSetting(
 	"sql.metrics.max_mem_reported_txn_fingerprints",
 	"the maximum number of reported transaction fingerprints stored in memory",
 	100000,
@@ -131,7 +131,7 @@ var MaxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 //
 // The total amount of memory consumed will still be constrained by the
 // top-level memory monitor created for SQL Stats.
-var MaxSQLStatsStmtFingerprintsPerExplicitTxn = settings.RegisterIntSetting(
+var MaxSQLStatsStmtFingerprintsPerExplicitTxn = settings.TenantWritable.RegisterIntSetting(
 	"sql.metrics.max_stmt_fingerprints_per_explicit_txn",
 	"the maximum number of statement fingerprints stored per explicit transaction",
 	2000,
@@ -139,7 +139,7 @@ var MaxSQLStatsStmtFingerprintsPerExplicitTxn = settings.RegisterIntSetting(
 
 // MaxSQLStatReset is the cluster setting that controls at what interval SQL
 // statement statistics must be flushed within.
-var MaxSQLStatReset = settings.RegisterDurationSetting(
+var MaxSQLStatReset = settings.TenantWritable.RegisterDurationSetting(
 	"diagnostics.forced_sql_stat_reset.interval",
 	"interval after which the reported SQL Stats are reset even "+
 		"if not collected by telemetry reporter. It has a max value of 24H.",

@@ -20,14 +20,14 @@ import (
 )
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
-var SplitByLoadEnabled = settings.RegisterBoolSetting(
+var SplitByLoadEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated",
 	true,
 ).WithPublic()
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
-var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
+var SplitByLoadQPSThreshold = settings.TenantWritable.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting",
 	2500, // 2500 req/s

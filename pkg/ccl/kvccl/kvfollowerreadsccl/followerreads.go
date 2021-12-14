@@ -34,7 +34,7 @@ import (
 // ClosedTimestampPropagationSlack is used by follower_read_timestamp() as a
 // measure of how long closed timestamp updates are supposed to take from the
 // leaseholder to the followers.
-var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
+var ClosedTimestampPropagationSlack = settings.TenantWritable.RegisterDurationSetting(
 	"kv.closed_timestamp.propagation_slack",
 	"a conservative estimate of the amount of time expect for closed timestamps to "+
 		"propagate from a leaseholder to followers. This is taken into account by "+

@@ -21,7 +21,7 @@ import (
 // featureSchemaChangeEnabled is the cluster setting used to enable and disable
 // any features that require schema changes. Documentation for which features
 // are covered TBD.
-var featureSchemaChangeEnabled = settings.RegisterBoolSetting(
+var featureSchemaChangeEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"feature.schema_change.enabled",
 	"set to true to enable schema changes, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

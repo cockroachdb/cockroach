@@ -17,7 +17,7 @@ import (
 )
 
 // TargetDuration is the follower reads closed timestamp update target duration.
-var TargetDuration = settings.RegisterDurationSetting(
+var TargetDuration = settings.TenantWritable.RegisterDurationSetting(
 	"kv.closed_timestamp.target_duration",
 	"if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration",
 	3*time.Second,
@@ -25,7 +25,7 @@ var TargetDuration = settings.RegisterDurationSetting(
 )
 
 // SideTransportCloseInterval determines the ClosedTimestampSender's frequency.
-var SideTransportCloseInterval = settings.RegisterDurationSetting(
+var SideTransportCloseInterval = settings.TenantWritable.RegisterDurationSetting(
 	"kv.closed_timestamp.side_transport_interval",
 	"the interval at which the closed-timestamp side-transport attempts to "+
 		"advance each range's closed timestamp; set to 0 to disable the side-transport",
@@ -37,7 +37,7 @@ var SideTransportCloseInterval = settings.RegisterDurationSetting(
 // LEAD_FOR_GLOBAL_READS closed timestamp policy use to publish close timestamps
 // (see TargetForPolicy), if it is set to a non-zero value. Meant as an escape
 // hatch.
-var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
+var LeadForGlobalReadsOverride = settings.TenantWritable.RegisterDurationSetting(
 	"kv.closed_timestamp.lead_for_global_reads_override",
 	"if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps",
 	0,

@@ -101,15 +101,10 @@ func (s *StringSetting) WithPublic() *StringSetting {
 	return s
 }
 
-// RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
-	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterValidatedStringSetting defines a new setting with type string with a
+// registerStringSetting defines a new setting with type string with an optional
 // validation function.
-func RegisterValidatedStringSetting(
-	key, desc string, defaultValue string, validateFn func(*Values, string) error,
+func registerStringSetting(
+	class Class, key, desc string, defaultValue string, validateFn func(*Values, string) error,
 ) *StringSetting {
 	if validateFn != nil {
 		if err := validateFn(nil, defaultValue); err != nil {
@@ -124,6 +119,6 @@ func RegisterValidatedStringSetting(
 	// PII and are thus non-reportable (to exclude them from telemetry
 	// reports).
 	setting.SetReportable(false)
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }

@@ -82,7 +82,7 @@ type s3Client struct {
 	uploader *s3manager.Uploader
 }
 
-var reuseSession = settings.RegisterBoolSetting(
+var reuseSession = settings.TenantWritable.RegisterBoolSetting(
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,

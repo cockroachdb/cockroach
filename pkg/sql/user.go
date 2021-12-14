@@ -369,7 +369,7 @@ WHERE
 	return settingsEntries, err
 }
 
-var userLoginTimeout = settings.RegisterDurationSetting(
+var userLoginTimeout = settings.TenantWritable.RegisterDurationSetting(
 	"server.user_login.timeout",
 	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
 	10*time.Second,

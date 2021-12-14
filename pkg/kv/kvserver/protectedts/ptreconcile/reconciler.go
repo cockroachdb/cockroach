@@ -33,7 +33,7 @@ import (
 
 // ReconcileInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
-var ReconcileInterval = settings.RegisterDurationSetting(
+var ReconcileInterval = settings.TenantWritable.RegisterDurationSetting(
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,

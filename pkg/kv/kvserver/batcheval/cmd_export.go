@@ -33,7 +33,7 @@ const SSTTargetSizeSetting = "kv.bulk_sst.target_size"
 
 // ExportRequestTargetFileSize controls the target file size for SSTs created
 // during backups.
-var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
+var ExportRequestTargetFileSize = settings.TenantWritable.RegisterByteSizeSetting(
 	SSTTargetSizeSetting,
 	fmt.Sprintf("target size for SSTs emitted from export requests; "+
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
@@ -50,7 +50,7 @@ const MaxExportOverageSetting = "kv.bulk_sst.max_allowed_overage"
 // the target file size which an exported SST may be. If this value is positive
 // and an SST would exceed this size (due to large rows or large numbers of
 // versions), then the export will fail.
-var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
+var ExportRequestMaxAllowedFileSizeOverage = settings.TenantWritable.RegisterByteSizeSetting(
 	MaxExportOverageSetting,
 	fmt.Sprintf("if positive, allowed size in excess of target size for SSTs from export requests; "+
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
@@ -64,7 +64,7 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 // holding locks for too long and preventing non mvcc operations from progressing.
 // If request takes longer than this threshold it would stop and return already
 // collected data and allow caller to use resume span to continue.
-var exportRequestMaxIterationTime = settings.RegisterDurationSetting(
+var exportRequestMaxIterationTime = settings.TenantWritable.RegisterDurationSetting(
 	"kv.bulk_sst.max_request_time",
 	"if set, limits amount of time spent in export requests; "+
 		"if export request can not finish within allocated time it will resume from the point it stopped in "+

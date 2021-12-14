@@ -33,32 +33,32 @@ const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
 
-var strA = settings.RegisterValidatedStringSetting(strKey, "desc", "<default>", func(sv *settings.Values, v string) error {
+var strA = settings.TenantWritable.RegisterValidatedStringSetting(strKey, "desc", "<default>", func(sv *settings.Values, v string) error {
 	if len(v) > 15 {
 		return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
 	}
 	return nil
 })
-var intA = settings.RegisterIntSetting(intKey, "desc", 1, func(v int64) error {
+var intA = settings.TenantWritable.RegisterIntSetting(intKey, "desc", 1, func(v int64) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
 	}
 	return nil
 
 })
-var durationA = settings.RegisterDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
+var durationA = settings.TenantWritable.RegisterDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
 	}
 	return nil
 })
-var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "desc", 1024*1024, func(v int64) error {
+var byteSizeA = settings.TenantWritable.RegisterByteSizeSetting(byteSizeKey, "desc", 1024*1024, func(v int64) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
 	}
 	return nil
 })
-var enumA = settings.RegisterEnumSetting(enumKey, "desc", "foo", map[int64]string{1: "foo", 2: "bar"})
+var enumA = settings.TenantWritable.RegisterEnumSetting(enumKey, "desc", "foo", map[int64]string{1: "foo", 2: "bar"})
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()

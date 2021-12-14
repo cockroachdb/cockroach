@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var parallelCommitsEnabled = settings.RegisterBoolSetting(
+var parallelCommitsEnabled = settings.TenantWritable.RegisterBoolSetting(
 	"kv.transaction.parallel_commits_enabled",
 	"if enabled, transactional commits will be parallelized with transactional writes",
 	true,

@@ -119,14 +119,14 @@ var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
-var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
+var bulkIOWriteLimit = settings.TenantWritable.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
 	1<<40,
 ).WithPublic()
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
-var addSSTableRequestLimit = settings.RegisterIntSetting(
+var addSSTableRequestLimit = settings.TenantWritable.RegisterIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
 	"number of AddSSTable requests a store will handle concurrently before queuing",
 	1,
@@ -134,7 +134,7 @@ var addSSTableRequestLimit = settings.RegisterIntSetting(
 )
 
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
-var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
+var concurrentRangefeedItersLimit = settings.TenantWritable.RegisterIntSetting(
 	"kv.rangefeed.concurrent_catchup_iterators",
 	"number of rangefeeds catchup iterators a store will allow concurrently before queueing",
 	64,
@@ -144,7 +144,7 @@ var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
 // concurrentscanInterleavedIntentsLimit is the number of concurrent
 // ScanInterleavedIntents requests that will be run on a store. Used as part
 // of pre-evaluation throttling.
-var concurrentscanInterleavedIntentsLimit = settings.RegisterIntSetting(
+var concurrentscanInterleavedIntentsLimit = settings.TenantWritable.RegisterIntSetting(
 	"kv.migration.concurrent_scan_interleaved_intents",
 	"number of scan interleaved intents requests a store will handle concurrently before queueing",
 	1,
@@ -153,7 +153,7 @@ var concurrentscanInterleavedIntentsLimit = settings.RegisterIntSetting(
 
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas.
-var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
+var queueAdditionOnSystemConfigUpdateRate = settings.TenantWritable.RegisterFloatSetting(
 	"kv.store.system_config_update.queue_add_rate",
 	"the rate (per second) at which the store will add, all replicas to the split and merge queue due to system config gossip",
 	.5,
@@ -163,7 +163,7 @@ var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas. The default is relatively high to deal with startup
 // scenarios.
-var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
+var queueAdditionOnSystemConfigUpdateBurst = settings.TenantWritable.RegisterIntSetting(
 	"kv.store.system_config_update.queue_add_burst",
 	"the burst rate at which the store will add all replicas to the split and merge queue due to system config gossip",
 	32,
@@ -173,7 +173,7 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 // leaseTransferWait limits the amount of time a drain command waits for lease
 // and Raft leadership transfers.
 var leaseTransferWait = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
+	s := settings.TenantWritable.RegisterDurationSetting(
 		leaseTransferWaitSettingName,
 		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
@@ -200,7 +200,7 @@ const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 // by a guessing - it could be improved by more measured heuristics. Exported
 // here since we check it in in the caller to limit generated requests as well
 // to prevent excessive queuing.
-var ExportRequestsLimit = settings.RegisterIntSetting(
+var ExportRequestsLimit = settings.TenantWritable.RegisterIntSetting(
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	3,
