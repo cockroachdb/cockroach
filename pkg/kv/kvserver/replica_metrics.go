@@ -59,7 +59,7 @@ func (r *Replica) Metrics(
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
-	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
+	quiescent := r.mu.quiescent
 	desc := r.mu.state.Desc
 	conf := r.mu.conf
 	raftLogSize := r.mu.raftLogSize
