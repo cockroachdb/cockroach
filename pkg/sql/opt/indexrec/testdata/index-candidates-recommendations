@@ -386,20 +386,87 @@ index-candidates
 SELECT k, i FROM t1 ORDER BY k DESC, i ASC
 ----
 t1:
- (k, i DESC)
+ (k DESC, i)
 
 index-recommendations
 SELECT k, i FROM t1 ORDER BY k DESC, i ASC
 ----
 index recommendations: 1
 1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k DESC, i);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: k:1 i:2
+ ├── cost: 1094.72
+ └── ordering: -1,+2
+
+# Only one index candidate is created with nested ORDER BY clauses.
+index-candidates
+SELECT * FROM (
+  SELECT k, i FROM t1
+  ORDER BY k DESC, i ASC
+)
+ORDER BY k ASC, i DESC
+----
+t1:
+ (k, i DESC)
+
+index-recommendations
+SELECT * FROM (
+  SELECT k, i FROM t1
+  ORDER BY k DESC, i ASC
+)
+ORDER BY k ASC, i DESC
+----
+index recommendations: 1
+1. type: index creation
    SQL command: CREATE INDEX ON t1 (k, i DESC);
 --
 Optimal Plan.
-scan t1@_hyp_1,rev
+scan t1@_hyp_1
  ├── columns: k:1 i:2
- ├── cost: 1195.37442
- └── ordering: -1,+2
+ ├── cost: 1094.72
+ └── ordering: +1,-2
+
+# Redundant index candidates are created but only one index is recommended.
+index-candidates
+SELECT k FROM t1 WHERE k > 3
+UNION ALL
+SELECT k FROM t1 WHERE k < 10
+ORDER BY k DESC
+----
+t1:
+ (k DESC)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 WHERE k > 3
+UNION ALL
+SELECT k FROM t1 WHERE k < 10
+ORDER BY k DESC
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k DESC);
+--
+Optimal Plan.
+union-all
+ ├── columns: k:15!null
+ ├── left columns: t1.k:1
+ ├── right columns: t1.k:8
+ ├── cost: 741.393333
+ ├── ordering: -15
+ ├── scan t1@_hyp_1
+ │    ├── columns: t1.k:1!null
+ │    ├── constraint: /-1/5: [ - /4]
+ │    ├── cost: 367.353333
+ │    └── ordering: -1
+ └── scan t1@_hyp_1
+      ├── columns: t1.k:8!null
+      ├── constraint: /-8/12: [/9 - /NULL)
+      ├── cost: 367.353333
+      └── ordering: -8
 
 index-candidates
 SELECT count(*) FROM t1 GROUP BY k
