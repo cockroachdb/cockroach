@@ -34,7 +34,7 @@ type physicalConfig struct {
 
 type rangefeedFactory func(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
@@ -71,12 +71,9 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg phys
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
-	for _, span := range cfg.Spans {
-		span := span
-		g.GoCtx(func(ctx context.Context) error {
-			return p(ctx, span, cfg.Timestamp, cfg.WithDiff, feed.eventC)
-		})
-	}
+	g.GoCtx(func(ctx context.Context) error {
+		return p(ctx, cfg.Spans, cfg.Timestamp, cfg.WithDiff, feed.eventC)
+	})
 	return g.Wait()
 }
 
