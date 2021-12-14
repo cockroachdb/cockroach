@@ -163,8 +163,8 @@ func (b *Builder) buildAlterTableRelocate(
 
 	// The first column is the target leaseholder or the relocation array,
 	// depending on variant.
-	cmdName := "EXPERIMENTAL_RELOCATE"
-	if relocate.RelocateLease {
+	cmdName := "RELOCATE"
+	if relocate.SubjectReplicas == tree.RelocateLease {
 		cmdName += " LEASE"
 		colNames = append([]string{"target leaseholder"}, colNames...)
 		colTypes = append([]*types.T{types.Int}, colTypes...)
@@ -181,8 +181,7 @@ func (b *Builder) buildAlterTableRelocate(
 	outScope.expr = b.factory.ConstructAlterTableRelocate(
 		inputScope.expr,
 		&memo.AlterTableRelocatePrivate{
-			RelocateLease:     relocate.RelocateLease,
-			RelocateNonVoters: relocate.RelocateNonVoters,
+			SubjectReplicas: relocate.SubjectReplicas,
 			AlterTableSplitPrivate: memo.AlterTableSplitPrivate{
 				Table:   b.factory.Metadata().AddTable(table, &tn),
 				Index:   index.Ordinal(),

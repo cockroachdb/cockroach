@@ -10,35 +10,62 @@
 
 package tree
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/cockroachdb/errors"
+)
 
 // RelocateRange represents an `ALTER RANGE .. RELOCATE ..`
 // statement.
 type RelocateRange struct {
-	Rows              *Select
-	ToStoreID         int64
-	FromStoreID       int64
-	RelocateLease     bool
-	RelocateNonVoters bool
+	Rows            *Select
+	ToStoreID       int64
+	FromStoreID     int64
+	SubjectReplicas RelocateSubject
+}
+
+// RelocateSubject indicates what replicas of a range should be relocated.
+type RelocateSubject int
+
+const (
+	// RelocateLease indicates that leases should be relocated.
+	RelocateLease RelocateSubject = iota
+	// RelocateVoters indicates what voter replicas should be relocated.
+	RelocateVoters
+	// RelocateNonVoters indicates that non-voter replicas should be relocated.
+	RelocateNonVoters
+)
+
+// Format implementsthe NodeFormatter interface.
+func (n *RelocateSubject) Format(ctx *FmtCtx) {
+	ctx.WriteString(n.String())
+}
+
+func (n RelocateSubject) String() string {
+	switch n {
+	case RelocateLease:
+		return "LEASE"
+	case RelocateVoters:
+		return "VOTERS"
+	case RelocateNonVoters:
+		return "NONVOTERS"
+	default:
+		panic(errors.AssertionFailedf("programming error: unhandled case %d", int(n)))
+	}
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RelocateRange) Format(ctx *FmtCtx) {
+func (n *RelocateRange) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER RANGE RELOCATE ")
-	if node.RelocateLease {
-		ctx.WriteString("LEASE ")
-	} else if node.RelocateNonVoters {
-		ctx.WriteString("NONVOTERS ")
-	} else {
-		ctx.WriteString("VOTERS ")
+	ctx.FormatNode(&n.SubjectReplicas)
+	// When relocating leases, the origin store is implicit.
+	if n.SubjectReplicas != RelocateLease {
+		ctx.WriteString(" FROM ")
+		ctx.WriteString(strconv.FormatInt(n.FromStoreID, 10))
 	}
-	if !node.RelocateLease {
-		ctx.WriteString("FROM ")
-		ctx.WriteString(strconv.FormatInt(node.FromStoreID, 10))
-		ctx.WriteString(" ")
-	}
-	ctx.WriteString("TO ")
-	ctx.WriteString(strconv.FormatInt(node.ToStoreID, 10))
+	ctx.WriteString(" TO ")
+	ctx.WriteString(strconv.FormatInt(n.ToStoreID, 10))
 	ctx.WriteString(" FOR ")
-	ctx.FormatNode(node.Rows)
+	ctx.FormatNode(n.Rows)
 }
