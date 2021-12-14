@@ -82,6 +82,7 @@ go_library(
         "metadata_replicas.go",
         "method.go",
         "span_config.go",
+        "tenant.go",
         "version.go",
     ],
     embed = [":roachpb_go_proto"],

@@ -16,13 +16,6 @@ import (
 	"strconv"
 )
 
-// A TenantID is a unique ID associated with a tenant in a multi-tenant cluster.
-// Each tenant is granted exclusive access to a portion of the keyspace and a
-// collection of SQL tables in that keyspace which comprise a "logical" cluster.
-//
-// The type is intentionally opaque to require deliberate use.
-type TenantID struct{ id uint64 }
-
 // SystemTenantID is the ID associated with the system's internal tenant in a
 // multi-tenant cluster and the only tenant in a single-tenant cluster.
 //
@@ -49,8 +42,8 @@ func MakeTenantID(id uint64) TenantID {
 
 // ToUint64 returns the TenantID as a uint64.
 func (t TenantID) ToUint64() uint64 {
-	checkValid(t.id)
-	return t.id
+	checkValid(t.InternalValue)
+	return t.InternalValue
 }
 
 // String implements the fmt.Stringer interface.
@@ -61,7 +54,7 @@ func (t TenantID) String() string {
 	case SystemTenantID:
 		return "system"
 	default:
-		return strconv.FormatUint(t.id, 10)
+		return strconv.FormatUint(t.InternalValue, 10)
 	}
 }
 
@@ -73,6 +66,11 @@ func checkValid(id uint64) {
 	if id == 0 {
 		panic("invalid tenant ID 0")
 	}
+}
+
+// IsSet returns whether this tenant ID is set to a valid value (>0).
+func (t TenantID) IsSet() bool {
+	return t.InternalValue != 0
 }
 
 // IsSystemTenantID returns whether the provided ID corresponds to that of the
