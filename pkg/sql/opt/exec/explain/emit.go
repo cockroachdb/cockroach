@@ -830,8 +830,11 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case alterRangeRelocateOp:
 		a := n.args.(*alterRangeRelocateArgs)
+		ob.Attr("replicas", a.subjectReplicas)
 		ob.Expr("to", a.toStoreID, nil /* columns */)
-		ob.Expr("from", a.fromStoreID, nil /* columns */)
+		if a.subjectReplicas != tree.RelocateLease {
+			ob.Expr("from", a.fromStoreID, nil /* columns */)
+		}
 
 	case simpleProjectOp,
 		serializingProjectOp,
