@@ -2098,7 +2098,7 @@ func TestStoreScanIntents(t *testing.T) {
 			errChan <- pErr
 		}()
 
-		wait := 1 * time.Second
+		wait := testutils.DefaultSucceedsSoonDuration
 		if !test.expFinish {
 			wait = 10 * time.Millisecond
 		}
