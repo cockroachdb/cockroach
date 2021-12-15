@@ -300,6 +300,7 @@ ALL_TESTS = [
     "//pkg/sql/schemachanger/scbuild:scbuild_test",
     "//pkg/sql/schemachanger/scexec:scexec_test",
     "//pkg/sql/schemachanger/scgraph:scgraph_test",
+    "//pkg/sql/schemachanger/scjob:scjob_test",
     "//pkg/sql/schemachanger/scplan/deprules:deprules_test",
     "//pkg/sql/schemachanger/scplan/opgen:opgen_test",
     "//pkg/sql/schemachanger/scplan:scplan_test",

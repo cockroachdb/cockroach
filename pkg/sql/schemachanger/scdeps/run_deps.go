@@ -30,7 +30,9 @@ func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
-	indexBackfiller scexec.IndexBackfiller,
+	backfiller scexec.Backfiller,
+	backfillTracker BackfillTrackerFactory,
+	backfillFlusher scexec.PeriodicBackfillProgressFlusher,
 	eventLoggerBuilder func(txn *kv.Txn) scexec.EventLogger,
 	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
@@ -45,7 +47,9 @@ func NewJobRunDependencies(
 		collectionFactory:  collectionFactory,
 		db:                 db,
 		internalExecutor:   internalExecutor,
-		indexBackfiller:    indexBackfiller,
+		backfiller:         backfiller,
+		backfillTracker:    backfillTracker,
+		backfillFlusher:    backfillFlusher,
 		eventLoggerBuilder: eventLoggerBuilder,
 		partitioner:        partitioner,
 		jobRegistry:        jobRegistry,
@@ -62,9 +66,11 @@ type jobExecutionDeps struct {
 	collectionFactory  *descs.CollectionFactory
 	db                 *kv.DB
 	internalExecutor   sqlutil.InternalExecutor
-	indexBackfiller    scexec.IndexBackfiller
 	eventLoggerBuilder func(txn *kv.Txn) scexec.EventLogger
 	partitioner        scmutationexec.Partitioner
+	backfiller         scexec.Backfiller
+	backfillTracker    BackfillTrackerFactory
+	backfillFlusher    scexec.PeriodicBackfillProgressFlusher
 	jobRegistry        *jobs.Registry
 	job                *jobs.Job
 
@@ -97,7 +103,9 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				indexValidator:  d.indexValidator,
 				eventLogger:     d.eventLoggerBuilder(txn),
 			},
-			indexBackfiller: d.indexBackfiller,
+			backfiller:      d.backfiller,
+			backfillTracker: d.backfillTracker(),
+			backfillFlusher: d.backfillFlusher,
 			statements:      d.statements,
 			partitioner:     d.partitioner,
 			user:            d.job.Payload().UsernameProto.Decode(),
