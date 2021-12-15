@@ -39,6 +39,7 @@ vectorized: true
 • root
 │
 ├── • relocate range
+│   │ replicas: VOTERS
 │   │ to: 22
 │   │ from: 11
 │   │
@@ -62,6 +63,7 @@ vectorized: true
 • root
 │
 ├── • relocate range
+│   │ replicas: VOTERS
 │   │ to: @S1
 │   │ from: @S2
 │   │
