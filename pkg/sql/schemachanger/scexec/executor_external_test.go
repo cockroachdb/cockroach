@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -66,11 +67,9 @@ func (ti testInfra) newExecDeps(
 		noopJobRegistry{},    /* jobRegistry */
 		noopBackfiller{},     /* indexBackfiller */
 		noopIndexValidator{}, /* indexValidator */
-		noopCCLCallbacks{},   /* noopCCLCallbacks */
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return nil
-		},
-		nil, /* statements */
+		noopPartitioner{},    /* partitioner */
+		noopEventLogger{},    /* eventLogger */
+		nil,                  /* statements */
 	)
 }
 
@@ -507,13 +506,12 @@ func (noopIndexValidator) ValidateInvertedIndexes(
 	return nil
 }
 
-type noopCCLCallbacks struct {
-}
+type noopPartitioner struct{}
 
-func (noopCCLCallbacks) AddPartitioning(
+func (noopPartitioner) AddPartitioning(
 	ctx context.Context,
-	tableDesc *tabledesc.Mutable,
-	indexDesc *descpb.IndexDescriptor,
+	tbl *tabledesc.Mutable,
+	index catalog.Index,
 	partitionFields []string,
 	listPartition []*scpb.ListPartition,
 	rangePartition []*scpb.RangePartitions,
@@ -523,6 +521,15 @@ func (noopCCLCallbacks) AddPartitioning(
 	return nil
 }
 
+type noopEventLogger struct{}
+
+func (noopEventLogger) LogEvent(
+	ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
+) error {
+	return nil
+}
+
 var _ scexec.IndexBackfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
-var _ scexec.Partitioner = noopCCLCallbacks{}
+var _ scmutationexec.Partitioner = noopPartitioner{}
+var _ scexec.EventLogger = noopEventLogger{}
