@@ -77,19 +77,12 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 			},
 		}, nil
 	},
+		// Turn the assertion into an error returned via the txn.
+		DisableCommitSanityCheck: true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
-
-	{
-		// Turn the assertion into an error.
-		prev := kvcoord.DisableCommitSanityCheck
-		kvcoord.DisableCommitSanityCheck = true
-		defer func() {
-			kvcoord.DisableCommitSanityCheck = prev
-		}()
-	}
 
 	k := tc.ScratchRange(t)
 	kNext := k.Next()

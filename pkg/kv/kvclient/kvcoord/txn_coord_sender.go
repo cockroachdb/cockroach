@@ -916,15 +916,15 @@ func (tc *TxnCoordSender) updateStateLocked(
 
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		if errTxn.Status == roachpb.COMMITTED {
-			pErr = sanityCheckCommittedErr(ctx, pErr, ba)
+		if err := maybeSanityCheckCommittedErr(ctx, pErr, ba, &tc.testingKnobs); err != nil {
+			return roachpb.NewError(err)
 		}
 		tc.mu.txn.Update(errTxn)
 	}
 	return pErr
 }
 
-// sanityCheckCommittedErr verifies the circumstances in which we're receiving
+// maybeSanityCheckCommittedErr verifies the circumstances in which we're receiving
 // an error indicating a COMMITTED transaction. Only rollbacks should be
 // encountering such errors. Marking a transaction as explicitly-committed can
 // also encounter these errors, but those errors don't make it to the
@@ -934,15 +934,23 @@ func (tc *TxnCoordSender) updateStateLocked(
 // wrapping the input error in case of an assertion violation.
 //
 // Requires: pErrWithCommittedTxn is non-nil and GetTxn() is also non-nil.
-func sanityCheckCommittedErr(
-	ctx context.Context, pErrWithCommittedTxn *roachpb.Error, ba roachpb.BatchRequest,
-) *roachpb.Error {
+func maybeSanityCheckCommittedErr(
+	ctx context.Context,
+	pErrWithCommittedTxn *roachpb.Error,
+	ba roachpb.BatchRequest,
+	knobs *ClientTestingKnobs,
+) error {
+	txn := pErrWithCommittedTxn.GetTxn()
+	if txn.Status != roachpb.COMMITTED {
+		return nil
+	}
 	// The only case in which an error can have a COMMITTED transaction in it is
 	// when the request was a rollback. Rollbacks can race with commits if a
 	// context timeout expires while a commit request is in flight.
 	if ba.IsSingleAbortTxnRequest() {
-		return pErrWithCommittedTxn
+		return nil
 	}
+
 	// Finding out about our transaction being committed indicates a serious bug.
 	// Requests are not supposed to be sent on transactions after they are
 	// committed.
@@ -958,10 +966,10 @@ func sanityCheckCommittedErr(
 				"This assertion can be disabled by setting the environment variable " +
 				"COCKROACH_DISABLE_COMMIT_SANITY_CHECK=true",
 		}))
-	if !DisableCommitSanityCheck {
+	if !DisableCommitSanityCheck && !knobs.DisableCommitSanityCheck {
 		log.Fatalf(ctx, "%s", err)
 	}
-	return roachpb.NewError(err)
+	return err
 }
 
 // setTxnAnchorKey sets the key at which to anchor the transaction record. The
