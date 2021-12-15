@@ -60,15 +60,11 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:    f.testName,
-		PackageName: f.packageName,
-		Message:     f.testMessage,
-		Artifacts:   "/", // best we can do for unit tests
-		HelpCommand: func(r *issues.Renderer) {
-			issues.ReproductionCommandFromString(repro)
-			r.Escaped("See also: ")
-			r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
-		},
+		TestName:        f.testName,
+		PackageName:     f.packageName,
+		Message:         f.testMessage,
+		Artifacts:       "/", // best we can do for unit tests
+		HelpCommand:     issues.UnitTestHelpCommand(repro),
 		MentionOnCreate: mentions,
 		ProjectColumnID: projColID,
 	}

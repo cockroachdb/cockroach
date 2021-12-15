@@ -130,3 +130,15 @@ var UnitTestFormatter = IssueFormatter{
 		return nil
 	},
 }
+
+// UnitTestHelpCommand is a HelpCommand for use with UnitTestFormatter. It
+// renders a reproduction command and helpful links.
+func UnitTestHelpCommand(repro string) func(r *Renderer) {
+	return func(r *Renderer) {
+		ReproductionCommandFromString(repro)
+		r.Escaped("\n") // need this newline or link won't render
+		r.Escaped("See also: ")
+		r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
+		r.Escaped("\n")
+	}
+}
