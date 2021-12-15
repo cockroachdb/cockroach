@@ -21,6 +21,7 @@ go_library(
 
 go_test(
     name = "deprules_test",
+    size = "small",
     srcs = ["rules_test.go"],
     data = glob(["testdata/**"]),
     embed = [":deprules"],

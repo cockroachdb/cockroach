@@ -30,7 +30,9 @@ func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
-	indexBackfiller scexec.IndexBackfiller,
+	backfiller scexec.Backfiller,
+	backfillTrackerFactory BackfillTrackerFactory,
+	periodicProgressFlusher scexec.PeriodicProgressFlusher,
 	eventLoggerFactory EventLoggerFactory,
 	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
@@ -42,31 +44,35 @@ func NewJobRunDependencies(
 	statements []string,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory:  collectionFactory,
-		db:                 db,
-		internalExecutor:   internalExecutor,
-		indexBackfiller:    indexBackfiller,
-		eventLoggerFactory: eventLoggerFactory,
-		partitioner:        partitioner,
-		jobRegistry:        jobRegistry,
-		job:                job,
-		codec:              codec,
-		settings:           settings,
-		testingKnobs:       testingKnobs,
-		statements:         statements,
-		indexValidator:     indexValidator,
+		collectionFactory:       collectionFactory,
+		db:                      db,
+		internalExecutor:        internalExecutor,
+		backfiller:              backfiller,
+		backfillTrackerFactory:  backfillTrackerFactory,
+		periodicProgressFlusher: periodicProgressFlusher,
+		eventLoggerFactory:      eventLoggerFactory,
+		partitioner:             partitioner,
+		jobRegistry:             jobRegistry,
+		job:                     job,
+		codec:                   codec,
+		settings:                settings,
+		testingKnobs:            testingKnobs,
+		statements:              statements,
+		indexValidator:          indexValidator,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory  *descs.CollectionFactory
-	db                 *kv.DB
-	internalExecutor   sqlutil.InternalExecutor
-	indexBackfiller    scexec.IndexBackfiller
-	eventLoggerFactory func(txn *kv.Txn) scexec.EventLogger
-	partitioner        scmutationexec.Partitioner
-	jobRegistry        *jobs.Registry
-	job                *jobs.Job
+	collectionFactory       *descs.CollectionFactory
+	db                      *kv.DB
+	internalExecutor        sqlutil.InternalExecutor
+	eventLoggerFactory      func(txn *kv.Txn) scexec.EventLogger
+	partitioner             scmutationexec.Partitioner
+	backfiller              scexec.Backfiller
+	backfillTrackerFactory  BackfillTrackerFactory
+	periodicProgressFlusher scexec.PeriodicProgressFlusher
+	jobRegistry             *jobs.Registry
+	job                     *jobs.Job
 
 	indexValidator scexec.IndexValidator
 
@@ -98,10 +104,12 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				eventLogger:        d.eventLoggerFactory(txn),
 				schemaChangerJobID: d.job.ID(),
 			},
-			indexBackfiller: d.indexBackfiller,
-			statements:      d.statements,
-			partitioner:     d.partitioner,
-			user:            d.job.Payload().UsernameProto.Decode(),
+			backfiller:              d.backfiller,
+			backfillTracker:         d.backfillTrackerFactory(),
+			periodicProgressFlusher: d.periodicProgressFlusher,
+			statements:              d.statements,
+			partitioner:             d.partitioner,
+			user:                    d.job.Payload().UsernameProto.Decode(),
 		})
 	})
 	if err != nil {

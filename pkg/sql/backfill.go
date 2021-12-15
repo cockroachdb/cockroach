@@ -84,8 +84,8 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt, /* validateFn */
 )
 
-// indexBackfillCheckpointInterval is the duration between backfill detail updates.
-var indexBackfillCheckpointInterval = settings.RegisterDurationSetting(
+// IndexBackfillCheckpointInterval is the duration between backfill detail updates.
+var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
@@ -882,6 +882,42 @@ func numRangesInSpans(
 	return len(rangeIds), nil
 }
 
+// NumRangesInSpanContainedBy returns the number of ranges that covers
+// a span and how many of those ranged are wholly contained in containedBy.
+//
+// It operates entirely on the current goroutine and is thus able to
+// reuse an existing kv.Txn safely.
+func NumRangesInSpanContainedBy(
+	ctx context.Context,
+	db *kv.DB,
+	distSQLPlanner *DistSQLPlanner,
+	outerSpan roachpb.Span,
+	containedBy []roachpb.Span,
+) (total, inContainedBy int, _ error) {
+	txn := db.NewTxn(ctx, "num-ranges-in-spans")
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	// For each span, iterate the spanResolver until it's exhausted, storing
+	// the found range ids in the map to de-duplicate them.
+	spanResolver.Seek(ctx, outerSpan, kvcoord.Ascending)
+	var g roachpb.SpanGroup
+	g.Add(containedBy...)
+	for {
+		if !spanResolver.Valid() {
+			return 0, 0, spanResolver.Error()
+		}
+		total++
+		desc := spanResolver.Desc()
+		if g.Encloses(desc.RSpan().AsRawSpanWithNoLocals().Intersect(outerSpan)) {
+			inContainedBy++
+		}
+		if !spanResolver.NeedAnother() {
+			break
+		}
+		spanResolver.Next(ctx)
+	}
+	return total, inContainedBy, nil
+}
+
 // TODO(adityamaru): Consider moving this to sql/backfill. It has a lot of
 // schema changer dependencies which will need to be passed around.
 func (sc *SchemaChanger) distIndexBackfill(
@@ -1134,7 +1170,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	// Setup periodic job details update.
 	stopJobDetailsUpdate := make(chan struct{})
-	detailsDuration := indexBackfillCheckpointInterval.Get(&sc.settings.SV)
+	detailsDuration := IndexBackfillCheckpointInterval.Get(&sc.settings.SV)
 	g.GoCtx(func(ctx context.Context) error {
 		tick := time.NewTicker(detailsDuration)
 		defer tick.Stop()
