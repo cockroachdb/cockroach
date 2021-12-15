@@ -193,7 +193,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t_idx@t_idx_v_idx; CREATE INDEX ON t_idx (v) STORING (b);
+   SQL commands: CREATE INDEX ON t_idx (v) STORING (b); DROP INDEX t_idx@t_idx_v_idx;
 
 subtest Insert
 

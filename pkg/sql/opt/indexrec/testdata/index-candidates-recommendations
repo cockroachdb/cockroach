@@ -11,7 +11,7 @@ CREATE TABLE t3 (k INT, i INT, f FLOAT)
 ----
 
 exec-ddl
-CREATE TABLE t4 (k INT, f FLOAT, j JSONB, a INT[])
+CREATE TABLE t4 (k INT, i INT, f FLOAT, j JSONB, a INT[])
 ----
 
 # Ensure that columns that require inverted indexes do not have candidates. This
@@ -47,7 +47,7 @@ CREATE INDEX existing_t1_k ON t1(k) STORING (s)
 ----
 
 exec-ddl
-CREATE INDEX existing_t1_i ON t1(i)
+CREATE UNIQUE INDEX existing_t1_i ON t1(i)
 ----
 
 exec-ddl
@@ -61,10 +61,11 @@ SELECT i FROM t1 WHERE i >= 3
 No index recommendations.
 --
 Optimal Plan.
-scan t1@_hyp_1
+scan t1@existing_t1_i
  ├── columns: i:2!null
- ├── constraint: /2/5: [/3 - ]
- └── cost: 367.353333
+ ├── constraint: /2: [/3 - ]
+ ├── cost: 354.263333
+ └── key: (2)
 
 # No recommendations because an index with the same explicit columns exists
 # already, and no new columns are being stored.
@@ -74,10 +75,10 @@ SELECT k FROM t1 WHERE k >= 3
 No index recommendations.
 --
 Optimal Plan.
-scan t1@_hyp_1
+scan t1@existing_t1_k
  ├── columns: k:1!null
  ├── constraint: /1/5: [/3 - ]
- └── cost: 367.353333
+ └── cost: 360.686667
 
 # There is a replacement recommendation because an index with the same explicit
 # columns exists already and new columns are being stored here. We stored the
@@ -87,42 +88,48 @@ SELECT i FROM t1 WHERE k >= 3
 ----
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t1@existing_t1_k; CREATE INDEX ON t1 (k) STORING (i, s);
+   SQL commands: CREATE INDEX ON t1 (k) STORING (i, s); DROP INDEX t1@existing_t1_k;
 --
 Optimal Plan.
 project
  ├── columns: i:2
  ├── cost: 374.04
- └── scan t1@_hyp_1
+ └── scan t1@_hyp_3
       ├── columns: k:1!null i:2
       ├── constraint: /1/5: [/3 - ]
-      └── cost: 370.686667
+      ├── cost: 370.686667
+      ├── lax-key: (1,2)
+      └── fd: (2)~~>(1)
 
+# Replacement recommendations for existing unique indexes must also create
+# unique indexes.
 index-recommendations
 SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3
 ----
 index recommendations: 2
 1. type: index replacement
-   SQL commands: DROP INDEX t1@existing_t1_i; CREATE INDEX ON t1 (i) STORING (k);
+   SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;
 2. type: index creation
    SQL command: CREATE INDEX ON t2 (i) STORING (k);
 --
 Optimal Plan.
 project
  ├── columns: k:1!null
- ├── cost: 770.258392
+ ├── cost: 766.796132
  └── inner-join (hash)
       ├── columns: t1.k:1!null t1.i:2!null t2.k:8!null t2.i:9!null
-      ├── cost: 759.15621
-      ├── fd: (1)==(8), (8)==(1)
-      ├── scan t1@_hyp_2
-      │    ├── columns: t1.k:1 t1.i:2!null
-      │    ├── constraint: /2/5: [/4 - ]
-      │    └── cost: 370.686667
-      ├── scan t2@_hyp_2
+      ├── cost: 755.793689
+      ├── fd: (2)-->(1), (1)==(8), (8)==(1)
+      ├── scan t2@_hyp_3
       │    ├── columns: t2.k:8 t2.i:9!null
       │    ├── constraint: /9/11: [/4 - ]
       │    └── cost: 367.353333
+      ├── scan t1@_hyp_4
+      │    ├── columns: t1.k:1 t1.i:2!null
+      │    ├── constraint: /2/5: [/4 - ]
+      │    ├── cost: 367.476667
+      │    ├── lax-key: (1,2)
+      │    └── fd: (2)-->(1)
       └── filters
            └── t1.k:1 = t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
@@ -1187,3 +1194,128 @@ union
       ├── columns: i:9 t1.f:10
       ├── cost: 1094.72
       └── ordering: +9,+10
+
+# Ensure that index recommendations are not made if there is an existing
+# inverted, partial, or expression index that can be used to create an
+# equivalent or better plan.
+
+# 1. Inverted index case:
+
+exec-ddl
+CREATE INVERTED INDEX inverted ON t4 (k, j)
+----
+
+index-recommendations
+SELECT k, j FROM t4 WHERE k = 1 AND j->'a' = '1'
+----
+No index recommendations.
+--
+Optimal Plan.
+index-join t4
+ ├── columns: k:1!null j:4
+ ├── immutable
+ ├── cost: 21.9622222
+ ├── fd: ()-->(1)
+ └── scan t4@inverted
+      ├── columns: rowid:6!null
+      ├── constraint: /1: [/1 - /1]
+      ├── inverted constraint: /9/6
+      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      ├── cost: 15.1755556
+      └── key: (6)
+
+exec-ddl
+DROP INDEX t4@inverted
+----
+
+# 2. Partial index case:
+
+exec-ddl
+CREATE INDEX partial_idx ON t4 (i) WHERE k > 1;
+----
+
+index-recommendations
+SELECT i FROM t4 WHERE i = 1 AND k > 1;
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: i:2!null
+ ├── cost: 23.84
+ ├── fd: ()-->(2)
+ └── scan t4@partial_idx,partial
+      ├── columns: i:2!null rowid:6!null
+      ├── constraint: /2/6: [/1 - /1]
+      ├── cost: 23.7266667
+      ├── key: (6)
+      └── fd: ()-->(2)
+
+# Ensure that we don't recommend replacing partial indexes or partial unique
+# indexes.
+
+index-recommendations
+SELECT i FROM t4 WHERE i > 5
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (i);
+--
+Optimal Plan.
+scan t4@_hyp_2
+ ├── columns: i:2!null
+ ├── constraint: /2/6: [/6 - ]
+ └── cost: 374.02
+
+exec-ddl
+CREATE UNIQUE INDEX partial_unique_idx ON t4 (f) WHERE i > 1;
+----
+
+index-recommendations
+SELECT i, f FROM t4 WHERE f > 5
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (f) STORING (i);
+--
+Optimal Plan.
+scan t4@_hyp_3
+ ├── columns: i:2 f:3!null
+ ├── constraint: /3/6: [/5.000000000000001 - ]
+ └── cost: 377.353333
+
+exec-ddl
+DROP INDEX t4@partial_idx
+----
+
+exec-ddl
+DROP INDEX t4@partial_unique_idx
+----
+
+# 3. Expression index case:
+
+exec-ddl
+CREATE INDEX expr ON t1 (k, lower(s))
+----
+
+index-recommendations
+SELECT k FROM t1 WHERE lower(s) = 'cockroach' AND k = 1
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── cost: 15.0296847
+ ├── fd: ()-->(1)
+ └── scan t1@expr
+      ├── columns: k:1!null rowid:5!null
+      ├── constraint: /1/8/5: [/1/'cockroach' - /1/'cockroach']
+      ├── cost: 14.9763514
+      ├── key: (5)
+      └── fd: ()-->(1)
+
+exec-ddl
+DROP INDEX t1@expr
+----

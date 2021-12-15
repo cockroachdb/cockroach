@@ -51,7 +51,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@v; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 # TopK descending.
 query T
@@ -159,7 +159,3 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@v
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (v, w);

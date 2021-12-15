@@ -918,7 +918,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX tc@c; CREATE INDEX ON tc (a) STORING (b);
+   SQL commands: CREATE INDEX ON tc (a) STORING (b); DROP INDEX tc@c;
 
 # Ensure that the query above no longer has index recommendations if they are
 # disabled.
@@ -1209,7 +1209,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX tt@a; CREATE INDEX ON tt (x) STORING (y);
+   SQL commands: CREATE INDEX ON tt (x) STORING (y); DROP INDEX tt@a;
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT

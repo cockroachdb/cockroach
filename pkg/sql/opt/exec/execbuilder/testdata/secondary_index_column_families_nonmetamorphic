@@ -265,10 +265,6 @@ vectorized: true
   missing stats
   table: t@i
   spans: [/2.01/3.001 - /2.01/3.001]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (y) STORING (z, v);
 
 # Ensure that we always have a k/v in family 0.
 statement ok

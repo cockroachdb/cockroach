@@ -77,10 +77,6 @@ vectorized: true
           missing stats
           table: inv@i (partial index)
           spans: 1 span
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON inv (c) STORING (b);
 
 query T
 EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
@@ -175,7 +171,3 @@ vectorized: true
       missing stats
       table: t70116@a_idx (partial index)
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t70116 (b);

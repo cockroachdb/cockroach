@@ -238,7 +238,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX xyz@y_idx; CREATE INDEX ON xyz (y) STORING (z);
+   SQL commands: CREATE INDEX ON xyz (y) STORING (z); DROP INDEX xyz@y_idx;
 
 # With the hint, we use a constrained scan.
 query T
@@ -277,7 +277,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX xyz@y_idx; CREATE INDEX ON xyz (y) STORING (z);
+   SQL commands: CREATE INDEX ON xyz (y) STORING (z); DROP INDEX xyz@y_idx;
 
 statement ok
 CREATE TABLE pks (
@@ -583,7 +583,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX kv3@kv3_v_idx; CREATE INDEX ON kv3 (v) STORING (meta);
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
@@ -607,7 +607,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX kv3@kv3_v_idx; CREATE INDEX ON kv3 (v) STORING (meta);
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 statement ok
 SET enable_implicit_select_for_update = false
@@ -734,7 +734,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX kv3@kv3_v_idx; CREATE INDEX ON kv3 (v) STORING (meta);
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
@@ -757,7 +757,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX kv3@kv3_v_idx; CREATE INDEX ON kv3 (v) STORING (meta);
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 # Reset for rest of test.
 statement ok

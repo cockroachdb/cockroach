@@ -584,7 +584,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX large@bc; CREATE INDEX ON large (b) STORING (c, d);
+   SQL commands: CREATE INDEX ON large (b) STORING (c, d); DROP INDEX large@bc;
 
 ############################
 #  LEFT OUTER LOOKUP JOIN  #
@@ -713,7 +713,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX large@bc; CREATE INDEX ON large (b) STORING (c, d);
+   SQL commands: CREATE INDEX ON large (b) STORING (c, d); DROP INDEX large@bc;
 
 # Left join with ON filter on covering index
 query T
@@ -901,11 +901,9 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
 ·
-index recommendations: 2
+index recommendations: 1
 1. type: index creation
    SQL command: CREATE INDEX ON t (e) STORING (a, b, d);
-2. type: index creation
-   SQL command: CREATE INDEX ON u (d);
 
 # Test index with middle primary key column explicit and the rest implicit.
 statement ok
@@ -941,11 +939,9 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
 ·
-index recommendations: 2
+index recommendations: 1
 1. type: index creation
    SQL command: CREATE INDEX ON t (e) STORING (a, b, d);
-2. type: index creation
-   SQL command: CREATE INDEX ON u (d);
 
 # Test index with last primary key column explicit and the rest implicit.
 statement ok
@@ -1837,11 +1833,11 @@ vectorized: true
 ·
 index recommendations: 3
 1. type: index replacement
-   SQL commands: DROP INDEX lineitem@l_sk; CREATE INDEX ON lineitem (l_suppkey) STORING (l_commitdate, l_receiptdate);
+   SQL commands: CREATE INDEX ON lineitem (l_suppkey) STORING (l_commitdate, l_receiptdate); DROP INDEX lineitem@l_sk;
 2. type: index creation
    SQL command: CREATE INDEX ON nation (n_name);
 3. type: index replacement
-   SQL commands: DROP INDEX supplier@s_nk; CREATE INDEX ON supplier (s_nationkey) STORING (s_name);
+   SQL commands: CREATE INDEX ON supplier (s_nationkey) STORING (s_name); DROP INDEX supplier@s_nk;
 
 # Regression test for #50964.
 statement ok
