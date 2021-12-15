@@ -46,7 +46,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
     [Column:{DescID: 57, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 57, ColumnID: 4}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 57, ColumnID: 5}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 57, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 57, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
   ops:
@@ -138,7 +138,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 6 MutationType ops
     [Column:{DescID: 57, ColumnID: 4}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
     [ColumnName:{DescID: 57, ColumnID: 5, Name: randcol}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 5}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 57, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 57, IndexID: 1}, VALIDATED, DROP] -> ABSENT
     [IndexName:{DescID: 57, IndexID: 1, Name: shipments_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
     [Sequence:{DescID: 58}, DROPPED, DROP] -> ABSENT

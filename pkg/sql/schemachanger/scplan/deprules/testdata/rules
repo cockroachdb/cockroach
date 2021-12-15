@@ -83,7 +83,7 @@ rules
     - $drop-idx-node[Type] = '*scpb.Node'
     - $drop-idx-node[Target] = $drop-idx-target
     - $drop-idx-target[Direction] = DROP
-    - $drop-idx-node[Status] = DELETE_AND_WRITE_ONLY
+    - $drop-idx-node[Status] = VALIDATED
 - name: partitioning information needs the basic index as created
   from: add-idx-node
   to: partitioning-node
