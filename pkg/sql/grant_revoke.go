@@ -59,6 +59,28 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
+
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+				grantOrAll := false
+				for _, priv := range privileges {
+					grantOrAll = grantOrAll || (priv == privilege.GRANT || priv == privilege.ALL)
+					if priv == privilege.GRANT {
+						p.noticeSender.BufferNotice(
+							errors.WithHintf(
+								pgnotice.Newf("the GRANT privilege is deprecated"),
+								"please use WITH GRANT OPTION",
+							),
+						)
+						break
+					}
+				}
+
+				// We must give all grant options on all of a user's privileges if GRANT or ALL privileges
+				// are present
+				if grantOrAll {
+					privDesc.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
+				}
+			}
 		},
 		grantOn:          grantOn,
 		granteesNameList: n.Grantees,
@@ -89,6 +111,22 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
+
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) && !n.GrantOptionFor {
+				for _, priv := range privileges {
+					if priv == privilege.GRANT {
+						p.noticeSender.BufferNotice(
+							errors.WithHintf(
+								pgnotice.Newf("the GRANT privilege is deprecated"),
+								"please use WITH GRANT OPTION",
+							),
+						)
+
+						privDesc.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
+						break
+					}
+				}
+			}
 		},
 		grantOn:          grantOn,
 		granteesNameList: n.Grantees,
@@ -167,13 +205,19 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 
-		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
-			return err
+		// Check the GRANT privilege if not all nodes are updated to 22.1 (ValidateGrantOption)
+		// Otherwise, we know the migration has given grant options to users who held GRANT and
+		// can simply reply on the grant option validation check below.
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+			if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
+				return err
+			}
 		}
 
 		if len(n.desiredprivs) > 0 {
 			// Only allow granting/revoking privileges that the requesting
 			// user themselves have on the descriptor.
+
 			for _, priv := range n.desiredprivs {
 				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
 					return err

@@ -144,7 +144,7 @@ func runRegisterValidateGrantOption(
 		execSQLAsUser("GRANT DELETE ON TABLE t1 TO foo2;", "foo3", "", 3),
 		execSQLAsUser("GRANT ALL PRIVILEGES ON SCHEMA s TO foo3;", "target", "", 2),
 		execSQLAsUser("GRANT CREATE ON DATABASE d TO foo3;", "foo2", "pq: user foo2 does not have CREATE privilege on database d", 2),
-		execSQLAsUser("GRANT USAGE ON SCHEMA s TO foo;", "foo3", "pq: missing WITH GRANT OPTION privilege type USAGE", 2),
+		//execSQLAsUser("GRANT USAGE ON SCHEMA s TO foo;", "foo3", "pq: missing WITH GRANT OPTION privilege type USAGE", 2),
 		execSQLAsUser("GRANT INSERT ON TABLE t1 TO foo;", "foo4", "pq: user foo4 does not have INSERT privilege on relation t1", 1),
 		execSQLAsUser("GRANT SELECT ON TABLE t1 TO foo;", "foo4", "", 1),
 		execSQLAsUser("GRANT DELETE ON TABLE t1 TO foo;", "foo4", "", 1),
@@ -153,9 +153,23 @@ func runRegisterValidateGrantOption(
 		execSQL("CREATE USER foo6;", "", 2),
 		execSQL("CREATE TABLE t2();", "", 3),
 		execSQL("GRANT ALL PRIVILEGES ON TABLE t2 TO foo5;", "", 1),
-		execSQLAsUser("GRANT DELETE ON TABLE t2 TO foo2;", "foo5", "pq: missing WITH GRANT OPTION privilege type DELETE", 2),
+		//execSQLAsUser("GRANT DELETE ON TABLE t2 TO foo2;", "foo5", "pq: missing WITH GRANT OPTION privilege type DELETE", 2),
+		execSQLAsUser("GRANT DELETE ON TABLE t2 TO foo2;", "foo5", "", 2),
 		execSQL("GRANT ALL PRIVILEGES ON TABLE t2 TO foo6 WITH GRANT OPTION;", "", 1),
 		execSQLAsUser("GRANT DELETE ON TABLE t2 TO foo2;", "foo6", "", 3),
+
+		// This section below exists solely for version 22.1 (GRANT privilege deprecation), delete once removed in 22.2
+		execSQL("CREATE USER foo7;", "", 2),
+		execSQL("GRANT SELECT, INSERT, DELETE ON TABLE t2 TO foo7;", "", 1),
+		execSQLAsUser("GRANT SELECT, INSERT, DELETE ON TABLE t2 TO foo2;", "foo7", "pq: missing WITH GRANT OPTION privilege type SELECT", 3),
+		execSQL("GRANT GRANT ON TABLE t2 TO foo7;", "", 1),
+		execSQLAsUser("GRANT SELECT, INSERT, DELETE ON TABLE t2 TO foo2;", "foo7", "", 3),
+		execSQL("REVOKE GRANT OPTION FOR GRANT ON TABLE t2 FROM foo7;", "", 1),
+		execSQLAsUser("GRANT SELECT, INSERT, DELETE ON TABLE t2 TO foo2;", "foo7", "", 3),
+		execSQL("REVOKE GRANT ON TABLE t2 FROM foo7;", "", 1),
+		execSQLAsUser("GRANT SELECT, INSERT, DELETE ON TABLE t2 TO foo2;", "foo7", "pq: missing WITH GRANT OPTION privilege type SELECT", 2),
+		execSQL("GRANT ALL PRIVILEGES ON TABLE t2 TO foo7;", "", 1),
+		execSQLAsUser("GRANT SELECT, INSERT, DELETE ON TABLE t2 TO foo2;", "foo7", "", 3),
 	)
 	u.run(ctx, t)
 }

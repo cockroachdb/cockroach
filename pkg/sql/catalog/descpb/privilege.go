@@ -184,9 +184,20 @@ func NewBaseDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDe
 func (p *PrivilegeDescriptor) ValidateGrantPrivileges(
 	user security.SQLUsername, privList privilege.List, isGrant bool,
 ) error {
+	code := pgcode.WarningPrivilegeNotGranted
+	if !isGrant {
+		code = pgcode.WarningPrivilegeNotRevoked
+	}
 	userPriv, exists := p.FindUser(user)
 	if !exists {
-		return nil
+		// This is a super edge case that happens with privileges granted on the public
+		// role such as USAGE on types (these are ignored when checking to make sure
+		// the user holds the privilege it is trying to grant). Because we no longer
+		// need the GRANT privilege to grant things, a user could possess a privilege
+		// while having 0 privilege bits, meaning it is not present on the privilege
+		// descriptor and exists will be false. Therefore, we must error out here.
+		return pgerror.Newf(code,
+			"missing WITH GRANT OPTION privilege type %s", privList[0].String())
 	}
 
 	// User has ALL WITH GRANT OPTION so they can grant anything.
@@ -196,10 +207,6 @@ func (p *PrivilegeDescriptor) ValidateGrantPrivileges(
 
 	for _, priv := range privList {
 		if userPriv.WithGrantOption&priv.Mask() == 0 {
-			code := pgcode.WarningPrivilegeNotGranted
-			if !isGrant {
-				code = pgcode.WarningPrivilegeNotRevoked
-			}
 			return pgerror.Newf(code,
 				"missing WITH GRANT OPTION privilege type %s", priv.String())
 		}
@@ -308,6 +315,27 @@ func (p *PrivilegeDescriptor) Revoke(
 		}
 	}
 
+}
+
+// GrantPrivilegeToGrantOptions adjusts a user's grant option bits based on whether the GRANT
+// privilege was just granted or revoked. If GRANT was just granted, the user should obtain grant
+// options for each privilege it currently has. If GRANT was just revoked, the user should lose
+// grant options for each privilege it has
+// TODO(jackcwu): delete this function once the GRANT privilege is finally removed
+func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
+	user security.SQLUsername, isGrant bool,
+) {
+	if isGrant {
+		userPriv := p.FindOrCreateUser(user)
+		userPriv.WithGrantOption = userPriv.Privileges
+	} else {
+		userPriv, ok := p.FindUser(user)
+		if !ok || userPriv.Privileges == 0 {
+			// Removing privileges from a user without privileges is a no-op.
+			return
+		}
+		userPriv.WithGrantOption = 0
+	}
 }
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum

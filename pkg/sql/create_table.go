@@ -338,6 +338,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		n.dbDesc.GetID(),
 		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
 	)
+
 	var desc *tabledesc.Mutable
 	var affected map[descpb.ID]*tabledesc.Mutable
 	// creationTime is initialized to a zero value and populated at read time.

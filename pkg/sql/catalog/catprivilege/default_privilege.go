@@ -72,6 +72,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	withGrantOption bool,
+	deprecateGrant bool,
 ) {
 	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
@@ -81,6 +82,11 @@ func (d *Mutable) GrantDefaultPrivileges(
 		// foldPrivileges converts the real privileges back into flags.
 		expandPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 		defaultPrivileges.Grant(grantee, privileges, withGrantOption)
+
+		if deprecateGrant {
+			defaultPrivileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
+		}
+
 		foldPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 		defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
@@ -93,6 +99,7 @@ func (d *Mutable) RevokeDefaultPrivileges(
 	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	grantOptionFor bool,
+	deprecateGrant bool,
 ) {
 	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
@@ -102,8 +109,12 @@ func (d *Mutable) RevokeDefaultPrivileges(
 		// foldPrivileges converts the real privileges back into flags.
 		expandPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 		defaultPrivileges.Revoke(grantee, privileges, targetObject.ToPrivilegeObjectType(), grantOptionFor)
-		foldPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 
+		if deprecateGrant {
+			defaultPrivileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
+		}
+
+		foldPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 		defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject] = defaultPrivileges
 	}
 

@@ -1,3 +1,10 @@
+# TODO(jack.wu): Replace these tests once the GRANT privilege is removed in 22.2
+# (look in the file history to the version before this for inspiration)
+# Currently, this file has been rewritten to accommodate giving grant options to
+# all a user's privileges when granted the GRANT privilege and removing all of them
+# when GRANT is revoked as part of the backwards compatibility plan for GRANT in
+# 22.1 (https://github.com/cockroachdb/cockroach/issues/73065)
+
 statement ok
 CREATE TABLE t(row INT)
 
@@ -7,26 +14,62 @@ CREATE USER testuser2
 statement ok
 CREATE USER target
 
+#
+# Granting ALL in 22.1 will give grant options automatically since it includes GRANT
+#
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t TO testuser
 
-# switch to testuser
+user testuser
+
+statement ok
+GRANT ALL PRIVILEGES ON TABLE t TO target
+
+statement ok
+GRANT SELECT ON TABLE t TO target
+
+user root
+
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser
+
 user testuser
 
 statement error pq: missing WITH GRANT OPTION privilege type ALL
-GRANT ALL PRIVILEGES ON table t to testuser2
+GRANT ALL PRIVILEGES ON TABLE t TO target
 
-# switch to root
+statement error pq: missing WITH GRANT OPTION privilege type SELECT
+GRANT SELECT ON TABLE t TO target
+
+#
+# Test granting grant options
+#
 user root
 
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t TO testuser WITH GRANT OPTION
 
-# switch to testuser
 user testuser
 
 statement ok
-GRANT SELECT, GRANT, INSERT ON TABLE t TO testuser2 WITH GRANT OPTION
+GRANT SELECT, INSERT ON TABLE t TO testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           public       t              testuser2  INSERT
+test           public       t              testuser2  SELECT
+
+user testuser2
+
+statement error pq: missing WITH GRANT OPTION privilege type INSERT
+GRANT INSERT, SELECT ON TABLE t TO target
+
+user testuser
+
+statement ok
+GRANT GRANT ON TABLE t TO testuser2
 
 query TTTTT colnames
 SHOW GRANTS FOR testuser2
@@ -36,6 +79,30 @@ test           public       t              testuser2  GRANT
 test           public       t              testuser2  INSERT
 test           public       t              testuser2  SELECT
 
+user testuser2
+
+# in version 22.1, granting GRANT to a user means they now have grant options on all their privileges.
+# This is to promote backwards compatibility as we deprecate GRANT
+statement ok
+GRANT INSERT, SELECT ON TABLE t TO target
+
+# however, future privileges do not automatically get grant options just because the user currently
+# holds GRANT - you would need to either specify grant options or grant GRANT again
+user root
+
+statement ok
+GRANT DELETE ON TABLE t TO testuser2
+
+user testuser2
+
+statement error pq: missing WITH GRANT OPTION privilege type DELETE
+GRANT DELETE ON TABLE t TO target
+
+user testuser
+
+statement ok
+GRANT DELETE, UPDATE ON TABLE t TO testuser2 WITH GRANT OPTION
+
 statement ok
 REVOKE INSERT ON TABLE t FROM testuser2
 
@@ -43,27 +110,97 @@ query TTTTT colnames
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type
+test           public       t              testuser2  DELETE
 test           public       t              testuser2  GRANT
 test           public       t              testuser2  SELECT
+test           public       t              testuser2  UPDATE
 
 statement ok
 REVOKE GRANT OPTION FOR SELECT ON TABLE t FROM testuser2
 
+# revoking GRANT OPTION FOR does not take away the privilege for the user
 query TTTTT colnames
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type
+test           public       t              testuser2  DELETE
 test           public       t              testuser2  GRANT
 test           public       t              testuser2  SELECT
+test           public       t              testuser2  UPDATE
 
-# switch to testuser2
 user testuser2
 
 statement error pq: missing WITH GRANT OPTION privilege type SELECT
 GRANT SELECT ON TABLE t TO target
 
-# switch to root
+statement ok
+GRANT DELETE, UPDATE ON TABLE t TO target
+
+user testuser
+
+statement ok
+REVOKE GRANT ON TABLE t FROM testuser2
+
+user testuser2
+
+# in version 22.1, revoking GRANT from a user means they lose grant options
+# on all of their privileges
+statement error pq: missing WITH GRANT OPTION privilege type DELETE
+GRANT DELETE ON TABLE t TO target
+
+statement error pq: missing WITH GRANT OPTION privilege type UPDATE
+GRANT UPDATE ON TABLE t TO target
+
+statement error pq: missing WITH GRANT OPTION privilege type SELECT
+GRANT SELECT ON TABLE t TO target
+
+# revoking grant option for on GRANT should not take away grant options
+# from other privileges
 user root
+
+statement ok
+GRANT GRANT ON TABLE t TO testuser2
+
+statement ok
+REVOKE GRANT OPTION FOR GRANT ON TABLE t FROM testuser2
+
+user testuser2
+
+statement ok
+GRANT DELETE ON TABLE t TO target
+
+statement ok
+GRANT UPDATE ON TABLE t TO target
+
+statement ok
+GRANT SELECT ON TABLE t TO target
+
+user root
+
+statement ok
+REVOKE GRANT ON TABLE t FROM testuser2
+
+#
+# test whether granting back GRANT with another privilege in the same statement
+# gives grant options for that privilege too
+#
+user root
+
+statement ok
+GRANT INSERT, GRANT ON TABLE t TO testuser2
+
+user testuser2
+
+statement ok
+GRANT INSERT ON TABLE t TO target
+
+#
+# try revoking ALL PRIVILEGES on various existing privilege states
+#
+user root
+
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser2
 
 statement ok
 REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser
@@ -74,13 +211,11 @@ SHOW GRANTS FOR testuser
 database_name  schema_name  relation_name  grantee    privilege_type
 test           public       t              testuser   ALL
 
-# switch to testuser
 user testuser
 
 statement error pq: missing WITH GRANT OPTION privilege type SELECT
 GRANT SELECT, GRANT, INSERT, DELETE ON TABLE t TO testuser2 WITH GRANT OPTION
 
-# switch to root
 user root
 
 statement ok
@@ -92,16 +227,16 @@ SHOW GRANTS FOR testuser
 database_name  schema_name  relation_name  grantee    privilege_type
 
 statement ok
-GRANT GRANT, UPDATE, DELETE ON TABLE t to testuser WITH GRANT OPTION
+GRANT UPDATE, DELETE ON TABLE t to testuser WITH GRANT OPTION
 
 query TTTTT colnames
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee    privilege_type
 test           public       t              testuser   DELETE
-test           public       t              testuser   GRANT
 test           public       t              testuser   UPDATE
 
+# test applying repeat privileges (ALL replaces individual privileges)
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t to testuser WITH GRANT OPTION
 
@@ -111,13 +246,11 @@ SHOW GRANTS FOR testuser
 database_name  schema_name  relation_name  grantee    privilege_type
 test           public       t              testuser   ALL
 
-# switch to testuser
 user testuser
 
 statement ok
 GRANT DELETE ON TABLE t to target
 
-# switch to root
 user root
 
 statement ok
@@ -129,7 +262,6 @@ SHOW GRANTS FOR testuser
 database_name  schema_name  relation_name  grantee    privilege_type
 test           public       t              testuser   ALL
 
-# switch to testuser
 user testuser
 
 statement ok
@@ -145,22 +277,32 @@ query TTTTT colnames
 SHOW GRANTS FOR testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type
+test           public       t              testuser2  DELETE
 test           public       t              testuser2  GRANT
+test           public       t              testuser2  INSERT
 test           public       t              testuser2  SELECT
+test           public       t              testuser2  UPDATE
 
-# switch to testuser2
 user testuser2
 
 statement ok
 GRANT SELECT ON TABLE t TO target
 
-# test revoking from oneself (non-owner of an object)
+#
+# Test granting to and revoking from oneself (non-owner of an object)
+#
 user root
 
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t TO testuser
 
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser
+
 user testuser
+
+statement error pq: missing WITH GRANT OPTION privilege type DELETE
+GRANT DELETE ON TABLE t TO testuser
 
 statement error pq: missing WITH GRANT OPTION privilege type DELETE
 REVOKE DELETE ON TABLE t FROM testuser
@@ -171,6 +313,9 @@ statement ok
 GRANT ALL PRIVILEGES ON TABLE t TO testuser WITH GRANT OPTION
 
 user testuser
+
+statement ok
+GRANT DELETE ON TABLE t TO testuser
 
 statement ok
 REVOKE DELETE ON TABLE t FROM testuser
@@ -196,8 +341,63 @@ REVOKE GRANT OPTION FOR SELECT ON TABLE t FROM testuser
 statement error pq: missing WITH GRANT OPTION privilege type SELECT
 GRANT SELECT ON TABLE t TO target
 
-# briefly test databases, schemas, types etc since the code is the same as with tables tested above
-# switch to root
+user root
+
+statement ok
+GRANT ALL PRIVILEGES ON TABLE t TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser
+
+statement error pq: missing WITH GRANT OPTION privilege type INSERT
+GRANT INSERT, DELETE ON TABLE t TO target
+
+user root
+
+statement ok
+GRANT ALL PRIVILEGES ON TABLE t TO testuser WITH GRANT OPTION
+
+statement ok
+REVOKE ALL PRIVILEGES ON TABLE t FROM testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+
+# revoking grant from ALL privileges means you lose grant options on
+# all the other privileges
+user root
+
+statement ok
+GRANT ALL PRIVILEGES ON TABLE t TO testuser
+
+statement ok
+REVOKE GRANT ON TABLE t FROM testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           public       t              testuser  CREATE
+test           public       t              testuser  DELETE
+test           public       t              testuser  DROP
+test           public       t              testuser  INSERT
+test           public       t              testuser  SELECT
+test           public       t              testuser  UPDATE
+test           public       t              testuser  ZONECONFIG
+
+user testuser
+
+statement error pq: missing WITH GRANT OPTION privilege type INSERT
+GRANT INSERT ON TABLE t TO target
+
+#
+# Wipe everything so far and briefly test databases, schemas, types
+# etc since the code is the same as with tables tested above
+#
 user root
 
 statement ok
@@ -220,22 +420,19 @@ statement ok
 CREATE SCHEMA s
 
 statement ok
-GRANT GRANT, CREATE ON SCHEMA s TO testuser WITH GRANT OPTION
+GRANT ALL PRIVILEGES ON SCHEMA s TO testuser WITH GRANT OPTION
 
 query TTTTT colnames
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee    privilege_type
-test           s            NULL           testuser   CREATE
-test           s            NULL           testuser   GRANT
+test           s            NULL           testuser   ALL
 
-# switch to testuser
 user testuser
 
 statement ok
 GRANT CREATE ON SCHEMA s TO testuser2 WITH GRANT OPTION
 
-# switch to root
 user root
 
 query TTTTT colnames
@@ -251,16 +448,24 @@ query TTTTT colnames
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee    privilege_type
-test           s            NULL           testuser   CREATE
-test           s            NULL           testuser   GRANT
+test           s            NULL           testuser   ALL
 
-# switch to testuser
 user testuser
 
 statement error pq: missing WITH GRANT OPTION privilege type CREATE
 GRANT CREATE ON SCHEMA s TO target
 
-# switch to root
+user root
+
+statement ok
+GRANT GRANT ON SCHEMA s TO testuser
+
+# granting GRANT here will give grant options on ALL privileges for testuser
+user testuser
+
+statement ok
+GRANT CREATE ON SCHEMA s TO target
+
 user root
 
 statement ok
@@ -278,20 +483,15 @@ d               public     CONNECT
 d               root       ALL
 d               testuser   ALL
 
-# switch to testuser
 user testuser
 
 statement ok
-GRANT GRANT, CREATE, CONNECT ON DATABASE d TO testuser2 WITH GRANT OPTION
+GRANT CREATE, CONNECT ON DATABASE d TO testuser2 WITH GRANT OPTION
 
 statement ok
 REVOKE GRANT OPTION FOR CREATE ON DATABASE d FROM testuser2
 
-# switch to testuser2
 user testuser2
-
-statement ok
-GRANT GRANT ON DATABASE d TO target WITH GRANT OPTION
 
 statement ok
 GRANT CONNECT ON DATABASE d TO target WITH GRANT OPTION
@@ -299,7 +499,6 @@ GRANT CONNECT ON DATABASE d TO target WITH GRANT OPTION
 statement error pq: missing WITH GRANT OPTION privilege type CREATE
 GRANT CREATE ON DATABASE d TO target WITH GRANT OPTION
 
-# switch to root
 user root
 
 query TTT colnames
@@ -310,11 +509,9 @@ d               admin      ALL
 d               public     CONNECT
 d               root       ALL
 d               target     CONNECT
-d               target     GRANT
 d               testuser   ALL
 d               testuser2  CONNECT
 d               testuser2  CREATE
-d               testuser2  GRANT
 
 statement ok
 REVOKE ALL PRIVILEGES ON DATABASE d FROM testuser2
@@ -327,23 +524,13 @@ d               admin      ALL
 d               public     CONNECT
 d               root       ALL
 d               target     CONNECT
-d               target     GRANT
 d               testuser   ALL
-
-# switch to testuser2
-user testuser2
-
-statement error pq: user testuser2 does not have GRANT privilege on database d
-GRANT CONNECT ON DATABASE d TO target WITH GRANT OPTION
 
 # test types
 user root
 
 statement ok
-CREATE type type1 as ENUM()
-
-statement ok
-GRANT GRANT ON TYPE type1 TO testuser
+CREATE TYPE type1 as ENUM()
 
 user testuser
 
@@ -361,7 +548,9 @@ user testuser
 statement ok
 GRANT USAGE ON TYPE type1 TO target
 
-# Test owner status - should be able to always grant/revoke on the object it owns, regardless of its own privileges
+#
+# Test owner status - one should always be able to grant/revoke on the object it owns, regardless of its own privileges
+#
 user root
 
 statement ok
@@ -399,18 +588,10 @@ test           public       t1          root      ALL
 test           public       t1          testuser2 CREATE
 test           public       t1          testuser2 SELECT
 
+# even though testuser doesn't have privileges on table t1, it can still grant
+# because it is the owner
 statement ok
 GRANT INSERT ON TABLE t1 TO testuser2
-
-statement ok
-GRANT GRANT ON TABLE t1 TO testuser2
-
-user testuser2
-
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
-GRANT SELECT ON TABLE t1 TO target
-
-user testuser
 
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t1 TO testuser2 WITH GRANT OPTION
@@ -423,40 +604,15 @@ test           public       t1          admin     ALL
 test           public       t1          root      ALL
 test           public       t1          testuser2 ALL
 
-user testuser2
-
-statement ok
-GRANT SELECT ON TABLE t1 TO TARGET
-
-statement ok
-REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t1 FROM testuser2
-
-statement error pq: missing WITH GRANT OPTION privilege type INSERT
-GRANT INSERT ON TABLE t1 TO target
-
-user testuser
-
-statement ok
-GRANT ALL PRIVILEGES ON TABLE t1 TO testuser2 WITH GRANT OPTION
-
-user testuser2
-
-statement ok
-REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser2
-
-statement error pq: user testuser2 does not have GRANT privilege on relation t1
-GRANT INSERT ON TABLE t1 TO target
-
-user testuser
-
 query TTTTT colnames
 SHOW GRANTS ON TABLE t1;
 ----
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t1          admin     ALL
 test           public       t1          root      ALL
-test           public       t1          target    SELECT
+test           public       t1          testuser2 ALL
 
+# owner can give privileges back to themself
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t1 TO testuser
 
@@ -466,5 +622,7 @@ SHOW GRANTS ON TABLE t1;
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t1          admin     ALL
 test           public       t1          root      ALL
-test           public       t1          target    SELECT
 test           public       t1          testuser  ALL
+test           public       t1          testuser2 ALL
+
+
