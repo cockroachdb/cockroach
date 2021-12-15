@@ -214,7 +214,7 @@ func TestManagerCheckJobConditions(t *testing.T) {
 
 	ts := tc.Server(0)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = false;`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = false;`)
 
 	var interceptCount int32
 	checkInterceptCountGreaterThan := func(min int32) int32 {
@@ -246,10 +246,10 @@ func TestManagerCheckJobConditions(t *testing.T) {
 	require.NoError(t, manager.Start(ctx))
 	currentCount = checkInterceptCountGreaterThan(currentCount) // wait for an initial check
 
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true;`)
 	currentCount = checkInterceptCountGreaterThan(currentCount) // the job enablement setting triggers a check
 
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.check_interval = '25m'`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval = '25m'`)
 	currentCount = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
 
 	tdb.Exec(t, `SET CLUSTER SETTING version = $1`, spanConfigJobVersion.String())
