@@ -162,6 +162,8 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
+		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
+		scdeps.NewNoOpPeriodicBackfillProgressFlusher(),
 		execCfg.IndexValidator,
 		scsqldeps.NewPartitioner(execCfg.Settings, evalContext),
 		NewSchemaChangerEventLogger(txn, execCfg, 1),

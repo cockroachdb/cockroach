@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -38,6 +39,9 @@ type TestState struct {
 	jobCounter                        int
 	txnCounter                        int
 	sideEffectLogBuffer               strings.Builder
+	backfiller                        scexec.Backfiller
+	indexSpanSplitter                 scexec.IndexSpanSplitter
+	backfillTracker                   scexec.BackfillTracker
 }
 
 // NewTestDependencies returns a TestState populated with the provided options.
