@@ -368,7 +368,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     [Column:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
@@ -549,7 +549,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
     [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
     [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 56, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, VALIDATED, DROP] -> ABSENT
     [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 58}, DROPPED, DROP] -> ABSENT

@@ -1181,7 +1181,7 @@ func (r *Registry) stepThroughStateMachine(
 	onExecutionFailed := func(cause error) error {
 		log.InfofDepth(
 			ctx, 1,
-			"job %d: %s execution encountered retriable error: %v",
+			"job %d: %s execution encountered retriable error: %+v",
 			job.ID(), status, cause,
 		)
 		start := job.getRunStats().LastRun
