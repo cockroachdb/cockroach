@@ -1393,6 +1393,9 @@ subtest pw_hashes
 
 user root
 
+statement ok
+SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = true
+
 let $bcrypt_pw
 SELECT 'CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq'
 
@@ -1433,7 +1436,3 @@ hash1  $2a$10$  true
 hash4  $2a$10$  false
 hash5  $2a$10$  false
 hash6  $2a$10$  false
-
-# Reset cluster setting after test completion.
-statement ok
-SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = true
