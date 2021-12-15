@@ -52,7 +52,11 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID, _ admissionOptions,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	_ <-chan struct{},
+	_ admissionOptions,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
