@@ -275,8 +275,14 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		// The reader canceled the stream meaning that it no longer needs any
 		// more data from the outbox. This is a graceful termination, so we
 		// return nil.
-		log.VEvent(streamCtx, 1, "Inbox reader canceled the stream")
-		return nil
+		log.VEventf(streamCtx, 1, "Inbox reader canceled the stream, flow context error: %v", i.flowCtx.Err())
+		return i.flowCtx.Err()
+	case <-i.flowCtx.Done():
+		// The flow context of the inbox host has been canceled. This can occur
+		// e.g. when the query is canceled, or when another stream encountered
+		// an unrecoverable error forcing it to shutdown the flow.
+		log.VEvent(streamCtx, 1, "the flow context of the Inbox host has been canceled")
+		return cancelchecker.QueryCanceledError
 	case <-streamCtx.Done():
 		// The client canceled the stream.
 		err := fmt.Errorf("%s: streamCtx in Inbox stream handler (remote client canceled)", streamCtx.Err())
