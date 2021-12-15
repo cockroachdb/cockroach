@@ -2621,7 +2621,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	//t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 type alwaysAliveSession string
