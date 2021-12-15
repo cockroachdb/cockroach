@@ -135,6 +135,10 @@ statement ok
 REVOKE admin FROM testuser;
 GRANT ALL ON DATABASE d to testuser2
 
+# Remove the following two lines once the GRANT privilege is removed in 22.2
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON DATABASE d FROM testuser2
+
 user testuser2
 
 # testuser2 has ALL privileges, no grant options, and is not a member of a role,
