@@ -457,7 +457,7 @@ export class TransactionsPage extends React.Component<
                       showNodes={nodes.length > 1}
                     />
                   </PageConfigItem>
-                  <PageConfigItem>
+                  <PageConfigItem className={commonStyles("separator")}>
                     <TimeScaleDropdown
                       currentScale={this.props.timeScale}
                       setTimeScale={this.changeTimeScale}
