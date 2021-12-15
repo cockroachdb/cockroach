@@ -12,23 +12,23 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"gocloud.dev/pubsub"
 )
 
+type messageStruct struct {
+	Message string
+	Err     error
+}
+
 // MockPubsubSink is the Webhook sink used in tests.
 type MockPubsubSink struct {
-	sub      *pubsub.Subscription
-	topic    *pubsub.Topic
-	ctx      context.Context
-	groupCtx ctxgroup.Group
-	errChan  chan error
-	url      string
-	shutdown func()
-	mu       struct {
-		syncutil.Mutex
-		rows []string
-	}
+	sub         *pubsub.Subscription
+	topic       *pubsub.Topic
+	ctx         context.Context
+	groupCtx    ctxgroup.Group
+	MessageChan chan messageStruct
+	url         string
+	shutdown    func()
 }
 
 // MakeMockPubsubSink returns a MockPubsubSink object initialized with the given url and context
@@ -37,7 +37,7 @@ func MakeMockPubsubSink(url string) (*MockPubsubSink, error) {
 	ctx, shutdown := context.WithCancel(ctx)
 	groupCtx := ctxgroup.WithContext(ctx)
 	p := &MockPubsubSink{
-		ctx: ctx, errChan: make(chan error, 1), url: url, shutdown: shutdown,
+		ctx: ctx, MessageChan: make(chan messageStruct, 1), url: url, shutdown: shutdown,
 		groupCtx: groupCtx,
 	}
 	return p, nil
@@ -50,7 +50,7 @@ func (p *MockPubsubSink) Close() {
 	}
 	p.shutdown()
 	_ = p.groupCtx.Wait()
-	close(p.errChan)
+	close(p.MessageChan)
 }
 
 // Dial opens a subscriber using the url of the MockPubsubSink
@@ -75,57 +75,19 @@ func (p *MockPubsubSink) Dial() error {
 // receive loops to read in messages
 func (p *MockPubsubSink) receive() {
 	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		default:
-		}
 		msg, err := p.sub.Receive(p.ctx)
+		m := messageStruct{}
 		if err != nil {
-			select {
-			case <-p.ctx.Done():
-			case p.errChan <- err:
-			default:
-			}
-			return
-		}
-		msg.Ack()
-		msgBody := string(msg.Body)
+			m.Err = err
 
+		} else {
+			msg.Ack()
+			m.Message = string(msg.Body)
+		}
 		select {
 		case <-p.ctx.Done():
 			return
-		default:
-			p.push(msgBody)
+		case p.MessageChan <- m:
 		}
 	}
-}
-
-// push adds a pubsub message to the end of the rows string slice
-func (p *MockPubsubSink) push(msg string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.mu.rows = append(p.mu.rows, msg)
-}
-
-// Pop removes and returns the first string in the rows string slice
-func (p *MockPubsubSink) Pop() *string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if len(p.mu.rows) > 0 {
-		oldest := p.mu.rows[0]
-		p.mu.rows = p.mu.rows[1:]
-		return &oldest
-	}
-	return nil
-}
-
-// CheckSinkError checks the errChan for any errors and returns it
-func (p *MockPubsubSink) CheckSinkError() error {
-	select {
-	case err := <-p.errChan:
-		return err
-	default:
-	}
-	return nil
 }
