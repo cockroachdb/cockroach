@@ -259,3 +259,35 @@ func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, e
 	}
 	return roachpb.MakeTenantID(id), nil
 }
+
+// RewriteSpanToTenantPrefix updates the passed Span, potentially in-place, to
+// ensure the Key and EndKey have the passed tenant prefix, regardless of what
+// prior tenant prefix, if any, they had before, and returns the updated Span.
+func RewriteSpanToTenantPrefix(sp roachpb.Span, prefix roachpb.Key) (roachpb.Span, error) {
+	var err error
+	sp.Key, err = rewriteKeyToTenantPrefix(sp.Key, prefix)
+	if err != nil {
+		return sp, err
+	}
+	sp.EndKey, err = rewriteKeyToTenantPrefix(sp.EndKey, prefix)
+	return sp, err
+}
+
+func rewriteKeyToTenantPrefix(key roachpb.Key, prefix roachpb.Key) (roachpb.Key, error) {
+	if !bytes.HasPrefix(key, prefix) {
+		suffix, _, err := DecodeTenantPrefix(key)
+		if err != nil {
+			return nil, err
+		}
+
+		// If new and old prefix are same length, we can update the prefix in-place.
+		if len(key)-len(suffix) == len(prefix) {
+			copy(key, prefix)
+		} else {
+			key = make(roachpb.Key, len(prefix)+len(suffix))
+			n := copy(key, prefix)
+			copy(key[n:], suffix)
+		}
+	}
+	return key, nil
+}
