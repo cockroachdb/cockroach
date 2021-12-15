@@ -405,13 +405,18 @@ const (
 )
 
 func (e *importRowError) Error() string {
-	return fmt.Sprintf("error parsing row %d: %v (row: %q)", e.rowNum, e.err, e.row)
+	// The job system will truncate this error before saving it,
+	// but we will additionally truncate it here since it is
+	// separately written to the log and could easily result in
+	// very large log files.
+	rowForLog := e.row
+	if len(rowForLog) > importRowErrMaxRuneCount {
+		rowForLog = util.TruncateString(rowForLog, importRowErrMaxRuneCount) + importRowErrTruncatedMarker
+	}
+	return fmt.Sprintf("error parsing row %d: %v (row: %s)", e.rowNum, e.err, rowForLog)
 }
 
 func newImportRowError(err error, row string, num int64) error {
-	if len(row) > importRowErrMaxRuneCount {
-		row = util.TruncateString(row, importRowErrMaxRuneCount) + importRowErrTruncatedMarker
-	}
 	return &importRowError{
 		err:    err,
 		row:    row,
