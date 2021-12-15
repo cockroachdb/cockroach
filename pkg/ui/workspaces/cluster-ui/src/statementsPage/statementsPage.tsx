@@ -11,7 +11,6 @@
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge } from "lodash";
-import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -23,7 +22,6 @@ import {
 } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination } from "src/pagination";
-import { DateRange } from "src/dateRange";
 import { TableStatistics } from "../tableStatistics";
 import {
   Filter,
@@ -69,7 +67,6 @@ import { StatementsRequest } from "src/api/statementsApi";
 import Long from "long";
 import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
-import { commonStyles } from "../common";
 import {
   TimeScaleDropdown,
   defaultTimeScaleSelected,
@@ -77,6 +74,7 @@ import {
   toDateRange,
 } from "../timeScaleDropdown";
 
+import { commonStyles } from "../common";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -557,7 +555,7 @@ export class StatementsPage extends React.Component<
               showNodes={nodes.length > 1}
             />
           </PageConfigItem>
-          <PageConfigItem>
+          <PageConfigItem className={commonStyles("separator")}>
             <TimeScaleDropdown
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
