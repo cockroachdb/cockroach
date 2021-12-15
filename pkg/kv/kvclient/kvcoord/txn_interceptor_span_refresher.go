@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -310,7 +311,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	log.VEventf(ctx, 2, "trying to refresh to %s because of %s", refreshTxn.ReadTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
-	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
+	if err := sr.tryUpdatingTxnSpans(ctx, refreshTxn); err != nil {
 		log.Eventf(ctx, "refresh failed; propagating original retry error")
 		return nil, pErr
 	}
@@ -455,7 +456,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	// If the transaction cannot change its read timestamp, no refresh is
 	// possible.
 	if !sr.canForwardReadTimestamp(ba.Txn) {
-		return ba, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+		return ba, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, nil)
 	}
 
 	refreshTxn := ba.Txn.Clone()
@@ -464,9 +465,9 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 		refreshTxn.ReadTimestamp, ba)
 
 	// Try updating the txn spans at a timestamp that will allow us to commit.
-	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
+	if err := sr.tryUpdatingTxnSpans(ctx, refreshTxn); err != nil {
 		log.Eventf(ctx, "preemptive refresh failed; propagating retry error")
-		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, err)
 	}
 
 	log.Eventf(ctx, "preemptive refresh succeeded")
@@ -474,13 +475,23 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	return ba, nil
 }
 
-func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.Error {
+func newRetryErrorOnFailedPreemptiveRefresh(
+	txn *roachpb.Transaction, pErr *roachpb.Error,
+) *roachpb.Error {
 	reason := roachpb.RETRY_SERIALIZABLE
 	if txn.WriteTooOld {
 		reason = roachpb.RETRY_WRITE_TOO_OLD
 	}
-	err := roachpb.NewTransactionRetryError(reason, "failed preemptive refresh")
-	return roachpb.NewErrorWithTxn(err, txn)
+	msg := "failed preemptive refresh"
+	if pErr != nil {
+		if refreshErr, ok := pErr.GetDetail().(*roachpb.RefreshFailedError); ok {
+			msg = fmt.Sprintf("%s of %s %s", msg, refreshErr.FailureReason(), refreshErr.Key)
+		} else {
+			msg = fmt.Sprintf("%s - unknown error: %s", msg, pErr.String())
+		}
+	}
+	retryErr := roachpb.NewTransactionRetryError(reason, msg)
+	return roachpb.NewErrorWithTxn(retryErr, txn)
 }
 
 // tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
@@ -493,10 +504,10 @@ func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.E
 // its ReadTimestamp adjusted by the Refresh() method.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
-) (ok bool) {
+) (err *roachpb.Error) {
 	// Track the result of the refresh in metrics.
 	defer func() {
-		if ok {
+		if err == nil {
 			sr.refreshSuccess.Inc(1)
 		} else {
 			sr.refreshFail.Inc(1)
@@ -508,11 +519,11 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
-		return false
+		return roachpb.NewError(errors.AssertionFailedf("can't refresh txn spans; not valid"))
 	} else if sr.refreshFootprint.empty() {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
 		sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
-		return true
+		return nil
 	}
 
 	// Refresh all spans (merge first).
@@ -554,11 +565,11 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	if _, batchErr := sr.wrapped.SendLocked(ctx, refreshSpanBa); batchErr != nil {
 		log.VEventf(ctx, 2, "failed to refresh txn spans (%s)", batchErr)
-		return false
+		return batchErr
 	}
 
 	sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
-	return true
+	return nil
 }
 
 // appendRefreshSpans appends refresh spans from the supplied batch request,
