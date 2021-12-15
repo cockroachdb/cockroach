@@ -353,7 +353,7 @@ func (v *criticalLocalitiesVisitor) visitNewZone(
 			return true
 		})
 	if err != nil {
-		return errors.AssertionFailedf("unexpected error visiting zones: %s", err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error visiting zones")
 	}
 	if !found {
 		return errors.AssertionFailedf("no suitable zone config found for range: %s", r)

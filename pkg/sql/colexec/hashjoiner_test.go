@@ -45,7 +45,7 @@ func init() {
 	for i, f := range floats {
 		_, err := decs[i].SetFloat64(f)
 		if err != nil {
-			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+			colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error"))
 		}
 	}
 }

@@ -1112,7 +1112,7 @@ func getFinalSourceQuery(
 		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 			d, err := placeholder.Eval(evalCtx)
 			if err != nil {
-				panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 			}
 			d.Format(ctx)
 		}),

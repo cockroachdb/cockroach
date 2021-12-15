@@ -76,7 +76,8 @@ func AssetReadDir(name string) ([]os.FileInfo, error) {
 		info, err := AssetInfo(joined)
 		if err != nil {
 			if _, dirErr := AssetDir(joined); dirErr != nil {
-				return nil, errors.Wrapf(err, "missing directory (%s)", dirErr)
+				// nolint:errwrap
+				return nil, errors.Wrapf(err, "missing directory (%v)", dirErr)
 			}
 			continue // skip subdirectory
 		}

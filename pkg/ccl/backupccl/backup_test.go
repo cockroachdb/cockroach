@@ -1665,11 +1665,11 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		checkpointPath = filepath.Join(ip.dir, ip.name, backupManifestCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
-			return errors.Errorf("%+v", err)
+			return errors.Wrap(err, "error while reading checkpoint")
 		}
 		var checkpointDesc BackupManifest
 		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
-			return errors.Errorf("%+v", err)
+			return errors.Wrap(err, "error while unmarshalling checkpoint")
 		}
 		if len(checkpointDesc.Files) == 0 {
 			return errors.Errorf("empty backup checkpoint descriptor")

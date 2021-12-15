@@ -503,8 +503,8 @@ func getFileLine(
 	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", "", errors.Errorf("couldn't find test %s in %s: %s %s",
-			testName, packageName, err, string(out))
+		return "", "", errors.Wrapf(err, "couldn't find test %s in %s: %s\n",
+			testName, packageName, string(out))
 	}
 	re := regexp.MustCompile(`(.*):(.*):`)
 	// The first 2 :-delimited fields are the filename and line number.

@@ -1503,8 +1503,8 @@ func (c *SyncedCluster) Logs(
 			if ctx.Err() != nil {
 				return nil
 			}
-			return errors.Errorf("failed to rsync from %v to %v: %v\n%s",
-				src, dest, err, stderrBuf.String())
+			return errors.Wrapf(err, "failed to rsync from %v to %v:\n%s\n",
+				src, dest, stderrBuf.String())
 		}
 		return nil
 	}
@@ -1548,7 +1548,7 @@ func (c *SyncedCluster) Logs(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := os.MkdirAll(dest, 0755); err != nil {
-		return errors.Errorf("failed to create destination directory: %v", err)
+		return errors.Wrapf(err, "failed to create destination directory")
 	}
 	// Cancel context upon signaling.
 	ch := make(chan os.Signal, 1)
@@ -1564,7 +1564,7 @@ func (c *SyncedCluster) Logs(
 		// Subtract ~1 second to deal with the flush delay in util/log.
 		t := timeutil.Now().Add(-1100 * time.Millisecond).Truncate(time.Microsecond)
 		if err := rsyncLogs(ctx); err != nil {
-			return errors.Errorf("failed to sync logs: %v", err)
+			return errors.Wrapf(err, "failed to sync logs")
 		}
 		if !to.IsZero() && t.After(to) {
 			t = to

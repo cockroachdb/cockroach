@@ -376,6 +376,8 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 			).Connect(ctx)
 			s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 			if !ok || s.Code() != codes.FailedPrecondition {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("expected failed precondition for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
 			}
 
@@ -385,6 +387,8 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 			).Connect(ctx)
 			s, ok = grpcstatus.FromError(errors.UnwrapAll(err))
 			if !ok || s.Code() != codes.PermissionDenied {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("expected permission denied for n%d->n%d, got %v", decomSrv.NodeID(), clusterSrv.NodeID(), err)
 			}
 		}
@@ -394,6 +398,8 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 		_, err := decomSrv.DB().Scan(ctx, scratchKey, keys.MaxKey, 1)
 		s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 		if !ok || s.Code() != codes.PermissionDenied {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("expected permission denied for scan, got %v", err)
 		}
 		return nil
