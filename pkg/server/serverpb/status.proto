@@ -1298,6 +1298,18 @@ message StatementDiagnosticsResponse {
   StatementDiagnostics diagnostics = 2;
 }
 
+message CancelStatementDiagnosticsRequest {
+  // ID of the statement diagnostics request to be canceled.
+  int64 statement_diagnostics_id = 1;
+}
+
+message CancelStatementDiagnosticsResponse {
+  // Whether the cancellation request succeeded and the statement diagnostics was canceled.
+  bool canceled = 1;
+  // Error message (accompanied with canceled = false).
+  string error = 2;
+}
+
 message JobRegistryStatusRequest {
   string node_id = 1;
 }
@@ -1720,6 +1732,14 @@ service Status {
   rpc StatementDiagnostics(StatementDiagnosticsRequest) returns (StatementDiagnosticsResponse) {
     option (google.api.http) = {
       get: "/_status/stmtdiag/{statement_diagnostics_id}"
+    };
+  }
+  // CancelStatementDiagnosticsRequest cancels a statement diagnostic request
+  // given its ID.
+  rpc CancelStatementDiagnostics(CancelStatementDiagnosticsRequest) returns (CancelStatementDiagnosticsResponse) {
+    option (google.api.http) = {
+      get: "/_status/cancelstmtdiag/{statement_diagnostics_id}"
+      body: "*"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/errors"
 )
 
@@ -231,5 +232,24 @@ func (s *statusServer) StatementDiagnostics(
 		Diagnostics: &diagnosticsProto,
 	}
 
+	return response, nil
+}
+
+// CancelStatementDiagnostics cancels an ongoing statement diagnostics
+// instance identified by the given ID. These are in the
+// `system.statement_diagnostics` table.
+func (s *statusServer) CancelStatementDiagnostics(
+	ctx context.Context, req *serverpb.CancelStatementDiagnosticsRequest,
+) (*serverpb.CancelStatementDiagnosticsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	// do i use the internal function or just delete this directly?
+	response := &serverpb.CancelStatementDiagnosticsResponse{}
+	stmtdiagnostics.StmtDiagCancelOutstandingRequest
 	return response, nil
 }

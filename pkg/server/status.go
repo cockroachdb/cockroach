@@ -424,6 +424,11 @@ type StmtDiagnosticsRequester interface {
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 	) error
+
+	DeleteRequest(
+		ctx context.Context,
+		fprint string,
+	) error
 }
 
 // newStatusServer allocates and returns a statusServer.

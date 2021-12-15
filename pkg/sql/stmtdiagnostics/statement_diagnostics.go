@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -246,6 +247,12 @@ func (r *Registry) InsertRequest(
 	ctx context.Context, fprint string, minExecutionLatency time.Duration, expiresAfter time.Duration,
 ) error {
 	_, err := r.insertRequestInternal(ctx, fprint, minExecutionLatency, expiresAfter)
+	return err
+}
+
+// DeleteRequest is part of the StmtDiagnosticsRequester interface.
+func (r *Registry) DeleteRequest(ctx context.Context, fprint string) error {
+	err := clisqlclient.StmtDiagCancelOutstandingRequest(ctx, fprint)
 	return err
 }
 
