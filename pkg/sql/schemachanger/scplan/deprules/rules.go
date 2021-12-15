@@ -36,9 +36,9 @@ func joinTargetNode(
 const (
 	add, drop = scpb.Target_ADD, scpb.Target_DROP
 
-	public, txnDropped, dropped, absent, deleteOnly, deleteAndWriteOnly = scpb.Status_PUBLIC,
+	public, txnDropped, dropped, absent, deleteOnly, deleteAndWriteOnly, validated = scpb.Status_PUBLIC,
 		scpb.Status_TXN_DROPPED, scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
-		scpb.Status_DELETE_AND_WRITE_ONLY
+		scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_VALIDATED
 	// Make the linter happy
 	_ = txnDropped
 	_ = deleteOnly
@@ -201,7 +201,7 @@ func init() {
 		joinTargetNode(addIdx, addTarget, addNode,
 			add, public),
 		joinTargetNode(dropIdx, dropTarget, dropNode,
-			drop, deleteAndWriteOnly),
+			drop, validated),
 	)
 
 	register(
