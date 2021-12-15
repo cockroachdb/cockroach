@@ -21,12 +21,6 @@ vectorized: true
       right table: t71093@c_idx
       right columns: (c)
       right fixed values: 1 column
-·
-index recommendations: 2
-1. type: index replacement
-   SQL commands: DROP INDEX t71093@a_idx; CREATE INDEX ON t71093 (a) STORING (b, c);
-2. type: index creation
-   SQL command: CREATE INDEX ON t71093 (b) STORING (a, c);
 
 query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
@@ -44,12 +38,6 @@ vectorized: true
       right table: t71093@c_idx
       right columns: (c, d)
       right fixed values: 1 column
-·
-index recommendations: 2
-1. type: index replacement
-   SQL commands: DROP INDEX t71093@a_idx; CREATE INDEX ON t71093 (a) STORING (b, c, d);
-2. type: index replacement
-   SQL commands: DROP INDEX t71093@c_idx; CREATE INDEX ON t71093 (c) STORING (a, d);
 
 query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
@@ -67,12 +55,6 @@ vectorized: true
       right table: t71093@c_idx
       right columns: (c, d)
       right fixed values: 1 column
-·
-index recommendations: 2
-1. type: index replacement
-   SQL commands: DROP INDEX t71093@a_idx; CREATE INDEX ON t71093 (a) STORING (b, c, d);
-2. type: index creation
-   SQL command: CREATE INDEX ON t71093 (b) STORING (a, c, d);
 
 # Make sure that the zigzag join is used in the regression test for #71271.
 statement ok
@@ -92,9 +74,3 @@ vectorized: true
   right table: t71271@t71271_d_idx
   right columns: (d)
   right fixed values: 1 column
-·
-index recommendations: 2
-1. type: index replacement
-   SQL commands: DROP INDEX t71271@t71271_c_idx; CREATE INDEX ON t71271 (c) STORING (d);
-2. type: index replacement
-   SQL commands: DROP INDEX t71271@t71271_d_idx; CREATE INDEX ON t71271 (d) STORING (c);

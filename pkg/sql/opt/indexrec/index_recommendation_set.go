@@ -114,13 +114,13 @@ func (irs *IndexRecommendationSet) getColOrdSet(
 func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	indexOrd cat.IndexOrdinal, scannedCols opt.ColSet, tabID opt.TableID,
 ) {
-	// Do not recommend the primary index.
-	if indexOrd == cat.PrimaryIndex {
-		return
-	}
 	// Do not add real table indexes (non-hypothetical table indexes).
 	switch hypTable := irs.md.TableMeta(tabID).Table.(type) {
 	case *HypotheticalTable:
+		// Do not recommend existing indexes.
+		if indexOrd < hypTable.Table.IndexCount() {
+			return
+		}
 		scannedColOrds := irs.getColOrdSet(scannedCols, tabID)
 		// Try to find an identical existing index recommendation.
 		for _, indexRec := range irs.indexRecs[hypTable] {
@@ -291,13 +291,15 @@ func (ir *indexRecommendation) indexRecommendationString(
 	var sb strings.Builder
 	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
 
+	var dropCmd tree.DropIndex
+	unique := false
 	if ir.existingIndex != nil {
 		sb.WriteString("   SQL commands: ")
 		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
-		dropCmd := tree.DropIndex{
-			IndexList: []*tree.TableIndexName{{Table: *tableName, Index: indexName}},
-		}
-		sb.WriteString(dropCmd.String() + "; ")
+		dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
+
+		// Maintain uniqueness if the existing index is unique.
+		unique = ir.existingIndex.IsUnique()
 	} else {
 		sb.WriteString("   SQL command: ")
 	}
@@ -306,8 +308,12 @@ func (ir *indexRecommendation) indexRecommendationString(
 		Table:   *tableName,
 		Columns: indexCols,
 		Storing: storing,
+		Unique:  unique,
 	}
 	sb.WriteString(createCmd.String() + ";")
+	if len(dropCmd.IndexList) > 0 {
+		sb.WriteString(" " + dropCmd.String() + ";")
+	}
 
 	return sb.String()
 }
