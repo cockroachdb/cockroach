@@ -1,19 +1,56 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scjob",
-    srcs = ["job.go"],
+    srcs = [
+        "backfill_tracker.go",
+        "backfill_tracker_factory.go",
+        "job.go",
+        "periodic_progress_flusher.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/schemachanger/scsqldeps",
+        "//pkg/util",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "scjob_test",
+    size = "small",
+    srcs = [
+        "backfill_tracker_test.go",
+        "periodic_progress_flusher_test.go",
+    ],
+    embed = [":scjob"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
