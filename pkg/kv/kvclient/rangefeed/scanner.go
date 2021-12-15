@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // runInitialScan will attempt to perform an initial data scan.
@@ -51,9 +53,11 @@ func (f *RangeFeed) runInitialScan(
 		f.onValue(ctx, &v)
 	}
 
+	getSpansToScan := f.getSpansToScan(ctx)
+
 	r.Reset()
 	for r.Next() {
-		if err := f.client.Scan(ctx, f.spans, f.initialTimestamp, onValue, f.scanConfig); err != nil {
+		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, f.scanConfig); err != nil {
 			if f.onInitialScanError != nil {
 				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
 					log.VEventf(ctx, 1, "stopping due to error: %v", err)
@@ -72,4 +76,60 @@ func (f *RangeFeed) runInitialScan(
 	}
 
 	return false
+}
+
+func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
+	retryAll := func() []roachpb.Span {
+		return f.spans
+	}
+
+	if f.retryBehavior == ScanRetryAll {
+		return retryAll
+	}
+
+	// We want to retry remaining spans.
+	// Maintain a frontier in order to keep track of which spans still need to be scanned.
+	frontier, err := span.MakeFrontier(f.spans...)
+	if err != nil {
+		// Frontier construction shouldn't really fail. The spans have already
+		// been validated by frontier constructed when starting rangefeed.
+		// We don't really have a good mechanism to return an initialization error from here,
+		// so, log it and fall back to retrying all spans.
+		log.Errorf(ctx, "failed to build frontier for the initial scan; "+
+			"falling back to retry all behavior: err=%v", err)
+		return retryAll
+	}
+
+	var fm syncutil.Mutex
+	userSpanDoneCallback := f.onSpanDone
+	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
+		if userSpanDoneCallback != nil {
+			if err := userSpanDoneCallback(ctx, sp); err != nil {
+				return err
+			}
+		}
+		fm.Lock()
+		defer fm.Unlock()
+		_, err := frontier.Forward(sp, f.initialTimestamp)
+		return err
+	}
+
+	isRetry := false
+	var retrySpans []roachpb.Span
+	return func() []roachpb.Span {
+		if !isRetry {
+			isRetry = true
+			return f.spans
+		}
+
+		retrySpans = retrySpans[:0]
+		frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			if ts.IsEmpty() {
+				retrySpans = append(retrySpans, sp)
+			}
+			return span.ContinueMatch
+		})
+		return retrySpans
+	}
+
 }

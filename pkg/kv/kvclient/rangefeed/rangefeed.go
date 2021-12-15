@@ -188,6 +188,7 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	if err != nil {
 		return err
 	}
+
 	for _, sp := range spans {
 		if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
 			return err
