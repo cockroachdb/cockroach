@@ -20,22 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
-
-// testPartitionInfo tracks partitioning information
-// for testing
-type testPartitionInfo struct {
-	tree.PartitionBy
-}
 
 // TestState is a backing struct used to implement all schema changer
 // dependencies, like scbuild.Dependencies or scexec.Dependencies, for the
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
 	descriptors, syntheticDescriptors nstree.Map
-	partitioningInfo                  map[descpb.ID]*testPartitionInfo
 	namespace                         map[descpb.NameInfo]descpb.ID
 	currentDatabase                   string
 	phase                             scop.Phase
