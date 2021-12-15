@@ -1551,20 +1551,19 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 // Next implements TestFeed
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
-		log.Info(context.Background(), "next loop start")
-		err := p.mockSink.CheckSinkError()
-		if err != nil {
-			return nil, err
-		}
-		msg := p.mockSink.Pop()
-		if msg != nil {
+		select {
+		case msg := <-p.mockSink.MessageChan:
+			log.Info(context.Background(), "next loop start")
+			if msg.Err != nil {
+				return nil, msg.Err
+			}
 			log.Info(context.Background(), "there is message")
 			m := &cdctest.TestFeedMessage{}
-			resolved, err := isResolvedTimestamp([]byte(*msg))
+			resolved, err := isResolvedTimestamp([]byte(msg.Message))
 			if err != nil {
 				return nil, err
 			}
-			msgBytes := []byte(*msg)
+			msgBytes := []byte(msg.Message)
 			if resolved {
 				m.Resolved = msgBytes
 			} else {
@@ -1577,9 +1576,6 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 				}
 			}
 			return m, nil
-		}
-		log.Info(context.Background(), "next select statement")
-		select {
 		case <-p.ss.eventReady():
 			log.Info(context.Background(), "eventReady")
 			println("eventReady")
