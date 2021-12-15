@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -83,9 +82,6 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
-	// Txn record GC populates txn tscache which prevents second commit
-	// attempt from hitting TransactionStatusError(alreadyCommitted).
-	defer batcheval.TestingSetTxnAutoGC(false)()
 	{
 		// Turn the assertion into an error.
 		prev := kvcoord.DisableCommitSanityCheck
@@ -96,9 +92,21 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 	}
 
 	k := tc.ScratchRange(t)
+	kNext := k.Next()
+	require.Equal(t, keys.ScratchRangeMin, k) // interceptor above relies on this
+	tc.SplitRangeOrFatal(t, kNext)
+
 	err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_ = txn.DisablePipelining() // keep it simple
 		if err := txn.Put(ctx, k, "hello"); err != nil {
+			t.Log(err)
+			return err
+		}
+		// We need to give the txn an external lock (i.e. one on a different range),
+		// or we'll auto-GC the txn record on the first commit attempt, preventing
+		// the second one from getting the "desired"
+		// TransactionStatusError(alreadyCommitted).
+		if err := txn.Put(ctx, kNext, "hullo"); err != nil {
 			t.Log(err)
 			return err
 		}
