@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -197,14 +198,41 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 		if err != nil {
 			return err
 		}
+
+		grantPresent, allPresent := false, false
+		if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
+			for _, priv := range privileges {
+				grantPresent = grantPresent || priv == privilege.GRANT
+				allPresent = allPresent || priv == privilege.ALL
+			}
+
+			noticeMessage := ""
+			// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
+			// if GRANT privilege is involved, we must always output the message
+			if allPresent && n.n.IsGrant && !grantOption {
+				noticeMessage = "grant options were automatically applied but this behavior is deprecated"
+			} else if grantPresent {
+				noticeMessage = "the GRANT privilege is deprecated"
+			}
+
+			if len(noticeMessage) > 0 {
+				params.p.noticeSender.BufferNotice(
+					errors.WithHintf(
+						pgnotice.Newf(noticeMessage),
+						"please use WITH GRANT OPTION",
+					),
+				)
+			}
+		}
+
 		for _, role := range roles {
 			if n.n.IsGrant {
 				defaultPrivs.GrantDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption,
+					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
 				)
 			} else {
 				defaultPrivs.RevokeDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption,
+					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
 				)
 			}
 
@@ -273,14 +301,41 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	if err != nil {
 		return err
 	}
+
+	grantPresent, allPresent := false, false
+	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
+		for _, priv := range privileges {
+			grantPresent = grantPresent || priv == privilege.GRANT
+			allPresent = allPresent || priv == privilege.ALL
+		}
+
+		noticeMessage := ""
+		// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
+		// if GRANT privilege is involved, we must always output the message
+		if allPresent && n.n.IsGrant && !grantOption {
+			noticeMessage = "grant options were automatically applied but this behavior is deprecated"
+		} else if grantPresent {
+			noticeMessage = "the GRANT privilege is deprecated"
+		}
+
+		if len(noticeMessage) > 0 {
+			params.p.noticeSender.BufferNotice(
+				errors.WithHintf(
+					pgnotice.Newf(noticeMessage),
+					"please use WITH GRANT OPTION",
+				),
+			)
+		}
+	}
+
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption,
+				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption,
+				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
 			)
 		}
 

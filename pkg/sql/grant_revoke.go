@@ -192,10 +192,14 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		if len(n.desiredprivs) > 0 {
 			// Only allow granting/revoking privileges that the requesting
 			// user themselves have on the descriptor.
+
+			grantPresent, allPresent := false, false
 			for _, priv := range n.desiredprivs {
 				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
 					return err
 				}
+				grantPresent = grantPresent || priv == privilege.GRANT
+				allPresent = allPresent || priv == privilege.ALL
 			}
 			privileges := descriptor.GetPrivileges()
 
@@ -204,10 +208,38 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
+
+				noticeMessage := ""
+				// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
+				// if GRANT privilege is involved, we must always output the message
+				if allPresent && n.isGrant && !n.withGrantOption {
+					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
+				} else if grantPresent {
+					noticeMessage = "the GRANT privilege is deprecated"
+				}
+
+				if len(noticeMessage) > 0 {
+					params.p.noticeSender.BufferNotice(
+						errors.WithHintf(
+							pgnotice.Newf(noticeMessage),
+							"please use WITH GRANT OPTION",
+						),
+					)
+				}
 			}
 
 			for _, grantee := range n.grantees {
 				n.changePrivilege(privileges, n.desiredprivs, grantee)
+
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+					if grantPresent || allPresent {
+						if n.isGrant {
+							privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
+						} else if !n.isGrant && !n.withGrantOption {
+							privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
+						}
+					}
+				}
 			}
 
 			// Ensure superusers have exactly the allowed privilege set.
