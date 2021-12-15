@@ -54,6 +54,7 @@ go_library(
         "java_helpers.go",
         "jepsen.go",
         "jobs.go",
+        "knex.go",
         "kv.go",
         "kvbench.go",
         "ledger.go",
