@@ -30,7 +30,8 @@ func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
-	indexBackfiller scexec.IndexBackfiller,
+	backfiller scexec.Backfiller,
+	rangeCounter RangeCounter,
 	eventLoggerFactory EventLoggerFactory,
 	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
@@ -45,7 +46,8 @@ func NewJobRunDependencies(
 		collectionFactory:  collectionFactory,
 		db:                 db,
 		internalExecutor:   internalExecutor,
-		indexBackfiller:    indexBackfiller,
+		backfiller:         backfiller,
+		rangeCounter:       rangeCounter,
 		eventLoggerFactory: eventLoggerFactory,
 		partitioner:        partitioner,
 		jobRegistry:        jobRegistry,
@@ -62,9 +64,10 @@ type jobExecutionDeps struct {
 	collectionFactory  *descs.CollectionFactory
 	db                 *kv.DB
 	internalExecutor   sqlutil.InternalExecutor
-	indexBackfiller    scexec.IndexBackfiller
 	eventLoggerFactory func(txn *kv.Txn) scexec.EventLogger
 	partitioner        scmutationexec.Partitioner
+	backfiller         scexec.Backfiller
+	rangeCounter       RangeCounter
 	jobRegistry        *jobs.Registry
 	job                *jobs.Job
 
@@ -88,6 +91,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
+		pl := d.job.Payload()
 		return fn(ctx, &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
@@ -98,10 +102,17 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				eventLogger:        d.eventLoggerFactory(txn),
 				schemaChangerJobID: d.job.ID(),
 			},
-			indexBackfiller: d.indexBackfiller,
-			statements:      d.statements,
-			partitioner:     d.partitioner,
-			user:            d.job.Payload().UsernameProto.Decode(),
+			backfiller: d.backfiller,
+			backfillTracker: newBackfillTracker(d.codec,
+				newBackfillTrackerConfig(ctx, d.codec, d.db, d.rangeCounter, d.job),
+				convertFromJobBackfillProgress(
+					d.codec, pl.GetNewSchemaChange().BackfillProgress,
+				),
+			),
+			periodicProgressFlusher: newPeriodicProgressFlusher(d.settings),
+			statements:              d.statements,
+			partitioner:             d.partitioner,
+			user:                    d.job.Payload().UsernameProto.Decode(),
 		})
 	})
 	if err != nil {

@@ -27,6 +27,7 @@ go_library(
 
 go_test(
     name = "screl_test",
+    size = "small",
     srcs = [
         "attribute_test.go",
         "query_test.go",

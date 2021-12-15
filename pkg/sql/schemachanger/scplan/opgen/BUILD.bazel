@@ -57,6 +57,7 @@ go_library(
 
 go_test(
     name = "opgen_test",
+    size = "small",
     srcs = ["register_test.go"],
     embed = [":opgen"],
     deps = ["//pkg/sql/schemachanger/scpb"],
