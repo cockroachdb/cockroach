@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
