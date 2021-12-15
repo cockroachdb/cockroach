@@ -8,6 +8,18 @@ user testuser
 statement ok
 USE d;
 
+# The public schema is special and has hard-coded privileges for the public role.
+# When https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
+# the public role will no longer have CREATE privilege.
+query TTTT colnames
+SHOW GRANTS ON SCHEMA public
+----
+database_name  schema_name  grantee  privilege_type
+d              public       admin    ALL
+d              public       public   CREATE
+d              public       public   USAGE
+d              public       root     ALL
+
 statement ok
 CREATE SCHEMA testuser_s;
 
