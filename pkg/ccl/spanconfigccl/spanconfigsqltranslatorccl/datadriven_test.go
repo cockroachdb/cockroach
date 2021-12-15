@@ -88,7 +88,7 @@ func TestDataDriven(t *testing.T) {
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		var tenant *spanconfigtestcluster.Tenant
