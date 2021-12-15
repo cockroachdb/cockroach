@@ -299,7 +299,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX xyz@xyz_y_idx; CREATE INDEX ON xyz (y) STORING (z);
+   SQL commands: CREATE INDEX ON xyz (y) STORING (z); DROP INDEX xyz@xyz_y_idx;
 
 # With the hint, we use a constrained scan.
 query T
@@ -332,4 +332,4 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX xyz@xyz_y_idx; CREATE INDEX ON xyz (y) STORING (z);
+   SQL commands: CREATE INDEX ON xyz (y) STORING (z); DROP INDEX xyz@xyz_y_idx;

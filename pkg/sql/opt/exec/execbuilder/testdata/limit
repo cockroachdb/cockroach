@@ -37,7 +37,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@t_v_idx; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@t_v_idx;
 
 # This kind of query can be used to work around memory usage limits. We need to
 # choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
@@ -267,7 +267,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@t_v_idx; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@t_v_idx;
 
 query T
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 10
@@ -295,7 +295,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@t_v_idx; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@t_v_idx;
 
 query T
 EXPLAIN (VERBOSE) SELECT k, w FROM (SELECT * FROM t WHERE v >= 1 AND v <= 100 ORDER BY k LIMIT 10) ORDER BY v
@@ -491,10 +491,6 @@ vectorized: true
           table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
           spans: [/7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
           limit: 5
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON user_checklist_items (date_should_be_completed);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v, w LIMIT 5
@@ -558,9 +554,3 @@ vectorized: true
           estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
           table: a@a_i_j_idx
           spans: FULL SCAN
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON a (i) STORING (j);
-2. type: index creation
-   SQL command: CREATE INDEX ON b (k) STORING (s);

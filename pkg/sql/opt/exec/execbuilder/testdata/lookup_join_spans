@@ -138,7 +138,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -172,7 +172,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -208,7 +208,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -242,7 +242,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -273,7 +273,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -303,7 +303,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -339,7 +339,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -373,7 +373,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -409,7 +409,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -443,7 +443,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -479,7 +479,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 query T
 EXPLAIN
@@ -513,7 +513,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 # Test lookup conditions w/ a left join.
 query T
@@ -617,7 +617,7 @@ index recommendations: 2
 1. type: index creation
    SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 2. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 # Test NULL values in bounded lookup span.
 query T
@@ -889,7 +889,7 @@ index recommendations: 2
 1. type: index creation
    SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 2. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
+   SQL commands: CREATE INDEX ON metrics (name) STORING (nullable); DROP INDEX metrics@name_index;
 
 
 # Test NULL values in simple equality condition.

@@ -2225,12 +2225,6 @@ vectorized: true
   right table: zigzag@c_idx
   right columns: (c)
   right fixed values: 1 column
-·
-index recommendations: 2
-1. type: index replacement
-   SQL commands: DROP INDEX zigzag@b_idx; CREATE INDEX ON zigzag (b) STORING (c);
-2. type: index replacement
-   SQL commands: DROP INDEX zigzag@c_idx; CREATE INDEX ON zigzag (c) STORING (b);
 
 
 # Zigzag join nested inside a lookup.
@@ -2254,11 +2248,9 @@ vectorized: true
       right columns: (c)
       right fixed values: 1 column
 ·
-index recommendations: 2
+index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX zigzag@b_idx; CREATE INDEX ON zigzag (b) STORING (c, d);
-2. type: index replacement
-   SQL commands: DROP INDEX zigzag@c_idx; CREATE INDEX ON zigzag (c) STORING (b, d);
+   SQL commands: CREATE INDEX ON zigzag (c) STORING (b, d); DROP INDEX zigzag@c_idx;
 
 # Zigzag join nested inside a lookup, with an on condition on lookup join.
 query T
@@ -2282,11 +2274,9 @@ vectorized: true
       right columns: (c)
       right fixed values: 1 column
 ·
-index recommendations: 2
+index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX zigzag@b_idx; CREATE INDEX ON zigzag (b) STORING (c, d);
-2. type: index replacement
-   SQL commands: DROP INDEX zigzag@c_idx; CREATE INDEX ON zigzag (c) STORING (b, d);
+   SQL commands: CREATE INDEX ON zigzag (c) STORING (b, d); DROP INDEX zigzag@c_idx;
 
 
 # Regression test for part of #34695.
@@ -2318,12 +2308,6 @@ vectorized: true
           missing stats
           table: zigzag2@a_b_idx
           spans: [/1/2 - /1/2]
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON zigzag2 (a) STORING (b, c, d);
-2. type: index creation
-   SQL command: CREATE INDEX ON zigzag2 (b) STORING (a, c, d);
 
 # Test that we can force a merge join.
 query T
