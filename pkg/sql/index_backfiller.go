@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// IndexBackfillPlanner holds dependencies for an index backfiller.
+// IndexBackfillPlanner holds dependencies for an index backfiller
+// for use in the declarative schema changer.
 type IndexBackfillPlanner struct {
 	execCfg   *ExecutorConfig
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory
@@ -40,46 +40,66 @@ func NewIndexBackfiller(
 	return &IndexBackfillPlanner{execCfg: execCfg, ieFactory: ieFactory}
 }
 
-// BackfillIndex will backfill the specified index on the passed table.
-//
-// TODO(ajwerner): allow backfilling multiple indexes.
-func (ib *IndexBackfillPlanner) BackfillIndex(
-	ctx context.Context,
-	tracker scexec.JobProgressTracker,
-	descriptor catalog.TableDescriptor,
-	source descpb.IndexID,
-	toBackfill ...descpb.IndexID,
-) error {
-
+// MaybePrepareDestIndexesForBackfill is part of the scexec.Backfiller interface.
+func (ib *IndexBackfillPlanner) MaybePrepareDestIndexesForBackfill(
+	ctx context.Context, current scexec.BackfillProgress, td catalog.TableDescriptor,
+) (scexec.BackfillProgress, error) {
+	if !current.MinimumWriteTimestamp.IsEmpty() {
+		return current, nil
+	}
 	// Pick an arbitrary read timestamp for the reads of the backfill.
 	// It's safe to use any timestamp to read even if we've partially backfilled
 	// at an earlier timestamp because other writing transactions have been
 	// writing at the appropriate timestamps in-between.
-	backfillReadTimestamp := ib.execCfg.DB.Clock().Now()
-	targetSpans := make([]roachpb.Span, len(toBackfill))
-	for i, idxID := range toBackfill {
-		targetSpans[i] = descriptor.IndexSpan(ib.execCfg.Codec, idxID)
+	backfillReadTimestamp := ib.execCfg.Clock.Now()
+	targetSpans := make([]roachpb.Span, len(current.DestIndexIDs))
+	for i, idxID := range current.DestIndexIDs {
+		targetSpans[i] = td.IndexSpan(ib.execCfg.Codec, idxID)
 	}
-	if err := ib.scanTargetSpansToPushTimestampCache(
-		ctx, backfillReadTimestamp, targetSpans,
+	if err := scanTargetSpansToPushTimestampCache(
+		ctx, ib.execCfg.DB, backfillReadTimestamp, targetSpans,
 	); err != nil {
-		return err
+		return scexec.BackfillProgress{}, err
 	}
 
-	// TODO(dt): persist a write ts, don't rescan above.
-	backfillWriteTimestamp := backfillReadTimestamp
-
-	resumeSpans, err := tracker.GetResumeSpans(ctx, descriptor.GetID(), source)
-	if err != nil {
-		return err
+	scanned := scexec.BackfillProgress{
+		Backfill:              current.Backfill,
+		MinimumWriteTimestamp: backfillReadTimestamp,
 	}
-	run, err := ib.plan(ctx, descriptor, backfillReadTimestamp, backfillWriteTimestamp, backfillReadTimestamp, resumeSpans, toBackfill, func(
+	scanned.SpansToDo = []roachpb.Span{
+		td.IndexSpan(ib.execCfg.Codec, td.GetPrimaryIndexID()),
+	}
+	return scanned, nil
+}
+
+// BackfillIndex is part of the scexec.Backfiller interface.
+func (ib *IndexBackfillPlanner) BackfillIndex(
+	ctx context.Context,
+	progress scexec.BackfillProgress,
+	tracker scexec.BackfillProgressWriter,
+	descriptor catalog.TableDescriptor,
+) error {
+	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
-		// TODO(ajwerner): Hook up the jobs tracking stuff.
-		log.Infof(ctx, "got update: %v", meta)
-		return nil
-	})
+		if meta.BulkProcessorProgress == nil {
+			return nil
+		}
+		progress.SpansToDo = roachpb.SubtractSpans(progress.SpansToDo,
+			meta.BulkProcessorProgress.CompletedSpans)
+		return tracker.SetBackfillProgress(ctx, progress)
+	}
+	now := ib.execCfg.DB.Clock().Now()
+	run, err := ib.plan(
+		ctx,
+		descriptor,
+		progress.MinimumWriteTimestamp,
+		now,
+		progress.MinimumWriteTimestamp,
+		progress.SpansToDo,
+		progress.DestIndexIDs,
+		updateFunc,
+	)
 	if err != nil {
 		return err
 	}
@@ -93,11 +113,11 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 // anything else from sneaking under us. Since these are new indexes, these
 // spans should be essentially empty, so this should be a pretty quick and
 // cheap scan.
-func (ib *IndexBackfillPlanner) scanTargetSpansToPushTimestampCache(
-	ctx context.Context, backfillTimestamp hlc.Timestamp, targetSpans []roachpb.Span,
+func scanTargetSpansToPushTimestampCache(
+	ctx context.Context, db *kv.DB, backfillTimestamp hlc.Timestamp, targetSpans []roachpb.Span,
 ) error {
 	const pageSize = 10000
-	return ib.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetFixedTimestamp(ctx, backfillTimestamp); err != nil {
 			return err
 		}
@@ -115,7 +135,7 @@ func (ib *IndexBackfillPlanner) scanTargetSpansToPushTimestampCache(
 
 func iterateNoop(_ []kv.KeyValue) error { return nil }
 
-var _ scexec.IndexBackfiller = (*IndexBackfillPlanner)(nil)
+var _ scexec.Backfiller = (*IndexBackfillPlanner)(nil)
 
 func (ib *IndexBackfillPlanner) plan(
 	ctx context.Context,

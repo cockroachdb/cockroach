@@ -49,7 +49,9 @@ func NewExecutorDependencies(
 	user security.SQLUsername,
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
-	indexBackfiller scexec.IndexBackfiller,
+	backfiller scexec.Backfiller,
+	backfillTracker scexec.BackfillTracker,
+	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	partitioner scmutationexec.Partitioner,
 	eventLogger scexec.EventLogger,
@@ -64,10 +66,12 @@ func NewExecutorDependencies(
 			indexValidator:  indexValidator,
 			eventLogger:     eventLogger,
 		},
-		indexBackfiller: indexBackfiller,
-		statements:      statements,
-		partitioner:     partitioner,
-		user:            user,
+		backfiller:              backfiller,
+		backfillTracker:         backfillTracker,
+		periodicProgressFlusher: backfillFlusher,
+		statements:              statements,
+		partitioner:             partitioner,
+		user:                    user,
 	}
 }
 
@@ -195,14 +199,14 @@ type catalogChangeBatcher struct {
 
 var _ scexec.CatalogChangeBatcher = (*catalogChangeBatcher)(nil)
 
-// CreateOrUpdateDescriptor implements the scexec.CatalogChangeBatcher interface.
+// CreateOrUpdateDescriptor implements the scexec.CatalogWriter interface.
 func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
 	return b.descsCollection.WriteDescToBatch(ctx, false /* kvTrace */, desc, b.batch)
 }
 
-// DeleteName implements the scexec.CatalogChangeBatcher interface.
+// DeleteName implements the scexec.CatalogWriter interface.
 func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
@@ -257,9 +261,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
 }
 
-var _ scexec.JobProgressTracker = (*execDeps)(nil)
-
-// GetResumeSpans implements the scexec.JobProgressTracker interface.
+// GetResumeSpans implements the scexec.BackfillTracker interface.
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
@@ -275,7 +277,7 @@ func (d *txnDeps) GetResumeSpans(
 	return []roachpb.Span{table.IndexSpan(d.codec, indexID)}, nil
 }
 
-// SetResumeSpans implements the scexec.JobProgressTracker interface.
+// SetResumeSpans implements the scexec.BackfillTracker interface.
 func (d *txnDeps) SetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
 ) error {
@@ -284,10 +286,12 @@ func (d *txnDeps) SetResumeSpans(
 
 type execDeps struct {
 	txnDeps
-	indexBackfiller scexec.IndexBackfiller
-	partitioner     scmutationexec.Partitioner
-	statements      []string
-	user            security.SQLUsername
+	partitioner             scmutationexec.Partitioner
+	backfiller              scexec.Backfiller
+	backfillTracker         scexec.BackfillTracker
+	periodicProgressFlusher scexec.PeriodicProgressFlusher
+	statements              []string
+	user                    security.SQLUsername
 }
 
 var _ scexec.Dependencies = (*execDeps)(nil)
@@ -303,8 +307,18 @@ func (d *execDeps) Partitioner() scmutationexec.Partitioner {
 }
 
 // IndexBackfiller implements the scexec.Dependencies interface.
-func (d *execDeps) IndexBackfiller() scexec.IndexBackfiller {
-	return d.indexBackfiller
+func (d *execDeps) IndexBackfiller() scexec.Backfiller {
+	return d.backfiller
+}
+
+// BackfillProgressTracker implements the scexec.Dependencies interface.
+func (d *execDeps) BackfillProgressTracker() scexec.BackfillTracker {
+	return d.backfillTracker
+}
+
+// PeriodicProgressFlusher implements the scexec.Dependencies interface.
+func (d *execDeps) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
+	return d.periodicProgressFlusher
 }
 
 func (d *execDeps) IndexValidator() scexec.IndexValidator {
@@ -313,11 +327,6 @@ func (d *execDeps) IndexValidator() scexec.IndexValidator {
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (d *execDeps) IndexSpanSplitter() scexec.IndexSpanSplitter {
-	return d
-}
-
-// JobProgressTracker implements the scexec.Dependencies interface.
-func (d *execDeps) JobProgressTracker() scexec.JobProgressTracker {
 	return d
 }
 
@@ -342,4 +351,60 @@ type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
 	return d.eventLogger
+}
+
+// BackfillTrackerFactory constructs a new BackfillTracker.
+type BackfillTrackerFactory func() scexec.BackfillTracker
+
+// NewNoOpBackfillTracker constructs a backfill tracker which does not do
+// anything. It will always return progress for a given backfill which
+// contains a full set of SpansToDo corresponding to the source index
+// span and an empty MinimumWriteTimestamp.
+func NewNoOpBackfillTracker(codec keys.SQLCodec) scexec.BackfillTracker {
+	return noopBackfillProgress{codec: codec}
+}
+
+type noopBackfillProgress struct {
+	codec keys.SQLCodec
+}
+
+func (n noopBackfillProgress) FlushCheckpoint(ctx context.Context) error {
+	return nil
+}
+
+func (n noopBackfillProgress) FlushFractionCompleted(ctx context.Context) error {
+	return nil
+}
+
+func (n noopBackfillProgress) GetBackfillProgress(
+	ctx context.Context, b scexec.Backfill,
+) (scexec.BackfillProgress, error) {
+	key := n.codec.IndexPrefix(uint32(b.TableID), uint32(b.SourceIndexID))
+	return scexec.BackfillProgress{
+		Backfill: b,
+		SpansToDo: []roachpb.Span{
+			{Key: key, EndKey: key.PrefixEnd()},
+		},
+	}, nil
+}
+
+func (n noopBackfillProgress) SetBackfillProgress(
+	ctx context.Context, progress scexec.BackfillProgress,
+) error {
+	return nil
+}
+
+type noopPeriodicProgressFlusher struct {
+}
+
+// NewNoopPeriodicProgressFlusher constructs a new
+// PeriodicProgressFlusher which never does anything.
+func NewNoopPeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
+	return noopPeriodicProgressFlusher{}
+}
+
+func (n noopPeriodicProgressFlusher) StartPeriodicUpdates(
+	ctx context.Context, tracker scexec.BackfillProgressFlusher,
+) (stop func() error) {
+	return func() error { return nil }
 }
