@@ -822,6 +822,23 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 		e.emitSpans("spans", a.Table, a.Table.Index(cat.PrimaryIndex), params)
 
+	case alterTableSplitOp:
+		a := n.args.(*alterTableSplitArgs)
+		ob.Attrf("index", "%s@%s", a.Index.Table().Name(), a.Index.Name())
+		ob.Expr("expiry", a.Expiration, nil /* columns */)
+
+	case alterTableUnsplitOp:
+		a := n.args.(*alterTableUnsplitArgs)
+		ob.Attrf("index", "%s@%s", a.Index.Table().Name(), a.Index.Name())
+
+	case alterTableUnsplitAllOp:
+		a := n.args.(*alterTableUnsplitAllArgs)
+		ob.Attrf("index", "%s@%s", a.Index.Table().Name(), a.Index.Name())
+
+	case alterTableRelocateOp:
+		a := n.args.(*alterTableRelocateArgs)
+		ob.Attrf("index", "%s@%s", a.Index.Table().Name(), a.Index.Name())
+
 	case recursiveCTEOp:
 		a := n.args.(*recursiveCTEArgs)
 		if e.ob.flags.Verbose && a.Deduplicate {
@@ -852,10 +869,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		saveTableOp,
 		errorIfRowsOp,
 		opaqueOp,
-		alterTableSplitOp,
-		alterTableUnsplitOp,
-		alterTableUnsplitAllOp,
-		alterTableRelocateOp,
 		controlJobsOp,
 		controlSchedulesOp,
 		cancelQueriesOp,
