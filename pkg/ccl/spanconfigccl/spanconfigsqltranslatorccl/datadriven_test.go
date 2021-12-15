@@ -94,7 +94,7 @@ func TestDataDriven(t *testing.T) {
 		var tenant *spanconfigtestcluster.Tenant
 		if strings.Contains(path, "tenant") {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.MakeTenantID(10))
-			tenant.Exec(`SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true`)
+			tenant.Exec(`SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`)
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		}

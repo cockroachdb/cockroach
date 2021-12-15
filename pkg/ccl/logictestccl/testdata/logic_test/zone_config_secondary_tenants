@@ -4,11 +4,14 @@
 statement ok
 CREATE TABLE t();
 
+statement ok
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = false
+
 statement error pq: unimplemented: operation is unsupported in multi-tenancy mode
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 
 statement ok
-SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;

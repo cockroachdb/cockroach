@@ -32,7 +32,7 @@ import (
 // is set.
 var EnabledSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"spanconfig.experimental_store.enabled",
+	"spanconfig.store.enabled",
 	`use the span config infrastructure in KV instead of the system config span`,
 	false,
 )

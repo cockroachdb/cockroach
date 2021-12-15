@@ -59,7 +59,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 
 	_, err := s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		`SET CLUSTER SETTING spanconfig.experimental_store.enabled = true`)
+		`SET CLUSTER SETTING spanconfig.store.enabled = true`)
 	require.NoError(t, err)
 
 	key, err := s.ScratchRange()

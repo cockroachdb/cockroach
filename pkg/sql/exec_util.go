@@ -185,12 +185,15 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.experimental_allow_for_secondary_tenant.enabled"
+const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_for_secondary_tenant.enabled"
 
 // secondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
 // to set zone configurations. It has no effect for the system tenant.
 //
 // This setting has no effect on zone configurations that have already been set.
+//
+// TODO(irfansharif): This should be a tenant-readonly setting, possible after
+// the work for #73349 is completed.
 var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	secondaryTenantsZoneConfigsEnabledSettingName,
