@@ -84,7 +84,7 @@ func ParseVersion(s string) (Version, error) {
 	for i := range parts {
 		var err error
 		if ints[i], err = strconv.ParseInt(parts[i], 10, 32); err != nil {
-			return c, errors.Errorf("invalid version %s: %s", s, err)
+			return c, errors.Wrapf(err, "invalid version %s", s)
 		}
 	}
 

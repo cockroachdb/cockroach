@@ -305,7 +305,7 @@ func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 	for _, str := range strNodeIDs {
 		i, err := strconv.ParseInt(str, 10, 32)
 		if err != nil {
-			return nil, errors.Errorf("unable to parse %s: %s", str, err)
+			return nil, errors.Wrapf(err, "unable to parse %s", str)
 		}
 		nodeIDs = append(nodeIDs, roachpb.NodeID(i))
 	}

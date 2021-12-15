@@ -441,7 +441,7 @@ func GetCsvNumCols(csvStr string) (cols int, err error) {
 	reader := csv.NewReader(strings.NewReader(csvStr))
 	records, err := reader.Read()
 	if err != nil {
-		return 0, errors.Errorf("error reading csv input: \n %v\n errors:%s", csvStr, err)
+		return 0, errors.Wrapf(err, "error reading csv input:\n %v\n", csvStr)
 	}
 	return len(records), nil
 }
@@ -451,8 +451,8 @@ func GetCsvNumCols(csvStr string) (cols int, err error) {
 func MatchCSV(csvStr string, matchColRow [][]string) (err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Errorf("csv input:\n%v\nexpected:\n%s\nerrors:%s",
-				csvStr, pretty.Sprint(matchColRow), err)
+			err = errors.Wrapf(err, "csv input:\n%v\nexpected:\n%s\n",
+				csvStr, pretty.Sprint(matchColRow))
 		}
 	}()
 
@@ -482,8 +482,8 @@ func MatchCSV(csvStr string, matchColRow [][]string) (err error) {
 			pat, str := matchColRow[i][j], records[i][j]
 			re := regexp.MustCompile(pat)
 			if !re.MatchString(str) {
-				err = errors.Errorf("%v\nrow #%d, col #%d: found %q which does not match %q",
-					err, i+1, j+1, str, pat)
+				err = errors.Wrapf(err, "row #%d, col #%d: found %q which does not match %q",
+					i+1, j+1, str, pat)
 			}
 		}
 	}

@@ -1900,7 +1900,7 @@ func (t *T) Size() (n int) {
 	temp := *t
 	err := temp.downgradeType()
 	if err != nil {
-		panic(errors.AssertionFailedf("error during Size call: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error during Size call"))
 	}
 	return temp.InternalType.Size()
 }

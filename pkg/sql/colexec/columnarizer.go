@@ -134,7 +134,7 @@ func newColumnarizer(
 				// propagate it in DrainMeta.
 				if err := c.Close(); buildutil.CrdbTestBuild && err != nil {
 					// Close never returns an error.
-					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
+					colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from Columnarizer.Close"))
 				}
 				return nil
 			}},

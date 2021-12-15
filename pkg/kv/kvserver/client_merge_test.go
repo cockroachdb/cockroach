@@ -2670,6 +2670,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	// Wait for store2 to hear about the split.
 	testutils.SucceedsSoon(t, func() error {
 		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("store2 has not yet processed split. err: %v", err)
 		}
 		return nil

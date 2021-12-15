@@ -364,7 +364,7 @@ func (ta *TxnAborter) statementFilter(
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			panic(errors.AssertionFailedf("TxnAborter failed to abort: %s", err))
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "TxnAborter failed to abort"))
 		}
 	}
 }

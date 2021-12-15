@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -91,7 +92,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	assertDatabaseNotResolvable := func(ctx context.Context, db *gosql.DB, dbName string) error {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, dbName))
 		if err == nil || err.Error() != "pq: target database or schema does not exist" {
-			return errors.AssertionFailedf("unexpected error: %s", err)
+			return errors.Newf("unexpected error: %s", pgerror.FullError(err))
 		}
 		return nil
 	}

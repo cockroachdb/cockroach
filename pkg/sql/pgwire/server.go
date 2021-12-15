@@ -675,8 +675,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// baseSQLMemoryBudget.
 	reserved := s.connMonitor.MakeBoundAccount()
 	if err := reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
-		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
-			baseSQLMemoryBudget, err)
+		return errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
+			baseSQLMemoryBudget)
 	}
 
 	// Load the client-provided session parameters.

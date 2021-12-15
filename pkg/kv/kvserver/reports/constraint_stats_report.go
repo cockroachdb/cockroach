@@ -430,7 +430,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 			return true
 		})
 	if err != nil {
-		return errors.Errorf("unexpected error visiting zones: %s", err)
+		return errors.Wrap(err, "unexpected error visiting zones")
 	}
 	v.prevZoneKey = zKey
 	v.prevConstraints = constraints

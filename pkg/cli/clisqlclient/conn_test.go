@@ -69,7 +69,7 @@ func TestConnRecover(t *testing.T) {
 				t.Fatal(closeErr)
 			}
 		} else if !errors.Is(err, driver.ErrBadConn) {
-			return errors.Newf("expected ErrBadConn, got %v", err)
+			return errors.Newf("expected ErrBadConn, got %v", err) // nolint:errwrap
 		}
 		return nil
 	})
@@ -89,7 +89,7 @@ func TestConnRecover(t *testing.T) {
 	// Ditto from Query().
 	testutils.SucceedsSoon(t, func() error {
 		if err := conn.Exec(`SELECT 1`, nil); !errors.Is(err, driver.ErrBadConn) {
-			return errors.Newf("expected ErrBadConn, got %v", err)
+			return errors.Newf("expected ErrBadConn, got %v", err) // nolint:errwrap
 		}
 		return nil
 	})

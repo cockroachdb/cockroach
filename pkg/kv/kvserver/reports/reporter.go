@@ -610,7 +610,7 @@ func visitRanges(
 			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
-					return errors.AssertionFailedf("expected visitor %T to have failed() after error: %s", v, err)
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected visitor %T to have failed() after error", v)
 				}
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)

@@ -56,6 +56,15 @@
             "github.com/cockroachdb/cockroach/.*$": "first-party code"
         }
     },
+    "errwrap": {
+      "exclude_files": {
+        ".*\\.pb\\.go$": "generated code",
+        ".*\\.pb\\.gw\\.go$": "generated code"
+      },
+      "only_files": {
+        "github.com/cockroachdb/cockroach/.*$": "first-party code"
+      }
+    },
     "fmtsafe": {
         "exclude_files": {
             "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger/log\\.go$": "format argument is not a constant expression",

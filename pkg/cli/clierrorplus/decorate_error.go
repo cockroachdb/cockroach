@@ -75,6 +75,8 @@ func MaybeDecorateError(
 		}()
 
 		connFailed := func() error {
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
 			const format = "cannot dial server.\n" +
 				"Is the server running?\n" +
 				"If the server is running, check --host client-side and --advertise server-side.\n\n%v"
@@ -82,18 +84,26 @@ func MaybeDecorateError(
 		}
 
 		connSecurityHint := func() error {
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
 			const format = "SSL authentication error while connecting.\n%v"
 			return errors.Errorf(format, err)
 		}
 
 		connInsecureHint := func() error {
-			return errors.Errorf("cannot establish secure connection to insecure server.\n"+
-				"Maybe use --insecure?\n\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "cannot establish secure connection to insecure server.\n" +
+				"Maybe use --insecure?\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		connRefused := func() error {
-			return errors.Errorf("server closed the connection.\n"+
-				"Is this a CockroachDB node?\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "server closed the connection.\n" +
+				"Is this a CockroachDB node?\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Is this an "unable to connect" type of error?
@@ -105,9 +115,11 @@ func MaybeDecorateError(
 		}
 
 		if wErr := (*security.Error)(nil); errors.As(err, &wErr) {
-			return errors.Errorf("cannot load certificates.\n"+
-				"Check your certificate settings, set --certs-dir, or use --insecure for insecure clusters.\n\n%v",
-				err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "cannot load certificates.\n" +
+				"Check your certificate settings, set --certs-dir, or use --insecure for insecure clusters.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		if wErr := (*x509.UnknownAuthorityError)(nil); errors.As(err, &wErr) {
@@ -181,7 +193,10 @@ func MaybeDecorateError(
 		}
 
 		opTimeout := func() error {
-			return errors.Errorf("operation timed out.\n\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "operation timed out.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Is it a plain context cancellation (i.e. timeout)?
@@ -201,7 +216,10 @@ func MaybeDecorateError(
 			return fmt.Errorf(
 				"incompatible client and server versions (likely server version: v1.0, required: >=v1.1)")
 		} else if grpcutil.IsClosedConnection(err) {
-			return errors.Errorf("connection lost.\n\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "connection lost.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Does the server require GSSAPI authentication?

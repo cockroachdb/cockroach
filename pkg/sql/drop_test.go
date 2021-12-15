@@ -73,7 +73,7 @@ func zoneExists(sqlDB *gosql.DB, expected *zonepb.ZoneConfig, id descpb.ID) erro
 		var storedID descpb.ID
 		var val []byte
 		if err := rows.Scan(&storedID, &val); err != nil {
-			return errors.Errorf("row scan failed: %s", err)
+			return errors.Wrap(err, "row scan failed")
 		}
 		if storedID != id {
 			return errors.Errorf("e = %d, v = %d", id, storedID)

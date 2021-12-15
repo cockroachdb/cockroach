@@ -121,7 +121,7 @@ func TestServerReport(t *testing.T) {
 				fmt.Sprintf(`ALTER %s CONFIGURE ZONE = '%s'`, cmd.resource, cmd.config),
 			); err != nil {
 				// Work around gossip asynchronicity.
-				return errors.Errorf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
+				return errors.Wrapf(err, "error applying zone config %q to %q", cmd.config, cmd.resource)
 			}
 			return nil
 		})

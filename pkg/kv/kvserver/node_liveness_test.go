@@ -461,6 +461,8 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 			return errors.Errorf("expected expiration to remain unchanged")
 		}
 		if live, err := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).IsLive(deadNodeID); live || err != nil {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("expected dead node to remain dead after epoch increment %t: %v", live, err)
 		}
 		return nil

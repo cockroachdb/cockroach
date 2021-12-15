@@ -654,11 +654,11 @@ func PrepareGeometry(a geopb.EWKB) (PreparedGeometry, error) {
 func PreparedGeomDestroy(a PreparedGeometry) {
 	g, err := ensureInitInternal()
 	if err != nil {
-		panic(errors.AssertionFailedf("trying to destroy PreparedGeometry with no GEOS: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "trying to destroy PreparedGeometry with no GEOS"))
 	}
 	ap := (*C.CR_GEOS_PreparedGeometry)(unsafe.Pointer(a))
 	if err := statusToError(C.CR_GEOS_PreparedGeometryDestroy(g, ap)); err != nil {
-		panic(errors.AssertionFailedf("PreparedGeometryDestroy returned an error: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "PreparedGeometryDestroy returned an error"))
 	}
 }
 

@@ -357,7 +357,7 @@ func (r *RangeDescriptor) Validate() error {
 	stores := map[StoreID]struct{}{}
 	for i, rep := range r.Replicas().Descriptors() {
 		if err := rep.Validate(); err != nil {
-			return errors.Errorf("replica %d is invalid: %s", i, err)
+			return errors.Wrapf(err, "replica %d is invalid", i)
 		}
 		if rep.ReplicaID >= r.NextReplicaID {
 			return errors.Errorf("ReplicaID %d must be less than NextReplicaID %d",

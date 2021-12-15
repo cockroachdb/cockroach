@@ -79,11 +79,11 @@ func TestRotateCerts(t *testing.T) {
 	clientTest := func(httpClient http.Client) error {
 		req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 		if err != nil {
-			return errors.Errorf("could not create request: %v", err)
+			return errors.Wrap(err, "could not create request")
 		}
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			return errors.Errorf("http request failed: %v", err)
+			return errors.Wrap(err, "http request failed")
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -178,6 +178,8 @@ func TestRotateCerts(t *testing.T) {
 	testutils.SucceedsSoon(t,
 		func() error {
 			if err := clientTest(firstClient); !testutils.IsError(err, "unknown authority") {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("expected unknown authority, got %v", err)
 			}
 
@@ -281,10 +283,10 @@ func TestRotateCerts(t *testing.T) {
 	testutils.SucceedsSoon(t,
 		func() error {
 			if err := clientTest(thirdClient); err != nil {
-				return errors.Errorf("third HTTP client failed: %v", err)
+				return errors.Wrap(err, "third HTTP client failed")
 			}
 			if _, err := thirdSQLClient.Exec("SELECT 1"); err != nil {
-				return errors.Errorf("third SQL client failed: %v", err)
+				return errors.Wrap(err, "third SQL client failed")
 			}
 			return nil
 		})

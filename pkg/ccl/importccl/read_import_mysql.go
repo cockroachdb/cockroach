@@ -761,7 +761,16 @@ func mysqlColToCockroach(
 				exprString := mysql.String(col.Default)
 				expr, err := parser.ParseExpr(exprString)
 				if err != nil {
-					return nil, unimplemented.Newf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+					// There is currently no way to wrap an error with an unimplemented
+					// error.
+					// nolint:errwrap
+					return nil, errors.Wrapf(
+						unimplemented.Newf("import.mysql.default", "unsupported default expression"),
+						"error parsing %q for column %q: %v",
+						exprString,
+						name,
+						err,
+					)
 				}
 				def.DefaultExpr.Expr = expr
 			}
