@@ -48,7 +48,6 @@ def lint_binary(name, test):
         data = [
             test,
             "//pkg/sql/opt/optgen/cmd/optfmt",
-            "@com_github_client9_misspell//cmd/misspell:misspell",
             "@com_github_cockroachdb_crlfmt//:crlfmt",
             "@go_sdk//:bin/go",
             "@org_golang_x_lint//golint:golint",
