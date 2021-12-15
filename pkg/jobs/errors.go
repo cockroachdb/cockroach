@@ -48,6 +48,17 @@ func IsPermanentJobError(err error) bool {
 	return errors.Is(err, errJobPermanentSentinel)
 }
 
+// errPauseSelfSentinel exists so the errors returned from PauseRequestErr can
+// be marked with it.
+var errPauseSelfSentinel = errors.New("job requested it be paused")
+
+// PauseRequestError marks an error as a pause request job error, which
+// indicates to the Registry that the job would like to be paused rather than
+// failing.
+func PauseRequestError(reason string) error {
+	return errors.Mark(errors.Newf("job request it be paused: %s", reason), errPauseSelfSentinel)
+}
+
 // InvalidStatusError is the error returned when the desired operation is
 // invalid given the job's current status.
 type InvalidStatusError struct {

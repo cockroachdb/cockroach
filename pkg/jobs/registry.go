@@ -1221,6 +1221,10 @@ func (r *Registry) stepThroughStateMachine(
 			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
+
+		if errors.Is(err, errPauseSelfSentinel) {
+			return r.PauseRequested(ctx, nil, job.ID(), err.Error())
+		}
 		// TODO(spaskob): enforce a limit on retries.
 
 		if nonCancelableRetry := job.Payload().Noncancelable && !IsPermanentJobError(err); nonCancelableRetry ||

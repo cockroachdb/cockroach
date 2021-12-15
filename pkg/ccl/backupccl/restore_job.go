@@ -1607,8 +1607,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
 			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
 
-			return r.execCfg.JobRegistry.PauseRequested(ctx, nil, r.job.ID(),
-				fmt.Sprintf(errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn))
+			return jobs.PauseRequestError(fmt.Sprintf(errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn))
 		}
 		return err
 	}
