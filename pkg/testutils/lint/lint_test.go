@@ -213,7 +213,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`\.og\.go`),
 			stream.GrepNot(`\.eg\.go`),
 			stream.GrepNot(`_string\.go`),
-			stream.GrepNot(`_generated\.go`),
+			stream.GrepNot(`_generated(_test)?\.go`),
 			stream.GrepNot(`/embedded.go`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
@@ -1340,7 +1340,7 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}
-		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|_generated\.go$`
+		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|_generated(_test)?\.go$`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)

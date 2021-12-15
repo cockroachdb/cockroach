@@ -20,6 +20,7 @@ go_library(
 
 go_test(
     name = "scplan_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "plan_test.go",

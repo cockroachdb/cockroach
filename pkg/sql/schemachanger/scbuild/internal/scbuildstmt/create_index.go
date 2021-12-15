@@ -80,8 +80,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		columnRefs[colName] = struct{}{}
 	}
 
-	// Setup an secondary index node.
-	secondaryIndex := &scpb.SecondaryIndex{TableID: rel.GetID(),
+	// Setup a secondary index node.
+	secondaryIndex := &scpb.SecondaryIndex{
+		TableID:            rel.GetID(),
 		Unique:             n.Unique,
 		KeyColumnIDs:       make([]descpb.ColumnID, 0, len(n.Columns)),
 		StoringColumnIDs:   make([]descpb.ColumnID, 0, len(n.Storing)),
@@ -89,6 +90,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		Concurrently:       n.Concurrently,
 		KeySuffixColumnIDs: nil,
 		ShardedDescriptor:  nil,
+
+		// TODO(ajwerner): If there exists a new primary index due to a column
+		// set change in this transaction, we may need this to refer to the
+		// new primary index as opposed to the old primary index.
+		SourceIndexID: rel.GetPrimaryIndexID(),
 	}
 	colNames := make([]string, 0, len(n.Columns))
 	// Setup the column ID.

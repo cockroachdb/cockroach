@@ -32,6 +32,7 @@ PrimaryIndex : []StoringColumnIDs
 PrimaryIndex : []CompositeColumnIDs
 PrimaryIndex :  Inverted
 PrimaryIndex :  Concurrently
+PrimaryIndex :  SourceIndexID
 
 object SecondaryIndex
 
@@ -46,6 +47,7 @@ SecondaryIndex : []StoringColumnIDs
 SecondaryIndex : []CompositeColumnIDs
 SecondaryIndex :  Inverted
 SecondaryIndex :  Concurrently
+SecondaryIndex :  SourceIndexID
 
 object SequenceDependency
 

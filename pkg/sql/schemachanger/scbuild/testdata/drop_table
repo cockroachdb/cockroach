@@ -295,6 +295,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     keyColumnIds:
     - 1
     shardedDescriptor: {}
+    sourceIndexId: 1
     storingColumnIds:
     - 2
     - 3

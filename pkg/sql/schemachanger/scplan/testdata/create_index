@@ -46,6 +46,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   ops:
     *scop.BackfillIndex
       IndexID: 2
+      SourceIndexID: 1
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
@@ -131,6 +132,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   ops:
     *scop.BackfillIndex
       IndexID: 2
+      SourceIndexID: 1
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
@@ -225,6 +227,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   ops:
     *scop.BackfillIndex
       IndexID: 2
+      SourceIndexID: 1
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
