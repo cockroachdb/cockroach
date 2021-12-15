@@ -3438,7 +3438,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	//t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
@@ -3485,7 +3485,7 @@ func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	//t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedProtectedTimestamps(t *testing.T) {
@@ -3730,7 +3730,7 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 		t.Run(`cloudstorage`, cloudStorageTest(testFn(shouldPause), feedTestNoTenants))
 		t.Run(`kafka`, kafkaTest(testFn(shouldPause), feedTestNoTenants))
 		t.Run(`webhook`, webhookTest(testFn(shouldPause), feedTestNoTenants))
-		t.Run(`pubsub`, pubsubTest(testFn(shouldPause), feedTestNoTenants))
+		//t.Run(`pubsub`, pubsubTest(testFn(shouldPause), feedTestNoTenants))
 	})
 
 }
@@ -4271,7 +4271,7 @@ INSERT INTO foo VALUES (1, 'f');
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	//t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 // Primary key changes are supported by changefeeds starting in 21.1. This test
@@ -4373,7 +4373,7 @@ INSERT INTO bar VALUES (6, 'f');
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	//t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 // TestChangefeedCheckpointSchemaChange tests to make sure that writes that
@@ -4885,7 +4885,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	//t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
