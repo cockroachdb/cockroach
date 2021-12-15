@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 var targetObjectToPrivilegeObject = map[tree.AlterDefaultPrivilegesTargetObject]privilege.ObjectType{
@@ -164,14 +166,31 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
+	grantOrAll := false
+	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
+		for _, priv := range privileges {
+			grantOrAll = grantOrAll || (priv == privilege.GRANT || priv == privilege.ALL)
+			if priv == privilege.GRANT {
+				params.p.noticeSender.BufferNotice(
+					errors.WithHintf(
+						pgnotice.Newf("the GRANT privilege is deprecated"),
+						"please use WITH GRANT OPTION",
+					),
+				)
+				break
+			}
+		}
+	}
+
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption,
+				role, privileges, granteeSQLUsernames, objectType, grantOption, grantOrAll,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption,
+				role, privileges, granteeSQLUsernames, objectType, grantOption, grantOrAll,
 			)
 		}
 

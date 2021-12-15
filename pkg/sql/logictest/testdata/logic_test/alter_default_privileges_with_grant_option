@@ -1,4 +1,13 @@
+# TODO(jack.wu): Replace these tests once the GRANT privilege is removed in 22.2
+# (look in the file history to the version before this for inspiration)
+# Currently, this file has been rewritten to accommodate giving grant options to
+# all a user's privileges when granted the GRANT privilege and removing all of them
+# when GRANT is revoked as part of the backwards compatibility plan for GRANT in
+# 22.1 (https://github.com/cockroachdb/cockroach/issues/73065)
+
+#
 # Should error when a role that does not exist is provided.
+#
 statement error pq: user or role who does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE who GRANT SELECT ON TABLES to testuser WITH GRANT OPTION
 
@@ -24,6 +33,9 @@ CREATE USER testuser2
 statement ok
 CREATE USER target
 
+#
+# table with default GRANT will have grant options on all privileges present
+#
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT GRANT, SELECT ON TABLES TO testuser;
 
@@ -45,13 +57,33 @@ user testuser
 statement ok
 SELECT * FROM t1
 
-statement error pq: missing WITH GRANT OPTION privilege type GRANT
-GRANT GRANT, SELECT ON TABLE t1 to target
+statement ok
+GRANT GRANT, SELECT ON TABLE t1 TO target
 
 user root
 
+#
+# no GRANT and no grant options cannot grant to others
+#
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, SELECT, INSERT ON TABLES TO testuser WITH GRANT OPTION
+ALTER DEFAULT PRIVILEGES FOR ROLE root REVOKE GRANT ON TABLES FROM testuser;
+
+statement ok
+CREATE TABLE t1_1()
+
+user testuser
+
+# no grant options since GRANT was just revoked
+statement error pq: missing WITH GRANT OPTION privilege type SELECT
+GRANT SELECT ON TABLE t1_1 TO target
+
+#
+# Test default with grant option flag
+#
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT ON TABLES TO testuser WITH GRANT OPTION
 
 statement ok
 CREATE TABLE t2()
@@ -64,6 +96,8 @@ SHOW GRANTS ON TABLE t1;
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t1          admin     ALL
 test           public       t1          root      ALL
+test           public       t1          target    GRANT
+test           public       t1          target    SELECT
 test           public       t1          testuser  CREATE
 test           public       t1          testuser  GRANT
 test           public       t1          testuser  SELECT
@@ -75,20 +109,19 @@ database_name  schema_name  table_name  grantee   privilege_type
 test           public       t2          admin     ALL
 test           public       t2          root      ALL
 test           public       t2          testuser  CREATE
-test           public       t2          testuser  GRANT
 test           public       t2          testuser  INSERT
 test           public       t2          testuser  SELECT
 
-statement error pq: missing WITH GRANT OPTION privilege type GRANT
-GRANT GRANT, SELECT ON TABLE t1 to target
-
 statement ok
-GRANT GRANT, SELECT, INSERT ON TABLE t2 to target
+GRANT SELECT, INSERT ON TABLE t2 to target
 
 user root
 
+#
+# default all privileges will have grant options
+#
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT OPTION
+ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser
 
 statement ok
 CREATE TABLE t3()
@@ -106,6 +139,9 @@ user testuser
 statement ok
 GRANT INSERT, DELETE on table t3 to target
 
+#
+# Revoking grant option for default privileges
+#
 user root
 
 statement ok
@@ -127,6 +163,9 @@ user testuser
 statement error pq: missing WITH GRANT OPTION privilege type INSERT
 GRANT INSERT, DELETE ON TABLE t4 TO target
 
+#
+# Revoke grant option for all privileges
+#
 user root
 
 statement ok
@@ -145,9 +184,15 @@ test           public       t5          testuser  ALL
 
 user testuser
 
-statement error pq: missing WITH GRANT OPTION privilege type GRANT
-GRANT GRANT, SELECT ON TABLE t5 TO target
+statement error pq: missing WITH GRANT OPTION privilege type SELECT
+GRANT SELECT ON TABLE t5 TO target
 
+statement error pq: missing WITH GRANT OPTION privilege type ALL
+GRANT ALL PRIVILEGES ON TABLE t5 TO target
+
+#
+# Revoke all privileges from a user
+#
 user root
 
 statement ok
@@ -164,13 +209,17 @@ test           public       t6          admin     ALL
 test           public       t6          root      ALL
 test           public       t6          testuser  CREATE
 
-# testuser alters default privileges on itself
+
+### ---------------------------------------------------------------------------------------
+#
+# non-superuser owner of an object can do whatever it wants
+#
 user testuser
 
 statement ok
 CREATE TABLE t7()
 
-# since testuser created the table, it automatically has ALL PRIVILEGES ON IT
+# since testuser created the table, it automatically has ALL PRIVILEGES on it
 query TTTTT colnames
 SHOW GRANTS ON TABLE t7;
 ----
@@ -182,8 +231,12 @@ test           public       t7          testuser  ALL
 statement ok
 GRANT SELECT ON TABLE t7 TO testuser
 
+#
+# owner of an object can revoke grant options from itself
+# and still grant
+#
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT ON TABLES TO testuser
+ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM testuser
 
 statement ok
 CREATE TABLE t8()
@@ -197,7 +250,14 @@ test           public       t8          root      ALL
 test           public       t8          testuser  ALL
 
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, SELECT ON TABLES TO testuser WITH GRANT OPTION
+GRANT SELECT ON TABLE t8 TO testuser
+
+#
+# owner of an object can revoke from itself and still grant even
+# though it doesn't hold privileges
+#
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser
 
 statement ok
 CREATE TABLE t9()
@@ -208,37 +268,75 @@ SHOW GRANTS ON TABLE t9;
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t9          admin     ALL
 test           public       t9          root      ALL
-test           public       t9          testuser  ALL
+test           public       t9          testuser  CREATE
 
 statement ok
-GRANT INSERT, DELETE ON TABLE t9 to testuser
+GRANT DELETE ON TABLE t9 TO testuser
 
-statement ok
-GRANT GRANT, SELECT ON TABLE t9 to testuser
-
+#
+# owner of an object can regrant privileges on itself even if
+# if doesn't hold them
+#
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT OPTION
 
 statement ok
 CREATE TABLE t10()
 
+query TTTTT colnames
+SHOW GRANTS ON TABLE t10
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t10         admin     ALL
+test           public       t10         root      ALL
+test           public       t10         testuser  ALL
+
+#
+# two non-superuser and non-object-owning users
+#
 statement ok
-GRANT INSERT, DELETE ON TABLE t10 to testuser
+ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser
+
+# Postgres does not seem to validate whether the user granting/revoking privileges
+# on another user holds those privileges themselves (testuser has no default
+# privs but can revoke from testuser2)
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser2
+
+user root
 
 statement ok
-ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR SELECT ON TABLES FROM testuser
+ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser
+
+user testuser
 
 statement ok
 CREATE TABLE t11()
 
-statement ok
-GRANT SELECT ON TABLE t11 TO testuser
+# The reason testuser does not have ALL despite creating the table is that the previous statement defaults to if root
+# creates the table but testuser is creating in this case; it's still going off the previous alter default privs which
+# was to revoke everything
+query TTTTT colnames
+SHOW GRANTS ON TABLE t11;
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           public       t11         admin     ALL
+test           public       t11         root      ALL
+test           public       t11         testuser  CREATE
+test           public       t11         testuser2 SELECT
 
-statement ok
-GRANT GRANT, INSERT, DELETE ON TABLE t11 TO testuser
+user testuser2
 
+statement error pq: missing WITH GRANT OPTION privilege type SELECT
+GRANT SELECT ON TABLE t11 TO target
+
+user testuser
+
+#
+# two non-superuser and non-object-owning users granting with grant options
+#
 statement ok
-ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM testuser
+ALTER DEFAULT PRIVILEGES GRANT INSERT, SELECT ON TABLES TO testuser2 WITH GRANT OPTION
 
 statement ok
 CREATE TABLE t12()
@@ -249,58 +347,51 @@ SHOW GRANTS ON TABLE t12;
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t12         admin     ALL
 test           public       t12         root      ALL
-test           public       t12         testuser  ALL
+test           public       t12         testuser  CREATE
+test           public       t12         testuser2 INSERT
+test           public       t12         testuser2 SELECT
+
+user testuser2
 
 statement ok
-GRANT INSERT, DELETE ON TABLE t12 TO testuser
+GRANT SELECT, INSERT ON TABLE t12 TO target
 
+user testuser
+
+#
+# two non-superuser and non-object-owning users granting with grant options
+#
 statement ok
-ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser
+ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser2 WITH GRANT OPTION
 
 statement ok
 CREATE TABLE t13()
 
 query TTTTT colnames
-SHOW GRANTS ON TABLE t13
+SHOW GRANTS ON TABLE t13;
 ----
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t13         admin     ALL
 test           public       t13         root      ALL
 test           public       t13         testuser  CREATE
+test           public       t13         testuser2 ALL
+
+user testuser2
 
 statement ok
-GRANT ALL PRIVILEGES ON TABLE t13 TO testuser
-
-query TTTTT colnames
-SHOW GRANTS ON TABLE t13
-----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t13         admin     ALL
-test           public       t13         root      ALL
-test           public       t13         testuser  ALL
-
-# one created user to another (testuser to testuser2)
-user testuser
-
-# Postgres does not seem to validate whether the user revoking privileges on another user holds those privileges themselves
-statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, SELECT, INSERT ON TABLES TO testuser2
-
-user root
-
-statement ok
-ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT OPTION
+GRANT INSERT ON TABLE t13 TO target
 
 user testuser
 
+#
+# two non-superuser and non-object-owning users revoking grant option for
+#
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, SELECT ON TABLES TO testuser2
+ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM testuser2
 
 statement ok
 CREATE TABLE t14()
 
-# The reason testuser does not have ALL despite creating the table is that we granted "FOR ROLE root", but testuser is creating
-# the table so when testuser creates a table, it's still going off the previous alter default privs which was to revoke everything
 query TTTTT colnames
 SHOW GRANTS ON TABLE t14;
 ----
@@ -308,15 +399,7 @@ database_name  schema_name  table_name  grantee   privilege_type
 test           public       t14         admin     ALL
 test           public       t14         root      ALL
 test           public       t14         testuser  CREATE
-test           public       t14         testuser2 GRANT
-test           public       t14         testuser2 INSERT
-test           public       t14         testuser2 SELECT
-
-statement ok
-GRANT GRANT, INSERT, DELETE ON TABLE t12 TO target
-
-statement ok
-ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT OPTION
+test           public       t14         testuser2 ALL
 
 user testuser2
 
@@ -326,7 +409,7 @@ GRANT SELECT ON TABLE t14 TO target
 user testuser
 
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, SELECT ON TABLES TO testuser2 WITH GRANT OPTION
+ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser2
 
 statement ok
 CREATE TABLE t15()
@@ -337,106 +420,15 @@ SHOW GRANTS ON TABLE t15;
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       t15         admin     ALL
 test           public       t15         root      ALL
-test           public       t15         testuser  ALL
-test           public       t15         testuser2 GRANT
-test           public       t15         testuser2 INSERT
-test           public       t15         testuser2 SELECT
+test           public       t15         testuser  CREATE
 
-user testuser2
-
-statement ok
-GRANT SELECT, GRANT ON TABLE t15 TO target
-
-statement error pq: missing WITH GRANT OPTION privilege type INSERT
-GRANT INSERT ON TABLE t15 TO target
-
-user testuser
-
-statement ok
-ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser2 WITH GRANT OPTION
-
-statement ok
-CREATE TABLE t16()
-
-query TTTTT colnames
-SHOW GRANTS ON TABLE t16;
-----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t16         admin     ALL
-test           public       t16         root      ALL
-test           public       t16         testuser  ALL
-test           public       t16         testuser2 ALL
-
-user testuser2
-
-statement ok
-GRANT INSERT ON TABLE t16 TO target
-
-user testuser
-
-statement ok
-ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR SELECT, INSERT ON TABLES FROM testuser2
-
-statement ok
-CREATE TABLE t17()
-
-query TTTTT colnames
-SHOW GRANTS ON TABLE t17;
-----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t17         admin     ALL
-test           public       t17         root      ALL
-test           public       t17         testuser  ALL
-test           public       t17         testuser2 ALL
-
-user testuser2
-
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
-GRANT SELECT, INSERT ON TABLE t17 TO target
-
-user testuser
-
-statement ok
-ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLES FROM testuser2
-
-statement ok
-CREATE TABLE t18()
-
-query TTTTT colnames
-SHOW GRANTS ON TABLE t18;
-----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t18         admin     ALL
-test           public       t18         root      ALL
-test           public       t18         testuser  ALL
-test           public       t18         testuser2 ALL
-
-user testuser2
-
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
-GRANT SELECT ON TABLE t18 TO target
-
-user testuser
-
-statement ok
-ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser2
-
-statement ok
-CREATE TABLE t19()
-
-query TTTTT colnames
-SHOW GRANTS ON TABLE t19;
-----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t19         admin     ALL
-test           public       t19         root      ALL
-test           public       t19         testuser  ALL
-
-# Test Schemas
+#
+# Test schemas
+#
 user root
 
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON SCHEMAS TO testuser, testuser2 WITH GRANT OPTION
+ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON SCHEMAS TO testuser, testuser2
 
 statement ok
 CREATE SCHEMA s1
@@ -450,8 +442,20 @@ test           s1           root       ALL
 test           s1           testuser   ALL
 test           s1           testuser2  ALL
 
+user testuser
+
 statement ok
-ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON SCHEMAS FROM testuser, testuser2
+GRANT ALL PRIVILEGES ON SCHEMA s1 TO target
+
+user testuser2
+
+statement ok
+GRANT ALL PRIVILEGES ON SCHEMA s1 TO target
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON SCHEMAS FROM testuser
 
 statement ok
 CREATE SCHEMA s2
@@ -482,6 +486,8 @@ GRANT ALL PRIVILEGES ON SCHEMA s2 TO target
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON TABLES TO testuser WITH GRANT OPTION
 
+user root
+
 statement ok
 CREATE TABLE s1.t1()
 
@@ -503,7 +509,49 @@ CREATE TABLE s1.t2()
 statement ok
 GRANT ALL PRIVILEGES ON TABLE s1.t2 TO target
 
-# Test Sequences
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON SCHEMAS FROM testuser
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE GRANT ON SCHEMAS FROM testuser2
+
+statement ok
+CREATE SCHEMA s3
+
+query TTTT colnames
+SHOW GRANTS ON SCHEMA s3
+----
+database_name  schema_name  grantee    privilege_type
+test           s3           admin      ALL
+test           s3           root       ALL
+test           s3           testuser   CREATE
+test           s3           testuser2  CREATE
+test           s3           testuser2  USAGE
+
+user testuser2
+
+# removing grant removes all grant options for testuser2's current privileges
+statement error pq: missing WITH GRANT OPTION privilege type CREATE
+GRANT CREATE, USAGE ON SCHEMA s3 TO target
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT CREATE, USAGE ON SCHEMAS TO testuser2 WITH GRANT OPTION
+
+statement ok
+CREATE SCHEMA s4
+
+user testuser2
+
+statement ok
+GRANT CREATE, USAGE ON SCHEMA s4 TO target
+
+#
+# Test Sequences (much of it is currently unimplemented, can't grant or revoke)
+#
+user root
+
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT CREATE ON SEQUENCES TO testuser2 WITH GRANT OPTION
 
@@ -519,47 +567,49 @@ SHOW GRANTS ON seq1
 database_name  schema_name  table_name  grantee   privilege_type
 test           public       seq1        admin     ALL
 test           public       seq1        root      ALL
-test           public       seq1        testuser  ALL
+test           public       seq1        testuser  CREATE
 test           public       seq1        testuser2 CREATE
 
-# TODO: implement the grant/revoke for sequence? Can't do much more that this in terms of testing otherwise
-# Test Types
-user testuser
+#
+# Test types
+#
+user root
 
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, USAGE ON TYPES TO testuser2 WITH GRANT OPTION
-
-statement ok
-ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TYPES FROM testuser
+ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TYPES FROM testuser
 
 statement ok
 CREATE TYPE type1 AS ENUM()
 
-query TTTTT colnames
-SHOW GRANTS ON TYPE type1
-----
-database_name  schema_name  type_name   grantee   privilege_type
-test           public       type1       admin     ALL
-test           public       type1       public    USAGE
-test           public       type1       root      ALL
-test           public       type1       testuser  ALL
-test           public       type1       testuser2 GRANT
-test           public       type1       testuser2 USAGE
-
-statement ok
-GRANT ALL PRIVILEGES ON TYPE type1 TO target
-
-statement ok
-GRANT USAGE ON TYPE type1 TO target
-
-user testuser2
-
-statement ok
-GRANT USAGE ON TYPE type1 TO target
-
-# Test Roles
 user testuser
 
+# USAGE on types is defined on the public role, in which every user is a member of,
+# so revoking will not take away the ability to use it
+statement ok
+CREATE TABLE type_table(input type1)
+
+statement error pq: missing WITH GRANT OPTION privilege type USAGE
+GRANT USAGE ON TYPE type1 TO testuser2
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT USAGE ON TYPES TO testuser WITH GRANT OPTION
+
+statement ok
+CREATE TYPE type2 AS ENUM()
+
+user testuser
+
+statement error pq: missing WITH GRANT OPTION privilege type USAGE
+GRANT USAGE ON TYPE type1 TO testuser2
+
+statement ok
+GRANT USAGE ON TYPE type2 TO testuser2
+
+#
+# Test roles
+#
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL PRIVILEGES ON TABLES FROM testuser
 
@@ -579,17 +629,17 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser, testuser2 GRANT ALL PRIVILEGES ON TA
 user testuser
 
 statement ok
-CREATE TABLE t20()
+CREATE TABLE t16()
 
 # testuser2 will have ALL privileges because the ALTER statement made from root specifies it happens when testuser does it
 query TTTTT colnames
-SHOW GRANTS ON TABLE t20;
+SHOW GRANTS ON TABLE t16;
 ----
 database_name  schema_name  table_name  grantee   privilege_type
-test           public       t20         admin     ALL
-test           public       t20         root      ALL
-test           public       t20         testuser  ALL
-test           public       t20         testuser2 ALL
+test           public       t16         admin     ALL
+test           public       t16         root      ALL
+test           public       t16         testuser  ALL
+test           public       t16         testuser2 ALL
 
 user root
 
@@ -599,23 +649,21 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser, testuser2 REVOKE GRANT OPTION FOR AL
 user testuser
 
 statement ok
-CREATE TABLE t21()
+CREATE TABLE t17()
 
 query TTTTT colnames
-SHOW GRANTS ON TABLE t21;
+SHOW GRANTS ON TABLE t17;
 ----
 database_name  schema_name  table_name  grantee   privilege_type
-test           public       t21         admin     ALL
-test           public       t21         root      ALL
-test           public       t21         testuser  ALL
-test           public       t21         testuser2 ALL
+test           public       t17         admin     ALL
+test           public       t17         root      ALL
+test           public       t17         testuser  ALL
+test           public       t17         testuser2 ALL
 
 user testuser2
 
 statement error pq: missing WITH GRANT OPTION privilege type ALL
-GRANT ALL PRIVILEGES ON TABLE t21 TO target
+GRANT ALL PRIVILEGES ON TABLE t17 TO target
 
 statement error pq: missing WITH GRANT OPTION privilege type SELECT
-GRANT SELECT, INSERT ON TABLE t21 TO target
-
-
+GRANT SELECT, INSERT ON TABLE t17 TO target
