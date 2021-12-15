@@ -41,6 +41,7 @@ function shouldProxy(reqPath) {
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
   const isBazelBuild = env && env.is_bazel_build;
+  const isBazelRun = env && env.is_bazel_run;
 
   let localRoots = [path.resolve(__dirname)];
   if (env.dist === "ccl") {
@@ -69,9 +70,24 @@ module.exports = (env, argv) => {
     path.resolve(__dirname, "../..", "node_modules"),
   ];
 
+  const resolve = {
+    // Add resolvable extensions.
+    extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
+    modules: modules,
+    alias: {
+      oss: path.resolve(__dirname),
+      "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
+    },
+  };
+
   if (isBazelBuild) {
     // required for bazel build to resolve properly dependencies
     modules.push("node_modules");
+
+    // required to properly resolve related path of cluster-ui module to runfiles location
+    if (isBazelRun) {
+      resolve.alias["@cockroachlabs/cluster-ui"] = path.resolve(__dirname, "..", "cluster-ui");
+    }
   }
 
   // Exclude DLLPlugin when build with Bazel because bazel handles caching on its own
@@ -99,15 +115,7 @@ module.exports = (env, argv) => {
 
     mode: argv.mode || "production",
 
-    resolve: {
-      // Add resolvable extensions.
-      extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
-      modules: modules,
-      alias: {
-        oss: path.resolve(__dirname),
-        "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
-      },
-    },
+    resolve,
 
     module: {
       rules: [

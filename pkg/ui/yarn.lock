@@ -1360,6 +1360,11 @@
     "@babel/helper-validator-identifier" "^7.14.5"
     to-fast-properties "^2.0.0"
 
+"@bazel/ibazel@^0.15.10":
+  version "0.15.10"
+  resolved "https://registry.yarnpkg.com/@bazel/ibazel/-/ibazel-0.15.10.tgz#cf0cff1aec6d8e7bb23e1fc618d09fbd39b7a13f"
+  integrity sha512-0v+OwCQ6fsGFa50r6MXWbUkSGuWOoZ22K4pMSdtWiL5LKFIE4kfmMmtQS+M7/ICNwk2EIYob+NRreyi/DGUz5A==
+
 "@bazel/typescript@4.1.0":
   version "4.1.0"
   resolved "https://registry.yarnpkg.com/@bazel/typescript/-/typescript-4.1.0.tgz#883e793c37df70c4ebc44bc4139f6008b3eb92fa"
@@ -1392,7 +1397,7 @@
     minimist "^1.2.0"
 
 "@cockroachlabs/cluster-ui@link:workspaces/cluster-ui":
-  version "22.1.0-prerelease-1"
+  version "22.1.0-prerelease-3"
   dependencies:
     "@babel/runtime" "^7.12.13"
 

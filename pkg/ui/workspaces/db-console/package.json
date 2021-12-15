@@ -14,7 +14,8 @@
     "cypress:open": "yarn cypress open",
     "cypress:run": "yarn cypress run --browser chrome",
     "cypress:run-visual-regression": "yarn cypress run --browser chrome --spec 'cypress/integration/**/*.visual.spec.ts'",
-    "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
+    "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'",
+    "bazel:watch": "ibazel run //pkg/ui/workspaces/db-console:watch"
   },
   "dependencies": {
     "@cockroachlabs/cluster-ui": "link:../cluster-ui",
@@ -57,6 +58,7 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
+    "@bazel/ibazel": "^0.15.10",
     "@cockroachlabs/eslint-config": "^0.1.11",
     "@storybook/react": "^6.1.21",
     "@testing-library/react": "^12.1.0",
