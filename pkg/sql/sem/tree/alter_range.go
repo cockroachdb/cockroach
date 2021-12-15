@@ -10,18 +10,14 @@
 
 package tree
 
-import (
-	"strconv"
-
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/errors"
 
 // RelocateRange represents an `ALTER RANGE .. RELOCATE ..`
 // statement.
 type RelocateRange struct {
 	Rows            *Select
-	ToStoreID       int64
-	FromStoreID     int64
+	ToStoreID       Expr
+	FromStoreID     Expr
 	SubjectReplicas RelocateSubject
 }
 
@@ -62,10 +58,10 @@ func (n *RelocateRange) Format(ctx *FmtCtx) {
 	// When relocating leases, the origin store is implicit.
 	if n.SubjectReplicas != RelocateLease {
 		ctx.WriteString(" FROM ")
-		ctx.WriteString(strconv.FormatInt(n.FromStoreID, 10))
+		ctx.FormatNode(n.FromStoreID)
 	}
 	ctx.WriteString(" TO ")
-	ctx.WriteString(strconv.FormatInt(n.ToStoreID, 10))
+	ctx.FormatNode(n.ToStoreID)
 	ctx.WriteString(" FOR ")
 	ctx.FormatNode(n.Rows)
 }

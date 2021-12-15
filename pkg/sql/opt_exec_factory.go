@@ -1971,7 +1971,10 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 
 // ConstructAlterRangeRelocate is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterRangeRelocate(
-	input exec.Node, relocateSubject tree.RelocateSubject, toStoreID int64, fromStoreID int64,
+	input exec.Node,
+	relocateSubject tree.RelocateSubject,
+	toStoreID tree.TypedExpr,
+	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
@@ -1980,8 +1983,8 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	return &relocateRange{
 		rows:            input.(planNode),
 		subjectReplicas: relocateSubject,
-		toStoreID:       roachpb.StoreID(toStoreID),
-		fromStoreID:     roachpb.StoreID(fromStoreID),
+		toStoreID:       toStoreID,
+		fromStoreID:     fromStoreID,
 	}, nil
 }
 
