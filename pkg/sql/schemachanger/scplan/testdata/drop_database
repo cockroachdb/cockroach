@@ -10,7 +10,6 @@ create-sequence
 CREATE SEQUENCE db1.public.SQ1
 ----
 
-
 create-sequence
 CREATE SEQUENCE db1.sc1.SQ1
 ----
@@ -57,14 +56,14 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [Column:{DescID: 60, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 60, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 60, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 60, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [Schema:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
     [Table:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
     [Column:{DescID: 59, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 59, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 59, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 59, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
     [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
@@ -296,7 +295,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [Column:{DescID: 60, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
     [ColumnName:{DescID: 60, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 60, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 60, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 60, IndexID: 1}, VALIDATED, DROP] -> ABSENT
     [IndexName:{DescID: 60, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Sequence:{DescID: 58}, DROPPED, DROP] -> ABSENT
@@ -307,7 +306,7 @@ PostCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [Column:{DescID: 59, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
     [ColumnName:{DescID: 59, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 59, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 59, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 59, IndexID: 1}, VALIDATED, DROP] -> ABSENT
     [IndexName:{DescID: 59, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 62}, DROPPED, DROP] -> ABSENT

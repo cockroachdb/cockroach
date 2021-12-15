@@ -95,7 +95,7 @@ PostCommitPhase stage 4 of 6 with 3 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -108,7 +108,7 @@ PostCommitPhase stage 4 of 6 with 3 MutationType ops
       TableID: 54
 PostCommitPhase non-revertible stage 5 of 6 with 1 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -219,7 +219,7 @@ PostCommitPhase stage 4 of 6 with 3 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -232,7 +232,7 @@ PostCommitPhase stage 4 of 6 with 3 MutationType ops
       TableID: 54
 PostCommitPhase non-revertible stage 5 of 6 with 1 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -388,7 +388,7 @@ PostCommitPhase stage 4 of 6 with 4 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [Column:{DescID: 54, ColumnID: 3}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
@@ -405,7 +405,7 @@ PostCommitPhase stage 4 of 6 with 4 MutationType ops
       TableID: 54
 PostCommitPhase non-revertible stage 5 of 6 with 1 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -516,7 +516,7 @@ PostCommitPhase stage 4 of 6 with 3 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -529,7 +529,7 @@ PostCommitPhase stage 4 of 6 with 3 MutationType ops
       TableID: 54
 PostCommitPhase non-revertible stage 5 of 6 with 1 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -720,10 +720,10 @@ PostCommitPhase stage 4 of 6 with 6 MutationType ops
   transitions:
     [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [Column:{DescID: 55, ColumnID: 3}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
     [PrimaryIndex:{DescID: 55, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 55, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 55, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -745,8 +745,8 @@ PostCommitPhase stage 4 of 6 with 6 MutationType ops
       TableID: 55
 PostCommitPhase non-revertible stage 5 of 6 with 2 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 55, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 55, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
