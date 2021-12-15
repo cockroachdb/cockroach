@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -25,8 +26,8 @@ type relocateRange struct {
 
 	rows            planNode
 	subjectReplicas tree.RelocateSubject
-	toStoreID       roachpb.StoreID
-	fromStoreID     roachpb.StoreID
+	toStoreID       tree.TypedExpr
+	fromStoreID     tree.TypedExpr
 	run             relocateRunState
 }
 
@@ -54,21 +55,33 @@ type relocateRequest struct {
 }
 
 func (n *relocateRange) startExec(params runParams) error {
-	if n.toStoreID <= 0 {
+	toStoreID, err := paramparse.DatumAsInt(params.EvalContext(), "TO", n.toStoreID)
+	if err != nil {
+		return err
+	}
+	var fromStoreID int64
+	if n.subjectReplicas != tree.RelocateLease {
+		// The from expression is NULL if the target is LEASE.
+		fromStoreID, err = paramparse.DatumAsInt(params.EvalContext(), "FROM", n.fromStoreID)
+		if err != nil {
+			return err
+		}
+	}
+
+	if toStoreID <= 0 {
 		return errors.Errorf("invalid target to store ID %d for RELOCATE", n.toStoreID)
 	}
-	if n.subjectReplicas != tree.RelocateLease && n.fromStoreID <= 0 {
+	if n.subjectReplicas != tree.RelocateLease && fromStoreID <= 0 {
 		return errors.Errorf("invalid target from store ID %d for RELOCATE", n.fromStoreID)
 	}
 	// Lookup all the store descriptors upfront, so we dont have to do it for each
 	// range we are working with.
-	var err error
-	n.run.toStoreDesc, err = lookupStoreDesc(n.toStoreID, params)
+	n.run.toStoreDesc, err = lookupStoreDesc(roachpb.StoreID(toStoreID), params)
 	if err != nil {
 		return err
 	}
 	if n.subjectReplicas != tree.RelocateLease {
-		n.run.fromStoreDesc, err = lookupStoreDesc(n.fromStoreID, params)
+		n.run.fromStoreDesc, err = lookupStoreDesc(roachpb.StoreID(fromStoreID), params)
 		if err != nil {
 			return err
 		}

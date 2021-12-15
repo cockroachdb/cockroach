@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 )
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
@@ -271,8 +271,8 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 }
 
 var nodeNames = [...]string{
-	alterRangeRelocateOp:   "relocate",
-	alterTableRelocateOp:   "relocate",
+	alterRangeRelocateOp:   "relocate range",
+	alterTableRelocateOp:   "relocate table",
 	alterTableSplitOp:      "split",
 	alterTableUnsplitAllOp: "unsplit all",
 	alterTableUnsplitOp:    "unsplit",
@@ -828,6 +828,14 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attrf("deduplicate", "")
 		}
 
+	case alterRangeRelocateOp:
+		a := n.args.(*alterRangeRelocateArgs)
+		ob.Attr("replicas", a.subjectReplicas)
+		ob.Expr("to", a.toStoreID, nil /* columns */)
+		if a.subjectReplicas != tree.RelocateLease {
+			ob.Expr("from", a.fromStoreID, nil /* columns */)
+		}
+
 	case simpleProjectOp,
 		serializingProjectOp,
 		ordinalityOp,
@@ -848,7 +856,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		alterTableUnsplitOp,
 		alterTableUnsplitAllOp,
 		alterTableRelocateOp,
-		alterRangeRelocateOp,
 		controlJobsOp,
 		controlSchedulesOp,
 		cancelQueriesOp,

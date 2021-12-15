@@ -907,12 +907,12 @@ ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1],1)
 hash: 8656743312841134920
 plan-gist: AgICBAYEL24CBgQ=
 explain(shape):
-• relocate
+• relocate table
 │
 └── • values
       size: 2 columns, 1 row
 explain(gist):
-• relocate
+• relocate table
 │
 └── • values
       size: 2 columns, 1 row

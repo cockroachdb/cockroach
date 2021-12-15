@@ -126,6 +126,7 @@ const (
 	exprKindOrderBy
 	exprKindReturning
 	exprKindSelect
+	exprKindStoreID
 	exprKindValues
 	exprKindWhere
 	exprKindWindowFrameStart
@@ -146,6 +147,7 @@ var exprKindName = [...]string{
 	exprKindOrderBy:           "ORDER BY",
 	exprKindReturning:         "RETURNING",
 	exprKindSelect:            "SELECT",
+	exprKindStoreID:           "RELOCATE STORE ID",
 	exprKindValues:            "VALUES",
 	exprKindWhere:             "WHERE",
 	exprKindWindowFrameStart:  "WINDOW FRAME START",
