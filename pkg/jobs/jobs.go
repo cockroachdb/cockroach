@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -610,7 +611,19 @@ func (j *Job) failed(
 		// a pause-requested job can transition to failed, which may or may not be
 		// acceptable depending on the job.
 		ju.UpdateStatus(StatusFailed)
-		md.Payload.Error = err.Error()
+
+		// Truncate all errors to avoid large rows in the jobs
+		// table.
+		const (
+			jobErrMaxRuneCount    = 1024
+			jobErrTruncatedMarker = " -- TRUNCATED"
+		)
+		errStr := err.Error()
+		if len(errStr) > jobErrMaxRuneCount {
+			errStr = util.TruncateString(errStr, jobErrMaxRuneCount) + jobErrTruncatedMarker
+		}
+		md.Payload.Error = errStr
+
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
