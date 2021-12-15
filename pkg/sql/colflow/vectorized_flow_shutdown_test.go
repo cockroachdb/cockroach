@@ -210,7 +210,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
 					inbox, err := colrpc.NewInbox(
-						ctxLocal,
 						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory),
 						typs,
 						execinfrapb.StreamID(streamID),
@@ -325,7 +324,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
 					inbox, err := colrpc.NewInbox(
-						ctxAnotherRemote,
 						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory),
 						typs,
 						execinfrapb.StreamID(streamID),
