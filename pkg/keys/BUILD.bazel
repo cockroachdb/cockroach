@@ -30,6 +30,7 @@ go_test(
     srcs = [
         "keys_test.go",
         "printer_test.go",
+        "sql_test.go",
     ],
     embed = [":keys"],
     deps = [
