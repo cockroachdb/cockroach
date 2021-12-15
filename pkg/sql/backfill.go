@@ -84,8 +84,8 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt, /* validateFn */
 )
 
-// indexBackfillCheckpointInterval is the duration between backfill detail updates.
-var indexBackfillCheckpointInterval = settings.RegisterDurationSetting(
+// IndexBackfillCheckpointInterval is the duration between backfill detail updates.
+var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
@@ -853,11 +853,11 @@ func getJobIDForMutationWithDescriptor(
 		"job not found for table id %d, mutation %d", tableDesc.GetID(), mutationID)
 }
 
-// numRangesInSpans returns the number of ranges that cover a set of spans.
+// NumRangesInSpans returns the number of ranges that cover a set of spans.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func numRangesInSpans(
+func NumRangesInSpans(
 	ctx context.Context, db *kv.DB, distSQLPlanner *DistSQLPlanner, spans []roachpb.Span,
 ) (int, error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
@@ -1077,7 +1077,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if updatedTodoSpans == nil {
 			return nil
 		}
-		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
+		nRanges, err := NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
 		if err != nil {
 			return err
 		}
@@ -1134,7 +1134,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	// Setup periodic job details update.
 	stopJobDetailsUpdate := make(chan struct{})
-	detailsDuration := indexBackfillCheckpointInterval.Get(&sc.settings.SV)
+	detailsDuration := IndexBackfillCheckpointInterval.Get(&sc.settings.SV)
 	g.GoCtx(func(ctx context.Context) error {
 		tick := time.NewTicker(detailsDuration)
 		defer tick.Stop()
@@ -1237,7 +1237,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			// schema change state machine or from a previous backfill attempt,
 			// we scale that fraction of ranges completed by the remaining fraction
 			// of the job's progress bar.
-			nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
+			nRanges, err := NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
 			if err != nil {
 				return err
 			}
