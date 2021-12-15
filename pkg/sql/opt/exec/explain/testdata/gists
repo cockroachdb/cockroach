@@ -862,11 +862,14 @@ hash: 12193483658718214527
 plan-gist: AgICAgYCLGoCBgY=
 explain(shape):
 • split
+│ index: foo@foo_pkey
+│ expiry: CAST(_ AS STRING)
 │
 └── • values
       size: 1 column, 1 row
 explain(gist):
 • split
+│ index: foo@foo_pkey
 │
 └── • values
       size: 1 column, 1 row
@@ -879,11 +882,13 @@ hash: 8861506885543083786
 plan-gist: AgICAgYCLWoCBgQ=
 explain(shape):
 • unsplit
+│ index: foo@foo_pkey
 │
 └── • values
       size: 1 column, 1 row
 explain(gist):
 • unsplit
+│ index: foo@foo_pkey
 │
 └── • values
       size: 1 column, 1 row
@@ -897,8 +902,10 @@ hash: 16533768908468588919
 plan-gist: Ai5qAgYE
 explain(shape):
 • unsplit all
+  index: foo@foo_pkey
 explain(gist):
 • unsplit all
+  index: foo@foo_pkey
 
 # alterTableRelocateOp
 gist-explain-roundtrip
@@ -908,11 +915,13 @@ hash: 8656743312841134920
 plan-gist: AgICBAYEL24CBgQ=
 explain(shape):
 • relocate table
+│ index: abc@abc_pkey
 │
 └── • values
       size: 2 columns, 1 row
 explain(gist):
 • relocate table
+│ index: abc@abc_pkey
 │
 └── • values
       size: 2 columns, 1 row
