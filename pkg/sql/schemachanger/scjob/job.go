@@ -65,11 +65,16 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	progress := n.job.Progress()
 	newSchemaChangeProgress := progress.GetNewSchemaChange()
 	newSchemaChangeDetails := payload.GetNewSchemaChange()
+	backfillTrackerFactory := newBackfillTrackerFactory(
+		ctx, execCfg.Codec, execCfg.DB, execCfg.DistSQLPlanner, n.job,
+	)
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
 		execCfg.InternalExecutor,
 		execCfg.IndexBackfiller,
+		backfillTrackerFactory,
+		newPeriodicProgressFlusher(execCfg.Settings),
 		func(txn *kv.Txn) scexec.EventLogger {
 			return sql.NewSchemaChangerEventLogger(txn, execCfg, 0)
 		},
