@@ -448,6 +448,8 @@ type flowCreatorHelper interface {
 	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
 	// done on the gateway node.
 	addFlowCoordinator(coordinator *FlowCoordinator)
+	// getCtxDone returns done channel of the context of this flow.
+	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -466,8 +468,13 @@ type remoteComponentCreator interface {
 		typs []*types.T,
 		getStats func() []*execinfrapb.ComponentStats,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
-		admissionOpts admissionOptions) (*colrpc.Inbox, error)
+	newInbox(
+		allocator *colmem.Allocator,
+		typs []*types.T,
+		streamID execinfrapb.StreamID,
+		flowCtxDone <-chan struct{},
+		admissionOpts admissionOptions,
+	) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -485,10 +492,13 @@ func (vectorizedRemoteComponentCreator) newInbox(
 	allocator *colmem.Allocator,
 	typs []*types.T,
 	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
 	admissionOpts admissionOptions,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInboxWithAdmissionControl(
-		allocator, typs, streamID, admissionOpts.admissionQ, admissionOpts.admissionInfo)
+		allocator, typs, streamID, flowCtxDone,
+		admissionOpts.admissionQ, admissionOpts.admissionInfo,
+	)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -897,6 +907,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
 				input.ColumnTypes,
 				inputStream.StreamID,
+				s.flowCreatorHelper.getFlowCtxDone(),
 				admissionOptions{
 					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
 					admissionInfo: s.admissionInfo,
@@ -1266,9 +1277,9 @@ func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	_ *execinfrapb.ProducerMessage,
-	f *flowinfra.FlowBase,
+	_ *flowinfra.FlowBase,
 ) error {
-	return s.RunWithStream(ctx, stream, f.GetCtxDone())
+	return s.RunWithStream(ctx, stream)
 }
 
 // Timeout is part of the flowinfra.InboundStreamHandler interface.
@@ -1332,6 +1343,10 @@ func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return r.f.GetCtxDone()
+}
+
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return r.f.GetCancelFlowFn()
 }
@@ -1386,6 +1401,10 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
+
+func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return nil
+}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
