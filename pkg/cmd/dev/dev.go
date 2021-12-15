@@ -70,6 +70,7 @@ Dev is the general-purpose dev tool for working on cockroachdb/cockroach. With d
 		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
+		makeRunCmd(ret.run),
 	)
 	// Add all the shared flags.
 	var debugVar bool

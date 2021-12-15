@@ -13,6 +13,7 @@ go_library(
         "lint.go",
         "logic.go",
         "main.go",
+        "run.go",
         "test.go",
         "util.go",
     ],
