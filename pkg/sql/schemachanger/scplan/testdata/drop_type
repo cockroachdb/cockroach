@@ -67,18 +67,18 @@ deps
 DROP TYPE defaultdb.typ
 ----
 - from: [Namespace:{DescID: 54, Name: typ}, ABSENT]
-  to:   [Type:{DescID: 54}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
+  to:   [Type:{DescID: 54}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 55, Name: _typ}, ABSENT]
-  to:   [Type:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Type:{DescID: 54}, ABSENT]
+  to:   [Type:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [Type:{DescID: 54}, DROPPED]
   to:   [Namespace:{DescID: 54, Name: typ}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [Type:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [Type:{DescID: 55}, DROPPED]
   to:   [Namespace:{DescID: 55, Name: _typ}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped

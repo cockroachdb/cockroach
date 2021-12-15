@@ -631,15 +631,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		KVMemoryMonitor:         kvMemoryMonitor,
 	}
 
-	var spanConfigAccessor spanconfig.KVAccessor
-	var spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
+	var spanConfig struct {
+		// kvAccessor powers the span configuration RPCs and the host tenant's
+		// reconciliation job.
+		kvAccessor spanconfig.KVAccessor
+		// subscriber is used by stores to subsribe to span configuration
+		// updates.
+		subscriber *spanconfigkvsubscriber.KVSubscriber
+		// kvAccessorForTenantRecords is when creating/destroying secondary
+		// tenant records.
+		kvAccessorForTenantRecords spanconfig.KVAccessor
+	}
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
 			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
 		} else {
-			spanConfigSubscriber = spanconfigkvsubscriber.New(
+			spanConfig.subscriber = spanconfigkvsubscriber.New(
 				stopper,
 				db,
 				clock,
@@ -649,15 +658,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				storeCfg.DefaultSpanConfig,
 				spanConfigKnobs,
 			)
-			storeCfg.SpanConfigSubscriber = spanConfigSubscriber
+			storeCfg.SpanConfigSubscriber = spanConfig.subscriber
 		}
 
-		spanConfigAccessor = spanconfigkvaccessor.New(
+		scKVAccessor := spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
 		)
+		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
 	} else {
-		spanConfigAccessor = spanconfigkvaccessor.DisabledAccessor{}
+		// If the spanconfigs infrastructure is disabled, there should be no
+		// reconciliation jobs or RPCs issued against the infrastructure. Plug
+		// in a disabled spanconfig.KVAccessor that would error out for
+		// unexpected use.
+		spanConfig.kvAccessor = spanconfigkvaccessor.DisabledKVAccessor
+
+		// Use a no-op accessor where tenant records are created/destroyed.
+		spanConfig.kvAccessorForTenantRecords = spanconfigkvaccessor.NoopKVAccessor
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -692,7 +709,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage, spanConfigAccessor,
+		tenantUsage, spanConfig.kvAccessor,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -777,6 +794,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
 			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
+			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
@@ -786,7 +804,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
 		systemConfigProvider:     g,
-		spanConfigAccessor:       spanConfigAccessor,
+		spanConfigAccessor:       spanConfig.kvAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -848,7 +866,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
-		spanConfigSubscriber:   spanConfigSubscriber,
+		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
