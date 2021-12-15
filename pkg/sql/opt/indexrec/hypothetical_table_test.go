@@ -30,8 +30,8 @@ func TestBuildOptAndHypTableMaps(t *testing.T) {
 
 	// A hypothetical table's index count is equivalent to its number of index
 	// candidates plus 1 for the primary index.
-	indexCountTable1 := len(indexCandidates[table1]) + 1
-	indexCountTable2 := len(indexCandidates[table2]) + 1
+	indexCountTable1 := len(indexCandidates[table1]) + table1.IndexCount()
+	indexCountTable2 := len(indexCandidates[table2]) + table2.IndexCount()
 
 	if hypTables[1].IndexCount() != indexCountTable1 {
 		t.Errorf(

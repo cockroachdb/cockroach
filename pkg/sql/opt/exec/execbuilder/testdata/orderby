@@ -366,10 +366,6 @@ vectorized: true
   missing stats
   table: abc@ba
   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (b, a, c);
 
 # We use the WHERE condition to force the use of the index.
 query T
@@ -566,10 +562,6 @@ vectorized: true
   missing stats
   table: abc@bc
   spans: [/2 - /2]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (b);
 
 query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
@@ -581,10 +573,6 @@ vectorized: true
   missing stats
   table: abc@bc
   spans: [/2 - /2]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (b);
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query T
@@ -620,10 +608,6 @@ vectorized: true
   estimated row count: 1,000 (missing stats)
   table: bar@i_bar
   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON bar (baz, id);
 
 statement ok
 CREATE TABLE abcd (
@@ -869,10 +853,6 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: uvwxyz@ywxz
   spans: /1-/2
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uvwxyz (y) STORING (w, x);
 
 
 statement ok
@@ -1122,10 +1102,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
@@ -1142,10 +1118,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
@@ -1182,10 +1154,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: kv@foo
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 # Check the syntax can be used with joins.
 #
@@ -1262,10 +1230,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: kv@foo
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC, k);
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))

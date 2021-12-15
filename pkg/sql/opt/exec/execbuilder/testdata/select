@@ -702,10 +702,6 @@ vectorized: true
   estimated row count: 333 (missing stats)
   table: c@str
   spans: -/"moo"/PrefixEnd
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON c (str);
 
 statement ok
 DROP TABLE c
@@ -1525,10 +1521,6 @@ vectorized: true
       table: xyz@xyz_x_y_z_idx
       spans: LIMITED SCAN
       limit: 10
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x, z) STORING (y);
 
 # ------------------------------------------------------
 # Verify that multi-span point lookups are parallelized.
@@ -1644,7 +1636,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX a@p; CREATE INDEX ON a (price) STORING (item);
+   SQL commands: CREATE UNIQUE INDEX ON a (price) STORING (item); DROP INDEX a@p;
 
 query T
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
@@ -1740,10 +1732,6 @@ vectorized: true
   missing stats
   table: b@b_d_key
   spans: [/10 - /10] [/1 - /NULL)
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON b (d);
 
 statement ok
 CREATE UNIQUE INDEX ON b(c, d)
