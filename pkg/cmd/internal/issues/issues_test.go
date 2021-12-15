@@ -13,14 +13,15 @@ package issues
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/datadriven"
 	"github.com/google/go-github/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,7 @@ func TestPost(t *testing.T) {
 		Goflags:   "race",
 	}
 
-	testCases := []struct {
+	type testCase struct {
 		name                 string
 		packageName          string
 		testName             string
@@ -54,7 +55,9 @@ func TestPost(t *testing.T) {
 		artifacts            string
 		reproCmd             string
 		reproTitle, reproURL string
-	}{
+	}
+
+	testCases := []testCase{
 		{
 			name:        "failure",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
@@ -147,6 +150,16 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		},
 	}
 
+	testByName := func(t *testing.T, name string) testCase {
+		for _, tc := range testCases {
+			if tc.name == name {
+				return tc
+			}
+		}
+		t.Fatalf("test case %s not found", name)
+		return testCase{} // unreachable
+	}
+
 	const (
 		foundNoIssue                 = "no-issue"
 		foundOnlyMatchingIssue       = "matching-issue"
@@ -183,138 +196,134 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		}},
 	}
 
-	const rewrite = false
-	// You can set `rewrite=true` above and re-run.
-	t.Log("hint: this test supports rewriting, jump to this line to learn how")
-
-	for _, c := range testCases {
-		t.Run(c.name, func(t *testing.T) {
-			for _, foundIssue := range []string{
-				foundNoIssue, foundOnlyMatchingIssue, foundMatchingAndRelatedIssue, foundOnlyRelatedIssue,
-			} {
-				results := map[string][][]github.Issue{
-					foundNoIssue:                 {{}, {}},
-					foundOnlyMatchingIssue:       {{matchingIssue}, {}},
-					foundMatchingAndRelatedIssue: {{matchingIssue}, {relatedIssue}},
-					foundOnlyRelatedIssue:        {{}, {relatedIssue}},
-				}[foundIssue]
-				t.Run(foundIssue, func(t *testing.T) {
-					var buf strings.Builder
-					opts := opts // play it safe since we're mutating it below
-					opts.getLatestTag = func() (string, error) {
-						const tag = "v3.3.0"
-						_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
-						return tag, nil
-					}
-
-					p := &poster{
-						Options: &opts,
-					}
-
-					createdIssue := false
-					p.createIssue = func(_ context.Context, owner string, repo string,
-						issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-						createdIssue = true
-						body := *issue.Body
-						issue.Body = nil
-						title := *issue.Title
-						issue.Title = nil
-
-						render := ghURL(t, title, body)
-						t.Log(render)
-						_, _ = fmt.Fprintf(&buf, "createIssue owner=%s repo=%s:\n%s\n\n%s\n\n%s\n\nRendered: %s", owner, repo, github.Stringify(issue), title, body, render)
-						return &github.Issue{ID: github.Int64(issueID)}, nil, nil
-					}
-
-					p.searchIssues = func(_ context.Context, query string,
-						opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
-						result := &github.IssuesSearchResult{}
-
-						require.NotEmpty(t, results)
-						result.Issues, results = results[0], results[1:]
-
-						result.Total = github.Int(len(result.Issues))
-						_, _ = fmt.Fprintf(&buf, "searchIssue %s: %s\n", query, github.Stringify(&result.Issues))
-						return result, nil, nil
-					}
-
-					createdComment := false
-					p.createComment = func(
-						_ context.Context, owner string, repo string, number int, comment *github.IssueComment,
-					) (*github.IssueComment, *github.Response, error) {
-						assert.Equal(t, *matchingIssue.Number, number)
-						createdComment = true
-						render := ghURL(t, "<comment>", *comment.Body)
-						t.Log(render)
-						_, _ = fmt.Fprintf(&buf, "createComment owner=%s repo=%s issue=%d:\n\n%s\n\nRendered: %s", owner, repo, number, *comment.Body, render)
-						return &github.IssueComment{}, nil, nil
-					}
-
-					p.listCommits = func(
-						_ context.Context, owner string, repo string, opts *github.CommitsListOptions,
-					) ([]*github.RepositoryCommit, *github.Response, error) {
-						_, _ = fmt.Fprintf(&buf, "listCommits owner=%s repo=%s %s\n", owner, repo, github.Stringify(opts))
-						assignee := assignee
-						return []*github.RepositoryCommit{
-							{
-								Author: &github.User{
-									Login: &assignee,
-								},
-							},
-						}, nil, nil
-					}
-
-					p.listMilestones = func(_ context.Context, owner, repo string,
-						_ *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error) {
-						result := []*github.Milestone{
-							{Title: github.String("3.3"), Number: github.Int(milestone)},
-							{Title: github.String("3.2"), Number: github.Int(1)},
-						}
-						_, _ = fmt.Fprintf(&buf, "listMilestones owner=%s repo=%s: result %s\n", owner, repo, github.Stringify(result))
-						return result, nil, nil
-					}
-
-					ctx := context.Background()
-					repro := ReproductionCommandFromString(c.reproCmd)
-					if c.reproTitle != "" {
-						repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
-					}
-					req := PostRequest{
-						PackageName:     c.packageName,
-						TestName:        c.testName,
-						Message:         c.message,
-						Artifacts:       c.artifacts,
-						MentionOnCreate: []string{"@nights-watch"},
-						HelpCommand:     repro,
-						ExtraLabels:     []string{"release-blocker"},
-					}
-					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
-					path := filepath.Join("testdata", "post", c.name+"-"+foundIssue+".txt")
-					b, err := ioutil.ReadFile(path)
-					failed := !assert.NoError(t, err)
-					if !failed {
-						exp, act := string(b), buf.String()
-						failed = failed || !assert.Equal(t, exp, act)
-					}
-					if failed && rewrite {
-						_ = os.MkdirAll(filepath.Dir(path), 0755)
-						require.NoError(t, ioutil.WriteFile(path, []byte(buf.String()), 0644))
-					}
-
-					switch foundIssue {
-					case foundNoIssue, foundOnlyRelatedIssue:
-						require.True(t, createdIssue)
-						require.False(t, createdComment)
-					case foundOnlyMatchingIssue, foundMatchingAndRelatedIssue:
-						require.False(t, createdIssue)
-						require.True(t, createdComment)
-					default:
-						t.Errorf("unhandled: %s", foundIssue)
-					}
-				})
-			}
-		})
+	// This test determines from the file name what logic to run. The first
+	// subgroup determines the test case (from the above slice). The second
+	// determines whether matching/related issues exist.
+	foundIssueScenarios := map[string][][]github.Issue{
+		foundNoIssue:                 {{}, {}},
+		foundOnlyMatchingIssue:       {{matchingIssue}, {}},
+		foundMatchingAndRelatedIssue: {{matchingIssue}, {relatedIssue}},
+		foundOnlyRelatedIssue:        {{}, {relatedIssue}},
 	}
+	var sKeys []string
+	for k := range foundIssueScenarios {
+		sKeys = append(sKeys, k)
+	}
+	re := regexp.MustCompile(`^(.+?)-(` + strings.Join(sKeys, "|") + `)\.txt$`)
+	datadriven.Walk(t, filepath.Join("testdata", "post"), func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			basename := filepath.Base(path)
+			sl := re.FindStringSubmatch(basename)
+			require.Len(t, sl, 3, "%s couldn't be interpreted as a test case", basename)
+			name, foundIssue := sl[1], sl[2]
+			c := testByName(t, name)
+			results, ok := foundIssueScenarios[foundIssue]
+			require.True(t, ok, "missing issue scenario %s", foundIssue)
+
+			var buf strings.Builder
+			opts := opts // play it safe since we're mutating it below
+			opts.getLatestTag = func() (string, error) {
+				const tag = "v3.3.0"
+				_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
+				return tag, nil
+			}
+
+			p := &poster{
+				Options: &opts,
+			}
+
+			createdIssue := false
+			p.createIssue = func(_ context.Context, owner string, repo string,
+				issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+				createdIssue = true
+				body := *issue.Body
+				issue.Body = nil
+				title := *issue.Title
+				issue.Title = nil
+
+				render := ghURL(t, title, body)
+				t.Log(render)
+				_, _ = fmt.Fprintf(&buf, "createIssue owner=%s repo=%s:\n%s\n\n%s\n\n%s\n\nRendered: %s", owner, repo, github.Stringify(issue), title, body, render)
+				return &github.Issue{ID: github.Int64(issueID)}, nil, nil
+			}
+
+			p.searchIssues = func(_ context.Context, query string,
+				opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
+				result := &github.IssuesSearchResult{}
+
+				require.NotEmpty(t, results)
+				result.Issues, results = results[0], results[1:]
+
+				result.Total = github.Int(len(result.Issues))
+				_, _ = fmt.Fprintf(&buf, "searchIssue %s: %s\n", query, github.Stringify(&result.Issues))
+				return result, nil, nil
+			}
+
+			createdComment := false
+			p.createComment = func(
+				_ context.Context, owner string, repo string, number int, comment *github.IssueComment,
+			) (*github.IssueComment, *github.Response, error) {
+				assert.Equal(t, *matchingIssue.Number, number)
+				createdComment = true
+				render := ghURL(t, "<comment>", *comment.Body)
+				t.Log(render)
+				_, _ = fmt.Fprintf(&buf, "createComment owner=%s repo=%s issue=%d:\n\n%s\n\nRendered: %s", owner, repo, number, *comment.Body, render)
+				return &github.IssueComment{}, nil, nil
+			}
+
+			p.listCommits = func(
+				_ context.Context, owner string, repo string, opts *github.CommitsListOptions,
+			) ([]*github.RepositoryCommit, *github.Response, error) {
+				_, _ = fmt.Fprintf(&buf, "listCommits owner=%s repo=%s %s\n", owner, repo, github.Stringify(opts))
+				assignee := assignee
+				return []*github.RepositoryCommit{
+					{
+						Author: &github.User{
+							Login: &assignee,
+						},
+					},
+				}, nil, nil
+			}
+
+			p.listMilestones = func(_ context.Context, owner, repo string,
+				_ *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error) {
+				result := []*github.Milestone{
+					{Title: github.String("3.3"), Number: github.Int(milestone)},
+					{Title: github.String("3.2"), Number: github.Int(1)},
+				}
+				_, _ = fmt.Fprintf(&buf, "listMilestones owner=%s repo=%s: result %s\n", owner, repo, github.Stringify(result))
+				return result, nil, nil
+			}
+
+			repro := UnitTestHelpCommand(c.reproCmd)
+			if c.reproTitle != "" {
+				repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
+			}
+			req := PostRequest{
+				PackageName:     c.packageName,
+				TestName:        c.testName,
+				Message:         c.message,
+				Artifacts:       c.artifacts,
+				MentionOnCreate: []string{"@cockroachdb/idonotexistbecausethisisatest"},
+				HelpCommand:     repro,
+				ExtraLabels:     []string{"release-blocker"},
+			}
+			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
+
+			switch foundIssue {
+			case foundNoIssue, foundOnlyRelatedIssue:
+				require.True(t, createdIssue)
+				require.False(t, createdComment)
+			case foundOnlyMatchingIssue, foundMatchingAndRelatedIssue:
+				require.False(t, createdIssue)
+				require.True(t, createdComment)
+			default:
+				t.Errorf("unhandled: %s", foundIssue)
+			}
+
+			return buf.String()
+		})
+	})
 }
 
 func TestPostEndToEnd(t *testing.T) {
