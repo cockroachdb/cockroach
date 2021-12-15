@@ -1,0 +1,212 @@
+# Test cases for defining default privileges on the schema.
+
+statement error pq: cannot use IN SCHEMA clause when using GRANT/REVOKE ON SCHEMAS
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SCHEMAS TO root
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+GRANT testuser TO root
+
+user testuser
+
+# Test on public schema.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA public GRANT SELECT ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE t1()
+
+query TTTTT colnames
+SHOW GRANTS ON t1
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t1          admin      ALL
+test           public       t1          root       ALL
+test           public       t1          testuser   ALL
+test           public       t1          testuser2  SELECT
+
+# When creating an object, take the union of the default privileges on
+# the schema and the database.
+# In the following test cases, testuser2 should have INSERT and SELECT.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT INSERT ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE t2()
+
+query TTTTT colnames
+SHOW GRANTS ON t2
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t2          admin      ALL
+test           public       t2          root       ALL
+test           public       t2          testuser   ALL
+test           public       t2          testuser2  INSERT
+test           public       t2          testuser2  SELECT
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE t3()
+
+query TTTTT colnames
+SHOW GRANTS ON t3
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t3          admin      ALL
+test           public       t3          root       ALL
+test           public       t3          testuser   ALL
+test           public       t3          testuser2  ALL
+
+# Revoke default privileges in schema.
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2
+
+statement ok
+CREATE TABLE t4()
+
+query TTTTT colnames
+SHOW GRANTS ON t4
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t4          admin      ALL
+test           public       t4          root       ALL
+test           public       t4          testuser   ALL
+test           public       t4          testuser2  SELECT
+
+# Multiple schemas.
+statement ok
+CREATE SCHEMA s
+
+statement ok
+GRANT CREATE, USAGE ON SCHEMA s TO testuser
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s, public GRANT ALL ON TABLES TO testuser2
+
+statement ok
+CREATE TABLE public.t5();
+CREATE TABLE s.t6();
+
+query TTTTT colnames
+SHOW GRANTS ON public.t5
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t5          admin      ALL
+test           public       t5          root       ALL
+test           public       t5          testuser   ALL
+test           public       t5          testuser2  ALL
+
+query TTTTT colnames
+SHOW GRANTS ON s.t6
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           s            t6          admin      ALL
+test           s            t6          root       ALL
+test           s            t6          testuser   ALL
+test           s            t6          testuser2  ALL
+
+# In schema for all roles.
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s, public REVOKE ALL ON TABLES FROM testuser2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s, public GRANT SELECT ON TABLES TO testuser2;
+
+user testuser
+
+statement ok
+CREATE TABLE public.t7();
+CREATE TABLE s.t8();
+
+query TTTTT colnames
+SHOW GRANTS ON public.t7
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t7          admin      ALL
+test           public       t7          root       ALL
+test           public       t7          testuser   ALL
+test           public       t7          testuser2  SELECT
+
+query TTTTT colnames
+SHOW GRANTS ON s.t8
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           s            t8          admin      ALL
+test           s            t8          root       ALL
+test           s            t8          testuser   ALL
+test           s            t8          testuser2  SELECT
+
+# Switch user to root, since we defined it on FOR ALL ROLES, the privileges
+# should be the same on tables we create.
+
+user root
+
+statement ok
+CREATE TABLE public.t9();
+CREATE TABLE s.t10();
+
+query TTTTT colnames
+SHOW GRANTS ON public.t9
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t9          admin      ALL
+test           public       t9          root       ALL
+test           public       t9          testuser   CREATE
+test           public       t9          testuser2  SELECT
+
+query TTTTT colnames
+SHOW GRANTS ON s.t10
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           s            t10         admin      ALL
+test           s            t10         root       ALL
+test           s            t10         testuser   CREATE
+test           s            t10         testuser2  SELECT
+
+# Revoking default privileges for the user creating the object is valid.
+user testuser
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser;
+
+statement ok
+CREATE TABLE t11()
+
+# Note that testuser still has CREATE because testuser has CREATE on the parent
+# database.
+query TTTTT colnames
+SHOW GRANTS ON t11
+----
+database_name  schema_name  table_name  grantee    privilege_type
+test           public       t11         admin      ALL
+test           public       t11         root       ALL
+test           public       t11         testuser   CREATE
+test           public       t11         testuser2  SELECT
+
+# Default privileges for schemas have no defaults - no privileges are defined
+# initially.
+statement ok
+CREATE SCHEMA s2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser;
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2
+
+statement ok
+CREATE TABLE s2.t12()
+
+# Note that testuser still has CREATE because testuser has CREATE on the parent
+# database.
+query TTTTT colnames
+SHOW GRANTS ON s2.t12
+----
+database_name  schema_name  table_name  grantee   privilege_type
+test           s2           t12         admin     ALL
+test           s2           t12         root      ALL
+test           s2           t12         testuser  CREATE
