@@ -231,16 +231,65 @@ CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
 statement error index with name "'t1-esc-index'" already exists
 CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
 
-subtest pause
+subtest resume-with-diff-tenant-resume-spans
 
 statement ok
-SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow'
+SET CLUSTER SETTING jobs.registry.interval.adopt = '50ms';
 
 statement ok
-CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL)
+SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms';
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow';
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL);
 
 statement ok
 INSERT INTO tbl VALUES (1, 100), (2, 200), (3, 300);
 
 statement error job .* was paused before it completed with reason: pause point "indexbackfill.before_flow" hit
-CREATE INDEX idx ON tbl(j);
+CREATE INDEX pauseidx ON tbl(j);
+
+# clear the pause point now that the job is paused.
+statement ok
+RESET CLUSTER SETTING jobs.debug.pausepoints 
+
+# while the backfill is paused, go in and replace the resume spans with some new
+# spans that both the wrong tenant ID or no tenant ID before resuming it to make
+# sure that on resume it re-keys the spans correctly. We pretty_key these below
+# to confirm/show what is in them.
+statement ok 
+UPDATE system.jobs 
+  SET payload = crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+      json_set(
+        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload), 
+        ARRAY['schemaChange', 'resumeSpanList', '0'], 
+        '{"resumeSpans": [{"key": "/u/IiQ==", "endKey": "/u/Iiew="}, {"key": "yIns", "endKey" : "yIo="}]}'::jsonb
+      )
+    )
+WHERE crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'description' LIKE 'CREATE INDEX pauseidx%';
+
+# confirm we see these bogus start and end keys in the job, both for the wrong
+# tenant and for no tenant.
+query TTTT
+SELECT 
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'endKey', 'base64'), 0),
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'key', 'base64'), 0),
+  crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'endKey', 'base64'), 0)
+FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs 
+) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
+----
+/103/Table/64/1   /103/Table/64/1/100   /64/1/100   /64/2
+
+# resume the job and ensure it completes, which includes validation.
+statement ok 
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%');
+
+query T
+SELECT status FROM [SHOW JOB WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%')];
+----
+succeeded
