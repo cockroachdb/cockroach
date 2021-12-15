@@ -380,6 +380,8 @@ type flowCreatorHelper interface {
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
 	addMaterializer(*colexec.Materializer)
+	// getCtxDone returns done channel of the context of this flow.
+	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -405,7 +407,12 @@ type remoteComponentCreator interface {
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
-	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(
+		allocator *colmem.Allocator,
+		typs []*types.T,
+		streamID execinfrapb.StreamID,
+		flowCtxDone <-chan struct{},
+	) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -422,9 +429,12 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(ctx, allocator, typs, streamID)
+	return colrpc.NewInboxWithFlowCtxDone(allocator, typs, streamID, flowCtxDone)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -843,7 +853,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(
-				ctx, colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID,
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				input.ColumnTypes, inputStream.StreamID, s.flowCreatorHelper.getFlowCtxDone(),
 			)
 
 			if err != nil {
@@ -1332,6 +1343,10 @@ func (r *vectorizedFlowCreatorHelper) addMaterializer(m *colexec.Materializer) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return r.f.GetCtxDone()
+}
+
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return r.f.GetCancelFlowFn()
 }
@@ -1386,6 +1401,10 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addMaterializer(*colexec.Materializer) {}
+
+func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return nil
+}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
