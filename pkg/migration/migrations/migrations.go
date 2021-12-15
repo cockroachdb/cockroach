@@ -142,6 +142,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		alterSystemStmtDiagReqs,
 	),
+	migration.NewTenantMigration(
+		"seed system.span_configurations with configs for existing for existing tenants",
+		toCV(clusterversion.SeedTenantSpanConfigs),
+		NoPrecondition,
+		seedTenantSpanConfigsMigration,
+	),
 }
 
 func init() {

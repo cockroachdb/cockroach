@@ -146,10 +146,7 @@ func (s *Store) Apply(
 func (s *Store) Copy(ctx context.Context) *Store {
 	clone := New(s.fallback)
 	_ = s.ForEachOverlapping(ctx, keys.EverythingSpan, func(entry roachpb.SpanConfigEntry) error {
-		clone.Apply(ctx, false /* dryrun */, spanconfig.Update{
-			Span:   entry.Span,
-			Config: entry.Config,
-		})
+		clone.Apply(ctx, false /* dryrun */, spanconfig.Update(entry))
 		return nil
 	})
 	return clone

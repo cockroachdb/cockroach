@@ -16,6 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -23,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,19 +36,65 @@ import (
 type Tenant struct {
 	serverutils.TestTenantInterface
 
-	t       *testing.T
-	db      *sqlutils.SQLRunner
-	cleanup func()
+	t          *testing.T
+	db         *sqlutils.SQLRunner
+	reconciler *spanconfigreconciler.Reconciler
+	recorder   *spanconfigtestutils.KVAccessorRecorder
+	cleanup    func()
+
+	mu struct {
+		syncutil.Mutex
+		lastCheckpoint, tsAfterLastExec hlc.Timestamp
+	}
 }
 
-// Exec is a wrapper around gosql.Exec that kills the test on error.
+// Exec is a wrapper around gosql.Exec that kills the test on error. It records
+// the execution timestamp for subsequent use.
 func (s *Tenant) Exec(query string, args ...interface{}) {
 	s.db.Exec(s.t, query, args...)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.tsAfterLastExec = s.Clock().Now()
+}
+
+// TimestampAfterLastExec returns a timestamp after the last time Exec was
+// invoked. It can be used for transactional ordering guarantees.
+func (s *Tenant) TimestampAfterLastExec() hlc.Timestamp {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.tsAfterLastExec
+}
+
+// Checkpoint is used to record a checkpointed timestamp, retrievable via
+// LastCheckpoint.
+func (s *Tenant) Checkpoint(ts hlc.Timestamp) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.lastCheckpoint = ts
+}
+
+// LastCheckpoint returns the last recorded checkpoint timestamp.
+func (s *Tenant) LastCheckpoint() hlc.Timestamp {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.lastCheckpoint
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
 func (s *Tenant) Query(query string, args ...interface{}) *gosql.Rows {
 	return s.db.Query(s.t, query, args...)
+}
+
+// Reconciler returns the reconciler associated with the given tenant.
+func (s *Tenant) Reconciler() spanconfig.Reconciler {
+	return s.reconciler
+}
+
+// KVAccessorRecorder returns the underlying recorder capturing KVAccessor
+// mutations made by the tenant.
+func (s *Tenant) KVAccessorRecorder() *spanconfigtestutils.KVAccessorRecorder {
+	return s.recorder
 }
 
 // WithMutableTableDescriptor invokes the provided callback with a mutable table

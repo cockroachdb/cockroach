@@ -69,7 +69,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	span := repl.Desc().RSpan().AsRawSpanWithNoLocals()
 	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
 
-	deleted, added := spanConfigStore.Apply(ctx, false /* dryrun */, spanconfig.Update{Span: span, Config: conf})
+	deleted, added := spanConfigStore.Apply(ctx, false /* dryrun */, spanconfig.Addition(span, conf))
 	require.Empty(t, deleted)
 	require.Len(t, added, 1)
 	require.True(t, added[0].Span.Equal(span))

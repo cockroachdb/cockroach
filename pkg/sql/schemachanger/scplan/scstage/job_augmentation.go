@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scplan
+package scstage
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// augmentedStagesForJob adds operations to the stages to deal with updating
+// AugmentStagesForJob adds operations to the stages to deal with updating
 // the job status and for updating the references from descriptors to jobs.
 //
 // TODO(ajwerner): Rather than adding this above the opgen layer, it'd be
@@ -32,7 +32,9 @@ import (
 // may prove to be a somewhat common pattern in other cases: consider the
 // intermediate index needed when adding and dropping columns as part of the
 // same transaction.
-func augmentStagesForJob(params Params, stages []Stage) (augmented []Stage, jobID jobspb.JobID) {
+func AugmentStagesForJob(
+	stages []Stage, executionPhase scop.Phase, jobIDGenerator func() jobspb.JobID,
+) (augmented []Stage, jobID jobspb.JobID) {
 	var (
 		toProcess   = stages
 		addStage    = func(s Stage) { augmented = append(augmented, s) }
@@ -49,7 +51,7 @@ func augmentStagesForJob(params Params, stages []Stage) (augmented []Stage, jobI
 
 		descIDs []descpb.ID
 		setup   = func() (done bool) {
-			switch params.ExecutionPhase {
+			switch executionPhase {
 			case scop.StatementPhase:
 				augmented = toProcess
 				return true // done
@@ -73,18 +75,18 @@ func augmentStagesForJob(params Params, stages []Stage) (augmented []Stage, jobI
 				}
 				var opsToAdd []scop.Op
 				jobID, descIDs, opsToAdd = createSchemaChangeJobAndAddDescriptorJobReferenceOps(
-					params.JobIDGenerator, toProcess[0].After, toProcess[0].Revertible,
+					jobIDGenerator, toProcess[0].After, toProcess[0].Revertible,
 				)
 				addCurStage(opsToAdd...)
 				return false // done
 			case scop.PostCommitPhase:
 				// Initialize the jobID and descriptors IDs to update for the
 				// PostCommit stages.
-				jobID, descIDs = params.JobIDGenerator(), descIDsFromState(toProcess[0].Before)
+				jobID, descIDs = jobIDGenerator(), descIDsFromState(toProcess[0].Before)
 				return false // done
 
 			default:
-				panic(errors.AssertionFailedf("unknown phase %v", params.ExecutionPhase))
+				panic(errors.AssertionFailedf("unknown phase %v", executionPhase))
 			}
 		}
 
@@ -172,7 +174,7 @@ func createSchemaChangeJobAndAddDescriptorJobReferenceOps(
 		RunningStatus: "",
 		NonCancelable: !revertible,
 	}
-	opsToAdd = append(opsToAdd, scop.CreateDeclarativeSchemaChangerJob{
+	opsToAdd = append(opsToAdd, &scop.CreateDeclarativeSchemaChangerJob{
 		Record: record,
 	})
 	opsToAdd = append(opsToAdd, generateOpsToAddJobIDs(descIDs, jobID)...)
@@ -187,7 +189,7 @@ func statementStrings(statements []*scpb.Statement) (strs []string) {
 }
 
 func generateUpdateJobProgressOp(id jobspb.JobID, after scpb.State) scop.Op {
-	return scop.UpdateSchemaChangeJobProgress{
+	return &scop.UpdateSchemaChangeJobProgress{
 		JobID:    id,
 		Statuses: after.Statuses(),
 	}
@@ -195,13 +197,13 @@ func generateUpdateJobProgressOp(id jobspb.JobID, after scpb.State) scop.Op {
 
 func generateOpsToRemoveJobIDs(descIDs []descpb.ID, jobID jobspb.JobID) []scop.Op {
 	return generateOpsForJobIDs(descIDs, jobID, func(descID descpb.ID, id jobspb.JobID) scop.Op {
-		return scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
+		return &scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
 	})
 }
 
 func generateOpsToAddJobIDs(descIDs []descpb.ID, jobID jobspb.JobID) []scop.Op {
 	return generateOpsForJobIDs(descIDs, jobID, func(descID descpb.ID, id jobspb.JobID) scop.Op {
-		return scop.AddJobReference{DescriptorID: descID, JobID: jobID}
+		return &scop.AddJobReference{DescriptorID: descID, JobID: jobID}
 	})
 }
 

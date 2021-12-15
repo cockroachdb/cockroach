@@ -588,14 +588,19 @@ func (t *TestTenant) SpanConfigKVAccessor() interface{} {
 	return t.SQLServer.tenantConnect
 }
 
+// SpanConfigReconciler is part TestTenantInterface.
+func (t *TestTenant) SpanConfigReconciler() interface{} {
+	return t.SQLServer.spanconfigMgr.Reconciler
+}
+
 // SpanConfigSQLTranslator is part TestTenantInterface.
 func (t *TestTenant) SpanConfigSQLTranslator() interface{} {
-	return t.SQLServer.spanconfigMgr.SQLTranslator
+	return t.SQLServer.spanconfigSQLTranslator
 }
 
 // SpanConfigSQLWatcher is part TestTenantInterface.
 func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
-	return t.SQLServer.spanconfigMgr.SQLTranslator
+	return t.SQLServer.spanconfigSQLWatcher
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
@@ -1043,24 +1048,28 @@ func (ts *TestServer) SpanConfigKVAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
 }
 
+// SpanConfigReconciler is part of TestServerInterface.
+func (ts *TestServer) SpanConfigReconciler() interface{} {
+	if ts.sqlServer.spanconfigMgr == nil {
+		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
+	}
+	return ts.sqlServer.spanconfigMgr.Reconciler
+}
+
 // SpanConfigSQLTranslator is part of TestServerInterface.
 func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
-	if ts.sqlServer.spanconfigMgr == nil {
-		panic(
-			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
-		)
+	if ts.sqlServer.spanconfigSQLTranslator == nil {
+		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
-	return ts.sqlServer.spanconfigMgr.SQLTranslator
+	return ts.sqlServer.spanconfigSQLTranslator
 }
 
 // SpanConfigSQLWatcher is part of TestServerInterface.
 func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
-	if ts.sqlServer.spanconfigMgr == nil {
-		panic(
-			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
-		)
+	if ts.sqlServer.spanconfigSQLWatcher == nil {
+		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
-	return ts.sqlServer.spanconfigMgr.SQLWatcher
+	return ts.sqlServer.spanconfigSQLWatcher
 }
 
 // SQLServer is part of TestServerInterface.

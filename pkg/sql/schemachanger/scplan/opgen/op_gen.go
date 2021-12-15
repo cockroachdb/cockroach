@@ -43,13 +43,14 @@ func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
 	for _, t := range r.targets {
 		edgesToAdd = edgesToAdd[:0]
 		if err := t.iterateFunc(g.Database(), func(n *scpb.Node) error {
-			var in bool
+			status := n.Status
 			for _, op := range t.transitions {
-				if in = in || op.from == n.Status; in {
+				if op.from == status {
 					edgesToAdd = append(edgesToAdd, toAdd{
 						transition: op,
 						n:          n,
 					})
+					status = op.to
 				}
 			}
 			return nil

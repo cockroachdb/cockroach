@@ -48,7 +48,7 @@ func TestGraphRanks(t *testing.T) {
 				{0, 1},
 				{3, 0},
 			},
-			expectedOrder: []int{1, 0, 2, 3},
+			expectedOrder: []int{3, 0, 1, 2},
 		},
 
 		// We will set up the dependency graph, so that its intentionally cyclic,
@@ -62,7 +62,7 @@ func TestGraphRanks(t *testing.T) {
 				{1, 3},
 				{3, 1},
 			},
-			expectedRankErr: "graph is not a dag",
+			expectedRankErr: "graph is not acyclical",
 		},
 
 		// We will set up the dependency graph to have a swap, which won't affect
@@ -75,7 +75,7 @@ func TestGraphRanks(t *testing.T) {
 				{1, 0},
 				{2, 0},
 			},
-			expectedRankErr: "graph is not a dag",
+			expectedRankErr: "graph is not acyclical",
 		},
 	}
 
@@ -132,7 +132,7 @@ func TestGraphRanks(t *testing.T) {
 		for _, edge := range tc.depEdges {
 			require.NoError(t, graph.AddDepEdge(
 				fmt.Sprintf("%d to %d", edge.from, edge.to),
-				scgraph.HappensAfter,
+				scgraph.Precedence,
 				state.Nodes[edge.from].Target,
 				scpb.Status_PUBLIC,
 				state.Nodes[edge.to].Target,

@@ -84,6 +84,10 @@ type TestTenantInterface interface {
 	// interface{}.
 	SpanConfigKVAccessor() interface{}
 
+	// SpanConfigReconciler returns the underlying spanconfig.Reconciler as an
+	// interface{}.
+	SpanConfigReconciler() interface{}
+
 	// SpanConfigSQLTranslator returns the underlying spanconfig.SQLTranslator as
 	// an interface{}.
 	SpanConfigSQLTranslator() interface{}
