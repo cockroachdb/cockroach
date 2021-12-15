@@ -1330,7 +1330,8 @@ func (e *RefreshFailedError) Error() string {
 	return e.message(nil)
 }
 
-func (e *RefreshFailedError) message(_ *Error) string {
+// FailureReason returns the failure reason as a string.
+func (e *RefreshFailedError) FailureReason() string {
 	var r string
 	switch e.Reason {
 	case RefreshFailedError_REASON_COMMITTED_VALUE:
@@ -1340,7 +1341,11 @@ func (e *RefreshFailedError) message(_ *Error) string {
 	default:
 		r = "UNKNOWN"
 	}
-	return fmt.Sprintf("encountered recently written %s %s @%s", r, e.Key, e.Timestamp)
+	return r
+}
+
+func (e *RefreshFailedError) message(_ *Error) string {
+	return fmt.Sprintf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
 }
 
 // Type is part of the ErrorDetailInterface.
