@@ -39,6 +39,7 @@ d              public       testuser_t  testuser  ALL
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM testuser;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM testuser;
 
 statement ok
 CREATE TABLE testuser_t2();

@@ -90,4 +90,9 @@ message DefaultPrivilegesForRole {
 message DefaultPrivilegeDescriptor {
   option (gogoproto.equal) = true;
   repeated DefaultPrivilegesForRole default_privileges_per_role = 1 [(gogoproto.nullable) = false];
+  enum DefaultPrivilegeDescriptorType {
+    DATABASE = 0;
+    SCHEMA = 1;
+  }
+  optional DefaultPrivilegeDescriptorType type = 2 [(gogoproto.nullable) = false];
 }

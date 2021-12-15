@@ -170,7 +170,7 @@ func NewInitial(
 		id,
 		name,
 		descpb.NewBaseDatabasePrivilegeDescriptor(owner),
-		catprivilege.MakeNewDefaultPrivilegeDescriptor(),
+		catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE),
 		options...,
 	)
 }

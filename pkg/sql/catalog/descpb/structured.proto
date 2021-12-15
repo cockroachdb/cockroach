@@ -1488,6 +1488,9 @@ message SchemaDescriptor {
 
   // privileges contains the privileges for the schema.
   optional PrivilegeDescriptor privileges = 4;
+
+  // DefaultPrivileges contains the default privileges for the database.
+  optional DefaultPrivilegeDescriptor default_privileges = 10;
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

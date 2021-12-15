@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -694,14 +693,9 @@ type TypeDescriptorResolver interface {
 // DefaultPrivilegeDescriptor protos are not accessed and interacted
 // with directly.
 type DefaultPrivilegeDescriptor interface {
-	CreatePrivilegesFromDefaultPrivileges(
-		dbID descpb.ID,
-		user security.SQLUsername,
-		targetObject tree.AlterDefaultPrivilegesTargetObject,
-		databasePrivileges *descpb.PrivilegeDescriptor,
-	) *descpb.PrivilegeDescriptor
 	GetDefaultPrivilegesForRole(descpb.DefaultPrivilegesRole) (*descpb.DefaultPrivilegesForRole, bool)
 	ForEachDefaultPrivilegeForRole(func(descpb.DefaultPrivilegesForRole) error) error
+	GetDefaultPrivilegeDescriptorType() descpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an
