@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -651,66 +651,19 @@ func (s *TestState) AddPartitioning(
 
 var _ scmutationexec.Partitioner = (*TestState)(nil)
 
-// IndexBackfiller implements the scexec.Dependencies interface.
-func (s *TestState) IndexBackfiller() scexec.IndexBackfiller {
-	return s
-}
-
-var _ scexec.IndexBackfiller = (*TestState)(nil)
-
-// BackfillIndex implements the scexec.IndexBackfiller interface.
-func (s *TestState) BackfillIndex(
-	_ context.Context,
-	_ scexec.JobProgressTracker,
-	tbl catalog.TableDescriptor,
-	source descpb.IndexID,
-	destinations ...descpb.IndexID,
-) error {
-	s.LogSideEffectf("backfill indexes %v from index #%d in table #%d", destinations, source, tbl.GetID())
-	return nil
-}
-
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (s *TestState) IndexSpanSplitter() scexec.IndexSpanSplitter {
-	return s
+	return s.indexSpanSplitter
 }
 
-var _ scexec.IndexSpanSplitter = (*TestState)(nil)
-
-// MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
-func (s *TestState) MaybeSplitIndexSpans(
-	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
-) error {
-	return nil
+// IndexBackfiller implements the scexec.Dependencies interface.
+func (s *TestState) IndexBackfiller() scexec.Backfiller {
+	return s.backfiller
 }
 
-// JobProgressTracker implements the scexec.Dependencies interface.
-func (s *TestState) JobProgressTracker() scexec.JobProgressTracker {
-	return s
-}
-
-var _ scexec.JobProgressTracker = (*TestState)(nil)
-
-// GetResumeSpans implements the scexec.JobProgressTracker interface.
-func (s *TestState) GetResumeSpans(
-	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
-) ([]roachpb.Span, error) {
-	desc, err := s.mustReadImmutableDescriptor(tableID)
-	if err != nil {
-		return nil, err
-	}
-	table, err := catalog.AsTableDescriptor(desc)
-	if err != nil {
-		return nil, err
-	}
-	return []roachpb.Span{table.IndexSpan(s.Codec(), indexID)}, nil
-}
-
-// SetResumeSpans implements the scexec.JobProgressTracker interface.
-func (s *TestState) SetResumeSpans(
-	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
-) error {
-	panic("implement me")
+// PeriodicProgressFlusher implements the scexec.Dependencies interface.
+func (s *TestState) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
+	return scdeps.NewNoopPeriodicProgressFlusher()
 }
 
 // TransactionalJobCreator implements the scexec.Dependencies interface.

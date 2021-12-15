@@ -43,6 +43,7 @@ go_library(
 
 go_test(
     name = "rel_test",
+    size = "small",
     srcs = [
         "bench_test.go",
         "rel_internal_test.go",

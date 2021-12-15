@@ -64,8 +64,10 @@ func (ti testInfra) newExecDeps(
 		txn,
 		security.RootUserName(),
 		descsCollection,
-		noopJobRegistry{},    /* jobRegistry */
-		noopBackfiller{},     /* indexBackfiller */
+		noopJobRegistry{}, /* jobRegistry */
+		noopBackfiller{},  /* backfiller */
+		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
+		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{}, /* indexValidator */
 		noopPartitioner{},    /* partitioner */
 		noopEventLogger{},    /* eventLogger */
@@ -473,12 +475,19 @@ func (n noopJobRegistry) CreateJobWithTxn(
 
 type noopBackfiller struct{}
 
+var _ scexec.Backfiller = (*noopBackfiller)(nil)
+
+func (n noopBackfiller) MaybePrepareDestIndexesForBackfill(
+	ctx context.Context, progress scexec.BackfillProgress, descriptor catalog.TableDescriptor,
+) (scexec.BackfillProgress, error) {
+	return progress, nil
+}
+
 func (n noopBackfiller) BackfillIndex(
 	ctx context.Context,
-	_ scexec.JobProgressTracker,
-	_ catalog.TableDescriptor,
-	source descpb.IndexID,
-	destinations ...descpb.IndexID,
+	progress scexec.BackfillProgress,
+	writer scexec.BackfillProgressWriter,
+	descriptor catalog.TableDescriptor,
 ) error {
 	return nil
 }
@@ -529,7 +538,7 @@ func (noopEventLogger) LogEvent(
 	return nil
 }
 
-var _ scexec.IndexBackfiller = noopBackfiller{}
+var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
 var _ scmutationexec.Partitioner = noopPartitioner{}
 var _ scexec.EventLogger = noopEventLogger{}
