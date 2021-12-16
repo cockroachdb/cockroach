@@ -346,7 +346,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON kv (v);
+   SQL command: CREATE INDEX ON kv (v DESC);
 
 # Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
 query T

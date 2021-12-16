@@ -146,6 +146,10 @@ vectorized: true
       table: t@t_v_idx
       spans: LIMITED SCAN
       limit: 6
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v DESC);
 
 query T
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
