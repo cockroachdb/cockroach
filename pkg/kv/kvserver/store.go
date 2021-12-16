@@ -2038,7 +2038,8 @@ func (s *Store) startGossip() {
 	s.initComplete.Add(len(gossipFns))
 	for _, gossipFn := range gossipFns {
 		gossipFn := gossipFn // per-iteration copy
-		if err := s.stopper.RunAsyncTask(context.Background(), "store-gossip", func(ctx context.Context) {
+		bgCtx := s.AnnotateCtx(context.Background())
+		if err := s.stopper.RunAsyncTask(bgCtx, "store-gossip", func(ctx context.Context) {
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
 			for first := true; ; {
