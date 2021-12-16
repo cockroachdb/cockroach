@@ -207,8 +207,7 @@ func updateReplicationStreamProgress(
 		})
 
 	if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
-		status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
-		err = nil
+		err = errors.Wrapf(err, "Replication stream %d not found", streamID)
 	}
 
 	return status, err

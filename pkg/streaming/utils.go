@@ -45,7 +45,7 @@ type ReplicationStreamManager interface {
 
 	// GetReplicationStreamSpec gets a stream replication spec.
 	GetReplicationStreamSpec(evalCtx *tree.EvalContext,
-		txn *kv.Txn, streamID StreamID, initialTimestamp hlc.Timestamp) (*streampb.ReplicationStreamSpec, error)
+		txn *kv.Txn, streamID StreamID) (*streampb.ReplicationStreamSpec, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.

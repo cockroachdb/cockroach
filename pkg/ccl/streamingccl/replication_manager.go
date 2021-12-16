@@ -65,17 +65,14 @@ func (r replicationStreamManagerImpl) UpdateReplicationStreamProgress(
 
 // GetReplicationStreamSpecHook hooks an GetReplicationStreamSpec implementation inside streamingccl package.
 var GetReplicationStreamSpecHook func(evalCtx *tree.EvalContext,
-	txn *kv.Txn, streamID streaming.StreamID, initialTimestamp hlc.Timestamp) (*streampb.ReplicationStreamSpec, error)
+	txn *kv.Txn, streamID streaming.StreamID) (*streampb.ReplicationStreamSpec, error)
 
 // GetReplicationStreamSpec implements ReplicationStreamManager interface.
 func (r replicationStreamManagerImpl) GetReplicationStreamSpec(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	initialTimestamp hlc.Timestamp,
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	if GetReplicationStreamSpecHook == nil {
 		return nil, errors.New("GetReplicationStreamSpecHook is not registered")
 	}
-	return GetReplicationStreamSpecHook(evalCtx, txn, streamID, initialTimestamp)
+	return GetReplicationStreamSpecHook(evalCtx, txn, streamID)
 }

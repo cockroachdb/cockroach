@@ -212,16 +212,16 @@ func createReplicationStreamHook(
 	return fn, replicationStreamHeader, nil, avoidBuffering, nil
 }
 
-func doGetReplicationStreamSpecHook(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	initialTimestamp hlc.Timestamp,
+func doGetReplicationStreamSpec(
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
 	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
 	if err != nil {
+		if jobs.HasJobNotFoundError(err) {
+			return nil, errors.Wrapf(err, "Replication stream %d not found", streamID)
+		}
 		return nil, err
 	}
 	var status jobs.Status
@@ -261,17 +261,15 @@ func doGetReplicationStreamSpecHook(
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
-				Spans:     sp.Spans,
-				StartFrom: initialTimestamp,
+				Spans: sp.Spans,
 				// When absent, ExecutionConfig will be set as default
 			},
 		})
 	}
 	return res, nil
-	//return protoutil.Marshal(res)
 }
 
 func init() {
 	sql.AddPlanHook(createReplicationStreamHook)
-	streamingccl.GetReplicationStreamSpecHook = doGetReplicationStreamSpecHook
+	streamingccl.GetReplicationStreamSpecHook = doGetReplicationStreamSpec
 }
