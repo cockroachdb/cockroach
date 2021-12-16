@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -203,6 +204,7 @@ const (
 // this won't be the case if the cluster settings move away from using global
 // state.
 type Tracer struct {
+	stack []byte // created at
 	// Preallocated noopSpans, used to avoid creating spans when we are not using
 	// x/net/trace or OpenTelemetry and we are not recording.
 	noopSpan        *Span
@@ -392,6 +394,7 @@ func (t *Tracer) SetRedactable(to bool) {
 // backends.
 func NewTracer() *Tracer {
 	t := &Tracer{
+		stack:               debug.Stack(),
 		activeSpansRegistry: makeSpanRegistry(),
 		// These might be overridden in NewTracerWithOpt.
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
@@ -762,15 +765,15 @@ func (t *Tracer) startSpanGeneric(
 			// WithParent.
 			panic("invalid sterile parent")
 		}
-		if opts.Parent.Tracer() != t {
+		if s := opts.Parent.Tracer(); s != t {
 			// Creating a child with a different Tracer than the parent is not allowed
 			// because it would become unclear which active span registry the new span
 			// should belong to. In particular, the child could end up in the parent's
 			// registry if the parent Finish()es before the child, and then it would
 			// be leaked because Finish()ing the child would attempt to remove the
 			// span from the child tracer's registry.
-			panic(fmt.Sprintf("attempting to start span with parent from different Tracer. parent: %s, child: %s",
-				opts.Parent.OperationName(), opName))
+			panic(fmt.Sprintf("attempting to start span with parent from different Tracer. parent: %s, child: %s\n\nparent created at:\n%s\n\nchild:%s",
+				opts.Parent.OperationName(), opName, s.stack, t.stack))
 		}
 		if opts.Parent.IsNoop() {
 			// If the parent is a no-op, we'll create a root span.
