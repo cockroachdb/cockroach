@@ -19,6 +19,7 @@ import {
   DatabaseDetailsPageData,
   DatabaseDetailsPageDataTableDetails,
   DatabaseDetailsPageDataTableStats,
+  ViewMode,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -125,6 +126,9 @@ describe("Database Details Page", function() {
       loaded: false,
       name: "things",
       showNodeRegionsColumn: false,
+      viewMode: ViewMode.Tables,
+      sortSettingTables: { ascending: true, columnTitle: "name" },
+      sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [],
     });
   });
@@ -141,6 +145,9 @@ describe("Database Details Page", function() {
       loaded: true,
       name: "things",
       showNodeRegionsColumn: false,
+      viewMode: ViewMode.Tables,
+      sortSettingTables: { ascending: true, columnTitle: "name" },
+      sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [
         {
           name: "foo",
