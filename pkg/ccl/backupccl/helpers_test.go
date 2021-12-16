@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -53,14 +54,8 @@ func backupRestoreTestSetupWithParams(
 	numAccounts int,
 	init func(tc *testcluster.TestCluster),
 	params base.TestClusterArgs,
-) (
-	ctx context.Context,
-	tc *testcluster.TestCluster,
-	sqlDB *sqlutils.SQLRunner,
-	tempDir string,
-	cleanup func(),
-) {
-	ctx = context.Background()
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
+	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup", nil)
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
@@ -100,18 +95,12 @@ func backupRestoreTestSetupWithParams(
 		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
 
-	return ctx, tc, sqlDB, dir, cleanupFn
+	return tc, sqlDB, dir, cleanupFn
 }
 
 func BackupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
-) (
-	ctx context.Context,
-	tc *testcluster.TestCluster,
-	sqlDB *sqlutils.SQLRunner,
-	tempDir string,
-	cleanup func(),
-) {
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
 }
 
@@ -121,7 +110,7 @@ func backupRestoreTestSetupEmpty(
 	tempDir string,
 	init func(*testcluster.TestCluster),
 	params base.TestClusterArgs,
-) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
@@ -186,8 +175,8 @@ func backupRestoreTestSetupEmptyWithParams(
 	dir string,
 	init func(tc *testcluster.TestCluster),
 	params base.TestClusterArgs,
-) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
-	ctx = context.Background()
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup-empty", nil)
 
 	params.ServerArgs.ExternalIODir = dir
 	if len(params.ServerArgsPerNode) > 0 {
@@ -206,7 +195,7 @@ func backupRestoreTestSetupEmptyWithParams(
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 	}
 
-	return ctx, tc, sqlDB, cleanupFn
+	return tc, sqlDB, cleanupFn
 }
 
 func createEmptyCluster(
