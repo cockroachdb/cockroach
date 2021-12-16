@@ -86,20 +86,20 @@ INSERT INTO ab VALUES (random(), random())
 insert ab
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:8 => a:1
- │    ├── column2:9 => b:2
+ │    ├── column8:8 => a:1
+ │    ├── column9:9 => b:2
  │    └── rowid_default:10 => rowid:3
  └── project
-      ├── columns: rowid_default:10 column1:8 column2:9
+      ├── columns: rowid_default:10 column8:8 column9:9
       ├── project
-      │    ├── columns: column1:8 column2:9
+      │    ├── columns: column8:8 column9:9
       │    ├── values
       │    │    ├── columns: column1:6 column2:7
       │    │    └── (random(), random())
       │    └── projections
-      │         ├── assignment-cast: FLOAT8 [as=column1:8]
+      │         ├── assignment-cast: FLOAT8 [as=column8:8]
       │         │    └── column1:6
-      │         └── assignment-cast: FLOAT8 [as=column2:9]
+      │         └── assignment-cast: FLOAT8 [as=column9:9]
       │              └── column2:7
       └── projections
            └── unique_rowid() [as=rowid_default:10]
@@ -115,22 +115,22 @@ INSERT INTO abcd VALUES (1, 1)
 insert abcd
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:10 => a:1
- │    ├── column2:11 => b:2
+ │    ├── column10:10 => a:1
+ │    ├── column11:11 => b:2
  │    ├── c_default:12 => c:3
  │    ├── d_default:13 => d:4
  │    └── rowid_default:14 => rowid:5
  └── project
-      ├── columns: c_default:12 d_default:13 rowid_default:14 column1:10!null column2:11!null
+      ├── columns: c_default:12 d_default:13 rowid_default:14 column10:10!null column11:11!null
       ├── project
-      │    ├── columns: column1:10!null column2:11!null
+      │    ├── columns: column10:10!null column11:11!null
       │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null
       │    │    └── (1.0, 1.0)
       │    └── projections
-      │         ├── assignment-cast: FLOAT8 [as=column1:10]
+      │         ├── assignment-cast: FLOAT8 [as=column10:10]
       │         │    └── column1:8
-      │         └── assignment-cast: FLOAT8 [as=column2:11]
+      │         └── assignment-cast: FLOAT8 [as=column11:11]
       │              └── column2:9
       └── projections
            ├── random() [as=c_default:12]
@@ -143,22 +143,22 @@ INSERT INTO abcd VALUES (random(), random())
 insert abcd
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:10 => a:1
- │    ├── column2:11 => b:2
+ │    ├── column10:10 => a:1
+ │    ├── column11:11 => b:2
  │    ├── c_default:12 => c:3
  │    ├── d_default:13 => d:4
  │    └── rowid_default:14 => rowid:5
  └── project
-      ├── columns: c_default:12 d_default:13 rowid_default:14 column1:10 column2:11
+      ├── columns: c_default:12 d_default:13 rowid_default:14 column10:10 column11:11
       ├── project
-      │    ├── columns: column1:10 column2:11
+      │    ├── columns: column10:10 column11:11
       │    ├── values
       │    │    ├── columns: column1:8 column2:9
       │    │    └── (random(), random())
       │    └── projections
-      │         ├── assignment-cast: FLOAT8 [as=column1:10]
+      │         ├── assignment-cast: FLOAT8 [as=column10:10]
       │         │    └── column1:8
-      │         └── assignment-cast: FLOAT8 [as=column2:11]
+      │         └── assignment-cast: FLOAT8 [as=column11:11]
       │              └── column2:9
       └── projections
            ├── random() [as=c_default:12]

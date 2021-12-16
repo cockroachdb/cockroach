@@ -1052,7 +1052,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: child@child_pkey
-│           │ lookup condition: (column1 = c_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column8 = c_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1065,12 +1065,12 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
         └── • lookup join (anti)
             │ table: parent@parent_pkey
             │ equality cols are key
-            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: (column9 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
             │
             └── • lookup join (anti)
                 │ table: parent@parent_pkey
                 │ equality cols are key
-                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+                │ lookup condition: (column9 = p_id) AND (crdb_region = 'ap-southeast-2')
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -1433,7 +1433,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_pkey
-│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column14 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1445,8 +1445,8 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ lookup condition: (column4 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           │ lookup condition: (column17 = b) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│           │ pred: (column14 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • scan buffer
 │                 label: buffer 1
@@ -1457,12 +1457,12 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((column3 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
-│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│           │ lookup condition: ((column16 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (b > 0)
+│           │ pred: (column14 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • filter
 │               │ estimated row count: 1
-│               │ filter: column4 > 0
+│               │ filter: column17 > 0
 │               │
 │               └── • scan buffer
 │                     label: buffer 1
@@ -1473,8 +1473,8 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ lookup condition: ((column3 = a) AND (column4 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+            │ lookup condition: ((column16 = a) AND (column17 = b)) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+            │ pred: (column14 != pk) OR (crdb_region_default != crdb_region)
             │
             └── • scan buffer
                   label: buffer 1
@@ -1758,8 +1758,8 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
-            │ lookup condition: (column3 = b) AND (crdb_region_col IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-            │ pred: (column1 != pk) OR (crdb_region_col_comp != crdb_region_col)
+            │ lookup condition: (column12 = b) AND (crdb_region_col IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+            │ pred: (column10 != pk) OR (crdb_region_col_comp != crdb_region_col)
             │
             └── • scan buffer
                   label: buffer 1
@@ -1818,7 +1818,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
-│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column12 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -1835,7 +1835,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
 │               │ equality: (lookup_join_const_col_@37, v_comp) = (crdb_region,v)
 │               │ equality cols are key
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│               │ pred: (column12 != pk) OR (crdb_region_default != crdb_region)
 │               │
 │               └── • cross join
 │                   │ estimated row count: 3
@@ -1857,7 +1857,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
                 │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
                 │ equality: (lookup_join_const_col_@51, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
                 │ equality cols are key
-                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+                │ pred: (column12 != pk) OR (crdb_region_default != crdb_region)
                 │
                 └── • cross join
                     │ estimated row count: 3
@@ -1996,7 +1996,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-│           │ lookup condition: (column1 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│           │ lookup condition: (column12 = pk) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • scan buffer
@@ -2012,7 +2012,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │           └── • lookup join
 │               │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
 │               │ equality: (lookup_join_const_col_@39, v_comp) = (crdb_region,v)
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│               │ pred: (column12 != pk) OR (crdb_region_default != crdb_region)
 │               │
 │               └── • cross join
 │                   │ estimated row count: 3
@@ -2022,7 +2022,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │                   │
 │                   └── • filter
 │                       │ estimated row count: 1
-│                       │ filter: column2 > 0
+│                       │ filter: column13 > 0
 │                       │
 │                       └── • scan buffer
 │                             label: buffer 1
@@ -2037,7 +2037,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │           └── • lookup join
 │               │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
 │               │ equality: (lookup_join_const_col_@53, v_comp) = (crdb_region,v)
-│               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+│               │ pred: (column12 != pk) OR (crdb_region_default != crdb_region)
 │               │
 │               └── • cross join
 │                   │ estimated row count: 3
@@ -2062,7 +2062,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
             └── • lookup join
                 │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
                 │ equality: (lookup_join_const_col_@67, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+                │ pred: (column12 != pk) OR (crdb_region_default != crdb_region)
                 │
                 └── • cross join
                     │ estimated row count: 3

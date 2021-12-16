@@ -558,62 +558,62 @@ insert xyz
  ├── columns: <none>
  ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
  ├── insert-mapping:
- │    ├── column1:9 => x:1
- │    ├── column2:10 => y:2
- │    └── column3:11 => z:3
+ │    ├── column9:9 => x:1
+ │    ├── column10:10 => y:2
+ │    └── column11:11 => z:3
  └── upsert-distinct-on
-      ├── columns: column1:9!null column2:10!null column3:11!null
-      ├── grouping columns: column2:10!null column3:11!null
+      ├── columns: column9:9!null column10:10!null column11:11!null
+      ├── grouping columns: column10:10!null column11:11!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── grouping columns: column2:10!null column3:11!null
+      │    ├── columns: column9:9!null column10:10!null column11:11!null
+      │    ├── grouping columns: column10:10!null column11:11!null
       │    ├── upsert-distinct-on
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    ├── grouping columns: column1:9!null
+      │    │    ├── columns: column9:9!null column10:10!null column11:11!null
+      │    │    ├── grouping columns: column9:9!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    │    │    │    ├── (1, 2, 3)
       │    │    │    │    │    │    │    └── (4, 5, 6)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
+      │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column9:9]
       │    │    │    │    │    │         │    └── column1:6
-      │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
+      │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column10:10]
       │    │    │    │    │    │         │    └── column2:7
-      │    │    │    │    │    │         └── assignment-cast: INT8 [as=column3:11]
+      │    │    │    │    │    │         └── assignment-cast: INT8 [as=column11:11]
       │    │    │    │    │    │              └── column3:8
       │    │    │    │    │    ├── scan xyz
       │    │    │    │    │    │    └── columns: x:12!null y:13 z:14
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── column1:9 = x:12
+      │    │    │    │    │         └── column9:9 = x:12
       │    │    │    │    ├── scan xyz
       │    │    │    │    │    └── columns: x:17!null y:18 z:19
       │    │    │    │    └── filters
-      │    │    │    │         ├── column2:10 = y:18
-      │    │    │    │         └── column3:11 = z:19
+      │    │    │    │         ├── column10:10 = y:18
+      │    │    │    │         └── column11:11 = z:19
       │    │    │    ├── scan xyz
       │    │    │    │    └── columns: x:22!null y:23 z:24
       │    │    │    └── filters
-      │    │    │         ├── column2:10 = y:23
-      │    │    │         └── column3:11 = z:24
+      │    │    │         ├── column10:10 = y:23
+      │    │    │         └── column11:11 = z:24
       │    │    └── aggregations
-      │    │         ├── first-agg [as=column2:10]
-      │    │         │    └── column2:10
-      │    │         └── first-agg [as=column3:11]
-      │    │              └── column3:11
+      │    │         ├── first-agg [as=column10:10]
+      │    │         │    └── column10:10
+      │    │         └── first-agg [as=column11:11]
+      │    │              └── column11:11
       │    └── aggregations
-      │         └── first-agg [as=column1:9]
-      │              └── column1:9
+      │         └── first-agg [as=column9:9]
+      │              └── column9:9
       └── aggregations
-           └── first-agg [as=column1:9]
-                └── column1:9
+           └── first-agg [as=column9:9]
+                └── column9:9
 
 # Conflict columns are explicitly specified.
 build
@@ -625,35 +625,35 @@ insert xyz
  ├── columns: <none>
  ├── arbiter indexes: xyz_y_z_key
  ├── insert-mapping:
- │    ├── column1:9 => x:1
- │    ├── column2:10 => y:2
- │    └── column3:11 => z:3
+ │    ├── column9:9 => x:1
+ │    ├── column10:10 => y:2
+ │    └── column11:11 => z:3
  └── upsert-distinct-on
-      ├── columns: column1:9!null column2:10!null column3:11!null
-      ├── grouping columns: column2:10!null column3:11!null
+      ├── columns: column9:9!null column10:10!null column11:11!null
+      ├── grouping columns: column10:10!null column11:11!null
       ├── anti-join (hash)
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    ├── project
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    ├── values
       │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    ├── (1, 2, 3)
       │    │    │    └── (4, 5, 6)
       │    │    └── projections
-      │    │         ├── assignment-cast: INT8 [as=column1:9]
+      │    │         ├── assignment-cast: INT8 [as=column9:9]
       │    │         │    └── column1:6
-      │    │         ├── assignment-cast: INT8 [as=column2:10]
+      │    │         ├── assignment-cast: INT8 [as=column10:10]
       │    │         │    └── column2:7
-      │    │         └── assignment-cast: INT8 [as=column3:11]
+      │    │         └── assignment-cast: INT8 [as=column11:11]
       │    │              └── column3:8
       │    ├── scan xyz
       │    │    └── columns: x:12!null y:13 z:14
       │    └── filters
-      │         ├── column2:10 = y:13
-      │         └── column3:11 = z:14
+      │         ├── column10:10 = y:13
+      │         └── column11:11 = z:14
       └── aggregations
-           └── first-agg [as=column1:9]
-                └── column1:9
+           └── first-agg [as=column9:9]
+                └── column9:9
 
 build
 INSERT INTO uniq VALUES ('x2', 'y1', 'z2'), ('x2', 'y2', 'z2'), ('x2', 'y2', 'z2')
@@ -663,65 +663,65 @@ insert uniq
  ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_y_key uniq_z_key
  ├── insert-mapping:
- │    ├── column1:9 => x:1
- │    ├── column2:10 => y:2
- │    └── column3:11 => z:3
+ │    ├── column9:9 => x:1
+ │    ├── column10:10 => y:2
+ │    └── column11:11 => z:3
  └── upsert-distinct-on
-      ├── columns: column1:9!null column2:10!null column3:11!null
-      ├── grouping columns: column3:11!null
+      ├── columns: column9:9!null column10:10!null column11:11!null
+      ├── grouping columns: column11:11!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── grouping columns: column2:10!null
+      │    ├── columns: column9:9!null column10:10!null column11:11!null
+      │    ├── grouping columns: column10:10!null
       │    ├── upsert-distinct-on
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    ├── grouping columns: column1:9!null
+      │    │    ├── columns: column9:9!null column10:10!null column11:11!null
+      │    │    ├── grouping columns: column9:9!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    │    │    │    ├── ('x2', 'y1', 'z2')
       │    │    │    │    │    │    │    ├── ('x2', 'y2', 'z2')
       │    │    │    │    │    │    │    └── ('x2', 'y2', 'z2')
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── assignment-cast: STRING [as=column1:9]
+      │    │    │    │    │    │         ├── assignment-cast: STRING [as=column9:9]
       │    │    │    │    │    │         │    └── column1:6
-      │    │    │    │    │    │         ├── assignment-cast: STRING [as=column2:10]
+      │    │    │    │    │    │         ├── assignment-cast: STRING [as=column10:10]
       │    │    │    │    │    │         │    └── column2:7
-      │    │    │    │    │    │         └── assignment-cast: STRING [as=column3:11]
+      │    │    │    │    │    │         └── assignment-cast: STRING [as=column11:11]
       │    │    │    │    │    │              └── column3:8
       │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    └── columns: x:12!null y:13 z:14
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── column1:9 = x:12
+      │    │    │    │    │         └── column9:9 = x:12
       │    │    │    │    ├── scan uniq
       │    │    │    │    │    └── columns: x:17!null y:18 z:19
       │    │    │    │    └── filters
-      │    │    │    │         └── column2:10 = y:18
+      │    │    │    │         └── column10:10 = y:18
       │    │    │    ├── scan uniq
       │    │    │    │    └── columns: x:22!null y:23 z:24
       │    │    │    └── filters
-      │    │    │         └── column3:11 = z:24
+      │    │    │         └── column11:11 = z:24
       │    │    └── aggregations
-      │    │         ├── first-agg [as=column2:10]
-      │    │         │    └── column2:10
-      │    │         └── first-agg [as=column3:11]
-      │    │              └── column3:11
+      │    │         ├── first-agg [as=column10:10]
+      │    │         │    └── column10:10
+      │    │         └── first-agg [as=column11:11]
+      │    │              └── column11:11
       │    └── aggregations
-      │         ├── first-agg [as=column1:9]
-      │         │    └── column1:9
-      │         └── first-agg [as=column3:11]
-      │              └── column3:11
+      │         ├── first-agg [as=column9:9]
+      │         │    └── column9:9
+      │         └── first-agg [as=column11:11]
+      │              └── column11:11
       └── aggregations
-           ├── first-agg [as=column1:9]
-           │    └── column1:9
-           └── first-agg [as=column2:10]
-                └── column2:10
+           ├── first-agg [as=column9:9]
+           │    └── column9:9
+           └── first-agg [as=column10:10]
+                └── column10:10
 
 # ------------------------------------------------------------------------------
 # Test excluded columns.
@@ -1478,31 +1478,31 @@ insert checks
  ├── columns: <none>
  ├── arbiter indexes: checks_pkey
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
+ │    ├── column9:9 => a:1
+ │    ├── column10:10 => b:2
  │    ├── c_default:11 => c:3
  │    └── d_comp:12 => d:4
  ├── check columns: check1:19 check2:20
  └── project
-      ├── columns: check1:19 check2:20!null column1:9!null column2:10!null c_default:11 d_comp:12
+      ├── columns: check1:19 check2:20!null column9:9!null column10:10!null c_default:11 d_comp:12
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null c_default:11 d_comp:12
-      │    ├── grouping columns: column1:9!null
+      │    ├── columns: column9:9!null column10:10!null c_default:11 d_comp:12
+      │    ├── grouping columns: column9:9!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:9!null column2:10!null c_default:11 d_comp:12
+      │    │    ├── columns: column9:9!null column10:10!null c_default:11 d_comp:12
       │    │    ├── project
-      │    │    │    ├── columns: d_comp:12 column1:9!null column2:10!null c_default:11
+      │    │    │    ├── columns: d_comp:12 column9:9!null column10:10!null c_default:11
       │    │    │    ├── project
-      │    │    │    │    ├── columns: c_default:11 column1:9!null column2:10!null
+      │    │    │    │    ├── columns: c_default:11 column9:9!null column10:10!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null
+      │    │    │    │    │    ├── columns: column9:9!null column10:10!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
       │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
+      │    │    │    │    │         ├── assignment-cast: INT8 [as=column9:9]
       │    │    │    │    │         │    └── column1:7
-      │    │    │    │    │         └── assignment-cast: INT8 [as=column2:10]
+      │    │    │    │    │         └── assignment-cast: INT8 [as=column10:10]
       │    │    │    │    │              └── column2:8
       │    │    │    │    └── projections
       │    │    │    │         └── NULL::INT8 [as=c_default:11]
@@ -1516,17 +1516,17 @@ insert checks
       │    │    │         └── d:16
       │    │    │              └── c:15 + 1
       │    │    └── filters
-      │    │         └── column1:9 = a:13
+      │    │         └── column9:9 = a:13
       │    └── aggregations
-      │         ├── first-agg [as=column2:10]
-      │         │    └── column2:10
+      │         ├── first-agg [as=column10:10]
+      │         │    └── column10:10
       │         ├── first-agg [as=c_default:11]
       │         │    └── c_default:11
       │         └── first-agg [as=d_comp:12]
       │              └── d_comp:12
       └── projections
-           ├── column2:10 < d_comp:12 [as=check1:19]
-           └── column1:9 > 0 [as=check2:20]
+           ├── column10:10 < d_comp:12 [as=check1:19]
+           └── column9:9 > 0 [as=check2:20]
 
 # UPSERT
 build
