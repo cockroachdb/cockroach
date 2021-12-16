@@ -98,7 +98,7 @@ func MakeRecord(
 	metaType MetaType,
 ) *ptpb.Record {
 	return &ptpb.Record{
-		ID:        recordID,
+		ID:        recordID.GetBytesMut(),
 		Timestamp: tsToProtect,
 		Mode:      ptpb.PROTECT_AFTER,
 		MetaType:  metaTypes[metaType],

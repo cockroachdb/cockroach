@@ -87,7 +87,7 @@ func makeVerificationBatch(r *ptpb.Record, aliveAt hlc.Timestamp) kv.Batch {
 		var req roachpb.AdminVerifyProtectedTimestampRequest
 		req.RecordAliveAt = aliveAt
 		req.Protected = r.Timestamp
-		req.RecordID = r.ID
+		req.RecordID = r.ID.GetUUID()
 		req.Key = s.Key
 		req.EndKey = s.EndKey
 		b.AddRawRequest(&req)

@@ -78,7 +78,7 @@ func TestVerifier(t *testing.T) {
 			spans[i] = makeTableSpan(tid)
 		}
 		r := ptpb.Record{
-			ID:        uuid.MakeV4(),
+			ID:        uuid.MakeV4().GetBytes(),
 			Timestamp: s.Clock().Now(),
 			Mode:      ptpb.PROTECT_AFTER,
 			Spans:     spans,
@@ -120,9 +120,9 @@ func TestVerifier(t *testing.T) {
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.Regexp(t, "boom", ptv.Verify(ctx, r.ID).Error())
-				ensureVerified(t, r.ID, false)
-				release(t, r.ID)
+				require.Regexp(t, "boom", ptv.Verify(ctx, r.ID.GetUUID()).Error())
+				ensureVerified(t, r.ID.GetUUID(), false)
+				release(t, r.ID.GetUUID())
 			},
 		},
 		{
@@ -148,9 +148,9 @@ func TestVerifier(t *testing.T) {
 				}))
 				require.Regexp(t, "protected ts verification error: failed to verify protection.*\n"+
 					"range ID: 42, range span: /Table/42 - /Table/43",
-					ptv.Verify(ctx, r.ID).Error())
-				ensureVerified(t, r.ID, false)
-				release(t, r.ID)
+					ptv.Verify(ctx, r.ID.GetUUID()).Error())
+				ensureVerified(t, r.ID.GetUUID(), false)
+				release(t, r.ID.GetUUID())
 			},
 		},
 		{
@@ -187,9 +187,9 @@ func TestVerifier(t *testing.T) {
 					"range ID: 42, "+
 					"range span: /Table/42 - /Table/43: foo\nrange ID: 12, "+
 					"range span: /Table/12 - /Table/13: bar",
-					ptv.Verify(ctx, r.ID).Error())
-				ensureVerified(t, r.ID, false)
-				release(t, r.ID)
+					ptv.Verify(ctx, r.ID.GetUUID()).Error())
+				ensureVerified(t, r.ID.GetUUID(), false)
+				release(t, r.ID.GetUUID())
 			},
 		},
 		{
@@ -216,9 +216,9 @@ func TestVerifier(t *testing.T) {
 				}))
 				require.Regexp(t, "protected ts verification error: failed to verify protection."+
 					"*\nrange ID: 42, range span: /Table/42 - /Table/43",
-					ptv.Verify(ctx, r.ID).Error())
-				ensureVerified(t, r.ID, false)
-				release(t, r.ID)
+					ptv.Verify(ctx, r.ID.GetUUID()).Error())
+				ensureVerified(t, r.ID.GetUUID(), false)
+				release(t, r.ID.GetUUID())
 			},
 		},
 		{
@@ -236,8 +236,8 @@ func TestVerifier(t *testing.T) {
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.NoError(t, ptv.Verify(ctx, r.ID))
-				ensureVerified(t, r.ID, true)
+				require.NoError(t, ptv.Verify(ctx, r.ID.GetUUID()))
+				ensureVerified(t, r.ID.GetUUID(), true)
 				// Show that we don't send again once we've already verified.
 				sawVerification := false
 				senderFunc.Store(kv.SenderFunc(func(
@@ -248,9 +248,9 @@ func TestVerifier(t *testing.T) {
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.NoError(t, ptv.Verify(ctx, r.ID))
+				require.NoError(t, ptv.Verify(ctx, r.ID.GetUUID()))
 				require.False(t, sawVerification)
-				release(t, r.ID)
+				release(t, r.ID.GetUUID())
 			},
 		},
 	} {

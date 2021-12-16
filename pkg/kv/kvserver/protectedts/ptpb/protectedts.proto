@@ -90,7 +90,7 @@ message Metadata {
 message Record {
 
   // ID uniquely identifies this row.
-  bytes id = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", (gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  bytes id = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.Bytes", (gogoproto.customname) = "ID"];
 
   // Timestamp is the timestamp which is protected.
   util.hlc.Timestamp timestamp = 2  [(gogoproto.nullable) = false];
