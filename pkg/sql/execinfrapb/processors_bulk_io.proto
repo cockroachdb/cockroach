@@ -255,22 +255,33 @@ message SplitAndScatterSpec {
   repeated TableRekey rekeys = 2 [(gogoproto.nullable) = false];
 }
 
-// FileCompression list of the compression codecs which are currently
-// supported for CSVWriter spec
+// FileCompression is a list of the compression codecs which are currently
+// supported for Exporter spec.
 enum FileCompression {
   None = 0;
   Gzip = 1;
+  Snappy = 2; // Only available for Parquet.
 }
 
-// CSVWriterSpec is the specification for a processor that consumes rows and
-// writes them to CSV files at uri. It outputs a row per file written with
+// FileFormat is list of file formats which are currently
+// supported for the Exporter spec.
+/*enum FileFormat {
+  Csv = 0;
+  Parquet = 1;
+}*/
+
+// ExporterSpec is the specification for a processor that consumes rows and
+// writes them to Parquet or CSV files at uri. It outputs a row per file written with
 // the file name, row count and byte size.
 message CSVWriterSpec {
   // destination as a cloud.ExternalStorage URI pointing to an export store
   // location (directory).
   optional string destination = 1 [(gogoproto.nullable) = false];
   optional string name_pattern = 2 [(gogoproto.nullable) = false];
-  optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
+  //optional FileFormat file_format = 10 [(gogoproto.nullable) = false];
+  optional roachpb.CSVOptions csv_options = 3 [(gogoproto.nullable) = true];
+  optional roachpb.ParquetOptions parquet_options = 8 [(gogoproto.nullable) = true];
+
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
   // chunk_size is the target byte size per file.
@@ -282,11 +293,15 @@ message CSVWriterSpec {
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+
+  // col_names specifies the logical column names for the exported parquet file.
+  repeated string col_names = 9 ;
 }
 
 // ParquetWriterSpec is the specification for a processor that consumes rows and
 // writes them to Parquet files at uri. It outputs a row per file written with
 // the file name, row count and byte size.
+// DEPRECATE
 message ParquetWriterSpec {
   // destination as a cloud.ExternalStorage URI pointing to an export store
   // location (directory).
@@ -308,9 +323,6 @@ message ParquetWriterSpec {
 
   // col_names specifies the logical column names for the exported parquet file.
   repeated string col_names = 8 ;
-
-  // col_nullability specifies which columns allow null values in the exported parquet file.
-  repeated bool col_nullability = 9 ;
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

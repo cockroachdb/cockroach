@@ -3937,29 +3937,23 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	}
 
 	var core execinfrapb.ProcessorCoreUnion
+	core.CSVWriter = &execinfrapb.CSVWriterSpec{
+		Destination:      n.destination,
+		NamePattern:      n.fileNamePattern,
+		ChunkRows:        int64(n.chunkRows),
+		ChunkSize:        n.chunkSize,
+		CompressionCodec: n.fileCompression,
+		ColNames:         n.colNames,
+		UserProto:        planCtx.planner.User().EncodeProto(),
+	}
+	switch {
+	case n.csvOpts != nil:
+		core.CSVWriter.CsvOptions = n.csvOpts
 
-	if n.csvOpts != nil {
-		core.CSVWriter = &execinfrapb.CSVWriterSpec{
-			Destination:      n.destination,
-			NamePattern:      n.fileNamePattern,
-			Options:          *n.csvOpts,
-			ChunkRows:        int64(n.chunkRows),
-			ChunkSize:        n.chunkSize,
-			CompressionCodec: n.fileCompression,
-			UserProto:        planCtx.planner.User().EncodeProto(),
-		}
-	} else if n.parquetOpts != nil {
-		core.ParquetWriter = &execinfrapb.ParquetWriterSpec{
-			Destination:    n.destination,
-			NamePattern:    n.fileNamePattern,
-			Options:        *n.parquetOpts,
-			ChunkRows:      int64(n.chunkRows),
-			ChunkSize:      n.chunkSize,
-			UserProto:      planCtx.planner.User().EncodeProto(),
-			ColNames:       n.colNames,
-			ColNullability: n.colNullability,
-		}
-	} else {
+	case n.parquetOpts != nil:
+		core.CSVWriter.ParquetOptions = n.parquetOpts
+
+	default:
 		return nil, errors.AssertionFailedf("parquetOpts and csvOpts are both empty. " +
 			"One must be not nil")
 	}

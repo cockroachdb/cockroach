@@ -65,6 +65,8 @@ message CSVOptions {
 }
 
 message ParquetOptions {
+  // col_nullability specifies which columns allow null values in the exported parquet file.
+  repeated bool col_nullability = 1 ;
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.

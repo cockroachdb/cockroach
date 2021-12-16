@@ -119,8 +119,8 @@ func newCSVExporter(sp execinfrapb.CSVWriterSpec) *csvExporter {
 			}
 		}
 	}
-	if sp.Options.Comma != 0 {
-		exporter.csvWriter.Comma = sp.Options.Comma
+	if sp.CsvOptions.Comma != 0 {
+		exporter.csvWriter.Comma = sp.CsvOptions.Comma
 	}
 	return exporter
 }
@@ -186,8 +186,8 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		writer := newCSVExporter(sp.spec)
 
 		var nullsAs string
-		if sp.spec.Options.NullEncoding != nil {
-			nullsAs = *sp.spec.Options.NullEncoding
+		if sp.spec.CsvOptions.NullEncoding != nil {
+			nullsAs = *sp.spec.CsvOptions.NullEncoding
 		}
 		f := tree.NewFmtCtx(tree.FmtExport)
 		defer f.Close()
@@ -220,7 +220,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 				for i, ed := range row {
 					if ed.IsNull() {
-						if sp.spec.Options.NullEncoding != nil {
+						if sp.spec.CsvOptions.NullEncoding != nil {
 							csvRow[i] = nullsAs
 							continue
 						} else {

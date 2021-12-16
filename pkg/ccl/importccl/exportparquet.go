@@ -40,6 +40,7 @@ type parquetExporter struct {
 	parquetWriter  *goparquet.FileWriter
 	schema         *parquetschema.SchemaDefinition
 	parquetColumns []parquetColumn
+	compression    execinfrapb.FileCompression
 }
 
 // Write appends a record to a parquet file.
@@ -65,7 +66,7 @@ func (c *parquetExporter) Bytes() []byte {
 
 func (c *parquetExporter) ResetBuffer() {
 	c.buf.Reset()
-	c.parquetWriter = buildFileWriter(c.buf, c.schema)
+	c.parquetWriter = buildFileWriter(c.buf, c.schema, c.compression)
 }
 
 // Len returns length of the buffer with content.
@@ -73,22 +74,27 @@ func (c *parquetExporter) Len() int {
 	return c.buf.Len()
 }
 
-func (c *parquetExporter) FileName(spec execinfrapb.ParquetWriterSpec, part string) string {
+func (c *parquetExporter) FileName(spec execinfrapb.CSVWriterSpec, part string) string {
 	pattern := exportParquetFilePatternDefault
 	if spec.NamePattern != "" {
 		pattern = spec.NamePattern
 	}
 
 	fileName := strings.Replace(pattern, exportFilePatternPart, part, -1)
-
+	suffix := ""
+	switch spec.CompressionCodec {
+	case execinfrapb.FileCompression_Gzip:
+		suffix = ".gz"
+	case execinfrapb.FileCompression_Snappy:
+		suffix = ".snappy"
+	}
+	fileName += suffix
 	return fileName
 }
 
 // newParquetExporter creates a new parquet file writer, defines the parquet
 // file schema, and initializes a new parquetExporter.
-func newParquetExporter(
-	sp execinfrapb.ParquetWriterSpec, typs []*types.T,
-) (*parquetExporter, error) {
+func newParquetExporter(sp execinfrapb.CSVWriterSpec, typs []*types.T) (*parquetExporter, error) {
 
 	var exporter *parquetExporter
 
@@ -103,6 +109,7 @@ func newParquetExporter(
 		buf:            buf,
 		schema:         schema,
 		parquetColumns: parquetColumns,
+		compression:    sp.CompressionCodec,
 	}
 	return exporter, nil
 }
@@ -120,10 +127,10 @@ type parquetColumn struct {
 }
 
 // newParquetColumns creates a list of parquet columns, given the input relation's column types.
-func newParquetColumns(typs []*types.T, sp execinfrapb.ParquetWriterSpec) ([]parquetColumn, error) {
+func newParquetColumns(typs []*types.T, sp execinfrapb.CSVWriterSpec) ([]parquetColumn, error) {
 	parquetColumns := make([]parquetColumn, len(typs))
 	for i := 0; i < len(typs); i++ {
-		parquetCol, err := newParquetColumn(typs[i], sp.ColNames[i], sp.ColNullability[i])
+		parquetCol, err := newParquetColumn(typs[i], sp.ColNames[i], sp.ParquetOptions.ColNullability[i])
 		if err != nil {
 			return nil, err
 		}
@@ -290,11 +297,21 @@ func newParquetSchema(parquetFields []parquetColumn) *parquetschema.SchemaDefini
 }
 
 func buildFileWriter(
-	buf *bytes.Buffer, schema *parquetschema.SchemaDefinition,
+	buf *bytes.Buffer,
+	schema *parquetschema.SchemaDefinition,
+	compression execinfrapb.FileCompression,
 ) *goparquet.FileWriter {
+	var parquetCompression parquet.CompressionCodec
+	switch compression {
+	case execinfrapb.FileCompression_Gzip:
+		parquetCompression = parquet.CompressionCodec_GZIP
+	case execinfrapb.FileCompression_Snappy:
+		parquetCompression = parquet.CompressionCodec_SNAPPY
+	default:
+		parquetCompression = parquet.CompressionCodec_UNCOMPRESSED
+	}
 	pw := goparquet.NewFileWriter(buf,
-		// TODO(MB): allow for user defined compression
-		goparquet.WithCompressionCodec(parquet.CompressionCodec_SNAPPY),
+		goparquet.WithCompressionCodec(parquetCompression),
 		goparquet.WithSchemaDefinition(schema),
 	)
 	return pw
@@ -303,7 +320,7 @@ func buildFileWriter(
 func newParquetWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec execinfrapb.ParquetWriterSpec,
+	spec execinfrapb.CSVWriterSpec,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
@@ -324,7 +341,7 @@ func newParquetWriterProcessor(
 type parquetWriterProcessor struct {
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
-	spec        execinfrapb.ParquetWriterSpec
+	spec        execinfrapb.CSVWriterSpec
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
