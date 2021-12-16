@@ -70,10 +70,11 @@ func TestGRPCInterceptors(t *testing.T) {
 		return types.MarshalAny(&recs[0])
 	}
 
+	bgCtx := context.Background()
 	s := stop.NewStopper()
-	defer s.Stop(context.Background())
-
+	defer s.Stop(bgCtx)
 	tr := tracing.NewTracer()
+
 	srv := grpc.NewServer(
 		grpc.UnaryInterceptor(tracing.ServerInterceptor(tr)),
 		grpc.StreamInterceptor(tracing.StreamServerInterceptor(tr)),
@@ -116,12 +117,12 @@ func TestGRPCInterceptors(t *testing.T) {
 	defer srv.GracefulStop()
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	require.NoError(t, err)
-	require.NoError(t, s.RunAsyncTask(context.Background(), "serve", func(ctx context.Context) {
+	require.NoError(t, s.RunAsyncTask(bgCtx, "serve", func(ctx context.Context) {
 		if err := srv.Serve(ln); err != nil {
 			t.Error(err)
 		}
 	}))
-	conn, err := grpc.DialContext(context.Background(), ln.Addr().String(),
+	conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
 		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
 			func(_ context.Context) bool { return false }, /* compatibilityMode */
@@ -189,7 +190,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithRecording(tracing.RecordingVerbose))
+			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracing.RecordingVerbose))
 			recAny, err := tc.do(ctx)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
