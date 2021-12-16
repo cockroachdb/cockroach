@@ -8257,39 +8257,39 @@ FROM
     abc AS x JOIN [INSERT INTO abc (a) SELECT 1 FROM abc RETURNING 1] JOIN abc AS y ON true ON false
 ----
 with &1
- ├── columns: bool:31!null
+ ├── columns: bool:30!null
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(31)
+ ├── fd: ()-->(30)
  ├── project
- │    ├── columns: "?column?":23!null
+ │    ├── columns: "?column?":22!null
  │    ├── volatile, mutations
- │    ├── fd: ()-->(23)
+ │    ├── fd: ()-->(22)
  │    ├── insert abc
  │    │    ├── columns: abc.rowid:10!null
  │    │    ├── insert-mapping:
- │    │    │    ├── column20:20 => abc.a:7
- │    │    │    ├── b_default:21 => abc.b:8
- │    │    │    ├── b_default:21 => abc.c:9
- │    │    │    └── rowid_default:22 => abc.rowid:10
+ │    │    │    ├── "?column?":19 => abc.a:7
+ │    │    │    ├── b_default:20 => abc.b:8
+ │    │    │    ├── b_default:20 => abc.c:9
+ │    │    │    └── rowid_default:21 => abc.rowid:10
  │    │    ├── volatile, mutations
  │    │    └── project
- │    │         ├── columns: b_default:21 rowid_default:22 column20:20!null
+ │    │         ├── columns: b_default:20 rowid_default:21 "?column?":19!null
  │    │         ├── volatile
- │    │         ├── fd: ()-->(20,21)
+ │    │         ├── fd: ()-->(19,20)
  │    │         ├── scan abc
  │    │         └── projections
- │    │              ├── CAST(NULL AS INT8) [as=b_default:21]
- │    │              ├── unique_rowid() [as=rowid_default:22, volatile]
- │    │              └── 1 [as=column20:20]
+ │    │              ├── CAST(NULL AS INT8) [as=b_default:20]
+ │    │              ├── unique_rowid() [as=rowid_default:21, volatile]
+ │    │              └── 1 [as="?column?":19]
  │    └── projections
- │         └── 1 [as="?column?":23]
+ │         └── 1 [as="?column?":22]
  └── values
-      ├── columns: bool:31!null
+      ├── columns: bool:30!null
       ├── cardinality: [0 - 0]
       ├── key: ()
-      └── fd: ()-->(31)
+      └── fd: ()-->(30)
 
 opt join-limit=3
 SELECT 1 FROM ((VALUES (1), (1)) JOIN ((VALUES (1), (1), (1)) JOIN (VALUES (1), (1), (1), (1)) ON true) ON true)

@@ -660,27 +660,24 @@ with &1 (t)
       └── insert x
            ├── columns: x.a:6 b:7 rowid:8!null
            ├── insert-mapping:
-           │    ├── column13:13 => x.a:6
-           │    ├── b_default:14 => b:7
-           │    └── rowid_default:15 => rowid:8
+           │    ├── "?column?":12 => x.a:6
+           │    ├── b_default:13 => b:7
+           │    └── rowid_default:14 => rowid:8
            └── project
-                ├── columns: b_default:14 rowid_default:15 column13:13
+                ├── columns: b_default:13 rowid_default:14 "?column?":12
                 ├── project
-                │    ├── columns: column13:13
-                │    ├── project
-                │    │    ├── columns: "?column?":12
-                │    │    ├── with-scan &1 (t)
-                │    │    │    ├── columns: a:11
-                │    │    │    └── mapping:
-                │    │    │         └──  x.a:1 => a:11
-                │    │    └── projections
-                │    │         └── a:11 + 20 [as="?column?":12]
-                │    └── projections
-                │         └── assignment-cast: INT8 [as=column13:13]
-                │              └── "?column?":12
+                │    ├── columns: "?column?":12
+                │    └── project
+                │         ├── columns: "?column?":12
+                │         ├── with-scan &1 (t)
+                │         │    ├── columns: a:11
+                │         │    └── mapping:
+                │         │         └──  x.a:1 => a:11
+                │         └── projections
+                │              └── a:11 + 20 [as="?column?":12]
                 └── projections
-                     ├── NULL::INT8 [as=b_default:14]
-                     └── unique_rowid() [as=rowid_default:15]
+                     ├── NULL::INT8 [as=b_default:13]
+                     └── unique_rowid() [as=rowid_default:14]
 
 build
 WITH t AS (SELECT a FROM x) UPDATE x SET a = (SELECT * FROM t) RETURNING *
@@ -1440,37 +1437,32 @@ WITH RECURSIVE cte(x, y) AS (
 ) SELECT * FROM cte;
 ----
 with &2
- ├── columns: x:21 y:22
+ ├── columns: x:19 y:20
  ├── project
  │    ├── columns: x.a:7!null x.b:8!null
  │    └── insert x
  │         ├── columns: x.a:7!null x.b:8!null rowid:9!null
  │         ├── insert-mapping:
- │         │    ├── column14:14 => x.a:7
- │         │    ├── column15:15 => x.b:8
- │         │    └── rowid_default:16 => rowid:9
+ │         │    ├── column1:12 => x.a:7
+ │         │    ├── column2:13 => x.b:8
+ │         │    └── rowid_default:14 => rowid:9
  │         └── project
- │              ├── columns: rowid_default:16 column14:14!null column15:15!null
+ │              ├── columns: rowid_default:14 column1:12!null column2:13!null
  │              ├── project
- │              │    ├── columns: column14:14!null column15:15!null
- │              │    ├── values
- │              │    │    ├── columns: column1:12!null column2:13!null
- │              │    │    ├── (1, 1)
- │              │    │    └── (2, 2)
- │              │    └── projections
- │              │         ├── assignment-cast: INT8 [as=column14:14]
- │              │         │    └── column1:12
- │              │         └── assignment-cast: INT8 [as=column15:15]
- │              │              └── column2:13
+ │              │    ├── columns: column1:12!null column2:13!null
+ │              │    └── values
+ │              │         ├── columns: column1:12!null column2:13!null
+ │              │         ├── (1, 1)
+ │              │         └── (2, 2)
  │              └── projections
- │                   └── unique_rowid() [as=rowid_default:16]
+ │                   └── unique_rowid() [as=rowid_default:14]
  └── with &3 (cte)
-      ├── columns: x:21 y:22
+      ├── columns: x:19 y:20
       ├── recursive-c-t-e
       │    ├── columns: x:3 y:4
       │    ├── working table binding: &1
       │    ├── initial columns: "?column?":1 "?column?":2
-      │    ├── recursive columns: "?column?":19 "?column?":20
+      │    ├── recursive columns: "?column?":17 "?column?":18
       │    ├── fake-rel
       │    │    └── columns: x:3 y:4
       │    ├── project
@@ -1481,28 +1473,28 @@ with &2
       │    │         ├── 1 [as="?column?":1]
       │    │         └── 2 [as="?column?":2]
       │    └── project
-      │         ├── columns: "?column?":19 "?column?":20
+      │         ├── columns: "?column?":17 "?column?":18
       │         ├── inner-join (cross)
-      │         │    ├── columns: x:5 y:6 a:17!null b:18!null
+      │         │    ├── columns: x:5 y:6 a:15!null b:16!null
       │         │    ├── with-scan &1 (cte)
       │         │    │    ├── columns: x:5 y:6
       │         │    │    └── mapping:
       │         │    │         ├──  x:3 => x:5
       │         │    │         └──  y:4 => y:6
       │         │    ├── with-scan &2
-      │         │    │    ├── columns: a:17!null b:18!null
+      │         │    │    ├── columns: a:15!null b:16!null
       │         │    │    └── mapping:
-      │         │    │         ├──  x.a:7 => a:17
-      │         │    │         └──  x.b:8 => b:18
+      │         │    │         ├──  x.a:7 => a:15
+      │         │    │         └──  x.b:8 => b:16
       │         │    └── filters (true)
       │         └── projections
-      │              ├── a:17 + x:5 [as="?column?":19]
-      │              └── b:18 + y:6 [as="?column?":20]
+      │              ├── a:15 + x:5 [as="?column?":17]
+      │              └── b:16 + y:6 [as="?column?":18]
       └── with-scan &3 (cte)
-           ├── columns: x:21 y:22
+           ├── columns: x:19 y:20
            └── mapping:
-                ├──  x:3 => x:21
-                └──  y:4 => y:22
+                ├──  x:3 => x:19
+                └──  y:4 => y:20
 
 # Veryify use of WITH inside the initial statement.
 build
@@ -1671,32 +1663,29 @@ build
 EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 explain
- ├── columns: info:9
+ ├── columns: info:8
  └── with &1 (foo)
-      ├── columns: a:8!null
+      ├── columns: a:7!null
       ├── project
       │    ├── columns: y.a:1!null
       │    └── insert y
       │         ├── columns: y.a:1!null rowid:2!null
       │         ├── insert-mapping:
-      │         │    ├── column6:6 => y.a:1
-      │         │    └── rowid_default:7 => rowid:2
+      │         │    ├── column1:5 => y.a:1
+      │         │    └── rowid_default:6 => rowid:2
       │         └── project
-      │              ├── columns: rowid_default:7 column6:6!null
+      │              ├── columns: rowid_default:6 column1:5!null
       │              ├── project
-      │              │    ├── columns: column6:6!null
-      │              │    ├── values
-      │              │    │    ├── columns: column1:5!null
-      │              │    │    └── (1,)
-      │              │    └── projections
-      │              │         └── assignment-cast: INT8 [as=column6:6]
-      │              │              └── column1:5
+      │              │    ├── columns: column1:5!null
+      │              │    └── values
+      │              │         ├── columns: column1:5!null
+      │              │         └── (1,)
       │              └── projections
-      │                   └── unique_rowid() [as=rowid_default:7]
+      │                   └── unique_rowid() [as=rowid_default:6]
       └── with-scan &1 (foo)
-           ├── columns: a:8!null
+           ├── columns: a:7!null
            └── mapping:
-                └──  y.a:1 => a:8
+                └──  y.a:1 => a:7
 
 exec-ddl
 CREATE TABLE a(x INT);
@@ -1715,25 +1704,22 @@ with &1 (b)
  └── insert a
       ├── columns: <none>
       ├── insert-mapping:
-      │    ├── column8:8 => x:1
-      │    └── rowid_default:9 => rowid:2
+      │    ├── w:7 => x:1
+      │    └── rowid_default:8 => rowid:2
       └── project
-           ├── columns: rowid_default:9 column8:8!null
+           ├── columns: rowid_default:8 w:7!null
            ├── project
-           │    ├── columns: column8:8!null
-           │    ├── project
-           │    │    ├── columns: w:7!null
-           │    │    ├── with-scan &1 (b)
-           │    │    │    ├── columns: z:6!null
-           │    │    │    └── mapping:
-           │    │    │         └──  column1:5 => z:6
-           │    │    └── projections
-           │    │         └── z:6 + 1 [as=w:7]
-           │    └── projections
-           │         └── assignment-cast: INT8 [as=column8:8]
-           │              └── w:7
+           │    ├── columns: w:7!null
+           │    └── project
+           │         ├── columns: w:7!null
+           │         ├── with-scan &1 (b)
+           │         │    ├── columns: z:6!null
+           │         │    └── mapping:
+           │         │         └──  column1:5 => z:6
+           │         └── projections
+           │              └── z:6 + 1 [as=w:7]
            └── projections
-                └── unique_rowid() [as=rowid_default:9]
+                └── unique_rowid() [as=rowid_default:8]
 
 # Subquery as a whole is correlated, but the WITH is not.
 build

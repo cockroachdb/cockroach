@@ -44,18 +44,13 @@ INSERT INTO kj VALUES (1, '{"a": 2}')
 insert kj
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column8:8 => k:1
- │    └── column9:9 => j:2
+ │    ├── column1:6 => k:1
+ │    └── column2:7 => j:2
  └── project
-      ├── columns: column8:8!null column9:9!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null
-      │    └── (1, '{"a": 2}')
-      └── projections
-           ├── assignment-cast: INT8 [as=column8:8]
-           │    └── column1:6
-           └── assignment-cast: JSONB [as=column9:9]
-                └── column2:7
+      ├── columns: column1:6!null column2:7!null
+      └── values
+           ├── columns: column1:6!null column2:7!null
+           └── (1, '{"a": 2}')
 
 build
 UPSERT INTO kj VALUES (1, '{"a": 2}')
@@ -97,30 +92,25 @@ insert kj
  ├── columns: <none>
  ├── arbiter indexes: kj_pkey
  ├── insert-mapping:
- │    ├── column8:8 => k:1
- │    └── column9:9 => j:2
+ │    ├── column1:6 => k:1
+ │    └── column2:7 => j:2
  └── upsert-distinct-on
-      ├── columns: column8:8!null column9:9!null
-      ├── grouping columns: column8:8!null
+      ├── columns: column1:6!null column2:7!null
+      ├── grouping columns: column1:6!null
       ├── anti-join (hash)
-      │    ├── columns: column8:8!null column9:9!null
+      │    ├── columns: column1:6!null column2:7!null
       │    ├── project
-      │    │    ├── columns: column8:8!null column9:9!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:6!null column2:7!null
-      │    │    │    └── (1, '{"a": 2}')
-      │    │    └── projections
-      │    │         ├── assignment-cast: INT8 [as=column8:8]
-      │    │         │    └── column1:6
-      │    │         └── assignment-cast: JSONB [as=column9:9]
-      │    │              └── column2:7
+      │    │    ├── columns: column1:6!null column2:7!null
+      │    │    └── values
+      │    │         ├── columns: column1:6!null column2:7!null
+      │    │         └── (1, '{"a": 2}')
       │    ├── scan kj
-      │    │    └── columns: k:10!null j:11
+      │    │    └── columns: k:8!null j:9
       │    └── filters
-      │         └── column8:8 = k:10
+      │         └── column1:6 = k:8
       └── aggregations
-           └── first-agg [as=column9:9]
-                └── column9:9
+           └── first-agg [as=column2:7]
+                └── column2:7
 
 build
 INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO UPDATE SET j = '{"a": 3}'
