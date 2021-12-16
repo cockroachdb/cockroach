@@ -42,7 +42,7 @@ const ClearStats = (props: clearStatsProps): React.ReactElement => {
   const toolTipText = `${statsType} statistics are aggregated once an hour by default and organized by the start time. 
   Statistics between two hourly intervals belong to the nearest hour rounded down. 
   For example, a ${statsType} execution ending at 1:50 would have its statistics aggregated in the 1:00 interval 
-  start time. Clicking ‘clear SQL stats’ will reset SQL stats on the Statements and Transactions pages and 
+  start time. Clicking ‘reset SQL stats’ will reset SQL stats on the Statements and Transactions pages and 
   crdb_internal tables.`;
   return (
     <Tooltip content={toolTipText} style="tableTitle">
@@ -50,7 +50,7 @@ const ClearStats = (props: clearStatsProps): React.ReactElement => {
         className={cx("action", "tooltip-info", "separator")}
         onClick={props.resetSQLStats}
       >
-        clear SQL stats
+        reset SQL stats
       </a>
     </Tooltip>
   );
