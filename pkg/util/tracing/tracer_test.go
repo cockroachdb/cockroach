@@ -545,13 +545,16 @@ func TestSpanRecordingFinished(t *testing.T) {
 	require.Len(t, spanOpsWithFinished, 0)
 }
 
+// Test that the noop span can be used after finish.
 func TestNoopSpanFinish(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
-	sp := tr.StartSpan("noop")
-	require.Equal(t, tr.noopSpan, sp)
-	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
-	sp.Finish()
-	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+	sp1 := tr.StartSpan("noop")
+	sp2 := tr.StartSpan("noop")
+	require.Equal(t, tr.noopSpan, sp1)
+	require.Equal(t, tr.noopSpan, sp2)
+	sp1.Finish()
+	sp2.Record("dummy")
+	sp2.Finish()
 }
 
 // Test that a span constructed with a no-op span behaves like a root span - it
