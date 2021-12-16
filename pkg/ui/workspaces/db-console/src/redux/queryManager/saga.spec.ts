@@ -143,7 +143,7 @@ describe("Query Management Saga", function() {
         let queryCalled = 0;
         const selfStopQuery = {
           id: "selfStopQuery",
-          refreshInterval: moment.duration(50),
+          refreshInterval: moment.duration(5),
           querySaga: function*(): IterableIterator<void> {
             queryCalled++;
             if (queryCalled > 3) {
@@ -156,9 +156,9 @@ describe("Query Management Saga", function() {
           .dispatch(autoRefresh(selfStopQuery))
           .dispatch(autoRefresh(selfStopQuery))
           .dispatch(autoRefresh(selfStopQuery))
-          .silentRun(250)
+          .silentRun()
           .then(() => {
-            assert.equal(queryCalled, 5);
+            assert.equal(queryCalled, 6);
           });
       });
       it("Uses retry delay when errors are encountered", function() {
