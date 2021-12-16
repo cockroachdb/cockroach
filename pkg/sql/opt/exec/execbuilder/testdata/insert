@@ -336,7 +336,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON select_t (v) STORING (x);
+   SQL command: CREATE INDEX ON select_t (v DESC) STORING (x);
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query T

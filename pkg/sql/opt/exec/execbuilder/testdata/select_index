@@ -854,7 +854,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON abz (c);
+   SQL command: CREATE INDEX ON abz (c DESC);
 
 # Issue #14426: verify we don't have an internal filter that contains "a IN ()"
 # (which causes an error in DistSQL due to expression serialization).
@@ -927,8 +927,8 @@ vectorized: true
       limit: 20
 ·
 index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX test2@test2_k_key; CREATE INDEX ON test2 (k) STORING (v);
+1. type: index creation
+   SQL command: CREATE INDEX ON test2 (k DESC) STORING (v);
 
 # The result output of this test requires that vectorized execution
 # is not used, so it has been moved to select_index_vectorize_off.
@@ -1490,8 +1490,8 @@ vectorized: true
           spans: FULL SCAN
 ·
 index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
+1. type: index creation
+   SQL command: CREATE INDEX ON noncover (c DESC) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
