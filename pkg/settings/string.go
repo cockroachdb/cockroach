@@ -25,7 +25,7 @@ type StringSetting struct {
 	common
 }
 
-var _ extendedSetting = &StringSetting{}
+var _ internalSetting = &StringSetting{}
 
 func (s *StringSetting) String(sv *Values) string {
 	return s.Get(sv)

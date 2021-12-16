@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -248,9 +247,7 @@ func (s *Stopper) Recover(ctx context.Context) {
 			s.onPanic(r)
 			return
 		}
-		if sv := settings.TODO(); sv != nil {
-			logcrash.ReportPanic(ctx, sv, r, 1)
-		}
+		logcrash.ReportPanicWithGlobalSettings(ctx, r, 1)
 		panic(r)
 	}
 }

@@ -50,7 +50,7 @@ import (
 type setClusterSettingNode struct {
 	name    string
 	st      *cluster.Settings
-	setting settings.WritableSetting
+	setting settings.NonMaskedSetting
 	// If value is nil, the setting should be reset.
 	value tree.TypedExpr
 	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
@@ -91,7 +91,7 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
-	setting, ok := v.(settings.WritableSetting)
+	setting, ok := v.(settings.NonMaskedSetting)
 	if !ok {
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}

@@ -577,6 +577,8 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderStress(t, "https://github.com/cockroachdb/cockroach/issues/70113")
+
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyRegistry.CloseAllStickyInMemEngines()
 	ctx := context.Background()

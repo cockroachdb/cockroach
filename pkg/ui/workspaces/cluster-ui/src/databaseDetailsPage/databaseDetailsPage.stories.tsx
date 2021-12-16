@@ -21,16 +21,39 @@ import {
 import {
   DatabaseDetailsPage,
   DatabaseDetailsPageProps,
+  ViewMode,
 } from "./databaseDetailsPage";
+
+import * as H from "history";
+const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseDetailsPageProps = {
   loading: true,
   loaded: false,
   name: randomName(),
   tables: [],
+  viewMode: ViewMode.Tables,
+  sortSettingTables: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  sortSettingGrants: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  onSortingTablesChange: () => {},
+  onSortingGrantsChange: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
 };
 
 const withoutData: DatabaseDetailsPageProps = {
@@ -38,9 +61,28 @@ const withoutData: DatabaseDetailsPageProps = {
   loaded: true,
   name: randomName(),
   tables: [],
+  viewMode: ViewMode.Tables,
+  sortSettingTables: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  sortSettingGrants: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  onSortingTablesChange: () => {},
+  onSortingGrantsChange: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
 };
 
 const withData: DatabaseDetailsPageProps = {
@@ -77,9 +119,28 @@ const withData: DatabaseDetailsPageProps = {
       },
     };
   }),
+  viewMode: ViewMode.Tables,
+  sortSettingTables: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  sortSettingGrants: {
+    ascending: false,
+    columnTitle: "name",
+  },
+  onSortingTablesChange: () => {},
+  onSortingGrantsChange: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
 };
 
 storiesOf("Database Details Page", module)
