@@ -395,13 +395,13 @@ INSERT INTO fk_b (b,a) VALUES (1,1)
 insert fk_b
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => b:1
- │    └── column2:8 => fk_b.a:2
+ │    ├── column7:7 => b:1
+ │    └── column8:8 => fk_b.a:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:7!null column2:8!null
+ │    ├── columns: column7:7!null column8:8!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(7,8)
@@ -418,7 +418,7 @@ insert fk_b
                 ├── with-scan &1
                 │    ├── columns: a:9!null
                 │    ├── mapping:
-                │    │    └──  column2:8 => a:9
+                │    │    └──  column8:8 => a:9
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(9)
