@@ -3901,6 +3901,123 @@ func TestTenantID(t *testing.T) {
 
 }
 
+//  TestUninitializedMetric
+//  This test examines the following behaviors:
+//  (1): When a replica is in an uninitialized state, the store containing that replica 
+//       should reflect this in store metric: UninitializedCount
+func TestUninitializedMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+
+	// Create a config with a sticky-in-mem engine so we can restart the server.
+	// We also configure the settings to be as robust as possible to problems
+	// during stressrace as the setup of the rpc connections seems to somehow
+	// fail sometimes when using secure connections.
+	raftConfig := base.RaftConfig{
+		// Prevent failures under stressrace.
+		RangeLeaseRaftElectionTimeoutMultiplier: 10000,
+	}
+	stickySpecTestServerArgs := base.TestServerArgs{
+		RaftConfig: raftConfig,
+		Insecure:   true,
+		StoreSpecs: []base.StoreSpec{
+			{
+				InMemory:               true,
+				StickyInMemoryEngineID: "1",
+			},
+		},
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				StickyEngineRegistry: stickyEngineRegistry,
+			},
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      stickySpecTestServerArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tenant2 := roachpb.MakeTenantID(2)
+	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
+	// Ensure that a range with a tenant prefix has the proper tenant ID.
+	tc.SplitRangeOrFatal(t, tenant2Prefix)
+	t.Run("(1) uninitialized replic is reflected in UninitializedMetric", func(t *testing.T) {
+		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+		sawSnapshot := make(chan struct{}, 1)
+		blockSnapshot := make(chan struct{})
+		tc.AddAndStartServer(t, base.TestServerArgs{
+			RaftConfig: raftConfig,
+			Insecure:   true,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					BeforeSnapshotSSTIngestion: func(
+						snapshot kvserver.IncomingSnapshot,
+						request_type kvserver.SnapshotRequest_Type,
+						strings []string,
+					) error {
+						if snapshot.Desc.RangeID == repl.RangeID {
+							select {
+							case sawSnapshot <- struct{}{}:
+							default:
+							}
+							<-blockSnapshot
+						}
+						return nil
+					},
+				},
+			},
+		})
+
+		// We're going to block the snapshot. We need to retry adding the replica
+		// to the second node as under stressrace, failures can occur due to
+		// networking handshake timeouts.
+		addReplicaErr := make(chan error)
+		addReplica := func() {
+			_, err := tc.AddVoters(tenant2Prefix, tc.Target(1))
+			addReplicaErr <- err
+		}
+		go addReplica()
+		if err := retry.ForDuration(3*time.Minute, func() error {
+			select {
+			case <-sawSnapshot:
+				return nil
+			case err := <-addReplicaErr:
+				go addReplica()
+				return err
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		const forceMetricTick = iota
+		uninitStore := tc.GetFirstStoreFromServer(t, 1)
+
+		// Force the store to compute the replica metrics
+		err := uninitStore.ComputeMetrics(ctx, forceMetricTick)
+		require.NoError(t, err)
+
+		// Blocked snapshot on the second server (1) should realize 1 uninitialized replica.
+		storeMetrics := uninitStore.Metrics()
+		require.Equal(t, int64(1), storeMetrics.UninitializedCount.Value())
+
+		// Unblock snapshot on the second server (1), this should initialize replica.
+		// Again force the store to compute the metrics, increment tick counter (iota)
+		close(blockSnapshot)
+		require.NoError(t, <-addReplicaErr)
+		err = uninitStore.ComputeMetrics(ctx, forceMetricTick)
+		require.NoError(t, err)
+
+		// There should now be no uninitialized replicas in the recorded metrics
+		storeMetrics = uninitStore.Metrics() // now initialized
+		require.Equal(t, int64(0), storeMetrics.UninitializedCount.Value())
+	})
+}
+
 // TestRangeMigration tests the below-raft migration infrastructure. It checks
 // to see that the version recorded as part of the in-memory ReplicaState
 // is up to date, and in-sync with the persisted state. It also checks to see

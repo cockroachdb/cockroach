@@ -888,6 +888,7 @@ export const getNodeStatus = () => {
           "replicas.leaders_not_leaseholders": 0,
           "replicas.leaseholders": 77,
           "replicas.quiescent": 77,
+          "replicas.uninitialized": 0,
           "replicas.reserved": 0,
           "requests.backpressure.split": 0,
           "requests.slow.latch": 0,
