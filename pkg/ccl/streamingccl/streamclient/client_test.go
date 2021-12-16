@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -25,12 +26,14 @@ type testStreamClient struct{}
 var _ Client = testStreamClient{}
 
 // Create implements the Client interface.
-func (sc testStreamClient) Create(ctx context.Context, target roachpb.TenantID) (StreamID, error) {
-	return StreamID(1), nil
+func (sc testStreamClient) Create(
+	ctx context.Context, target roachpb.TenantID,
+) (streaming.StreamID, error) {
+	return streaming.StreamID(1), nil
 }
 
 // Plan implements the Client interface.
-func (sc testStreamClient) Plan(ctx context.Context, ID StreamID) (Topology, error) {
+func (sc testStreamClient) Plan(ctx context.Context, ID streaming.StreamID) (Topology, error) {
 	return Topology([]PartitionInfo{
 		{SrcAddr: streamingccl.PartitionAddress("test://host1")},
 		{SrcAddr: streamingccl.PartitionAddress("test://host2")},
@@ -38,14 +41,21 @@ func (sc testStreamClient) Plan(ctx context.Context, ID StreamID) (Topology, err
 }
 
 // Heartbeat implements the Client interface.
-func (sc testStreamClient) Heartbeat(ctx context.Context, ID StreamID, _ hlc.Timestamp) error {
+func (sc testStreamClient) Heartbeat(
+	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
+) error {
+	return nil
+}
+
+// Close implements the Client interface.
+func (sc testStreamClient) Close() error {
 	return nil
 }
 
 // Subscribe implements the Client interface.
 func (sc testStreamClient) Subscribe(
-	ctx context.Context, stream StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
-) (chan streamingccl.Event, chan error, error) {
+	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+) (Subscription, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
 		Value: roachpb.Value{
@@ -59,13 +69,37 @@ func (sc testStreamClient) Subscribe(
 	events <- streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 100})
 	close(events)
 
-	return events, nil, nil
+	return &testStreamSubscription{
+		eventCh: events,
+	}, nil
+}
+
+type testStreamSubscription struct {
+	eventCh chan streamingccl.Event
+}
+
+// Subscribe implements the Subscription interface.
+func (t testStreamSubscription) Subscribe(ctx context.Context) error {
+	return nil
+}
+
+// Events implements the Subscription interface.
+func (t testStreamSubscription) Events() <-chan streamingccl.Event {
+	return t.eventCh
+}
+
+// Err implements the Subscription interface.
+func (t testStreamSubscription) Err() error {
+	return nil
 }
 
 // ExampleClientUsage serves as documentation to indicate how a stream
 // client could be used.
 func ExampleClient() {
 	client := testStreamClient{}
+	defer func() {
+		_ = client.Close()
+	}()
 
 	id, err := client.Create(context.Background(), roachpb.MakeTenantID(1))
 	if err != nil {
@@ -111,7 +145,7 @@ func ExampleClient() {
 
 		for _, partition := range topology {
 			// TODO(dt): use Subscribe helper and partition.SrcAddr
-			eventCh, _ /* errCh */, err := client.Subscribe(context.Background(), id, partition.SubscriptionToken, ts)
+			sub, err := client.Subscribe(context.Background(), id, partition.SubscriptionToken, ts)
 			if err != nil {
 				panic(err)
 			}
@@ -119,7 +153,7 @@ func ExampleClient() {
 			// This example looks for the closing of the channel to terminate the test,
 			// but an ingestion job should look for another event such as the user
 			// cutting over to the new cluster to move to the next stage.
-			for event := range eventCh {
+			for event := range sub.Events() {
 				switch event.Type() {
 				case streamingccl.KVEvent:
 					kv := event.GetKV()

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -153,22 +154,22 @@ func updateReplicationStreamProgress(
 	streamID streaming.StreamID,
 	ts hlc.Timestamp,
 	txn *kv.Txn,
-) (status jobspb.StreamReplicationStatus, err error) {
+) (status streampb.StreamReplicationStatus, err error) {
 	const useReadLock = false
 	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if md.Status == jobs.StatusRunning {
-				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_ACTIVE
+				status.StreamStatus = streampb.StreamReplicationStatus_STREAM_ACTIVE
 			} else if md.Status == jobs.StatusPaused {
-				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_PAUSED
+				status.StreamStatus = streampb.StreamReplicationStatus_STREAM_PAUSED
 			} else if md.Status.Terminal() {
-				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
+				status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
 			} else {
-				status.StreamStatus = jobspb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY
+				status.StreamStatus = streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY
 			}
 			// Skip checking PTS record in cases that it might already be released
-			if status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_ACTIVE &&
-				status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_PAUSED {
+			if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE &&
+				status.StreamStatus != streampb.StreamReplicationStatus_STREAM_PAUSED {
 				return nil
 			}
 
@@ -178,7 +179,7 @@ func updateReplicationStreamProgress(
 				return err
 			}
 			status.ProtectedTimestamp = &ptsRecord.Timestamp
-			if status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_ACTIVE {
+			if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
 				return nil
 			}
 
@@ -197,7 +198,7 @@ func updateReplicationStreamProgress(
 		})
 
 	if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
-		status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
+		status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
 		err = nil
 	}
 
@@ -208,7 +209,7 @@ func updateReplicationStreamProgress(
 // record to the specified frontier.
 func heartbeatReplicationStream(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
-) (jobspb.StreamReplicationStatus, error) {
+) (streampb.StreamReplicationStatus, error) {
 
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)

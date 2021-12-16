@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -288,16 +287,19 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
 
-	checkStreamStatus := func(t *testing.T, streamID string, expectedStreamStatus jobspb.StreamReplicationStatus_StreamStatus) {
+	checkStreamStatus := func(t *testing.T, streamID string, expectedStreamStatus streampb.StreamReplicationStatus_StreamStatus) {
 		hlcTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.replication_stream_progress($1, $2)", streamID, hlcTime.String())
+		status, rawStatus := &streampb.StreamReplicationStatus{}, make([]byte, 0)
+		row := h.SysDB.QueryRow(t, "SELECT crdb_internal.replication_stream_progress($1, $2)", streamID, hlcTime.String())
 
-		expectedStatus := jobspb.StreamReplicationStatus{StreamStatus: expectedStreamStatus}
+		row.Scan(&rawStatus)
+		require.NoError(t, protoutil.Unmarshal(rawStatus, status))
+		expectedStatus := streampb.StreamReplicationStatus{StreamStatus: expectedStreamStatus}
 		// A running stream is expected to report the current protected timestamp for the replicating spans.
-		if expectedStatus.StreamStatus == jobspb.StreamReplicationStatus_STREAM_ACTIVE {
-			expectedStatus.ProtectedTimestamp = &hlcTime
+		if expectedStatus.StreamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
+			require.Equal(t, hlcTime, *status.ProtectedTimestamp)
 		}
-		require.Equal(t, expectedStatus.String(), rows[0][0])
+		require.Equal(t, expectedStreamStatus, status.StreamStatus)
 	}
 
 	// Makes the stream time out really soon
@@ -309,7 +311,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 			[][]string{{"failed"}})
-		checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_INACTIVE)
+		checkStreamStatus(t, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 
 	// Make sure the stream does not time out within the test timeout
@@ -326,20 +328,17 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
 			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 				[][]string{{"running"}})
-			checkStreamStatus(t, streamID, jobspb.StreamReplicationStatus_STREAM_ACTIVE)
+			checkStreamStatus(t, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
 
 		// Get a replication stream spec
 		spec, rawSpec := &streampb.ReplicationStreamSpec{}, make([]byte, 0)
-		initialTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		row := h.SysDB.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1, $2)",
-			streamID, initialTime.String())
+		row := h.SysDB.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1)", streamID)
 		row.Scan(&rawSpec)
 		require.NoError(t, protoutil.Unmarshal(rawSpec, spec))
 
 		// Ensures the processor spec tracks the tenant span
 		require.Equal(t, 1, len(spec.Partitions))
-		require.Equal(t, initialTime, spec.Partitions[0].PartitionSpec.StartFrom)
 		require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
 		tenantPrefix := keys.MakeTenantPrefix(h.Tenant.ID)
 		require.Equal(t, roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
@@ -347,7 +346,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
-		checkStreamStatus(t, "123", jobspb.StreamReplicationStatus_STREAM_INACTIVE)
+		checkStreamStatus(t, "123", streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 }
 
