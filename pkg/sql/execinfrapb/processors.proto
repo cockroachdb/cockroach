@@ -101,7 +101,7 @@ message ProcessorCoreUnion {
   optional BackfillerSpec backfiller = 11;
   optional ReadImportDataSpec readImport = 13;
   reserved 14;
-  optional CSVWriterSpec CSVWriter = 20;
+  optional ExportSpec exporter = 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
   reserved 17;
@@ -123,7 +123,6 @@ message ProcessorCoreUnion {
   optional FiltererSpec filterer = 34;
   optional StreamIngestionDataSpec streamIngestionData = 35;
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
-  optional ParquetWriterSpec ParquetWriter = 37;
 
   reserved 6, 12;
 }

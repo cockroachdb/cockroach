@@ -497,8 +497,8 @@ func (c *ReadImportDataSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
-func (s *CSVWriterSpec) summary() (string, []string) {
-	return "CSVWriter", []string{s.Destination}
+func (s *ExportSpec) summary() (string, []string) {
+	return "Exporter", []string{s.Destination}
 }
 
 // summary implements the diagramCellType interface.

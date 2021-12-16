@@ -24,6 +24,7 @@ message IOFileFormat {
     PgCopy = 4;
     PgDump = 5;
     Avro = 6;
+    Parquet = 7;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];
@@ -33,12 +34,14 @@ message IOFileFormat {
   optional MysqldumpOptions mysql_dump = 9 [(gogoproto.nullable) = false];
   optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
   optional AvroOptions avro = 8 [(gogoproto.nullable) = false];
+  optional ParquetOptions parquet = 10 [(gogoproto.nullable) = false];
 
   enum Compression {
     Auto = 0;
     None = 1;
     Gzip = 2;
     Bzip = 3;
+    Snappy = 4;
   }
   optional Compression compression = 5 [(gogoproto.nullable) = false];
   // If true, don't abort on failures but instead save the offending row and keep on.
@@ -62,9 +65,6 @@ message CSVOptions {
   // Indicates the number of rows to import per CSV file.
   // Must be a non-zero positive number. 
   optional int64 row_limit = 6 [(gogoproto.nullable) = false];
-}
-
-message ParquetOptions {
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
@@ -152,4 +152,9 @@ message AvroOptions {
   optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
   optional int32 record_separator = 5 [(gogoproto.nullable) = false];
   optional int64 row_limit = 6 [(gogoproto.nullable) = false];
+}
+
+message ParquetOptions {
+  // col_nullability specifies which columns allow null values in the exported parquet file.
+  repeated bool col_nullability = 1 ;
 }

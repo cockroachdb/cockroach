@@ -247,8 +247,7 @@ var (
 	errReadImportWrap                 = errors.New("core.ReadImport is not supported")
 	errBackupDataWrap                 = errors.New("core.BackupData is not supported")
 	errBackfillerWrap                 = errors.New("core.Backfiller is not supported (not an execinfra.RowSource)")
-	errCSVWriterWrap                  = errors.New("core.CSVWriter is not supported (not an execinfra.RowSource)")
-	errParquetWriterWrap              = errors.New("core.ParquetWriter is not supported (not an execinfra.RowSource)")
+	errExporterWrap                   = errors.New("core.Exporter is not supported (not an execinfra.RowSource)")
 	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
@@ -274,10 +273,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 		return errBackfillerWrap
 	case spec.Core.ReadImport != nil:
 		return errReadImportWrap
-	case spec.Core.CSVWriter != nil:
-		return errCSVWriterWrap
-	case spec.Core.ParquetWriter != nil:
-		return errParquetWriterWrap
+	case spec.Core.Exporter != nil:
+		return errExporterWrap
 	case spec.Core.Sampler != nil:
 		return errSamplerWrap
 	case spec.Core.SampleAggregator != nil:

@@ -270,16 +270,19 @@ func TestExportOrder(t *testing.T) {
 }
 
 // parquetTest provides information to validate a test of EXPORT PARQUET. All
-// fields below name and stmt validate some aspect of the exported parquet file.
+// fields below the stmt validate some aspect of the exported parquet file.
 // If a validation field is empty, then that field will not be used in the test.
 type parquetTest struct {
-	// name is the name of the test.
-	name string
+	// filePrefix provides the parquet file name in front of the parquetExportFilePattern
+	filePrefix string
+
+	// fileSuffix provides the compression type, if any, of the parquet file
+	fileSuffix string
 
 	// prep contains sql commands that will execute before the stmt.
 	prep []string
 
-	// stmt contains the EXPORT PARQUET statement.
+	// stmt contains the EXPORT PARQUET sql statement to test
 	stmt string
 
 	// colNames provides the expected column names for the parquet file.
@@ -421,7 +424,7 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 
 	tests := []parquetTest{
 		{
-			name: "basic",
+			filePrefix: "basic",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/basic' FROM SELECT *
 							FROM foo WHERE y IS NOT NULL ORDER BY y ASC LIMIT 2 `,
 			colNames: []string{"i", "x", "y", "z", "a"},
@@ -429,7 +432,7 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 				{int64(2), "Bob", int64(2), 24.1, false}},
 		},
 		{
-			name: "null_vals",
+			filePrefix: "null_vals",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/null_vals' FROM SELECT *
 							FROM foo ORDER BY x ASC LIMIT 2`,
 			vals: [][]interface{}{
@@ -437,13 +440,13 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 				{int64(4), "Alex", int64(3), 14.3, nil}},
 		},
 		{
-			name: "colname",
+			filePrefix: "colname",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/colname' FROM SELECT avg(z), min(y) AS baz
 							FROM foo`,
 			colNames: []string{"avg", "baz"},
 		},
 		{
-			name: "nullable",
+			filePrefix: "nullable",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/nullable' FROM SELECT y,z,x
 							FROM foo`,
 			colFieldRepType: []parquet.FieldRepetitionType{
@@ -459,7 +462,7 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 			// I already verified that the vendor's parquet writer can write arrays
 			// with null values just fine, so EXPORT PARQUET is bug free; however this
 			// roundtrip test would fail.
-			name: "arrays",
+			filePrefix: "arrays",
 			prep: []string{"CREATE TABLE atable (i INT PRIMARY KEY, x INT[])",
 				"INSERT INTO atable VALUES (1, ARRAY[1,2]), (2, ARRAY[2]), (3,ARRAY[1,13,5]),(4, NULL),(5, ARRAY[])"},
 			stmt:     `EXPORT INTO PARQUET 'nodelocal://0/arrays' FROM SELECT * FROM atable`,
@@ -472,25 +475,41 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 				{int64(5), []interface{}{}},
 			},
 		},
+		{
+			filePrefix: "compress_gzip",
+			fileSuffix: ".gz",
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/compress_gzip' WITH compression = gzip
+							FROM SELECT * FROM foo`,
+		},
+		{
+			filePrefix: "compress_snappy",
+			fileSuffix: ".snappy",
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/compress_snappy' WITH compression = snappy
+							FROM SELECT * FROM foo `,
+		},
+		{
+			filePrefix: "uncompress",
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/uncompress'
+							FROM SELECT * FROM foo `,
+		},
 	}
 
 	for _, test := range tests {
-		t.Logf("Test %s", test.name)
+		t.Logf("Test %s", test.filePrefix)
 		if test.prep != nil {
 			for _, cmd := range test.prep {
 				sqlDB.Exec(t, cmd)
 			}
 		}
 		sqlDB.Exec(t, test.stmt)
-		paths, err := filepath.Glob(filepath.Join(dir, test.name,
-			parquetExportFilePattern))
+
+		paths, err := filepath.Glob(filepath.Join(dir, test.filePrefix, parquetExportFilePattern+test.fileSuffix))
 		require.NoError(t, err)
 
 		require.Equal(t, 1, len(paths))
 
 		err = validateParquetFile(t, paths[0], test)
 		require.NoError(t, err)
-
 	}
 }
 
