@@ -539,8 +539,13 @@ func (p *PhysicalPlan) AddProjection(columns []uint32, newMergeOrdering execinfr
 				columns[i] = post.OutputColumns[c]
 			}
 		}
-		post.OutputColumns = columns
-		post.Projection = true
+		if isIdentityProjection(columns, len(p.GetResultTypes())) {
+			post.OutputColumns = nil
+			post.Projection = false
+		} else {
+			post.OutputColumns = columns
+			post.Projection = true
+		}
 	}
 
 	p.SetLastStagePost(post, newResultTypes)
