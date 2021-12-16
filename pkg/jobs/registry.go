@@ -144,6 +144,11 @@ type Registry struct {
 	}
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
+
+	testingPausePoints struct {
+		mu     syncutil.Mutex
+		points map[string]struct{}
+	}
 }
 
 // jobExecCtxMaker is a wrapper around sql.NewInternalPlanner. It returns an
@@ -1460,5 +1465,41 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 	}
 	if updateErr != nil {
 		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
+	}
+}
+
+// CheckPausepoint returns a PauseRequestError if the named pausepoint is
+// set.
+//
+// This can be called in the middle of some job implementation to effectively
+// define a 'breakpoint' which, when reached, will cause the job to pause. This
+// can be very useful in allowing inspection of the persisted job state at that
+// point, without worrying about catching it before the job progresses further
+// or completes. These pause points can be set or removed at runtime.
+func (r *Registry) CheckPausepoint(name string) error {
+	r.testingPausePoints.mu.Lock()
+	defer r.testingPausePoints.mu.Unlock()
+	if _, ok := r.testingPausePoints.points[name]; ok {
+		return PauseRequestError("pause point hit: " + name)
+	}
+	return nil
+}
+
+// SetPausePoint enables or disables a named pause point. See CheckPausepoint.
+// As a special-case, setting the name "all" to false will clear all points.
+func (r *Registry) SetPausePoint(name string, enabled bool) {
+	r.testingPausePoints.mu.Lock()
+	defer r.testingPausePoints.mu.Unlock()
+	if enabled {
+		if r.testingPausePoints.points == nil {
+			r.testingPausePoints.points = make(map[string]struct{})
+		}
+		r.testingPausePoints.points[name] = struct{}{}
+	} else if r.testingPausePoints.points != nil {
+		if name == "all" {
+			r.testingPausePoints.points = nil
+		} else {
+			delete(r.testingPausePoints.points, name)
+		}
 	}
 }
