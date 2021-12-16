@@ -34,10 +34,11 @@ import (
 
 // Limiters is the collection of per-store limits used during cmd evaluation.
 type Limiters struct {
-	BulkIOWriteRate              *rate.Limiter
-	ConcurrentImportRequests     limit.ConcurrentRequestLimiter
-	ConcurrentExportRequests     limit.ConcurrentRequestLimiter
-	ConcurrentAddSSTableRequests limit.ConcurrentRequestLimiter
+	BulkIOWriteRate                      *rate.Limiter
+	ConcurrentImportRequests             limit.ConcurrentRequestLimiter
+	ConcurrentExportRequests             limit.ConcurrentRequestLimiter
+	ConcurrentAddSSTableRequests         limit.ConcurrentRequestLimiter
+	ConcurrentAddSSTableAsWritesRequests limit.ConcurrentRequestLimiter
 	// concurrentRangefeedIters is a semaphore used to limit the number of
 	// rangefeeds in the "catch-up" state across the store. The "catch-up" state
 	// is a temporary state at the beginning of a rangefeed which is expensive
