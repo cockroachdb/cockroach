@@ -580,4 +580,8 @@ func (c *manualCache) QueryRecord(
 	return false, c.asOf
 }
 
+func (c *manualCache) GetLastUpdateTimestamp() hlc.Timestamp {
+	return c.asOf
+}
+
 var _ protectedts.Cache = (*manualCache)(nil)

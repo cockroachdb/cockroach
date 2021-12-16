@@ -127,6 +127,9 @@ type Cache interface {
 
 	// Refresh forces the cache to update to at least asOf.
 	Refresh(_ context.Context, asOf hlc.Timestamp) error
+
+	// GetLastUpdateTimestamp returns the last updated timestamp of the Cache.
+	GetLastUpdateTimestamp() hlc.Timestamp
 }
 
 // Verifier provides a mechanism to verify that a created Record will certainly
@@ -162,4 +165,8 @@ func (c *emptyCache) QueryRecord(
 
 func (c *emptyCache) Refresh(_ context.Context, asOf hlc.Timestamp) error {
 	return nil
+}
+
+func (c *emptyCache) GetLastUpdateTimestamp() hlc.Timestamp {
+	return (*hlc.Clock)(c).Now()
 }

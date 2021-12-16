@@ -9009,3 +9009,192 @@ CREATE SCHEMA db.s;
 
 	sqlDB.Exec(t, `BACKUP DATABASE db TO 'nodelocal://0/test/2'`)
 }
+
+func TestEphemeralBackupAndRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, _, sqlDB, iodir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 10, InitManualReplication)
+	defer cleanupFn()
+
+	_, _, restoreDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, iodir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanup()
+
+	t.Run("table-level-ephemeral", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo select * from generate_series(1,10)`)
+		sqlDB.Exec(t, `ALTER TABLE foo CONFIGURE ZONE USING is_ephemeral = true`)
+
+		sqlDB.Exec(t, `BACKUP TABLE foo TO $1`, LocalFoo)
+		restoreDB.Exec(t, `CREATE DATABASE data`)
+		restoreDB.Exec(t, `RESTORE TABLE data.foo FROM $1`, LocalFoo)
+		restoreDB.CheckQueryResults(t, `SELECT * FROM data.foo`, [][]string{})
+	})
+
+	t.Run("database-level-ephemeral", func(t *testing.T) {
+		sqlDB.Exec(t, `ALTER DATABASE data CONFIGURE ZONE USING is_ephemeral = true`)
+
+		sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo+"/database-level")
+		restoreDB.Exec(t, `RESTORE DATABASE data FROM $1 WITH new_db_name = 'data2'`, LocalFoo+"/database-level")
+		restoreDB.CheckQueryResults(t, `SELECT * FROM data2.foo`, [][]string{})
+
+		// Bank should also be marked as ephemeral as a result of the database being
+		// marked as ephemeral.
+		restoreDB.CheckQueryResults(t, `SELECT * FROM data2.bank`, [][]string{})
+	})
+
+	t.Run("index-partition-level-ephemeral", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE data2; USE data2;`)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, val INT, INDEX bar(val))`)
+		sqlDB.ExpectErr(t, "cannot set `is_ephemeral` on an index or partition zone configuration",
+			`ALTER INDEX foo@bar CONFIGURE ZONE USING is_ephemeral = true`)
+	})
+}
+
+func TestProtectedTimestampForEphemeralTableDuringBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// A sketch of the test is as follows:
+	//
+	//  * Create a table foo to backup.
+	//  * Create an initial BACKUP of foo.
+	//  * Set a 1 second gcttl for foo.
+	//  * Start a BACKUP incremental from that base backup which blocks after
+	//	  setup (after time of backup is decided), until it is signaled.
+	//  * Manually enqueue the ranges for GC and ensure that at least one
+	//    range ran the GC. Since the table is marked as ephemeral the pts
+	//    record written by the backup should not block GC.
+	//  * Unblock the backup.
+	//  * Ensure the backup has succeeded.
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	allowRequest := make(chan struct{})
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range ba.Requests {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportRequest:
+					<-allowRequest
+				}
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	close(allowRequest)
+
+	for _, testrun := range []struct {
+		name      string
+		runBackup func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner)
+	}{
+		{
+			"backup-normal",
+			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
+				sqlDB.Exec(t, query)
+			},
+		},
+		{
+			"backup-detached",
+			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
+				backupWithDetachedOption := query + ` WITH DETACHED`
+				db := sqlDB.DB.(*gosql.DB)
+				var jobID jobspb.JobID
+				err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+					return tx.QueryRow(backupWithDetachedOption).Scan(&jobID)
+				})
+				require.NoError(t, err)
+				waitForSuccessfulJob(t, tc, jobID)
+			},
+		},
+	} {
+		baseBackupURI := "nodelocal://0/foo" + testrun.name
+		testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s'`, baseBackupURI), runner) // create a base backup.
+		allowRequest = make(chan struct{})
+		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING is_ephemeral = true;")
+		rRand, _ := randutil.NewTestRand()
+		writeGarbage := func(from, to int) {
+			for i := from; i < to; i++ {
+				runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))
+			}
+		}
+		writeGarbage(3, 10)
+
+		g, _ := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			// If BACKUP does not protect the timestamp, the ExportRequest will
+			// throw an error and fail the backup.
+			incURI := "nodelocal://0/foo-inc" + testrun.name
+			testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s' INCREMENTAL FROM '%s'`, incURI, baseBackupURI), runner)
+			return nil
+		})
+
+		var jobID string
+		testutils.SucceedsSoon(t, func() error {
+			row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+			return row.Scan(&jobID)
+		})
+
+		time.Sleep(3 * time.Second) // Wait for the data to definitely be expired and GC to run.
+		gcTable := func(skipShouldQueue bool) (traceStr string) {
+			rows := runner.Query(t, "SELECT start_key"+
+				" FROM crdb_internal.ranges_no_leases"+
+				" WHERE table_name = $1"+
+				" AND database_name = current_database()"+
+				" ORDER BY start_key ASC", "foo")
+			var traceBuf strings.Builder
+			for rows.Next() {
+				var startKey roachpb.Key
+				require.NoError(t, rows.Scan(&startKey))
+				r := tc.LookupRangeOrFatal(t, startKey)
+				l, _, err := tc.FindRangeLease(r, nil)
+				require.NoError(t, err)
+				lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+				s, repl := getFirstStoreReplica(t, lhServer, startKey)
+				trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, skipShouldQueue)
+				require.NoError(t, err)
+				fmt.Fprintf(&traceBuf, "%s\n", trace.String())
+			}
+			require.NoError(t, rows.Err())
+			return traceBuf.String()
+		}
+
+		// Even though there is a backup holding a PTS record on the table, the
+		// ranges should be able to run GC since the table is marked as ephemeral.
+		// This regex matches when all float priorities other than 0.00000. It does
+		// this by matching either a float >= 1 (e.g. 1230.012) or a float < 1 (e.g.
+		// 0.000123).
+		matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
+		nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
+		writeGarbage(3, 10)
+		testutils.SucceedsSoon(t, func() error {
+			if trace := gcTable(false /* skipShouldQueue */); !nonZeroProgressRE.MatchString(trace) {
+				return fmt.Errorf("expected %v in trace: %v", nonZeroProgressRE, trace)
+			}
+			return nil
+		})
+
+		// Unblock the blocked backup request. This will attempt to read data below
+		// the GCThreshold but the returned `BatchTimestampBeforeGCError` will
+		// indicate that the table was marked as ephemeral, allowing the backup to
+		// finish successfully.
+		close(allowRequest)
+		require.NoError(t, g.Wait())
+	}
+}

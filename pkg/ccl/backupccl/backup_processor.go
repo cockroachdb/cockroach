@@ -425,6 +425,15 @@ func runBackupProcessor(
 						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
 							return errors.Wrap(exportRequestErr, "export request timeout")
 						}
+						// BatchTimestampBeforeGCError is returned if the ExportRequest
+						// attempts to read below the range's GC threshold.
+						if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*roachpb.BatchTimestampBeforeGCError); ok {
+							// If the range we are exporting is marked as ephemeral, we do not
+							// want to back this up.
+							if batchTimestampBeforeGCError.IsEphemeral {
+								continue
+							}
+						}
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
 

@@ -3226,6 +3226,16 @@ func (r *Replica) adminScatter(
 func (r *Replica) adminVerifyProtectedTimestamp(
 	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
+	// If the replica has been explicitly marked as ephemeral, then we do not need
+	// to check if the verification actually applies. The GC queue does not
+	// respect protected timestamp records covering an ephemeral replica when
+	// computing the new GCThreshold, and thus verification of such records is not
+	// useful.
+	if r.IsEphemeral() {
+		resp.Verified = true
+		return resp, nil
+	}
+
 	var doesNotApplyReason string
 	resp.Verified, doesNotApplyReason, err = r.protectedTimestampRecordApplies(ctx, &args)
 	if err != nil {

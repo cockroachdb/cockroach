@@ -97,6 +97,7 @@ type EvalContext interface {
 	GetLastSplitQPS() float64
 
 	GetGCThreshold() hlc.Timestamp
+	IsEphemeral() bool
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
@@ -229,6 +230,9 @@ func (m *mockEvalCtxImpl) CanCreateTxnRecord(
 }
 func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
 	return m.GCThreshold
+}
+func (m *mockEvalCtxImpl) IsEphemeral() bool {
+	return false
 }
 func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")

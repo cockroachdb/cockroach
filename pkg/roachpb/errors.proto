@@ -465,6 +465,7 @@ message IntegerOverflowError {
 message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+  optional bool IsEphemeral = 3 [(gogoproto.nullable) = false];
 }
 
 // An IntentMissingError indicates that a QueryIntent request expected

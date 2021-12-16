@@ -165,6 +165,11 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	return rec.i.GetGCThreshold()
 }
 
+// IsEphemeral returns whether the replica is marked as ephemeral.
+func (rec SpanSetReplicaEvalContext) IsEphemeral() bool {
+	return rec.i.IsEphemeral()
+}
+
 // String implements Stringer.
 func (rec SpanSetReplicaEvalContext) String() string {
 	return rec.i.String()

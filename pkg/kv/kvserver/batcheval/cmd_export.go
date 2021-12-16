@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -106,6 +107,13 @@ func evalExport(
 		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
 	}
 	evalExportSpan.RecordStructured(&evalExportTrace)
+
+	// If the range being exported is marked as ephemeral, we do not want to send
+	// back any data to be backed up.
+	if cArgs.EvalCtx.IsEphemeral() {
+		log.Infof(ctx, "[%s, %s) marked as ephemeral, returning empty ExportResponse", args.Key, args.EndKey)
+		return result.Result{}, nil
+	}
 
 	if !args.ReturnSST {
 		return result.Result{}, errors.New("ReturnSST is required")

@@ -105,6 +105,14 @@ func (r *Replica) protectedTimestampRecordApplies(
 func (r *Replica) readProtectedTimestampsRLocked(
 	ctx context.Context, f func(r *ptpb.Record),
 ) (ts cachedProtectedTimestampState) {
+	// If this replica is marked as `ephemeral` we ignore any of the protected
+	// timestamp records that may cover it. By doing so we allow GC to progress on
+	// explicitly marked ephemeral data.
+	if r.isEphemeralRLocked() {
+		ts.readAt = r.store.protectedtsCache.GetLastUpdateTimestamp()
+		return ts
+	}
+
 	desc := r.descRLocked()
 	gcThreshold := *r.mu.state.GCThreshold
 

@@ -74,6 +74,13 @@ func New(config Config) *Cache {
 
 var _ protectedts.Cache = (*Cache)(nil)
 
+// GetLastUpdateTimestamp is part of the protectedts.Cache interface.
+func (c *Cache) GetLastUpdateTimestamp() hlc.Timestamp {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.mu.lastUpdate
+}
+
 // Iterate is part of the protectedts.Cache interface.
 func (c *Cache) Iterate(
 	_ context.Context, from, to roachpb.Key, it protectedts.Iterator,
