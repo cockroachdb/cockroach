@@ -184,6 +184,82 @@ func TestDiagnosticsRequest(t *testing.T) {
 		wg.Wait()
 		checkCompleted(reqID)
 	})
+
+	// Verify that an error is returned when attempting to cancel non-existent
+	// request.
+	t.Run("cancel non-existent request", func(t *testing.T) {
+		require.NotNil(t, registry.CancelRequest(ctx, "foo"))
+	})
+
+	// Verify that if a request (either conditional or unconditional, w/ or w/o
+	// expiration) is canceled, the bundle for it is not created afterwards.
+	t.Run("request canceled", func(t *testing.T) {
+		const fprint = "SELECT pg_sleep(_)"
+		for _, conditional := range []bool{false, true} {
+			t.Run(fmt.Sprintf("conditional=%t", conditional), func(t *testing.T) {
+				var minExecutionLatency time.Duration
+				if conditional {
+					minExecutionLatency = 100 * time.Millisecond
+				}
+				for _, expiresAfter := range []time.Duration{0, time.Second} {
+					t.Run(fmt.Sprintf("expiresAfter=%s", expiresAfter), func(t *testing.T) {
+						reqID, err := registry.InsertRequestInternal(
+							ctx, fprint, minExecutionLatency, expiresAfter,
+						)
+						require.NoError(t, err)
+						checkNotCompleted(reqID)
+
+						err = registry.CancelRequest(ctx, fprint)
+						require.NoError(t, err)
+						checkNotCompleted(reqID)
+
+						// Run the query that is slow enough to satisfy the
+						// conditional request.
+						_, err = db.Exec("SELECT pg_sleep(0.2)")
+						require.NoError(t, err)
+						checkNotCompleted(reqID)
+					})
+				}
+			})
+		}
+	})
+
+	// Verify that if a request (either conditional or unconditional) is
+	// canceled, the ongoing bundle for it is still created.
+	t.Run("ongoing request canceled", func(t *testing.T) {
+		const fprint = "SELECT pg_sleep(_)"
+		for _, conditional := range []bool{false, true} {
+			t.Run("conditional", func(t *testing.T) {
+				var minExecutionLatency time.Duration
+				if conditional {
+					minExecutionLatency = 100 * time.Millisecond
+				}
+				reqID, err := registry.InsertRequestInternal(
+					ctx, fprint, minExecutionLatency, expiresAfter,
+				)
+				require.NoError(t, err)
+				checkNotCompleted(reqID)
+
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					// Sleep for a bit and then cancel the request.
+					time.Sleep(100 * time.Millisecond)
+					err := registry.CancelRequest(ctx, fprint)
+					require.NoError(t, err)
+				}()
+
+				// Now run the query that is slow enough to satisfy the
+				// conditional request.
+				_, err = db.Exec("SELECT pg_sleep(0.2)")
+				require.NoError(t, err)
+
+				wg.Wait()
+				checkCompleted(reqID)
+			})
+		}
+	})
 }
 
 // Test that a different node can service a diagnostics request.
