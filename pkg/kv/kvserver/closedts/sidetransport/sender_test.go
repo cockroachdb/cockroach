@@ -309,7 +309,9 @@ func (s *sideTransportGRPCServer) addr() net.Addr {
 
 func newMockSideTransportGRPCServer(stopper *stop.Stopper) (*sideTransportGRPCServer, error) {
 	receiver := newMockReceiver()
-	if err := stopper.RunAsyncTask(context.Background(), "stopper-watcher", func(ctx context.Context) {
+	ac := log.MakeDummyAmbientContext(stopper.Tracer())
+	ctx := ac.AnnotateCtx(context.Background())
+	if err := stopper.RunAsyncTask(ctx, "stopper-watcher", func(ctx context.Context) {
 		// We can't use a Closer since the receiver will be blocking inside of a task.
 		<-stopper.ShouldQuiesce()
 		receiver.Close()
