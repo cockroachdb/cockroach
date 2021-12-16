@@ -366,7 +366,7 @@ export class DatabaseDetailsPage extends React.Component<
         ),
         cell: table => (
           <Link
-            to={`/database/${this.props.name}/table/${table.name}`}
+            to={`/database/${this.props.name}/table/${table.name}?tab=grants`}
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s")} />
