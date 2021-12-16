@@ -36,13 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -582,7 +582,7 @@ func (c *transientCluster) createAndAddNode(
 		//
 		// TODO(knz): re-connect the `log` package every time the first
 		// node is restarted and gets a new `Settings` instance.
-		settings.SetCanonicalValuesContainer(&serv.ClusterSettings().SV)
+		logcrash.SetGlobalSettings(&serv.ClusterSettings().SV)
 	}
 
 	// Remember this server for the stop/restart primitives in the SQL

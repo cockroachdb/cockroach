@@ -29,11 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -91,7 +91,7 @@ func clearFlagChanges(cmd *cobra.Command) {
 // See below for defaults.
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
+	logcrash.SetGlobalSettings(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
