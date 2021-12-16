@@ -1835,6 +1835,23 @@ func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 			}
 		}
 	}
+
+	// Set some env vars. The first two also the default for `roachprod start`,
+	// but we have to add them so that the third one doesn't wipe them out.
+	if !argExists(args, "COCKROACH_ENABLE_RPC_COMPRESSION") {
+		// RPC compressions costs around 5% on kv95, so we disable it. It might help
+		// when moving snapshots around, though.
+		args = append(args, "--env=COCKROACH_ENABLE_RPC_COMPRESSION=false")
+	}
+	if !argExists(args, "COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED") {
+		// Get rid of an annoying popup in the UI.
+		args = append(args, "--env=COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true")
+	}
+	if !argExists(args, "COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH") {
+		// Panic on span use-after-Finish, so we catch such bugs.
+		args = append(args, "--env=COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH=true")
+	}
+
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		return err
 	}
@@ -1876,7 +1893,7 @@ func (c *clusterImpl) Start(ctx context.Context, opts ...option.Option) {
 
 func argExists(args []string, target string) bool {
 	for _, arg := range args {
-		if arg == target || strings.HasPrefix(arg, target+"=") {
+		if arg == target || strings.HasPrefix(arg, target+"=") || strings.HasPrefix(arg, "--env="+target+"=") {
 			return true
 		}
 	}
