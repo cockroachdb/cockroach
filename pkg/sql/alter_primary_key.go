@@ -386,6 +386,20 @@ func (p *planner) AlterPrimaryKey(
 				}
 			}
 		}
+
+		if !idx.Primary() {
+			newPrimaryKeyColIDs := catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...)
+			for _, colID := range idx.CollectKeySuffixColumnIDs().Ordered() {
+				col, err := tableDesc.FindColumnWithID(colID)
+				if err != nil {
+					return false, err
+				}
+				if col.IsVirtual() && !newPrimaryKeyColIDs.Contains(colID) {
+					return true, err
+				}
+			}
+		}
+
 		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
 	}
 	var indexesToRewrite []catalog.Index
@@ -468,6 +482,10 @@ func (p *planner) AlterPrimaryKey(
 		swapArgs.LocalityConfigSwap = &alterPrimaryKeyLocalitySwap.localityConfigSwap
 	}
 	tableDesc.AddPrimaryKeySwapMutation(swapArgs)
+
+	if err := catalog.ValidateSelf(tableDesc); err != nil {
+		return err
+	}
 
 	// Mark the primary key of the table as valid.
 	{
@@ -612,4 +630,34 @@ func shouldCopyPrimaryKey(
 		desc.HasPrimaryKey() &&
 		!desc.IsPrimaryIndexDefaultRowID() &&
 		!idsAndDirsMatch(oldPK, newPK)
+}
+
+// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given
+// table descriptor, but sets up the index with KeySuffixColumnIDs from the
+// given index, rather than the table's primary key.
+func addIndexMutationWithSpecificPrimaryKey(
+	ctx context.Context,
+	table *tabledesc.Mutable,
+	toAdd *descpb.IndexDescriptor,
+	primary *descpb.IndexDescriptor,
+) error {
+	// Reset the ID so that a call to AllocateIDs will set up the index.
+	toAdd.ID = 0
+	if err := table.AddIndexMutation(toAdd, descpb.DescriptorMutation_ADD); err != nil {
+		return err
+	}
+	if err := table.AllocateIDsWithoutValidation(ctx); err != nil {
+		return err
+	}
+	// Use the columns in the given primary index to construct this indexes
+	// KeySuffixColumnIDs list.
+	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
+	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
+	toAdd.KeySuffixColumnIDs = nil
+	for _, colID := range primary.KeyColumnIDs {
+		if !presentColIDs.Contains(colID) {
+			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
+		}
+	}
+	return nil
 }
