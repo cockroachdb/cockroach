@@ -1260,18 +1260,18 @@ with &1
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
  │    ├── insert-mapping:
- │    │    ├── column1:7 => abc.a:1
+ │    │    ├── column7:7 => abc.a:1
  │    │    ├── b_default:8 => abc.b:2
  │    │    └── b_default:8 => abc.c:3
  │    └── project
- │         ├── columns: b_default:8 column1:7!null
+ │         ├── columns: b_default:8 column7:7!null
  │         ├── project
- │         │    ├── columns: column1:7!null
+ │         │    ├── columns: column7:7!null
  │         │    ├── values
  │         │    │    ├── columns: column1:6!null
  │         │    │    └── (1,)
  │         │    └── projections
- │         │         └── assignment-cast: INT8 [as=column1:7]
+ │         │         └── assignment-cast: INT8 [as=column7:7]
  │         │              └── column1:6
  │         └── projections
  │              └── NULL::INT8 [as=b_default:8]
@@ -1322,20 +1322,20 @@ with &1
  │    └── insert abc
  │         ├── columns: abc.a:1!null b:2!null c:3!null
  │         ├── insert-mapping:
- │         │    ├── column1:9 => abc.a:1
- │         │    ├── column2:10 => b:2
- │         │    └── column3:11 => c:3
+ │         │    ├── column9:9 => abc.a:1
+ │         │    ├── column10:10 => b:2
+ │         │    └── column11:11 => c:3
  │         └── project
- │              ├── columns: column1:9!null column2:10!null column3:11!null
+ │              ├── columns: column9:9!null column10:10!null column11:11!null
  │              ├── values
  │              │    ├── columns: column1:6!null column2:7!null column3:8!null
  │              │    └── (1, 2, 3)
  │              └── projections
- │                   ├── assignment-cast: INT8 [as=column1:9]
+ │                   ├── assignment-cast: INT8 [as=column9:9]
  │                   │    └── column1:6
- │                   ├── assignment-cast: INT8 [as=column2:10]
+ │                   ├── assignment-cast: INT8 [as=column10:10]
  │                   │    └── column2:7
- │                   └── assignment-cast: INT8 [as=column3:11]
+ │                   └── assignment-cast: INT8 [as=column11:11]
  │                        └── column3:8
  └── with-scan &1
       ├── columns: a:12!null
@@ -1453,17 +1453,17 @@ INSERT INTO inaccessible VALUES (1)
 insert inaccessible
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => k:1
+ │    ├── column6:6 => k:1
  │    └── v_default:7 => v:2
  └── project
-      ├── columns: v_default:7 column1:6!null
+      ├── columns: v_default:7 column6:6!null
       ├── project
-      │    ├── columns: column1:6!null
+      │    ├── columns: column6:6!null
       │    ├── values
       │    │    ├── columns: column1:5!null
       │    │    └── (1,)
       │    └── projections
-      │         └── assignment-cast: INT8 [as=column1:6]
+      │         └── assignment-cast: INT8 [as=column6:6]
       │              └── column1:5
       └── projections
            └── NULL::INT8 [as=v_default:7]

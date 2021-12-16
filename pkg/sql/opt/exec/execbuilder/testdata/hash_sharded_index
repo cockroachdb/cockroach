@@ -19,20 +19,20 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (crdb_internal_a_shard_11_comp, column1, check1)
+    │ columns: (crdb_internal_a_shard_11_comp, column6, check1)
     │ estimated row count: 2
     │ render check1: crdb_internal_a_shard_11_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    │ render column1: column1
+    │ render column6: column6
     │ render crdb_internal_a_shard_11_comp: crdb_internal_a_shard_11_comp
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_11_comp, column1)
+        │ columns: (crdb_internal_a_shard_11_comp, column6)
         │ estimated row count: 2
-        │ render crdb_internal_a_shard_11_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 11)::INT4
-        │ render column1: column1
+        │ render crdb_internal_a_shard_11_comp: mod(fnv32(crdb_internal.datums_to_bytes(column6)), 11)::INT4
+        │ render column6: column6
         │
         └── • values
-              columns: (column1)
+              columns: (column6)
               size: 1 column, 2 rows
               row 0, expr 0: 1
               row 1, expr 0: 2
@@ -53,22 +53,22 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (column1, crdb_internal_a_shard_12_comp, rowid_default, check1)
+    │ columns: (column7, crdb_internal_a_shard_12_comp, rowid_default, check1)
     │ estimated row count: 2
     │ render check1: crdb_internal_a_shard_12_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-    │ render column1: column1
+    │ render column7: column7
     │ render rowid_default: rowid_default
     │ render crdb_internal_a_shard_12_comp: crdb_internal_a_shard_12_comp
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
+        │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column7)
         │ estimated row count: 2
-        │ render crdb_internal_a_shard_12_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 12)::INT4
+        │ render crdb_internal_a_shard_12_comp: mod(fnv32(crdb_internal.datums_to_bytes(column7)), 12)::INT4
         │ render rowid_default: unique_rowid()
-        │ render column1: column1
+        │ render column7: column7
         │
         └── • values
-              columns: (column1)
+              columns: (column7)
               size: 1 column, 2 rows
               row 0, expr 0: 1
               row 1, expr 0: 2

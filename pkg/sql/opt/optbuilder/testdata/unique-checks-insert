@@ -16,28 +16,28 @@ INSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
+ │    ├── column13:13 => uniq.k:1
+ │    ├── column14:14 => uniq.v:2
+ │    ├── column15:15 => uniq.w:3
+ │    ├── column16:16 => uniq.x:4
+ │    └── column17:17 => uniq.y:5
  ├── input binding: &1
  ├── project
- │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+ │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
  │    ├── values
  │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    │    ├── (1, 1, 1, 1, 1)
  │    │    └── (2, 2, 2, 2, 2)
  │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:13]
+ │         ├── assignment-cast: INT8 [as=column13:13]
  │         │    └── column1:8
- │         ├── assignment-cast: INT8 [as=column2:14]
+ │         ├── assignment-cast: INT8 [as=column14:14]
  │         │    └── column2:9
- │         ├── assignment-cast: INT8 [as=column3:15]
+ │         ├── assignment-cast: INT8 [as=column15:15]
  │         │    └── column3:10
- │         ├── assignment-cast: INT8 [as=column4:16]
+ │         ├── assignment-cast: INT8 [as=column16:16]
  │         │    └── column4:11
- │         └── assignment-cast: INT8 [as=column5:17]
+ │         └── assignment-cast: INT8 [as=column17:17]
  │              └── column5:12
  └── unique-checks
       ├── unique-checks-item: uniq(w)
@@ -48,11 +48,11 @@ insert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:25!null v:26!null w:27!null x:28!null y:29!null
       │              │    └── mapping:
-      │              │         ├──  column1:13 => k:25
-      │              │         ├──  column2:14 => v:26
-      │              │         ├──  column3:15 => w:27
-      │              │         ├──  column4:16 => x:28
-      │              │         └──  column5:17 => y:29
+      │              │         ├──  column13:13 => k:25
+      │              │         ├──  column14:14 => v:26
+      │              │         ├──  column15:15 => w:27
+      │              │         ├──  column16:16 => x:28
+      │              │         └──  column17:17 => y:29
       │              ├── scan uniq
       │              │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
       │              └── filters
@@ -66,11 +66,11 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:37!null v:38!null w:39!null x:40!null y:41!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:37
-                     │         ├──  column2:14 => v:38
-                     │         ├──  column3:15 => w:39
-                     │         ├──  column4:16 => x:40
-                     │         └──  column5:17 => y:41
+                     │         ├──  column13:13 => k:37
+                     │         ├──  column14:14 => v:38
+                     │         ├──  column15:15 => w:39
+                     │         ├──  column16:16 => x:40
+                     │         └──  column17:17 => y:41
                      ├── scan uniq
                      │    └── columns: uniq.k:30!null uniq.v:31 uniq.w:32 uniq.x:33 uniq.y:34
                      └── filters
@@ -85,29 +85,29 @@ INSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2), (3, NULL, NULL, NULL, 
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
+ │    ├── column13:13 => uniq.k:1
+ │    ├── column14:14 => uniq.v:2
+ │    ├── column15:15 => uniq.w:3
+ │    ├── column16:16 => uniq.x:4
+ │    └── column17:17 => uniq.y:5
  ├── input binding: &1
  ├── project
- │    ├── columns: column1:13!null column2:14 column3:15 column4:16 column5:17!null
+ │    ├── columns: column13:13!null column14:14 column15:15 column16:16 column17:17!null
  │    ├── values
  │    │    ├── columns: column1:8!null column2:9 column3:10 column4:11 column5:12!null
  │    │    ├── (1, 1, 1, 1, 1)
  │    │    ├── (2, 2, 2, 2, 2)
  │    │    └── (3, NULL::INT8, NULL::INT8, NULL::INT8, 3)
  │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:13]
+ │         ├── assignment-cast: INT8 [as=column13:13]
  │         │    └── column1:8
- │         ├── assignment-cast: INT8 [as=column2:14]
+ │         ├── assignment-cast: INT8 [as=column14:14]
  │         │    └── column2:9
- │         ├── assignment-cast: INT8 [as=column3:15]
+ │         ├── assignment-cast: INT8 [as=column15:15]
  │         │    └── column3:10
- │         ├── assignment-cast: INT8 [as=column4:16]
+ │         ├── assignment-cast: INT8 [as=column16:16]
  │         │    └── column4:11
- │         └── assignment-cast: INT8 [as=column5:17]
+ │         └── assignment-cast: INT8 [as=column17:17]
  │              └── column5:12
  └── unique-checks
       ├── unique-checks-item: uniq(w)
@@ -118,11 +118,11 @@ insert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:25!null v:26 w:27 x:28 y:29!null
       │              │    └── mapping:
-      │              │         ├──  column1:13 => k:25
-      │              │         ├──  column2:14 => v:26
-      │              │         ├──  column3:15 => w:27
-      │              │         ├──  column4:16 => x:28
-      │              │         └──  column5:17 => y:29
+      │              │         ├──  column13:13 => k:25
+      │              │         ├──  column14:14 => v:26
+      │              │         ├──  column15:15 => w:27
+      │              │         ├──  column16:16 => x:28
+      │              │         └──  column17:17 => y:29
       │              ├── scan uniq
       │              │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
       │              └── filters
@@ -136,11 +136,11 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:37!null v:38 w:39 x:40 y:41!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:37
-                     │         ├──  column2:14 => v:38
-                     │         ├──  column3:15 => w:39
-                     │         ├──  column4:16 => x:40
-                     │         └──  column5:17 => y:41
+                     │         ├──  column13:13 => k:37
+                     │         ├──  column14:14 => v:38
+                     │         ├──  column15:15 => w:39
+                     │         ├──  column16:16 => x:40
+                     │         └──  column17:17 => y:41
                      ├── scan uniq
                      │    └── columns: uniq.k:30!null uniq.v:31 uniq.w:32 uniq.x:33 uniq.y:34
                      └── filters
@@ -157,14 +157,14 @@ INSERT INTO uniq VALUES (1, 1, NULL, 1, 1), (2, 2, NULL, 2, 2)
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
+ │    ├── column13:13 => uniq.k:1
+ │    ├── column14:14 => uniq.v:2
+ │    ├── column15:15 => uniq.w:3
+ │    ├── column16:16 => uniq.x:4
+ │    └── column17:17 => uniq.y:5
  ├── input binding: &1
  ├── values
- │    ├── columns: column1:13!null column2:14!null column3:15 column4:16!null column5:17!null
+ │    ├── columns: column13:13!null column14:14!null column15:15 column16:16!null column17:17!null
  │    ├── (1, 1, NULL, 1, 1)
  │    └── (2, 2, NULL, 2, 2)
  └── unique-checks
@@ -176,9 +176,9 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:25!null x:28!null y:29!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:25
-                     │         ├──  column4:16 => x:28
-                     │         └──  column5:17 => y:29
+                     │         ├──  column13:13 => k:25
+                     │         ├──  column16:16 => x:28
+                     │         └──  column17:17 => y:29
                      ├── scan uniq
                      │    └── columns: uniq.k:18!null uniq.x:21 uniq.y:22
                      └── filters
@@ -195,14 +195,14 @@ INSERT INTO uniq VALUES (1, 1, 1, NULL, 1), (2, 2, NULL, NULL, 2)
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
+ │    ├── column13:13 => uniq.k:1
+ │    ├── column14:14 => uniq.v:2
+ │    ├── column15:15 => uniq.w:3
+ │    ├── column16:16 => uniq.x:4
+ │    └── column17:17 => uniq.y:5
  ├── input binding: &1
  ├── values
- │    ├── columns: column1:13!null column2:14!null column3:15 column4:16 column5:17!null
+ │    ├── columns: column13:13!null column14:14!null column15:15 column16:16 column17:17!null
  │    ├── (1, 1, 1, NULL, 1)
  │    └── (2, 2, NULL, NULL, 2)
  └── unique-checks
@@ -214,8 +214,8 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:25!null w:27
                      │    └── mapping:
-                     │         ├──  column1:13 => k:25
-                     │         └──  column3:15 => w:27
+                     │         ├──  column13:13 => k:25
+                     │         └──  column15:15 => w:27
                      ├── scan uniq
                      │    └── columns: uniq.k:18!null uniq.w:20
                      └── filters
@@ -231,14 +231,14 @@ INSERT INTO uniq VALUES (1, 1, 1, 1, NULL), (2, 2, 2, 2, NULL)
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
+ │    ├── column13:13 => uniq.k:1
+ │    ├── column14:14 => uniq.v:2
+ │    ├── column15:15 => uniq.w:3
+ │    ├── column16:16 => uniq.x:4
+ │    └── column17:17 => uniq.y:5
  ├── input binding: &1
  ├── values
- │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17
+ │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17
  │    ├── (1, 1, 1, 1, NULL)
  │    └── (2, 2, 2, 2, NULL)
  └── unique-checks
@@ -250,8 +250,8 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:25!null w:27!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:25
-                     │         └──  column3:15 => w:27
+                     │         ├──  column13:13 => k:25
+                     │         └──  column15:15 => w:27
                      ├── scan uniq
                      │    └── columns: uniq.k:18!null uniq.w:20
                      └── filters
@@ -267,13 +267,13 @@ INSERT INTO uniq VALUES (1, 1, NULL, NULL, NULL), (2, 2, NULL, NULL, NULL)
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => k:1
- │    ├── column2:14 => v:2
- │    ├── column3:15 => w:3
- │    ├── column4:16 => x:4
- │    └── column5:17 => y:5
+ │    ├── column13:13 => k:1
+ │    ├── column14:14 => v:2
+ │    ├── column15:15 => w:3
+ │    ├── column16:16 => x:4
+ │    └── column17:17 => y:5
  └── values
-      ├── columns: column1:13!null column2:14!null column3:15 column4:16 column5:17
+      ├── columns: column13:13!null column14:14!null column15:15 column16:16 column17:17
       ├── (1, 1, NULL, NULL, NULL)
       └── (2, 2, NULL, NULL, NULL)
 
@@ -287,98 +287,98 @@ insert uniq
  ├── arbiter indexes: uniq_pkey uniq_v_key
  ├── arbiter constraints: unique_w unique_x_y
  ├── insert-mapping:
- │    ├── column1:13 => k:1
- │    ├── column2:14 => v:2
- │    ├── column3:15 => w:3
- │    ├── column4:16 => x:4
- │    └── column5:17 => y:5
+ │    ├── column13:13 => k:1
+ │    ├── column14:14 => v:2
+ │    ├── column15:15 => w:3
+ │    ├── column16:16 => x:4
+ │    └── column17:17 => y:5
  └── upsert-distinct-on
-      ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
-      ├── grouping columns: column4:16!null column5:17!null
+      ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
+      ├── grouping columns: column16:16!null column17:17!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
-      │    ├── grouping columns: column3:15!null
+      │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
+      │    ├── grouping columns: column15:15!null
       │    ├── upsert-distinct-on
-      │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
-      │    │    ├── grouping columns: column2:14!null
+      │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
+      │    │    ├── grouping columns: column14:14!null
       │    │    ├── upsert-distinct-on
-      │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
-      │    │    │    ├── grouping columns: column1:13!null
+      │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
+      │    │    │    ├── grouping columns: column13:13!null
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+      │    │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
       │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+      │    │    │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
       │    │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+      │    │    │    │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
       │    │    │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+      │    │    │    │    │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
       │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+      │    │    │    │    │    │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
       │    │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
       │    │    │    │    │    │    │    │    │    └── (1, 2, 3, 4, 5)
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:13]
+      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column13:13]
       │    │    │    │    │    │    │    │         │    └── column1:8
-      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:14]
+      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column14:14]
       │    │    │    │    │    │    │    │         │    └── column2:9
-      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column3:15]
+      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column15:15]
       │    │    │    │    │    │    │    │         │    └── column3:10
-      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column4:16]
+      │    │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column16:16]
       │    │    │    │    │    │    │    │         │    └── column4:11
-      │    │    │    │    │    │    │    │         └── assignment-cast: INT8 [as=column5:17]
+      │    │    │    │    │    │    │    │         └── assignment-cast: INT8 [as=column17:17]
       │    │    │    │    │    │    │    │              └── column5:12
       │    │    │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    │    │    └── columns: k:18!null v:19 w:20 x:21 y:22
       │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── column1:13 = k:18
+      │    │    │    │    │    │    │         └── column13:13 = k:18
       │    │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    │    └── columns: k:25!null v:26 w:27 x:28 y:29
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── column2:14 = v:26
+      │    │    │    │    │    │         └── column14:14 = v:26
       │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    └── columns: k:32!null v:33 w:34 x:35 y:36
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── column3:15 = w:34
+      │    │    │    │    │         └── column15:15 = w:34
       │    │    │    │    ├── scan uniq
       │    │    │    │    │    └── columns: k:39!null v:40 w:41 x:42 y:43
       │    │    │    │    └── filters
-      │    │    │    │         ├── column4:16 = x:42
-      │    │    │    │         └── column5:17 = y:43
+      │    │    │    │         ├── column16:16 = x:42
+      │    │    │    │         └── column17:17 = y:43
       │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=column2:14]
-      │    │    │         │    └── column2:14
-      │    │    │         ├── first-agg [as=column3:15]
-      │    │    │         │    └── column3:15
-      │    │    │         ├── first-agg [as=column4:16]
-      │    │    │         │    └── column4:16
-      │    │    │         └── first-agg [as=column5:17]
-      │    │    │              └── column5:17
+      │    │    │         ├── first-agg [as=column14:14]
+      │    │    │         │    └── column14:14
+      │    │    │         ├── first-agg [as=column15:15]
+      │    │    │         │    └── column15:15
+      │    │    │         ├── first-agg [as=column16:16]
+      │    │    │         │    └── column16:16
+      │    │    │         └── first-agg [as=column17:17]
+      │    │    │              └── column17:17
       │    │    └── aggregations
-      │    │         ├── first-agg [as=column1:13]
-      │    │         │    └── column1:13
-      │    │         ├── first-agg [as=column3:15]
-      │    │         │    └── column3:15
-      │    │         ├── first-agg [as=column4:16]
-      │    │         │    └── column4:16
-      │    │         └── first-agg [as=column5:17]
-      │    │              └── column5:17
+      │    │         ├── first-agg [as=column13:13]
+      │    │         │    └── column13:13
+      │    │         ├── first-agg [as=column15:15]
+      │    │         │    └── column15:15
+      │    │         ├── first-agg [as=column16:16]
+      │    │         │    └── column16:16
+      │    │         └── first-agg [as=column17:17]
+      │    │              └── column17:17
       │    └── aggregations
-      │         ├── first-agg [as=column1:13]
-      │         │    └── column1:13
-      │         ├── first-agg [as=column2:14]
-      │         │    └── column2:14
-      │         ├── first-agg [as=column4:16]
-      │         │    └── column4:16
-      │         └── first-agg [as=column5:17]
-      │              └── column5:17
+      │         ├── first-agg [as=column13:13]
+      │         │    └── column13:13
+      │         ├── first-agg [as=column14:14]
+      │         │    └── column14:14
+      │         ├── first-agg [as=column16:16]
+      │         │    └── column16:16
+      │         └── first-agg [as=column17:17]
+      │              └── column17:17
       └── aggregations
-           ├── first-agg [as=column1:13]
-           │    └── column1:13
-           ├── first-agg [as=column2:14]
-           │    └── column2:14
-           └── first-agg [as=column3:15]
-                └── column3:15
+           ├── first-agg [as=column13:13]
+           │    └── column13:13
+           ├── first-agg [as=column14:14]
+           │    └── column14:14
+           └── first-agg [as=column15:15]
+                └── column15:15
 
 # On conflict clause references unique without index constraint.
 build
@@ -388,46 +388,46 @@ insert uniq
  ├── columns: <none>
  ├── arbiter constraints: unique_w
  ├── insert-mapping:
- │    ├── column1:13 => uniq.k:1
- │    ├── column2:14 => uniq.v:2
- │    ├── column3:15 => uniq.w:3
- │    ├── column4:16 => uniq.x:4
- │    └── column5:17 => uniq.y:5
+ │    ├── column13:13 => uniq.k:1
+ │    ├── column14:14 => uniq.v:2
+ │    ├── column15:15 => uniq.w:3
+ │    ├── column16:16 => uniq.x:4
+ │    └── column17:17 => uniq.y:5
  ├── input binding: &1
  ├── upsert-distinct-on
- │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
- │    ├── grouping columns: column3:15!null
+ │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
+ │    ├── grouping columns: column15:15!null
  │    ├── anti-join (hash)
- │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+ │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
  │    │    ├── project
- │    │    │    ├── columns: column1:13!null column2:14!null column3:15!null column4:16!null column5:17!null
+ │    │    │    ├── columns: column13:13!null column14:14!null column15:15!null column16:16!null column17:17!null
  │    │    │    ├── values
  │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    │    │    │    └── (1, 2, 3, 4, 5)
  │    │    │    └── projections
- │    │    │         ├── assignment-cast: INT8 [as=column1:13]
+ │    │    │         ├── assignment-cast: INT8 [as=column13:13]
  │    │    │         │    └── column1:8
- │    │    │         ├── assignment-cast: INT8 [as=column2:14]
+ │    │    │         ├── assignment-cast: INT8 [as=column14:14]
  │    │    │         │    └── column2:9
- │    │    │         ├── assignment-cast: INT8 [as=column3:15]
+ │    │    │         ├── assignment-cast: INT8 [as=column15:15]
  │    │    │         │    └── column3:10
- │    │    │         ├── assignment-cast: INT8 [as=column4:16]
+ │    │    │         ├── assignment-cast: INT8 [as=column16:16]
  │    │    │         │    └── column4:11
- │    │    │         └── assignment-cast: INT8 [as=column5:17]
+ │    │    │         └── assignment-cast: INT8 [as=column17:17]
  │    │    │              └── column5:12
  │    │    ├── scan uniq
  │    │    │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
  │    │    └── filters
- │    │         └── column3:15 = uniq.w:20
+ │    │         └── column15:15 = uniq.w:20
  │    └── aggregations
- │         ├── first-agg [as=column1:13]
- │         │    └── column1:13
- │         ├── first-agg [as=column2:14]
- │         │    └── column2:14
- │         ├── first-agg [as=column4:16]
- │         │    └── column4:16
- │         └── first-agg [as=column5:17]
- │              └── column5:17
+ │         ├── first-agg [as=column13:13]
+ │         │    └── column13:13
+ │         ├── first-agg [as=column14:14]
+ │         │    └── column14:14
+ │         ├── first-agg [as=column16:16]
+ │         │    └── column16:16
+ │         └── first-agg [as=column17:17]
+ │              └── column17:17
  └── unique-checks
       └── unique-checks-item: uniq(x,y)
            └── project
@@ -437,11 +437,11 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:32!null v:33!null w:34!null x:35!null y:36!null
                      │    └── mapping:
-                     │         ├──  column1:13 => k:32
-                     │         ├──  column2:14 => v:33
-                     │         ├──  column3:15 => w:34
-                     │         ├──  column4:16 => x:35
-                     │         └──  column5:17 => y:36
+                     │         ├──  column13:13 => k:32
+                     │         ├──  column14:14 => v:33
+                     │         ├──  column15:15 => w:34
+                     │         ├──  column16:16 => x:35
+                     │         └──  column17:17 => y:36
                      ├── scan uniq
                      │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
                      └── filters
@@ -460,28 +460,28 @@ INSERT INTO uniq SELECT k, v, w, x, y FROM other
 insert uniq
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── k:16 => uniq.k:1
- │    ├── v:17 => uniq.v:2
- │    ├── w:18 => uniq.w:3
- │    ├── x:19 => uniq.x:4
- │    └── y:20 => uniq.y:5
+ │    ├── column16:16 => uniq.k:1
+ │    ├── column17:17 => uniq.v:2
+ │    ├── column18:18 => uniq.w:3
+ │    ├── column19:19 => uniq.x:4
+ │    └── column20:20 => uniq.y:5
  ├── input binding: &1
  ├── project
- │    ├── columns: k:16 v:17 w:18!null x:19 y:20
+ │    ├── columns: column16:16 column17:17 column18:18!null column19:19 column20:20
  │    ├── project
  │    │    ├── columns: other.k:8 other.v:9 other.w:10!null other.x:11 other.y:12
  │    │    └── scan other
  │    │         └── columns: other.k:8 other.v:9 other.w:10!null other.x:11 other.y:12 rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
  │    └── projections
- │         ├── assignment-cast: INT8 [as=k:16]
+ │         ├── assignment-cast: INT8 [as=column16:16]
  │         │    └── other.k:8
- │         ├── assignment-cast: INT8 [as=v:17]
+ │         ├── assignment-cast: INT8 [as=column17:17]
  │         │    └── other.v:9
- │         ├── assignment-cast: INT8 [as=w:18]
+ │         ├── assignment-cast: INT8 [as=column18:18]
  │         │    └── other.w:10
- │         ├── assignment-cast: INT8 [as=x:19]
+ │         ├── assignment-cast: INT8 [as=column19:19]
  │         │    └── other.x:11
- │         └── assignment-cast: INT8 [as=y:20]
+ │         └── assignment-cast: INT8 [as=column20:20]
  │              └── other.y:12
  └── unique-checks
       ├── unique-checks-item: uniq(w)
@@ -492,11 +492,11 @@ insert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:28 v:29 w:30!null x:31 y:32
       │              │    └── mapping:
-      │              │         ├──  k:16 => k:28
-      │              │         ├──  v:17 => v:29
-      │              │         ├──  w:18 => w:30
-      │              │         ├──  x:19 => x:31
-      │              │         └──  y:20 => y:32
+      │              │         ├──  column16:16 => k:28
+      │              │         ├──  column17:17 => v:29
+      │              │         ├──  column18:18 => w:30
+      │              │         ├──  column19:19 => x:31
+      │              │         └──  column20:20 => y:32
       │              ├── scan uniq
       │              │    └── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24 uniq.y:25
       │              └── filters
@@ -510,11 +510,11 @@ insert uniq
                      ├── with-scan &1
                      │    ├── columns: k:40 v:41 w:42!null x:43 y:44
                      │    └── mapping:
-                     │         ├──  k:16 => k:40
-                     │         ├──  v:17 => v:41
-                     │         ├──  w:18 => w:42
-                     │         ├──  x:19 => x:43
-                     │         └──  y:20 => y:44
+                     │         ├──  column16:16 => k:40
+                     │         ├──  column17:17 => v:41
+                     │         ├──  column18:18 => w:42
+                     │         ├──  column19:19 => x:43
+                     │         └──  column20:20 => y:44
                      ├── scan uniq
                      │    └── columns: uniq.k:33!null uniq.v:34 uniq.w:35 uniq.x:36 uniq.y:37
                      └── filters
@@ -545,25 +545,25 @@ INSERT INTO uniq_overlaps_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
 insert uniq_overlaps_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:11 => uniq_overlaps_pk.a:1
- │    ├── column2:12 => uniq_overlaps_pk.b:2
- │    ├── column3:13 => uniq_overlaps_pk.c:3
- │    └── column4:14 => uniq_overlaps_pk.d:4
+ │    ├── column11:11 => uniq_overlaps_pk.a:1
+ │    ├── column12:12 => uniq_overlaps_pk.b:2
+ │    ├── column13:13 => uniq_overlaps_pk.c:3
+ │    └── column14:14 => uniq_overlaps_pk.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null
+ │    ├── columns: column11:11!null column12:12!null column13:13!null column14:14!null
  │    ├── values
  │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
  │    │    ├── (1, 1, 1, 1)
  │    │    └── (2, 2, 2, 2)
  │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:11]
+ │         ├── assignment-cast: INT8 [as=column11:11]
  │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column2:12]
+ │         ├── assignment-cast: INT8 [as=column12:12]
  │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column3:13]
+ │         ├── assignment-cast: INT8 [as=column13:13]
  │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column4:14]
+ │         └── assignment-cast: INT8 [as=column14:14]
  │              └── column4:10
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
@@ -574,10 +574,10 @@ insert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:21!null b:22!null c:23!null d:24!null
       │              │    └── mapping:
-      │              │         ├──  column1:11 => a:21
-      │              │         ├──  column2:12 => b:22
-      │              │         ├──  column3:13 => c:23
-      │              │         └──  column4:14 => d:24
+      │              │         ├──  column11:11 => a:21
+      │              │         ├──  column12:12 => b:22
+      │              │         ├──  column13:13 => c:23
+      │              │         └──  column14:14 => d:24
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:15!null uniq_overlaps_pk.b:16!null uniq_overlaps_pk.c:17 uniq_overlaps_pk.d:18
       │              └── filters
@@ -592,10 +592,10 @@ insert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:31!null b:32!null c:33!null d:34!null
       │              │    └── mapping:
-      │              │         ├──  column1:11 => a:31
-      │              │         ├──  column2:12 => b:32
-      │              │         ├──  column3:13 => c:33
-      │              │         └──  column4:14 => d:34
+      │              │         ├──  column11:11 => a:31
+      │              │         ├──  column12:12 => b:32
+      │              │         ├──  column13:13 => c:33
+      │              │         └──  column14:14 => d:34
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:25!null uniq_overlaps_pk.b:26!null uniq_overlaps_pk.c:27 uniq_overlaps_pk.d:28
       │              └── filters
@@ -609,10 +609,10 @@ insert uniq_overlaps_pk
                      ├── with-scan &1
                      │    ├── columns: a:41!null b:42!null c:43!null d:44!null
                      │    └── mapping:
-                     │         ├──  column1:11 => a:41
-                     │         ├──  column2:12 => b:42
-                     │         ├──  column3:13 => c:43
-                     │         └──  column4:14 => d:44
+                     │         ├──  column11:11 => a:41
+                     │         ├──  column12:12 => b:42
+                     │         ├──  column13:13 => c:43
+                     │         └──  column14:14 => d:44
                      ├── scan uniq_overlaps_pk
                      │    └── columns: uniq_overlaps_pk.a:35!null uniq_overlaps_pk.b:36!null uniq_overlaps_pk.c:37 uniq_overlaps_pk.d:38
                      └── filters
@@ -629,26 +629,26 @@ INSERT INTO uniq_overlaps_pk SELECT k, v, x, y FROM other
 insert uniq_overlaps_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── k:15 => uniq_overlaps_pk.a:1
- │    ├── v:16 => uniq_overlaps_pk.b:2
- │    ├── x:17 => uniq_overlaps_pk.c:3
- │    └── y:18 => uniq_overlaps_pk.d:4
+ │    ├── column15:15 => uniq_overlaps_pk.a:1
+ │    ├── column16:16 => uniq_overlaps_pk.b:2
+ │    ├── column17:17 => uniq_overlaps_pk.c:3
+ │    └── column18:18 => uniq_overlaps_pk.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: k:15 v:16 x:17 y:18
+ │    ├── columns: column15:15 column16:16 column17:17 column18:18
  │    ├── project
- │    │    ├── columns: other.k:7 other.v:8 other.x:10 other.y:11
+ │    │    ├── columns: k:7 v:8 x:10 y:11
  │    │    └── scan other
- │    │         └── columns: other.k:7 other.v:8 w:9!null other.x:10 other.y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+ │    │         └── columns: k:7 v:8 w:9!null x:10 y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  │    └── projections
- │         ├── assignment-cast: INT8 [as=k:15]
- │         │    └── other.k:7
- │         ├── assignment-cast: INT8 [as=v:16]
- │         │    └── other.v:8
- │         ├── assignment-cast: INT8 [as=x:17]
- │         │    └── other.x:10
- │         └── assignment-cast: INT8 [as=y:18]
- │              └── other.y:11
+ │         ├── assignment-cast: INT8 [as=column15:15]
+ │         │    └── k:7
+ │         ├── assignment-cast: INT8 [as=column16:16]
+ │         │    └── v:8
+ │         ├── assignment-cast: INT8 [as=column17:17]
+ │         │    └── x:10
+ │         └── assignment-cast: INT8 [as=column18:18]
+ │              └── y:11
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── project
@@ -658,10 +658,10 @@ insert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:25 b:26 c:27 d:28
       │              │    └── mapping:
-      │              │         ├──  k:15 => a:25
-      │              │         ├──  v:16 => b:26
-      │              │         ├──  x:17 => c:27
-      │              │         └──  y:18 => d:28
+      │              │         ├──  column15:15 => a:25
+      │              │         ├──  column16:16 => b:26
+      │              │         ├──  column17:17 => c:27
+      │              │         └──  column18:18 => d:28
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:19!null uniq_overlaps_pk.b:20!null uniq_overlaps_pk.c:21 uniq_overlaps_pk.d:22
       │              └── filters
@@ -676,10 +676,10 @@ insert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:35 b:36 c:37 d:38
       │              │    └── mapping:
-      │              │         ├──  k:15 => a:35
-      │              │         ├──  v:16 => b:36
-      │              │         ├──  x:17 => c:37
-      │              │         └──  y:18 => d:38
+      │              │         ├──  column15:15 => a:35
+      │              │         ├──  column16:16 => b:36
+      │              │         ├──  column17:17 => c:37
+      │              │         └──  column18:18 => d:38
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:29!null uniq_overlaps_pk.b:30!null uniq_overlaps_pk.c:31 uniq_overlaps_pk.d:32
       │              └── filters
@@ -693,10 +693,10 @@ insert uniq_overlaps_pk
                      ├── with-scan &1
                      │    ├── columns: a:45 b:46 c:47 d:48
                      │    └── mapping:
-                     │         ├──  k:15 => a:45
-                     │         ├──  v:16 => b:46
-                     │         ├──  x:17 => c:47
-                     │         └──  y:18 => d:48
+                     │         ├──  column15:15 => a:45
+                     │         ├──  column16:16 => b:46
+                     │         ├──  column17:17 => c:47
+                     │         └──  column18:18 => d:48
                      ├── scan uniq_overlaps_pk
                      │    └── columns: uniq_overlaps_pk.a:39!null uniq_overlaps_pk.b:40!null uniq_overlaps_pk.c:41 uniq_overlaps_pk.d:42
                      └── filters
@@ -724,28 +724,28 @@ INSERT INTO uniq_hidden_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
 insert uniq_hidden_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:12 => uniq_hidden_pk.a:1
- │    ├── column2:13 => uniq_hidden_pk.b:2
- │    ├── column3:14 => uniq_hidden_pk.c:3
- │    ├── column4:15 => uniq_hidden_pk.d:4
+ │    ├── column12:12 => uniq_hidden_pk.a:1
+ │    ├── column13:13 => uniq_hidden_pk.b:2
+ │    ├── column14:14 => uniq_hidden_pk.c:3
+ │    ├── column15:15 => uniq_hidden_pk.d:4
  │    └── rowid_default:16 => uniq_hidden_pk.rowid:5
  ├── input binding: &1
  ├── project
- │    ├── columns: rowid_default:16 column1:12!null column2:13!null column3:14!null column4:15!null
+ │    ├── columns: rowid_default:16 column12:12!null column13:13!null column14:14!null column15:15!null
  │    ├── project
- │    │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null
+ │    │    ├── columns: column12:12!null column13:13!null column14:14!null column15:15!null
  │    │    ├── values
  │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
  │    │    │    ├── (1, 1, 1, 1)
  │    │    │    └── (2, 2, 2, 2)
  │    │    └── projections
- │    │         ├── assignment-cast: INT8 [as=column1:12]
+ │    │         ├── assignment-cast: INT8 [as=column12:12]
  │    │         │    └── column1:8
- │    │         ├── assignment-cast: INT8 [as=column2:13]
+ │    │         ├── assignment-cast: INT8 [as=column13:13]
  │    │         │    └── column2:9
- │    │         ├── assignment-cast: INT8 [as=column3:14]
+ │    │         ├── assignment-cast: INT8 [as=column14:14]
  │    │         │    └── column3:10
- │    │         └── assignment-cast: INT8 [as=column4:15]
+ │    │         └── assignment-cast: INT8 [as=column15:15]
  │    │              └── column4:11
  │    └── projections
  │         └── unique_rowid() [as=rowid_default:16]
@@ -758,10 +758,10 @@ insert uniq_hidden_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:24!null b:25!null c:26!null d:27!null rowid:28
       │              │    └── mapping:
-      │              │         ├──  column1:12 => a:24
-      │              │         ├──  column2:13 => b:25
-      │              │         ├──  column3:14 => c:26
-      │              │         ├──  column4:15 => d:27
+      │              │         ├──  column12:12 => a:24
+      │              │         ├──  column13:13 => b:25
+      │              │         ├──  column14:14 => c:26
+      │              │         ├──  column15:15 => d:27
       │              │         └──  rowid_default:16 => rowid:28
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
@@ -777,10 +777,10 @@ insert uniq_hidden_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:36!null b:37!null c:38!null d:39!null rowid:40
       │              │    └── mapping:
-      │              │         ├──  column1:12 => a:36
-      │              │         ├──  column2:13 => b:37
-      │              │         ├──  column3:14 => c:38
-      │              │         ├──  column4:15 => d:39
+      │              │         ├──  column12:12 => a:36
+      │              │         ├──  column13:13 => b:37
+      │              │         ├──  column14:14 => c:38
+      │              │         ├──  column15:15 => d:39
       │              │         └──  rowid_default:16 => rowid:40
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
@@ -797,10 +797,10 @@ insert uniq_hidden_pk
                      ├── with-scan &1
                      │    ├── columns: a:48!null b:49!null c:50!null d:51!null rowid:52
                      │    └── mapping:
-                     │         ├──  column1:12 => a:48
-                     │         ├──  column2:13 => b:49
-                     │         ├──  column3:14 => c:50
-                     │         ├──  column4:15 => d:51
+                     │         ├──  column12:12 => a:48
+                     │         ├──  column13:13 => b:49
+                     │         ├──  column14:14 => c:50
+                     │         ├──  column15:15 => d:51
                      │         └──  rowid_default:16 => rowid:52
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
@@ -816,29 +816,29 @@ INSERT INTO uniq_hidden_pk SELECT k, v, x, y FROM other
 insert uniq_hidden_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── k:16 => uniq_hidden_pk.a:1
- │    ├── v:17 => uniq_hidden_pk.b:2
- │    ├── x:18 => uniq_hidden_pk.c:3
- │    ├── y:19 => uniq_hidden_pk.d:4
+ │    ├── column16:16 => uniq_hidden_pk.a:1
+ │    ├── column17:17 => uniq_hidden_pk.b:2
+ │    ├── column18:18 => uniq_hidden_pk.c:3
+ │    ├── column19:19 => uniq_hidden_pk.d:4
  │    └── rowid_default:20 => uniq_hidden_pk.rowid:5
  ├── input binding: &1
  ├── project
- │    ├── columns: rowid_default:20 k:16 v:17 x:18 y:19
+ │    ├── columns: rowid_default:20 column16:16 column17:17 column18:18 column19:19
  │    ├── project
- │    │    ├── columns: k:16 v:17 x:18 y:19
+ │    │    ├── columns: column16:16 column17:17 column18:18 column19:19
  │    │    ├── project
- │    │    │    ├── columns: other.k:8 other.v:9 other.x:11 other.y:12
+ │    │    │    ├── columns: k:8 v:9 x:11 y:12
  │    │    │    └── scan other
- │    │    │         └── columns: other.k:8 other.v:9 w:10!null other.x:11 other.y:12 other.rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
+ │    │    │         └── columns: k:8 v:9 w:10!null x:11 y:12 other.rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
  │    │    └── projections
- │    │         ├── assignment-cast: INT8 [as=k:16]
- │    │         │    └── other.k:8
- │    │         ├── assignment-cast: INT8 [as=v:17]
- │    │         │    └── other.v:9
- │    │         ├── assignment-cast: INT8 [as=x:18]
- │    │         │    └── other.x:11
- │    │         └── assignment-cast: INT8 [as=y:19]
- │    │              └── other.y:12
+ │    │         ├── assignment-cast: INT8 [as=column16:16]
+ │    │         │    └── k:8
+ │    │         ├── assignment-cast: INT8 [as=column17:17]
+ │    │         │    └── v:9
+ │    │         ├── assignment-cast: INT8 [as=column18:18]
+ │    │         │    └── x:11
+ │    │         └── assignment-cast: INT8 [as=column19:19]
+ │    │              └── y:12
  │    └── projections
  │         └── unique_rowid() [as=rowid_default:20]
  └── unique-checks
@@ -850,10 +850,10 @@ insert uniq_hidden_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:28 b:29 c:30 d:31 rowid:32
       │              │    └── mapping:
-      │              │         ├──  k:16 => a:28
-      │              │         ├──  v:17 => b:29
-      │              │         ├──  x:18 => c:30
-      │              │         ├──  y:19 => d:31
+      │              │         ├──  column16:16 => a:28
+      │              │         ├──  column17:17 => b:29
+      │              │         ├──  column18:18 => c:30
+      │              │         ├──  column19:19 => d:31
       │              │         └──  rowid_default:20 => rowid:32
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:21 uniq_hidden_pk.b:22 uniq_hidden_pk.c:23 uniq_hidden_pk.d:24 uniq_hidden_pk.rowid:25!null
@@ -869,10 +869,10 @@ insert uniq_hidden_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:40 b:41 c:42 d:43 rowid:44
       │              │    └── mapping:
-      │              │         ├──  k:16 => a:40
-      │              │         ├──  v:17 => b:41
-      │              │         ├──  x:18 => c:42
-      │              │         ├──  y:19 => d:43
+      │              │         ├──  column16:16 => a:40
+      │              │         ├──  column17:17 => b:41
+      │              │         ├──  column18:18 => c:42
+      │              │         ├──  column19:19 => d:43
       │              │         └──  rowid_default:20 => rowid:44
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:33 uniq_hidden_pk.b:34 uniq_hidden_pk.c:35 uniq_hidden_pk.d:36 uniq_hidden_pk.rowid:37!null
@@ -889,10 +889,10 @@ insert uniq_hidden_pk
                      ├── with-scan &1
                      │    ├── columns: a:52 b:53 c:54 d:55 rowid:56
                      │    └── mapping:
-                     │         ├──  k:16 => a:52
-                     │         ├──  v:17 => b:53
-                     │         ├──  x:18 => c:54
-                     │         ├──  y:19 => d:55
+                     │         ├──  column16:16 => a:52
+                     │         ├──  column17:17 => b:53
+                     │         ├──  column18:18 => c:54
+                     │         ├──  column19:19 => d:55
                      │         └──  rowid_default:20 => rowid:56
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:45 uniq_hidden_pk.b:46 uniq_hidden_pk.c:47 uniq_hidden_pk.d:48 uniq_hidden_pk.rowid:49!null
@@ -916,22 +916,22 @@ INSERT INTO uniq_partial VALUES (1, 1, 1), (2, 2, 2)
 insert uniq_partial
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => uniq_partial.k:1
- │    ├── column2:10 => uniq_partial.a:2
- │    └── column3:11 => uniq_partial.b:3
+ │    ├── column9:9 => uniq_partial.k:1
+ │    ├── column10:10 => uniq_partial.a:2
+ │    └── column11:11 => uniq_partial.b:3
  ├── input binding: &1
  ├── project
- │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    ├── columns: column9:9!null column10:10!null column11:11!null
  │    ├── values
  │    │    ├── columns: column1:6!null column2:7!null column3:8!null
  │    │    ├── (1, 1, 1)
  │    │    └── (2, 2, 2)
  │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:9]
+ │         ├── assignment-cast: INT8 [as=column9:9]
  │         │    └── column1:6
- │         ├── assignment-cast: INT8 [as=column2:10]
+ │         ├── assignment-cast: INT8 [as=column10:10]
  │         │    └── column2:7
- │         └── assignment-cast: INT8 [as=column3:11]
+ │         └── assignment-cast: INT8 [as=column11:11]
  │              └── column3:8
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
@@ -942,9 +942,9 @@ insert uniq_partial
                      ├── with-scan &1
                      │    ├── columns: k:17!null a:18!null b:19!null
                      │    └── mapping:
-                     │         ├──  column1:9 => k:17
-                     │         ├──  column2:10 => a:18
-                     │         └──  column3:11 => b:19
+                     │         ├──  column9:9 => k:17
+                     │         ├──  column10:10 => a:18
+                     │         └──  column11:11 => b:19
                      ├── scan uniq_partial
                      │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
                      └── filters
@@ -960,23 +960,23 @@ INSERT INTO uniq_partial VALUES (1, 1, 1), (2, 2, 2), (3, NULL, 3)
 insert uniq_partial
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => uniq_partial.k:1
- │    ├── column2:10 => uniq_partial.a:2
- │    └── column3:11 => uniq_partial.b:3
+ │    ├── column9:9 => uniq_partial.k:1
+ │    ├── column10:10 => uniq_partial.a:2
+ │    └── column11:11 => uniq_partial.b:3
  ├── input binding: &1
  ├── project
- │    ├── columns: column1:9!null column2:10 column3:11!null
+ │    ├── columns: column9:9!null column10:10 column11:11!null
  │    ├── values
  │    │    ├── columns: column1:6!null column2:7 column3:8!null
  │    │    ├── (1, 1, 1)
  │    │    ├── (2, 2, 2)
  │    │    └── (3, NULL::INT8, 3)
  │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:9]
+ │         ├── assignment-cast: INT8 [as=column9:9]
  │         │    └── column1:6
- │         ├── assignment-cast: INT8 [as=column2:10]
+ │         ├── assignment-cast: INT8 [as=column10:10]
  │         │    └── column2:7
- │         └── assignment-cast: INT8 [as=column3:11]
+ │         └── assignment-cast: INT8 [as=column11:11]
  │              └── column3:8
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
@@ -987,9 +987,9 @@ insert uniq_partial
                      ├── with-scan &1
                      │    ├── columns: k:17!null a:18 b:19!null
                      │    └── mapping:
-                     │         ├──  column1:9 => k:17
-                     │         ├──  column2:10 => a:18
-                     │         └──  column3:11 => b:19
+                     │         ├──  column9:9 => k:17
+                     │         ├──  column10:10 => a:18
+                     │         └──  column11:11 => b:19
                      ├── scan uniq_partial
                      │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
                      └── filters
@@ -1007,11 +1007,11 @@ INSERT INTO uniq_partial VALUES (1, NULL, 1), (2, NULL, 2)
 insert uniq_partial
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => k:1
- │    ├── column2:10 => a:2
- │    └── column3:11 => b:3
+ │    ├── column9:9 => k:1
+ │    ├── column10:10 => a:2
+ │    └── column11:11 => b:3
  └── values
-      ├── columns: column1:9!null column2:10 column3:11!null
+      ├── columns: column9:9!null column10:10 column11:11!null
       ├── (1, NULL, 1)
       └── (2, NULL, 2)
 
@@ -1025,40 +1025,40 @@ insert uniq_partial
  ├── arbiter indexes: uniq_partial_pkey
  ├── arbiter constraints: unique_a
  ├── insert-mapping:
- │    ├── column1:9 => k:1
- │    ├── column2:10 => a:2
- │    └── column3:11 => b:3
+ │    ├── column9:9 => k:1
+ │    ├── column10:10 => a:2
+ │    └── column11:11 => b:3
  └── project
-      ├── columns: column1:9!null column2:10!null column3:11!null
+      ├── columns: column9:9!null column10:10!null column11:11!null
       └── upsert-distinct-on
-           ├── columns: column1:9!null column2:10!null column3:11!null arbiter_unique_a_distinct:22
-           ├── grouping columns: column2:10!null arbiter_unique_a_distinct:22
+           ├── columns: column9:9!null column10:10!null column11:11!null arbiter_unique_a_distinct:22
+           ├── grouping columns: column10:10!null arbiter_unique_a_distinct:22
            ├── project
-           │    ├── columns: arbiter_unique_a_distinct:22 column1:9!null column2:10!null column3:11!null
+           │    ├── columns: arbiter_unique_a_distinct:22 column9:9!null column10:10!null column11:11!null
            │    ├── upsert-distinct-on
-           │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-           │    │    ├── grouping columns: column1:9!null
+           │    │    ├── columns: column9:9!null column10:10!null column11:11!null
+           │    │    ├── grouping columns: column9:9!null
            │    │    ├── anti-join (hash)
-           │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+           │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
            │    │    │    ├── anti-join (hash)
-           │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+           │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
            │    │    │    │    ├── project
-           │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+           │    │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
            │    │    │    │    │    ├── values
            │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
            │    │    │    │    │    │    ├── (1, 2, 3)
            │    │    │    │    │    │    └── (2, 2, 3)
            │    │    │    │    │    └── projections
-           │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
+           │    │    │    │    │         ├── assignment-cast: INT8 [as=column9:9]
            │    │    │    │    │         │    └── column1:6
-           │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
+           │    │    │    │    │         ├── assignment-cast: INT8 [as=column10:10]
            │    │    │    │    │         │    └── column2:7
-           │    │    │    │    │         └── assignment-cast: INT8 [as=column3:11]
+           │    │    │    │    │         └── assignment-cast: INT8 [as=column11:11]
            │    │    │    │    │              └── column3:8
            │    │    │    │    ├── scan uniq_partial
            │    │    │    │    │    └── columns: k:12!null a:13 b:14
            │    │    │    │    └── filters
-           │    │    │    │         └── column1:9 = k:12
+           │    │    │    │         └── column9:9 = k:12
            │    │    │    ├── select
            │    │    │    │    ├── columns: k:17!null a:18 b:19!null
            │    │    │    │    ├── scan uniq_partial
@@ -1066,20 +1066,20 @@ insert uniq_partial
            │    │    │    │    └── filters
            │    │    │    │         └── b:19 > 0
            │    │    │    └── filters
-           │    │    │         ├── column2:10 = a:18
-           │    │    │         └── column3:11 > 0
+           │    │    │         ├── column10:10 = a:18
+           │    │    │         └── column11:11 > 0
            │    │    └── aggregations
-           │    │         ├── first-agg [as=column2:10]
-           │    │         │    └── column2:10
-           │    │         └── first-agg [as=column3:11]
-           │    │              └── column3:11
+           │    │         ├── first-agg [as=column10:10]
+           │    │         │    └── column10:10
+           │    │         └── first-agg [as=column11:11]
+           │    │              └── column11:11
            │    └── projections
-           │         └── (column3:11 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:22]
+           │         └── (column11:11 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:22]
            └── aggregations
-                ├── first-agg [as=column1:9]
-                │    └── column1:9
-                └── first-agg [as=column3:11]
-                     └── column3:11
+                ├── first-agg [as=column9:9]
+                │    └── column9:9
+                └── first-agg [as=column11:11]
+                     └── column11:11
 
 # Error when there is no arbiter predicate to match the partial unique
 # constraint predicate.
@@ -1096,29 +1096,29 @@ insert uniq_partial
  ├── columns: <none>
  ├── arbiter constraints: unique_a
  ├── insert-mapping:
- │    ├── column1:9 => k:1
- │    ├── column2:10 => a:2
- │    └── column3:11 => b:3
+ │    ├── column9:9 => k:1
+ │    ├── column10:10 => a:2
+ │    └── column11:11 => b:3
  └── project
-      ├── columns: column1:9!null column2:10!null column3:11!null
+      ├── columns: column9:9!null column10:10!null column11:11!null
       └── upsert-distinct-on
-           ├── columns: column1:9!null column2:10!null column3:11!null arbiter_unique_a_distinct:17
-           ├── grouping columns: column2:10!null arbiter_unique_a_distinct:17
+           ├── columns: column9:9!null column10:10!null column11:11!null arbiter_unique_a_distinct:17
+           ├── grouping columns: column10:10!null arbiter_unique_a_distinct:17
            ├── project
-           │    ├── columns: arbiter_unique_a_distinct:17 column1:9!null column2:10!null column3:11!null
+           │    ├── columns: arbiter_unique_a_distinct:17 column9:9!null column10:10!null column11:11!null
            │    ├── anti-join (hash)
-           │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+           │    │    ├── columns: column9:9!null column10:10!null column11:11!null
            │    │    ├── project
-           │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+           │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
            │    │    │    ├── values
            │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
            │    │    │    │    └── (1, 2, 3)
            │    │    │    └── projections
-           │    │    │         ├── assignment-cast: INT8 [as=column1:9]
+           │    │    │         ├── assignment-cast: INT8 [as=column9:9]
            │    │    │         │    └── column1:6
-           │    │    │         ├── assignment-cast: INT8 [as=column2:10]
+           │    │    │         ├── assignment-cast: INT8 [as=column10:10]
            │    │    │         │    └── column2:7
-           │    │    │         └── assignment-cast: INT8 [as=column3:11]
+           │    │    │         └── assignment-cast: INT8 [as=column11:11]
            │    │    │              └── column3:8
            │    │    ├── select
            │    │    │    ├── columns: k:12!null a:13 b:14!null
@@ -1127,15 +1127,15 @@ insert uniq_partial
            │    │    │    └── filters
            │    │    │         └── b:14 > 0
            │    │    └── filters
-           │    │         ├── column2:10 = a:13
-           │    │         └── column3:11 > 0
+           │    │         ├── column10:10 = a:13
+           │    │         └── column11:11 > 0
            │    └── projections
-           │         └── (column3:11 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:17]
+           │         └── (column11:11 > 0) OR NULL::BOOL [as=arbiter_unique_a_distinct:17]
            └── aggregations
-                ├── first-agg [as=column1:9]
-                │    └── column1:9
-                └── first-agg [as=column3:11]
-                     └── column3:11
+                ├── first-agg [as=column9:9]
+                │    └── column9:9
+                └── first-agg [as=column11:11]
+                     └── column11:11
 
 # Insert with non-constant input.
 build
@@ -1144,23 +1144,23 @@ INSERT INTO uniq_partial SELECT k, v, w FROM other
 insert uniq_partial
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── k:14 => uniq_partial.k:1
- │    ├── v:15 => uniq_partial.a:2
- │    └── w:16 => uniq_partial.b:3
+ │    ├── column14:14 => uniq_partial.k:1
+ │    ├── column15:15 => uniq_partial.a:2
+ │    └── column16:16 => uniq_partial.b:3
  ├── input binding: &1
  ├── project
- │    ├── columns: k:14 v:15 w:16!null
+ │    ├── columns: column14:14 column15:15 column16:16!null
  │    ├── project
- │    │    ├── columns: other.k:6 other.v:7 other.w:8!null
+ │    │    ├── columns: other.k:6 v:7 w:8!null
  │    │    └── scan other
- │    │         └── columns: other.k:6 other.v:7 other.w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12 other.tableoid:13
+ │    │         └── columns: other.k:6 v:7 w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12 other.tableoid:13
  │    └── projections
- │         ├── assignment-cast: INT8 [as=k:14]
+ │         ├── assignment-cast: INT8 [as=column14:14]
  │         │    └── other.k:6
- │         ├── assignment-cast: INT8 [as=v:15]
- │         │    └── other.v:7
- │         └── assignment-cast: INT8 [as=w:16]
- │              └── other.w:8
+ │         ├── assignment-cast: INT8 [as=column15:15]
+ │         │    └── v:7
+ │         └── assignment-cast: INT8 [as=column16:16]
+ │              └── w:8
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
            └── project
@@ -1170,9 +1170,9 @@ insert uniq_partial
                      ├── with-scan &1
                      │    ├── columns: k:22 a:23 b:24!null
                      │    └── mapping:
-                     │         ├──  k:14 => k:22
-                     │         ├──  v:15 => a:23
-                     │         └──  w:16 => b:24
+                     │         ├──  column14:14 => k:22
+                     │         ├──  column15:15 => a:23
+                     │         └──  column16:16 => b:24
                      ├── scan uniq_partial
                      │    └── columns: uniq_partial.k:17!null uniq_partial.a:18 uniq_partial.b:19
                      └── filters
@@ -1205,25 +1205,25 @@ INSERT INTO uniq_partial_overlaps_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
 insert uniq_partial_overlaps_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:11 => uniq_partial_overlaps_pk.a:1
- │    ├── column2:12 => uniq_partial_overlaps_pk.b:2
- │    ├── column3:13 => uniq_partial_overlaps_pk.c:3
- │    └── column4:14 => uniq_partial_overlaps_pk.d:4
+ │    ├── column11:11 => uniq_partial_overlaps_pk.a:1
+ │    ├── column12:12 => uniq_partial_overlaps_pk.b:2
+ │    ├── column13:13 => uniq_partial_overlaps_pk.c:3
+ │    └── column14:14 => uniq_partial_overlaps_pk.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null
+ │    ├── columns: column11:11!null column12:12!null column13:13!null column14:14!null
  │    ├── values
  │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
  │    │    ├── (1, 1, 1, 1)
  │    │    └── (2, 2, 2, 2)
  │    └── projections
- │         ├── assignment-cast: INT8 [as=column1:11]
+ │         ├── assignment-cast: INT8 [as=column11:11]
  │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column2:12]
+ │         ├── assignment-cast: INT8 [as=column12:12]
  │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column3:13]
+ │         ├── assignment-cast: INT8 [as=column13:13]
  │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column4:14]
+ │         └── assignment-cast: INT8 [as=column14:14]
  │              └── column4:10
  └── unique-checks
       ├── unique-checks-item: uniq_partial_overlaps_pk(c)
@@ -1234,10 +1234,10 @@ insert uniq_partial_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:21!null b:22!null c:23!null d:24!null
       │              │    └── mapping:
-      │              │         ├──  column1:11 => a:21
-      │              │         ├──  column2:12 => b:22
-      │              │         ├──  column3:13 => c:23
-      │              │         └──  column4:14 => d:24
+      │              │         ├──  column11:11 => a:21
+      │              │         ├──  column12:12 => b:22
+      │              │         ├──  column13:13 => c:23
+      │              │         └──  column14:14 => d:24
       │              ├── scan uniq_partial_overlaps_pk
       │              │    └── columns: uniq_partial_overlaps_pk.a:15!null uniq_partial_overlaps_pk.b:16!null uniq_partial_overlaps_pk.c:17 uniq_partial_overlaps_pk.d:18
       │              └── filters
@@ -1253,10 +1253,10 @@ insert uniq_partial_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:31!null b:32!null c:33!null d:34!null
       │              │    └── mapping:
-      │              │         ├──  column1:11 => a:31
-      │              │         ├──  column2:12 => b:32
-      │              │         ├──  column3:13 => c:33
-      │              │         └──  column4:14 => d:34
+      │              │         ├──  column11:11 => a:31
+      │              │         ├──  column12:12 => b:32
+      │              │         ├──  column13:13 => c:33
+      │              │         └──  column14:14 => d:34
       │              ├── scan uniq_partial_overlaps_pk
       │              │    └── columns: uniq_partial_overlaps_pk.a:25!null uniq_partial_overlaps_pk.b:26!null uniq_partial_overlaps_pk.c:27 uniq_partial_overlaps_pk.d:28
       │              └── filters
@@ -1272,10 +1272,10 @@ insert uniq_partial_overlaps_pk
                      ├── with-scan &1
                      │    ├── columns: a:41!null b:42!null c:43!null d:44!null
                      │    └── mapping:
-                     │         ├──  column1:11 => a:41
-                     │         ├──  column2:12 => b:42
-                     │         ├──  column3:13 => c:43
-                     │         └──  column4:14 => d:44
+                     │         ├──  column11:11 => a:41
+                     │         ├──  column12:12 => b:42
+                     │         ├──  column13:13 => c:43
+                     │         └──  column14:14 => d:44
                      ├── scan uniq_partial_overlaps_pk
                      │    └── columns: uniq_partial_overlaps_pk.a:35!null uniq_partial_overlaps_pk.b:36!null uniq_partial_overlaps_pk.c:37 uniq_partial_overlaps_pk.d:38
                      └── filters
@@ -1294,26 +1294,26 @@ INSERT INTO uniq_partial_overlaps_pk SELECT k, v, x, y FROM other
 insert uniq_partial_overlaps_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── k:15 => uniq_partial_overlaps_pk.a:1
- │    ├── v:16 => uniq_partial_overlaps_pk.b:2
- │    ├── x:17 => uniq_partial_overlaps_pk.c:3
- │    └── y:18 => uniq_partial_overlaps_pk.d:4
+ │    ├── column15:15 => uniq_partial_overlaps_pk.a:1
+ │    ├── column16:16 => uniq_partial_overlaps_pk.b:2
+ │    ├── column17:17 => uniq_partial_overlaps_pk.c:3
+ │    └── column18:18 => uniq_partial_overlaps_pk.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: k:15 v:16 x:17 y:18
+ │    ├── columns: column15:15 column16:16 column17:17 column18:18
  │    ├── project
- │    │    ├── columns: other.k:7 other.v:8 other.x:10 other.y:11
+ │    │    ├── columns: k:7 v:8 x:10 y:11
  │    │    └── scan other
- │    │         └── columns: other.k:7 other.v:8 w:9!null other.x:10 other.y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+ │    │         └── columns: k:7 v:8 w:9!null x:10 y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  │    └── projections
- │         ├── assignment-cast: INT8 [as=k:15]
- │         │    └── other.k:7
- │         ├── assignment-cast: INT8 [as=v:16]
- │         │    └── other.v:8
- │         ├── assignment-cast: INT8 [as=x:17]
- │         │    └── other.x:10
- │         └── assignment-cast: INT8 [as=y:18]
- │              └── other.y:11
+ │         ├── assignment-cast: INT8 [as=column15:15]
+ │         │    └── k:7
+ │         ├── assignment-cast: INT8 [as=column16:16]
+ │         │    └── v:8
+ │         ├── assignment-cast: INT8 [as=column17:17]
+ │         │    └── x:10
+ │         └── assignment-cast: INT8 [as=column18:18]
+ │              └── y:11
  └── unique-checks
       ├── unique-checks-item: uniq_partial_overlaps_pk(c)
       │    └── project
@@ -1323,10 +1323,10 @@ insert uniq_partial_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:25 b:26 c:27 d:28
       │              │    └── mapping:
-      │              │         ├──  k:15 => a:25
-      │              │         ├──  v:16 => b:26
-      │              │         ├──  x:17 => c:27
-      │              │         └──  y:18 => d:28
+      │              │         ├──  column15:15 => a:25
+      │              │         ├──  column16:16 => b:26
+      │              │         ├──  column17:17 => c:27
+      │              │         └──  column18:18 => d:28
       │              ├── scan uniq_partial_overlaps_pk
       │              │    └── columns: uniq_partial_overlaps_pk.a:19!null uniq_partial_overlaps_pk.b:20!null uniq_partial_overlaps_pk.c:21 uniq_partial_overlaps_pk.d:22
       │              └── filters
@@ -1342,10 +1342,10 @@ insert uniq_partial_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:35 b:36 c:37 d:38
       │              │    └── mapping:
-      │              │         ├──  k:15 => a:35
-      │              │         ├──  v:16 => b:36
-      │              │         ├──  x:17 => c:37
-      │              │         └──  y:18 => d:38
+      │              │         ├──  column15:15 => a:35
+      │              │         ├──  column16:16 => b:36
+      │              │         ├──  column17:17 => c:37
+      │              │         └──  column18:18 => d:38
       │              ├── scan uniq_partial_overlaps_pk
       │              │    └── columns: uniq_partial_overlaps_pk.a:29!null uniq_partial_overlaps_pk.b:30!null uniq_partial_overlaps_pk.c:31 uniq_partial_overlaps_pk.d:32
       │              └── filters
@@ -1361,10 +1361,10 @@ insert uniq_partial_overlaps_pk
                      ├── with-scan &1
                      │    ├── columns: a:45 b:46 c:47 d:48
                      │    └── mapping:
-                     │         ├──  k:15 => a:45
-                     │         ├──  v:16 => b:46
-                     │         ├──  x:17 => c:47
-                     │         └──  y:18 => d:48
+                     │         ├──  column15:15 => a:45
+                     │         ├──  column16:16 => b:46
+                     │         ├──  column17:17 => c:47
+                     │         └──  column18:18 => d:48
                      ├── scan uniq_partial_overlaps_pk
                      │    └── columns: uniq_partial_overlaps_pk.a:39!null uniq_partial_overlaps_pk.b:40!null uniq_partial_overlaps_pk.c:41 uniq_partial_overlaps_pk.d:42
                      └── filters
@@ -1391,23 +1391,23 @@ INSERT INTO uniq_partial_hidden_pk VALUES (1, 1), (2, 2)
 insert uniq_partial_hidden_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => uniq_partial_hidden_pk.a:1
- │    ├── column2:10 => uniq_partial_hidden_pk.b:2
+ │    ├── column9:9 => uniq_partial_hidden_pk.a:1
+ │    ├── column10:10 => uniq_partial_hidden_pk.b:2
  │    ├── c_default:11 => uniq_partial_hidden_pk.c:3
  │    └── rowid_default:12 => uniq_partial_hidden_pk.rowid:4
  ├── input binding: &1
  ├── project
- │    ├── columns: c_default:11 rowid_default:12 column1:9!null column2:10!null
+ │    ├── columns: c_default:11 rowid_default:12 column9:9!null column10:10!null
  │    ├── project
- │    │    ├── columns: column1:9!null column2:10!null
+ │    │    ├── columns: column9:9!null column10:10!null
  │    │    ├── values
  │    │    │    ├── columns: column1:7!null column2:8!null
  │    │    │    ├── (1, 1)
  │    │    │    └── (2, 2)
  │    │    └── projections
- │    │         ├── assignment-cast: INT8 [as=column1:9]
+ │    │         ├── assignment-cast: INT8 [as=column9:9]
  │    │         │    └── column1:7
- │    │         └── assignment-cast: INT8 [as=column2:10]
+ │    │         └── assignment-cast: INT8 [as=column10:10]
  │    │              └── column2:8
  │    └── projections
  │         ├── NULL::INT8 [as=c_default:11]
@@ -1421,8 +1421,8 @@ insert uniq_partial_hidden_pk
                      ├── with-scan &1
                      │    ├── columns: a:19!null b:20!null c:21 rowid:22
                      │    └── mapping:
-                     │         ├──  column1:9 => a:19
-                     │         ├──  column2:10 => b:20
+                     │         ├──  column9:9 => a:19
+                     │         ├──  column10:10 => b:20
                      │         ├──  c_default:11 => c:21
                      │         └──  rowid_default:12 => rowid:22
                      ├── scan uniq_partial_hidden_pk
@@ -1440,24 +1440,24 @@ INSERT INTO uniq_partial_hidden_pk SELECT k, v FROM other
 insert uniq_partial_hidden_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── k:15 => uniq_partial_hidden_pk.a:1
- │    ├── v:16 => uniq_partial_hidden_pk.b:2
+ │    ├── column15:15 => uniq_partial_hidden_pk.a:1
+ │    ├── column16:16 => uniq_partial_hidden_pk.b:2
  │    ├── c_default:17 => uniq_partial_hidden_pk.c:3
  │    └── rowid_default:18 => uniq_partial_hidden_pk.rowid:4
  ├── input binding: &1
  ├── project
- │    ├── columns: c_default:17 rowid_default:18 k:15 v:16
+ │    ├── columns: c_default:17 rowid_default:18 column15:15 column16:16
  │    ├── project
- │    │    ├── columns: k:15 v:16
+ │    │    ├── columns: column15:15 column16:16
  │    │    ├── project
- │    │    │    ├── columns: other.k:7 other.v:8
+ │    │    │    ├── columns: k:7 v:8
  │    │    │    └── scan other
- │    │    │         └── columns: other.k:7 other.v:8 w:9!null x:10 y:11 other.rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+ │    │    │         └── columns: k:7 v:8 w:9!null x:10 y:11 other.rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  │    │    └── projections
- │    │         ├── assignment-cast: INT8 [as=k:15]
- │    │         │    └── other.k:7
- │    │         └── assignment-cast: INT8 [as=v:16]
- │    │              └── other.v:8
+ │    │         ├── assignment-cast: INT8 [as=column15:15]
+ │    │         │    └── k:7
+ │    │         └── assignment-cast: INT8 [as=column16:16]
+ │    │              └── v:8
  │    └── projections
  │         ├── NULL::INT8 [as=c_default:17]
  │         └── unique_rowid() [as=rowid_default:18]
@@ -1470,8 +1470,8 @@ insert uniq_partial_hidden_pk
                      ├── with-scan &1
                      │    ├── columns: a:25 b:26 c:27 rowid:28
                      │    └── mapping:
-                     │         ├──  k:15 => a:25
-                     │         ├──  v:16 => b:26
+                     │         ├──  column15:15 => a:25
+                     │         ├──  column16:16 => b:26
                      │         ├──  c_default:17 => c:27
                      │         └──  rowid_default:18 => rowid:28
                      ├── scan uniq_partial_hidden_pk
@@ -1503,17 +1503,17 @@ insert uniq_partial_constraint_and_index
  ├── columns: <none>
  ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
  ├── insert-mapping:
- │    ├── column1:9 => uniq_partial_constraint_and_index.k:1
- │    ├── column2:10 => uniq_partial_constraint_and_index.a:2
- │    └── column3:11 => uniq_partial_constraint_and_index.b:3
+ │    ├── column9:9 => uniq_partial_constraint_and_index.k:1
+ │    ├── column10:10 => uniq_partial_constraint_and_index.a:2
+ │    └── column11:11 => uniq_partial_constraint_and_index.b:3
  ├── partial index put columns: partial_index_put1:18
  ├── input binding: &1
  ├── project
- │    ├── columns: partial_index_put1:18!null column1:9!null column2:10!null column3:11!null
+ │    ├── columns: partial_index_put1:18!null column9:9!null column10:10!null column11:11!null
  │    ├── anti-join (cross)
- │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    ├── columns: column9:9!null column10:10!null column11:11!null
  │    │    ├── values
- │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
  │    │    │    └── (1, 1, 1)
  │    │    ├── select
  │    │    │    ├── columns: uniq_partial_constraint_and_index.a:13!null
@@ -1537,9 +1537,9 @@ insert uniq_partial_constraint_and_index
                      │    ├── with-scan &1
                      │    │    ├── columns: k:24!null a:25!null b:26!null
                      │    │    └── mapping:
-                     │    │         ├──  column1:9 => k:24
-                     │    │         ├──  column2:10 => a:25
-                     │    │         └──  column3:11 => b:26
+                     │    │         ├──  column9:9 => k:24
+                     │    │         ├──  column10:10 => a:25
+                     │    │         └──  column11:11 => b:26
                      │    └── filters
                      │         └── b:26 > 10
                      ├── select
@@ -1575,16 +1575,16 @@ insert uniq_constraint_and_partial_index
  ├── columns: <none>
  ├── arbiter constraints: unique_a
  ├── insert-mapping:
- │    ├── column1:9 => k:1
- │    ├── column2:10 => a:2
- │    └── column3:11 => b:3
+ │    ├── column9:9 => k:1
+ │    ├── column10:10 => a:2
+ │    └── column11:11 => b:3
  ├── partial index put columns: partial_index_put1:18
  └── project
-      ├── columns: partial_index_put1:18!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:18!null column9:9!null column10:10!null column11:11!null
       ├── anti-join (cross)
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    ├── values
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    │    └── (1, 1, 1)
       │    ├── select
       │    │    ├── columns: a:13!null
@@ -1597,7 +1597,7 @@ insert uniq_constraint_and_partial_index
       │    │         └── a:13 = 1
       │    └── filters (true)
       └── projections
-           └── column3:11 > 0 [as=partial_index_put1:18]
+           └── column11:11 > 0 [as=partial_index_put1:18]
 
 exec-ddl
 CREATE TABLE uniq_partial_constraint_and_partial_index (
@@ -1620,41 +1620,41 @@ insert uniq_partial_constraint_and_partial_index
  ├── arbiter indexes: uniq_partial_constraint_and_partial_index_a_key
  ├── arbiter constraints: unique_a
  ├── insert-mapping:
- │    ├── column1:9 => k:1
- │    ├── column2:10 => a:2
- │    └── column3:11 => b:3
+ │    ├── column9:9 => k:1
+ │    ├── column10:10 => a:2
+ │    └── column11:11 => b:3
  ├── partial index put columns: partial_index_put1:24
  └── project
-      ├── columns: partial_index_put1:24!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:24!null column9:9!null column10:10!null column11:11!null
       ├── project
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── columns: column9:9!null column10:10!null column11:11!null
       │    └── upsert-distinct-on
-      │         ├── columns: column1:9!null column2:10!null column3:11!null arbiter_unique_a_distinct:23
-      │         ├── grouping columns: column2:10!null arbiter_unique_a_distinct:23
+      │         ├── columns: column9:9!null column10:10!null column11:11!null arbiter_unique_a_distinct:23
+      │         ├── grouping columns: column10:10!null arbiter_unique_a_distinct:23
       │         ├── project
-      │         │    ├── columns: arbiter_unique_a_distinct:23 column1:9!null column2:10!null column3:11!null
+      │         │    ├── columns: arbiter_unique_a_distinct:23 column9:9!null column10:10!null column11:11!null
       │         │    ├── project
-      │         │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:9!null column2:10!null column3:11!null arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22
-      │         │    │         ├── grouping columns: column2:10!null arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22
+      │         │    │         ├── columns: column9:9!null column10:10!null column11:11!null arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22
+      │         │    │         ├── grouping columns: column10:10!null arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22
       │         │    │         ├── project
-      │         │    │         │    ├── columns: arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22 column1:9!null column2:10!null column3:11!null
+      │         │    │         │    ├── columns: arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22 column9:9!null column10:10!null column11:11!null
       │         │    │         │    ├── anti-join (hash)
-      │         │    │         │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │         │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │         │    │         │    │    ├── anti-join (hash)
-      │         │    │         │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │         │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │         │    │         │    │    │    ├── project
-      │         │    │         │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │         │    │    │    │    ├── columns: column9:9!null column10:10!null column11:11!null
       │         │    │         │    │    │    │    ├── values
       │         │    │         │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    │    │    │    └── (1, 1, 1)
       │         │    │         │    │    │    │    └── projections
-      │         │    │         │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
+      │         │    │         │    │    │    │         ├── assignment-cast: INT8 [as=column9:9]
       │         │    │         │    │    │    │         │    └── column1:6
-      │         │    │         │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
+      │         │    │         │    │    │    │         ├── assignment-cast: INT8 [as=column10:10]
       │         │    │         │    │    │    │         │    └── column2:7
-      │         │    │         │    │    │    │         └── assignment-cast: INT8 [as=column3:11]
+      │         │    │         │    │    │    │         └── assignment-cast: INT8 [as=column11:11]
       │         │    │         │    │    │    │              └── column3:8
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: k:12!null a:13 b:14!null
@@ -1666,8 +1666,8 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    └── filters
       │         │    │         │    │    │    │         └── b:14 > 0
       │         │    │         │    │    │    └── filters
-      │         │    │         │    │    │         ├── column2:10 = a:13
-      │         │    │         │    │    │         └── column3:11 > 0
+      │         │    │         │    │    │         ├── column10:10 = a:13
+      │         │    │         │    │    │         └── column11:11 > 0
       │         │    │         │    │    ├── select
       │         │    │         │    │    │    ├── columns: k:17!null a:18 b:19!null
       │         │    │         │    │    │    ├── scan uniq_partial_constraint_and_partial_index
@@ -1678,24 +1678,24 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    └── filters
       │         │    │         │    │    │         └── b:19 > 10
       │         │    │         │    │    └── filters
-      │         │    │         │    │         ├── column2:10 = a:18
-      │         │    │         │    │         └── column3:11 > 10
+      │         │    │         │    │         ├── column10:10 = a:18
+      │         │    │         │    │         └── column11:11 > 10
       │         │    │         │    └── projections
-      │         │    │         │         └── (column3:11 > 0) OR NULL::BOOL [as=arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22]
+      │         │    │         │         └── (column11:11 > 0) OR NULL::BOOL [as=arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:22]
       │         │    │         └── aggregations
-      │         │    │              ├── first-agg [as=column1:9]
-      │         │    │              │    └── column1:9
-      │         │    │              └── first-agg [as=column3:11]
-      │         │    │                   └── column3:11
+      │         │    │              ├── first-agg [as=column9:9]
+      │         │    │              │    └── column9:9
+      │         │    │              └── first-agg [as=column11:11]
+      │         │    │                   └── column11:11
       │         │    └── projections
-      │         │         └── (column3:11 > 10) OR NULL::BOOL [as=arbiter_unique_a_distinct:23]
+      │         │         └── (column11:11 > 10) OR NULL::BOOL [as=arbiter_unique_a_distinct:23]
       │         └── aggregations
-      │              ├── first-agg [as=column1:9]
-      │              │    └── column1:9
-      │              └── first-agg [as=column3:11]
-      │                   └── column3:11
+      │              ├── first-agg [as=column9:9]
+      │              │    └── column9:9
+      │              └── first-agg [as=column11:11]
+      │                   └── column11:11
       └── projections
-           └── column3:11 > 0 [as=partial_index_put1:24]
+           └── column11:11 > 0 [as=partial_index_put1:24]
 
 exec-ddl
 CREATE TABLE uniq_computed_pk (
@@ -1724,32 +1724,32 @@ INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
 insert uniq_computed_pk
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:13 => uniq_computed_pk.i:1
- │    ├── column2:14 => uniq_computed_pk.s:2
- │    ├── column3:15 => uniq_computed_pk.d:3
+ │    ├── column13:13 => uniq_computed_pk.i:1
+ │    ├── column14:14 => uniq_computed_pk.s:2
+ │    ├── column15:15 => uniq_computed_pk.d:3
  │    ├── c_i_expr_comp:16 => uniq_computed_pk.c_i_expr:4
- │    ├── column2:14 => uniq_computed_pk.c_s:5
- │    ├── column3:15 => uniq_computed_pk.c_d:6
+ │    ├── column14:14 => uniq_computed_pk.c_s:5
+ │    ├── column15:15 => uniq_computed_pk.c_d:6
  │    └── c_d_expr_comp:17 => uniq_computed_pk.c_d_expr:7
  ├── input binding: &1
  ├── project
- │    ├── columns: c_i_expr_comp:16!null c_d_expr_comp:17!null column1:13!null column2:14!null column3:15!null
+ │    ├── columns: c_i_expr_comp:16!null c_d_expr_comp:17!null column13:13!null column14:14!null column15:15!null
  │    ├── project
- │    │    ├── columns: column1:13!null column2:14!null column3:15!null
+ │    │    ├── columns: column13:13!null column14:14!null column15:15!null
  │    │    ├── values
  │    │    │    ├── columns: column1:10!null column2:11!null column3:12!null
  │    │    │    ├── (1, 'a', 1.0)
  │    │    │    └── (2, 'b', 2.0)
  │    │    └── projections
- │    │         ├── assignment-cast: INT8 [as=column1:13]
+ │    │         ├── assignment-cast: INT8 [as=column13:13]
  │    │         │    └── column1:10
- │    │         ├── assignment-cast: STRING [as=column2:14]
+ │    │         ├── assignment-cast: STRING [as=column14:14]
  │    │         │    └── column2:11
- │    │         └── assignment-cast: DECIMAL [as=column3:15]
+ │    │         └── assignment-cast: DECIMAL [as=column15:15]
  │    │              └── column3:12
  │    └── projections
- │         ├── CASE WHEN column1:13 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr_comp:16]
- │         └── column3:15::STRING [as=c_d_expr_comp:17]
+ │         ├── CASE WHEN column13:13 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr_comp:16]
+ │         └── column15:15::STRING [as=c_d_expr_comp:17]
  └── unique-checks
       └── unique-checks-item: uniq_computed_pk(d)
            └── project
@@ -1759,12 +1759,12 @@ insert uniq_computed_pk
                      ├── with-scan &1
                      │    ├── columns: i:45!null s:46!null d:47!null c_i_expr:48!null c_s:49!null c_d:50!null c_d_expr:51!null
                      │    └── mapping:
-                     │         ├──  column1:13 => i:45
-                     │         ├──  column2:14 => s:46
-                     │         ├──  column3:15 => d:47
+                     │         ├──  column13:13 => i:45
+                     │         ├──  column14:14 => s:46
+                     │         ├──  column15:15 => d:47
                      │         ├──  c_i_expr_comp:16 => c_i_expr:48
-                     │         ├──  column2:14 => c_s:49
-                     │         ├──  column3:15 => c_d:50
+                     │         ├──  column14:14 => c_s:49
+                     │         ├──  column15:15 => c_d:50
                      │         └──  c_d_expr_comp:17 => c_d_expr:51
                      ├── project
                      │    ├── columns: uniq_computed_pk.c_s:40 uniq_computed_pk.i:36!null uniq_computed_pk.s:37 uniq_computed_pk.d:38 uniq_computed_pk.c_i_expr:39!null uniq_computed_pk.c_d:41 uniq_computed_pk.c_d_expr:42

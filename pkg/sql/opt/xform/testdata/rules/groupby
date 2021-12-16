@@ -2292,12 +2292,12 @@ memo (optimized, ~26KB, required=[])
  │         └── cost: 1084.62
  ├── G14: (projections G18 G19 G20)
  ├── G15: (eq G21 G22)
- ├── G16: (variable w)
- ├── G17: (variable "?column?")
- ├── G18: (variable kuvw.v)
- ├── G19: (variable kuvw.w)
+ ├── G16: (variable column14)
+ ├── G17: (variable column15)
+ ├── G18: (variable v)
+ ├── G19: (variable w)
  ├── G20: (const 1.0)
- ├── G21: (variable v)
+ ├── G21: (variable column13)
  └── G22: (variable x)
 
 # Ensure that streaming ensure-upsert-distinct-on will be used.

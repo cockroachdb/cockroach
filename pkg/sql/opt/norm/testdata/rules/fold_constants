@@ -832,15 +832,15 @@ INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:12 => c:1
- │    ├── column2:13 => qc:2
- │    ├── column3:14 => i:3
- │    ├── column4:15 => s:4
+ │    ├── column12:12 => c:1
+ │    ├── column13:13 => qc:2
+ │    ├── column14:14 => i:3
+ │    ├── column15:15 => s:4
  │    └── rowid_default:16 => rowid:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null rowid_default:16
+      ├── columns: column12:12!null column13:13!null column14:14!null column15:15!null rowid_default:16
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
@@ -854,7 +854,7 @@ INSERT INTO assn_cast (c) VALUES ('foo')
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => c:1
+ │    ├── column9:9 => c:1
  │    ├── qc_default:10 => qc:2
  │    ├── i_default:11 => i:3
  │    ├── s_default:12 => s:4
@@ -862,7 +862,7 @@ insert assn_cast
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:9 qc_default:10 i_default:11 s_default:12 rowid_default:13
+      ├── columns: column9:9 qc_default:10 i_default:11 s_default:12 rowid_default:13
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
@@ -882,7 +882,7 @@ INSERT INTO assn_cast(c) VALUES ($1)
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => c:1
+ │    ├── column9:9 => c:1
  │    ├── qc_default:10 => qc:2
  │    ├── i_default:11 => i:3
  │    ├── s_default:12 => s:4
@@ -890,7 +890,7 @@ insert assn_cast
  ├── cardinality: [0 - 0]
  ├── volatile, mutations, has-placeholder
  └── values
-      ├── columns: column1:9 qc_default:10 i_default:11 s_default:12 rowid_default:13
+      ├── columns: column9:9 qc_default:10 i_default:11 s_default:12 rowid_default:13
       ├── cardinality: [1 - 1]
       ├── volatile, has-placeholder
       ├── key: ()
@@ -911,7 +911,7 @@ INSERT INTO assn_cast(c) VALUES ($1::CHAR)
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => c:1
+ │    ├── column9:9 => c:1
  │    ├── qc_default:10 => qc:2
  │    ├── i_default:11 => i:3
  │    ├── s_default:12 => s:4
@@ -919,7 +919,7 @@ insert assn_cast
  ├── cardinality: [0 - 0]
  ├── volatile, mutations, has-placeholder
  └── values
-      ├── columns: column1:9 qc_default:10 i_default:11 s_default:12 rowid_default:13
+      ├── columns: column9:9 qc_default:10 i_default:11 s_default:12 rowid_default:13
       ├── cardinality: [1 - 1]
       ├── volatile, has-placeholder
       ├── key: ()
@@ -942,12 +942,12 @@ insert assn_cast
  │    ├── c_default:10 => c:1
  │    ├── qc_default:11 => qc:2
  │    ├── i_default:12 => i:3
- │    ├── column1:9 => s:4
+ │    ├── column9:9 => s:4
  │    └── rowid_default:13 => rowid:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:9!null c_default:10 qc_default:11 i_default:12 rowid_default:13
+      ├── columns: column9:9!null c_default:10 qc_default:11 i_default:12 rowid_default:13
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
@@ -964,12 +964,12 @@ insert assn_cast
  │    ├── c_default:10 => c:1
  │    ├── qc_default:11 => qc:2
  │    ├── i_default:12 => i:3
- │    ├── column1:9 => s:4
+ │    ├── column9:9 => s:4
  │    └── rowid_default:13 => rowid:5
  ├── cardinality: [0 - 0]
  ├── stable+volatile, mutations
  └── values
-      ├── columns: column1:9 c_default:10 qc_default:11 i_default:12 rowid_default:13
+      ├── columns: column9:9 c_default:10 qc_default:11 i_default:12 rowid_default:13
       ├── cardinality: [1 - 1]
       ├── stable+volatile
       ├── key: ()

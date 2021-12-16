@@ -1246,18 +1246,18 @@ VALUES (1, FALSE, '2020-03-01', 'the-account', 'the-customer', '70F03EB1-4F58-4C
 insert transactions
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:18 => dealerid:1
- │    ├── column2:19 => isbuy:2
- │    ├── column3:20 => date:3
- │    ├── column4:21 => accountname:4
- │    ├── column5:22 => customername:5
- │    ├── column6:23 => operationid:6
+ │    ├── column18:18 => dealerid:1
+ │    ├── column19:19 => isbuy:2
+ │    ├── column20:20 => date:3
+ │    ├── column21:21 => accountname:4
+ │    ├── column22:22 => customername:5
+ │    ├── column23:23 => operationid:6
  │    ├── version_default:24 => version:7
  │    └── olddate_default:25 => olddate:8
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:18!null column2:19!null column3:20!null column4:21!null column5:22!null column6:23!null version_default:24 olddate_default:25!null
+      ├── columns: column18:18!null column19:19!null column20:20!null column21:21!null column22:22!null column23:23!null version_default:24 olddate_default:25!null
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()

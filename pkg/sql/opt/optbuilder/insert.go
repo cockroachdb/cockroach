@@ -610,10 +610,6 @@ func (mb *mutationBuilder) buildInputForInsert(
 		mb.addTargetTableColsForInsert(len(mb.outScope.cols))
 	}
 
-	if !isUpsert {
-		mb.outScope = mb.addAssignmentCasts(mb.outScope, desiredTypes)
-	}
-
 	// Loop over input columns and:
 	//   1. Type check each column
 	//   2. Check if the INSERT violates a GENERATED ALWAYS AS IDENTITY column.
@@ -647,6 +643,10 @@ func (mb *mutationBuilder) buildInputForInsert(
 		// Record the ID of the column that contains the value to be inserted
 		// into the corresponding target table column.
 		mb.insertColIDs[ord] = inCol.id
+	}
+
+	if !isUpsert {
+		mb.addAssignmentCasts(mb.insertColIDs)
 	}
 }
 

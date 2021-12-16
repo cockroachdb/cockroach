@@ -35,7 +35,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: parent@parent_pkey
-            │ equality: (column2) = (p)
+            │ equality: (column8) = (p)
             │ equality cols are key
             │
             └── • scan buffer
@@ -71,7 +71,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (anti)
-            │ equality: (y) = (p)
+            │ equality: (column11) = (p)
             │ right cols are key
             │
             ├── • scan buffer
@@ -110,12 +110,12 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: parent@parent_pkey
-            │ equality: (column2) = (p)
+            │ equality: (column8) = (p)
             │ equality cols are key
             │
             └── • filter
                 │ estimated row count: 1
-                │ filter: column2 IS NOT NULL
+                │ filter: column8 IS NOT NULL
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -155,12 +155,12 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: multi_col_parent@multi_col_parent_pkey
-            │ equality: (column2, column3, column4) = (p,q,r)
+            │ equality: (column12, column13, column14) = (p,q,r)
             │ equality cols are key
             │
             └── • filter
                 │ estimated row count: 1
-                │ filter: (column2 IS NOT NULL) AND (column3 IS NOT NULL)
+                │ filter: (column12 IS NOT NULL) AND (column13 IS NOT NULL)
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -204,12 +204,12 @@ vectorized: true
 │       │
 │       └── • lookup join (anti)
 │           │ table: multi_ref_parent_a@multi_ref_parent_a_pkey
-│           │ equality: (column2) = (a)
+│           │ equality: (column12) = (a)
 │           │ equality cols are key
 │           │
 │           └── • filter
 │               │ estimated row count: 1
-│               │ filter: column2 IS NOT NULL
+│               │ filter: column12 IS NOT NULL
 │               │
 │               └── • scan buffer
 │                     label: buffer 1
@@ -220,12 +220,12 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: multi_ref_parent_bc@multi_ref_parent_bc_pkey
-            │ equality: (column3, column4) = (b,c)
+            │ equality: (column13, column14) = (b,c)
             │ equality cols are key
             │
             └── • filter
                 │ estimated row count: 1
-                │ filter: (column3 IS NOT NULL) AND (column4 IS NOT NULL)
+                │ filter: (column13 IS NOT NULL) AND (column14 IS NOT NULL)
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -1242,7 +1242,7 @@ vectorized: true
         │
         └── • hash join (anti)
             │ estimated row count: 9
-            │ equality: (column2) = (p)
+            │ equality: (column8) = (p)
             │ right cols are key
             │
             ├── • scan buffer
@@ -1468,7 +1468,7 @@ vectorized: true
         │
         └── • hash join (anti)
             │ estimated row count: 0
-            │ equality: (?column?) = (p)
+            │ equality: (column8) = (p)
             │ right cols are key
             │
             ├── • scan buffer

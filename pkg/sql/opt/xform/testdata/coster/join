@@ -776,15 +776,15 @@ INSERT INTO c VALUES (1,1), (2,2)
 insert c
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => c:1
- │    └── column2:8 => c.p:2
+ │    ├── column7:7 => c:1
+ │    └── column8:8 => c.p:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 12.12
  ├── values
- │    ├── columns: column1:7!null column2:8!null
+ │    ├── columns: column7:7!null column8:8!null
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2, distinct(8)=2, null(8)=0]
  │    ├── cost: 0.03
@@ -802,7 +802,7 @@ insert c
                 ├── with-scan &1
                 │    ├── columns: p:9!null
                 │    ├── mapping:
-                │    │    └──  column2:8 => p:9
+                │    │    └──  column8:8 => p:9
                 │    ├── cardinality: [2 - 2]
                 │    ├── stats: [rows=2, distinct(9)=2, null(9)=0]
                 │    └── cost: 0.01
@@ -815,15 +815,15 @@ INSERT INTO c VALUES (1,1), (2,2)
 insert c
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => c:1
- │    └── column2:8 => c.p:2
+ │    ├── column7:7 => c:1
+ │    └── column8:8 => c.p:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 0.06001206
  ├── values
- │    ├── columns: column1:7!null column2:8!null
+ │    ├── columns: column7:7!null column8:8!null
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2, distinct(8)=2, null(8)=0]
  │    ├── cost: 0.03
@@ -842,7 +842,7 @@ insert c
                 ├── with-scan &1
                 │    ├── columns: p:9!null
                 │    ├── mapping:
-                │    │    └──  column2:8 => p:9
+                │    │    └──  column8:8 => p:9
                 │    ├── cardinality: [2 - 2]
                 │    ├── stats: [rows=2, distinct(9)=2, null(9)=0]
                 │    └── cost: 0.01
@@ -867,15 +867,15 @@ INSERT INTO c VALUES (1, 1)
 insert c
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:7 => c:1
- │    └── column2:8 => c.p:2
+ │    ├── column7:7 => c:1
+ │    └── column8:8 => c.p:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 6.08
  ├── values
- │    ├── columns: column1:7!null column2:8!null
+ │    ├── columns: column7:7!null column8:8!null
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
  │    ├── cost: 0.02
@@ -896,7 +896,7 @@ insert c
                 ├── with-scan &1
                 │    ├── columns: p:9!null
                 │    ├── mapping:
-                │    │    └──  column2:8 => p:9
+                │    │    └──  column8:8 => p:9
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
                 │    ├── cost: 0.01

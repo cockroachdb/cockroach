@@ -402,7 +402,7 @@ with &1 (foo)
  ├── insert a
  │    ├── columns: a.k:1!null a.i:2 a.f:3 a.s:4 a.j:5
  │    ├── insert-mapping:
- │    │    ├── column1:9 => a.k:1
+ │    │    ├── column9:9 => a.k:1
  │    │    ├── i_default:10 => a.i:2
  │    │    ├── f_default:11 => a.f:3
  │    │    ├── s_default:12 => a.s:4
@@ -412,7 +412,7 @@ with &1 (foo)
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    └── values
- │         ├── columns: column1:9!null i_default:10 f_default:11 s_default:12 j_default:13
+ │         ├── columns: column9:9!null i_default:10 f_default:11 s_default:12 j_default:13
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
  │         ├── fd: ()-->(9-13)
@@ -556,8 +556,8 @@ with &2 (cte)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
  │    ├── insert-mapping:
- │    │    ├── column1:7 => t.public.child.c:1
- │    │    └── column2:8 => t.public.child.p:2
+ │    │    ├── column7:7 => t.public.child.c:1
+ │    │    └── column8:8 => t.public.child.p:2
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
@@ -566,7 +566,7 @@ with &2 (cte)
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
- │    │    ├── columns: column1:7(int!null) column2:8(int!null)
+ │    │    ├── columns: column7:7(int!null) column8:8(int!null)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
  │    │    ├── cost: 0.02
@@ -590,7 +590,7 @@ with &2 (cte)
  │                   ├── with-scan &1
  │                   │    ├── columns: p:9(int!null)
  │                   │    ├── mapping:
- │                   │    │    └──  column2:8(int) => p:9(int)
+ │                   │    │    └──  column8:8(int) => p:9(int)
  │                   │    ├── cardinality: [1 - 1]
  │                   │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
  │                   │    ├── cost: 0.01

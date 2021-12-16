@@ -1242,17 +1242,17 @@ VALUES (1, FALSE, '2020-03-01', 'the-account', 'the-customer', '70F03EB1-4F58-4C
 insert transactions
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:16 => dealerid:1
- │    ├── column2:17 => isbuy:2
- │    ├── column3:18 => date:3
- │    ├── column4:19 => accountname:4
- │    ├── column5:20 => customername:5
- │    ├── column6:21 => operationid:6
+ │    ├── column16:16 => dealerid:1
+ │    ├── column17:17 => isbuy:2
+ │    ├── column18:18 => date:3
+ │    ├── column19:19 => accountname:4
+ │    ├── column20:20 => customername:5
+ │    ├── column21:21 => operationid:6
  │    └── version_default:22 => version:7
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:16!null column2:17!null column3:18!null column4:19!null column5:20!null column6:21!null version_default:22
+      ├── columns: column16:16!null column17:17!null column18:18!null column19:19!null column20:20!null column21:21!null version_default:22
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()

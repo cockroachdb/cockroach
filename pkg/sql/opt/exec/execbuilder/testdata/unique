@@ -262,8 +262,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (w) = (column3)
-│           │ pred: column1 != k
+│           │ equality: (w) = (column15)
+│           │ pred: column13 != k
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -278,8 +278,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (x, y) = (column4, column5)
-            │ pred: column1 != k
+            │ equality: (x, y) = (column16, column17)
+            │ pred: column13 != k
             │
             ├── • scan
             │     missing stats
@@ -319,8 +319,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (x, y) = (column4, column5)
-            │ pred: column1 != k
+            │ equality: (x, y) = (column16, column17)
+            │ pred: column13 != k
             │
             ├── • scan
             │     missing stats
@@ -351,7 +351,7 @@ vectorized: true
 │ arbiter constraints: unique_w, unique_x_y
 │
 └── • cross join (right anti)
-    │ columns: (column1, column2, column3, column4, column5)
+    │ columns: (column13, column14, column15, column16, column17)
     │ estimated row count: 0 (missing stats)
     │
     ├── • scan
@@ -361,9 +361,9 @@ vectorized: true
     │     spans: /1/0
     │
     └── • hash join (right anti)
-        │ columns: (column1, column2, column3, column4, column5)
+        │ columns: (column13, column14, column15, column16, column17)
         │ estimated row count: 0 (missing stats)
-        │ equality: (w) = (column3)
+        │ equality: (w) = (column15)
         │ right cols are key
         │
         ├── • scan
@@ -373,16 +373,16 @@ vectorized: true
         │     spans: FULL SCAN
         │
         └── • lookup join (anti)
-            │ columns: (column1, column2, column3, column4, column5)
+            │ columns: (column13, column14, column15, column16, column17)
             │ estimated row count: 0 (missing stats)
             │ table: uniq@uniq_v_key
-            │ equality: (column2) = (v)
+            │ equality: (column14) = (v)
             │ equality cols are key
             │
             └── • hash join (right anti)
-                │ columns: (column1, column2, column3, column4, column5)
+                │ columns: (column13, column14, column15, column16, column17)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (x, y) = (column4, column5)
+                │ equality: (x, y) = (column16, column17)
                 │ right cols are key
                 │
                 ├── • scan
@@ -392,7 +392,7 @@ vectorized: true
                 │     spans: FULL SCAN
                 │
                 └── • values
-                      columns: (column1, column2, column3, column4, column5)
+                      columns: (column13, column14, column15, column16, column17)
                       size: 5 columns, 1 row
                       row 0, expr 0: 1
                       row 0, expr 1: 2
@@ -433,8 +433,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (semi)
-│           │ equality: (w) = (w)
-│           │ pred: k != k
+│           │ equality: (column19) = (w)
+│           │ pred: column17 != k
 │           │
 │           ├── • scan buffer
 │           │     label: buffer 1
@@ -449,8 +449,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (semi)
-            │ equality: (x, y) = (x, y)
-            │ pred: k != k
+            │ equality: (column20, column21) = (x, y)
+            │ pred: column17 != k
             │
             ├── • scan buffer
             │     label: buffer 1
@@ -484,8 +484,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (b, c) = (column2, column3)
-│           │ pred: column1 != a
+│           │ equality: (b, c) = (column12, column13)
+│           │ pred: column11 != a
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -501,8 +501,8 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
-│           │ equality: (column1) = (a)
-│           │ pred: column2 != b
+│           │ equality: (column11) = (a)
+│           │ pred: column12 != b
 │           │
 │           └── • scan buffer
 │                 label: buffer 1
@@ -512,8 +512,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (c, d) = (column3, column4)
-            │ pred: (column1 != a) OR (column2 != b)
+            │ equality: (c, d) = (column13, column14)
+            │ pred: (column11 != a) OR (column12 != b)
             │
             ├── • scan
             │     missing stats
@@ -558,7 +558,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (semi)
-│           │ equality: (v, x) = (b, c)
+│           │ equality: (column18, column19) = (b, c)
 │           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan buffer
@@ -574,7 +574,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (semi)
-│           │ equality: (k, v, y) = (a, b, d)
+│           │ equality: (column17, column18, column20) = (a, b, d)
 │           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan buffer
@@ -590,7 +590,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (semi)
-            │ equality: (k) = (a)
+            │ equality: (column17) = (a)
             │ pred: rowid_default != rowid
             │
             ├── • scan buffer
@@ -627,7 +627,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (a) = (column1)
+│           │ equality: (a) = (column10)
 │           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
@@ -643,7 +643,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (b, c) = (column2, column3)
+            │ equality: (b, c) = (column11, column12)
             │ pred: rowid_default != rowid
             │
             ├── • scan
@@ -687,7 +687,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (c) = (column3)
+│           │ equality: (c) = (column12)
 │           │ pred: rowid_default != rowid
 │           │
 │           ├── • scan
@@ -703,7 +703,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right anti)
-│           │ equality: (b, c) = (column2, column3)
+│           │ equality: (b, c) = (column11, column12)
 │           │
 │           ├── • scan
 │           │     missing stats
@@ -718,7 +718,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right anti)
-            │ equality: (a) = (column1)
+            │ equality: (a) = (column10)
             │
             ├── • scan
             │     missing stats
@@ -752,20 +752,20 @@ vectorized: true
 │   │ into: uniq_enum(r, s, i, j)
 │   │
 │   └── • buffer
-│       │ columns: (column1, column2, column3, column4, check1)
+│       │ columns: (column11, column12, column13, column14, check1)
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ columns: (column1, column2, column3, column4, check1)
+│           │ columns: (column11, column12, column13, column14, check1)
 │           │ estimated row count: 2
-│           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
-│           │ render column1: column1
-│           │ render column2: column2
-│           │ render column3: column3
-│           │ render column4: column4
+│           │ render check1: column11 IN ('us-east', 'us-west', 'eu-west')
+│           │ render column11: column11
+│           │ render column12: column12
+│           │ render column13: column13
+│           │ render column14: column14
 │           │
 │           └── • values
-│                 columns: (column1, column2, column3, column4)
+│                 columns: (column11, column12, column13, column14)
 │                 size: 4 columns, 2 rows
 │                 row 0, expr 0: 'us-west'
 │                 row 0, expr 1: 'foo'
@@ -782,22 +782,22 @@ vectorized: true
 │       │ columns: ()
 │       │
 │       └── • project
-│           │ columns: (column3)
+│           │ columns: (column13)
 │           │ estimated row count: 1 (missing stats)
 │           │
 │           └── • project
-│               │ columns: (column1, column3)
+│               │ columns: (column11, column13)
 │               │ estimated row count: 1 (missing stats)
 │               │
 │               └── • lookup join (semi)
-│                   │ columns: ("lookup_join_const_col_@16", column1, column3)
+│                   │ columns: ("lookup_join_const_col_@16", column11, column13)
 │                   │ table: uniq_enum@uniq_enum_pkey
-│                   │ equality: (lookup_join_const_col_@16, column3) = (r,i)
+│                   │ equality: (lookup_join_const_col_@16, column13) = (r,i)
 │                   │ equality cols are key
-│                   │ pred: column1 != r
+│                   │ pred: column11 != r
 │                   │
 │                   └── • cross join (inner)
-│                       │ columns: ("lookup_join_const_col_@16", column1, column3)
+│                       │ columns: ("lookup_join_const_col_@16", column11, column13)
 │                       │ estimated row count: 6
 │                       │
 │                       ├── • values
@@ -808,11 +808,11 @@ vectorized: true
 │                       │     row 2, expr 0: 'eu-west'
 │                       │
 │                       └── • project
-│                           │ columns: (column1, column3)
+│                           │ columns: (column11, column13)
 │                           │ estimated row count: 2
 │                           │
 │                           └── • scan buffer
-│                                 columns: (column1, column2, column3, column4, check1)
+│                                 columns: (column11, column12, column13, column14, check1)
 │                                 label: buffer 1
 │
 └── • constraint-check
@@ -821,22 +821,22 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column2, column4)
+            │ columns: (column12, column14)
             │ estimated row count: 1 (missing stats)
             │
             └── • project
-                │ columns: (column1, column2, column3, column4)
+                │ columns: (column11, column12, column13, column14)
                 │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@26", column1, column2, column3, column4)
+                    │ columns: ("lookup_join_const_col_@26", column11, column12, column13, column14)
                     │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (lookup_join_const_col_@26, column2, column4) = (r,s,j)
+                    │ equality: (lookup_join_const_col_@26, column12, column14) = (r,s,j)
                     │ equality cols are key
-                    │ pred: (column1 != r) OR (column3 != i)
+                    │ pred: (column11 != r) OR (column13 != i)
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@26", column1, column2, column3, column4)
+                        │ columns: ("lookup_join_const_col_@26", column11, column12, column13, column14)
                         │ estimated row count: 6
                         │
                         ├── • values
@@ -847,11 +847,11 @@ vectorized: true
                         │     row 2, expr 0: 'eu-west'
                         │
                         └── • project
-                            │ columns: (column1, column2, column3, column4)
+                            │ columns: (column11, column12, column13, column14)
                             │ estimated row count: 2
                             │
                             └── • scan buffer
-                                  columns: (column1, column2, column3, column4, check1)
+                                  columns: (column11, column12, column13, column14, check1)
                                   label: buffer 1
 ·
 index recommendations: 1
@@ -875,28 +875,28 @@ vectorized: true
 │   │ into: uniq_enum(r, s, i, j)
 │   │
 │   └── • buffer
-│       │ columns: (r_default, column1, column2, j_default, check1)
+│       │ columns: (r_default, column9, column10, j_default, check1)
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ columns: (r_default, column1, column2, j_default, check1)
+│           │ columns: (r_default, column9, column10, j_default, check1)
 │           │ estimated row count: 2
 │           │ render check1: r_default IN ('us-east', 'us-west', 'eu-west')
-│           │ render column1: column1
-│           │ render column2: column2
+│           │ render column9: column9
+│           │ render column10: column10
 │           │ render r_default: r_default
 │           │ render j_default: j_default
 │           │
 │           └── • render
-│               │ columns: (r_default, j_default, column1, column2)
+│               │ columns: (r_default, j_default, column9, column10)
 │               │ estimated row count: 2
 │               │ render r_default: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render j_default: CAST(NULL AS INT8)
-│               │ render column1: column1
-│               │ render column2: column2
+│               │ render column9: column9
+│               │ render column10: column10
 │               │
 │               └── • values
-│                     columns: (column1, column2)
+│                     columns: (column9, column10)
 │                     size: 2 columns, 2 rows
 │                     row 0, expr 0: 'foo'
 │                     row 0, expr 1: 1
@@ -909,22 +909,22 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column2)
+            │ columns: (column10)
             │ estimated row count: 1 (missing stats)
             │
             └── • project
-                │ columns: (r_default, column2)
+                │ columns: (r_default, column10)
                 │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@14", r_default, column2)
+                    │ columns: ("lookup_join_const_col_@14", r_default, column10)
                     │ table: uniq_enum@uniq_enum_pkey
-                    │ equality: (lookup_join_const_col_@14, column2) = (r,i)
+                    │ equality: (lookup_join_const_col_@14, column10) = (r,i)
                     │ equality cols are key
                     │ pred: r_default != r
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@14", r_default, column2)
+                        │ columns: ("lookup_join_const_col_@14", r_default, column10)
                         │ estimated row count: 6
                         │
                         ├── • values
@@ -935,11 +935,11 @@ vectorized: true
                         │     row 2, expr 0: 'eu-west'
                         │
                         └── • project
-                            │ columns: (r_default, column2)
+                            │ columns: (r_default, column10)
                             │ estimated row count: 2
                             │
                             └── • scan buffer
-                                  columns: (r_default, column1, column2, j_default, check1)
+                                  columns: (r_default, column9, column10, j_default, check1)
                                   label: buffer 1
 
 # Test that we use the index when available for de-duplicating INSERT ON
@@ -960,44 +960,44 @@ vectorized: true
 │ arbiter constraints: unique_i, unique_s_j
 │
 └── • render
-    │ columns: (column1, column2, column3, column4, check1)
+    │ columns: (column11, column12, column13, column14, check1)
     │ estimated row count: 0 (missing stats)
-    │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
-    │ render column1: column1
-    │ render column2: column2
-    │ render column3: column3
-    │ render column4: column4
+    │ render check1: column11 IN ('us-east', 'us-west', 'eu-west')
+    │ render column11: column11
+    │ render column12: column12
+    │ render column13: column13
+    │ render column14: column14
     │
     └── • lookup join (anti)
-        │ columns: (column1, column2, column3, column4)
+        │ columns: (column11, column12, column13, column14)
         │ estimated row count: 0 (missing stats)
         │ table: uniq_enum@uniq_enum_r_s_j_key
         │ equality cols are key
-        │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+        │ lookup condition: ((column12 = s) AND (column14 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
         │
         └── • lookup join (anti)
-            │ columns: (column1, column2, column3, column4)
+            │ columns: (column11, column12, column13, column14)
             │ estimated row count: 0 (missing stats)
             │ table: uniq_enum@uniq_enum_pkey
             │ equality cols are key
-            │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+            │ lookup condition: (column13 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
             │
             └── • lookup join (anti)
-                │ columns: (column1, column2, column3, column4)
+                │ columns: (column11, column12, column13, column14)
                 │ estimated row count: 0 (missing stats)
                 │ table: uniq_enum@uniq_enum_pkey
-                │ equality: (column1, column3) = (r,i)
+                │ equality: (column11, column13) = (r,i)
                 │ equality cols are key
                 │
                 └── • lookup join (anti)
-                    │ columns: (column1, column2, column3, column4)
+                    │ columns: (column11, column12, column13, column14)
                     │ estimated row count: 0 (missing stats)
                     │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (column1, column2, column4) = (r,s,j)
+                    │ equality: (column11, column12, column14) = (r,s,j)
                     │ equality cols are key
                     │
                     └── • values
-                          columns: (column1, column2, column3, column4)
+                          columns: (column11, column12, column13, column14)
                           size: 4 columns, 2 rows
                           row 0, expr 0: 'us-west'
                           row 0, expr 1: 'foo'
@@ -1035,8 +1035,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (a) = (column2)
-│           │ pred: column1 != k
+│           │ equality: (a) = (column10)
+│           │ pred: column9 != k
 │           │
 │           ├── • filter
 │           │   │ filter: b > 0
@@ -1048,7 +1048,7 @@ vectorized: true
 │           │
 │           └── • filter
 │               │ estimated row count: 1
-│               │ filter: column3 > 0
+│               │ filter: column11 > 0
 │               │
 │               └── • scan buffer
 │                     estimated row count: 2
@@ -1059,8 +1059,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (b) = (column3)
-            │ pred: column1 != k
+            │ equality: (b) = (column11)
+            │ pred: column9 != k
             │
             ├── • filter
             │   │ filter: b > 0
@@ -1072,7 +1072,7 @@ vectorized: true
             │
             └── • filter
                 │ estimated row count: 1
-                │ filter: column3 > 0
+                │ filter: column11 > 0
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -1106,8 +1106,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (b) = (column3)
-            │ pred: column1 != k
+            │ equality: (b) = (column11)
+            │ pred: column9 != k
             │
             ├── • filter
             │   │ filter: b > 0
@@ -1119,7 +1119,7 @@ vectorized: true
             │
             └── • filter
                 │ estimated row count: 1
-                │ filter: column3 > 0
+                │ filter: column11 > 0
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -1145,41 +1145,41 @@ vectorized: true
 │ arbiter constraints: unique_a, unique_b
 │
 └── • project
-    │ columns: (column1, column2, column3)
+    │ columns: (column9, column10, column11)
     │ estimated row count: 0 (missing stats)
     │
     └── • distinct
-        │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
+        │ columns: (arbiter_unique_b_distinct, column9, column10, column11)
         │ estimated row count: 0 (missing stats)
         │ distinct on: arbiter_unique_b_distinct
         │ nulls are distinct
         │
         └── • render
-            │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
+            │ columns: (arbiter_unique_b_distinct, column9, column10, column11)
             │ estimated row count: 0 (missing stats)
-            │ render arbiter_unique_b_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
-            │ render column1: column1
-            │ render column2: column2
-            │ render column3: column3
+            │ render arbiter_unique_b_distinct: (column11 > 0) OR CAST(NULL AS BOOL)
+            │ render column9: column9
+            │ render column10: column10
+            │ render column11: column11
             │
             └── • distinct
-                │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
+                │ columns: (arbiter_unique_a_distinct, column9, column10, column11)
                 │ estimated row count: 0 (missing stats)
                 │ distinct on: arbiter_unique_a_distinct
                 │ nulls are distinct
                 │
                 └── • render
-                    │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
+                    │ columns: (arbiter_unique_a_distinct, column9, column10, column11)
                     │ estimated row count: 0 (missing stats)
-                    │ render arbiter_unique_a_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
+                    │ render arbiter_unique_a_distinct: (column11 > 0) OR CAST(NULL AS BOOL)
+                    │ render column9: column9
+                    │ render column10: column10
+                    │ render column11: column11
                     │
                     └── • hash join (right anti)
-                        │ columns: (column1, column2, column3)
+                        │ columns: (column9, column10, column11)
                         │ estimated row count: 0 (missing stats)
-                        │ equality: (b) = (column3)
+                        │ equality: (b) = (column11)
                         │ right cols are key
                         │
                         ├── • filter
@@ -1194,11 +1194,11 @@ vectorized: true
                         │         spans: FULL SCAN
                         │
                         └── • hash join (right anti)
-                            │ columns: (column1, column2, column3)
+                            │ columns: (column9, column10, column11)
                             │ estimated row count: 0 (missing stats)
-                            │ equality: (a) = (column2)
+                            │ equality: (a) = (column10)
                             │ right cols are key
-                            │ pred: column3 > 0
+                            │ pred: column11 > 0
                             │
                             ├── • filter
                             │   │ columns: (a, b)
@@ -1212,11 +1212,11 @@ vectorized: true
                             │         spans: FULL SCAN
                             │
                             └── • cross join (anti)
-                                │ columns: (column1, column2, column3)
+                                │ columns: (column9, column10, column11)
                                 │ estimated row count: 0 (missing stats)
                                 │
                                 ├── • values
-                                │     columns: (column1, column2, column3)
+                                │     columns: (column9, column10, column11)
                                 │     size: 3 columns, 1 row
                                 │     row 0, expr 0: 1
                                 │     row 0, expr 1: 2
@@ -1261,8 +1261,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (a) = (v)
-│           │ pred: k != k
+│           │ equality: (a) = (column16)
+│           │ pred: column15 != k
 │           │
 │           ├── • filter
 │           │   │ filter: b > 0
@@ -1273,7 +1273,7 @@ vectorized: true
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
-│               │ filter: w > 0
+│               │ filter: column17 > 0
 │               │
 │               └── • scan buffer
 │                     label: buffer 1
@@ -1283,8 +1283,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (b) = (w)
-            │ pred: k != k
+            │ equality: (b) = (column17)
+            │ pred: column15 != k
             │
             ├── • filter
             │   │ filter: b > 0
@@ -1295,7 +1295,7 @@ vectorized: true
             │         spans: FULL SCAN
             │
             └── • filter
-                │ filter: w > 0
+                │ filter: column17 > 0
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -1345,7 +1345,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (b) = (v)
+            │ equality: (b) = (column17)
             │ pred: rowid_default != rowid
             │
             ├── • filter
@@ -1357,7 +1357,7 @@ vectorized: true
             │         spans: FULL SCAN
             │
             └── • filter
-                │ filter: x > 0
+                │ filter: column18 > 0
                 │
                 └── • scan buffer
                       label: buffer 1
@@ -1382,21 +1382,21 @@ vectorized: true
 │   │ into: uniq_partial_enum(r, a, b, c)
 │   │
 │   └── • buffer
-│       │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
+│       │ columns: (column11, column12, column13, column14, check1, partial_index_put1)
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
+│           │ columns: (column11, column12, column13, column14, check1, partial_index_put1)
 │           │ estimated row count: 2
-│           │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
-│           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
-│           │ render column1: column1
-│           │ render column2: column2
-│           │ render column3: column3
-│           │ render column4: column4
+│           │ render partial_index_put1: column14 IN ('bar', 'baz', 'foo')
+│           │ render check1: column11 IN ('us-east', 'us-west', 'eu-west')
+│           │ render column11: column11
+│           │ render column12: column12
+│           │ render column13: column13
+│           │ render column14: column14
 │           │
 │           └── • values
-│                 columns: (column1, column2, column3, column4)
+│                 columns: (column11, column12, column13, column14)
 │                 size: 4 columns, 2 rows
 │                 row 0, expr 0: 'us-west'
 │                 row 0, expr 1: 1
@@ -1413,21 +1413,21 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column3)
+            │ columns: (column13)
             │ estimated row count: 1
             │
             └── • project
-                │ columns: (column1, column2, column3, column4)
+                │ columns: (column11, column12, column13, column14)
                 │ estimated row count: 1
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@17", column1, column2, column3, column4)
+                    │ columns: ("lookup_join_const_col_@17", column11, column12, column13, column14)
                     │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@17, column3) = (r,b)
-                    │ pred: (column1 != r) OR (column2 != a)
+                    │ equality: (lookup_join_const_col_@17, column13) = (r,b)
+                    │ pred: (column11 != r) OR (column12 != a)
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@17", column1, column2, column3, column4)
+                        │ columns: ("lookup_join_const_col_@17", column11, column12, column13, column14)
                         │ estimated row count: 6
                         │
                         ├── • values
@@ -1438,16 +1438,16 @@ vectorized: true
                         │     row 2, expr 0: 'eu-west'
                         │
                         └── • filter
-                            │ columns: (column1, column2, column3, column4)
+                            │ columns: (column11, column12, column13, column14)
                             │ estimated row count: 2
-                            │ filter: column4 IN ('bar', 'baz', 'foo')
+                            │ filter: column14 IN ('bar', 'baz', 'foo')
                             │
                             └── • project
-                                │ columns: (column1, column2, column3, column4)
+                                │ columns: (column11, column12, column13, column14)
                                 │ estimated row count: 2
                                 │
                                 └── • scan buffer
-                                      columns: (column1, column2, column3, column4, check1, partial_index_put1)
+                                      columns: (column11, column12, column13, column14, check1, partial_index_put1)
                                       label: buffer 1
 ·
 index recommendations: 1
@@ -1472,46 +1472,46 @@ vectorized: true
 │ arbiter constraints: unique_b
 │
 └── • render
-    │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
+    │ columns: (column11, column12, column13, column14, check1, partial_index_put1)
     │ estimated row count: 0
-    │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
-    │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
-    │ render column1: column1
-    │ render column2: column2
-    │ render column3: column3
-    │ render column4: column4
+    │ render partial_index_put1: column14 IN ('bar', 'baz', 'foo')
+    │ render check1: column11 IN ('us-east', 'us-west', 'eu-west')
+    │ render column11: column11
+    │ render column12: column12
+    │ render column13: column13
+    │ render column14: column14
     │
     └── • distinct
-        │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
+        │ columns: (arbiter_unique_b_distinct, column11, column12, column13, column14)
         │ estimated row count: 0
-        │ distinct on: arbiter_unique_b_distinct, column3
+        │ distinct on: arbiter_unique_b_distinct, column13
         │ nulls are distinct
         │
         └── • render
-            │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
+            │ columns: (arbiter_unique_b_distinct, column11, column12, column13, column14)
             │ estimated row count: 0
-            │ render arbiter_unique_b_distinct: (column4 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
-            │ render column1: column1
-            │ render column2: column2
-            │ render column3: column3
-            │ render column4: column4
+            │ render arbiter_unique_b_distinct: (column14 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
+            │ render column11: column11
+            │ render column12: column12
+            │ render column13: column13
+            │ render column14: column14
             │
             └── • lookup join (anti)
-                │ columns: (column1, column2, column3, column4)
+                │ columns: (column11, column12, column13, column14)
                 │ estimated row count: 0
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
-                │ pred: column4 IN ('bar', 'baz', 'foo')
+                │ lookup condition: (column13 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: column14 IN ('bar', 'baz', 'foo')
                 │
                 └── • lookup join (anti)
-                    │ columns: (column1, column2, column3, column4)
+                    │ columns: (column11, column12, column13, column14)
                     │ estimated row count: 0
                     │ table: uniq_partial_enum@uniq_partial_enum_pkey
-                    │ equality: (column1, column2) = (r,a)
+                    │ equality: (column11, column12) = (r,a)
                     │ equality cols are key
                     │
                     └── • values
-                          columns: (column1, column2, column3, column4)
+                          columns: (column11, column12, column13, column14)
                           size: 4 columns, 2 rows
                           row 0, expr 0: 'us-west'
                           row 0, expr 1: 1
@@ -1554,8 +1554,8 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (d) = (column3)
-            │ pred: (column1 != i) OR (c_i_expr_comp != c_i_expr)
+            │ equality: (d) = (column15)
+            │ pred: (column13 != i) OR (c_i_expr_comp != c_i_expr)
             │
             ├── • scan
             │     missing stats
@@ -1593,7 +1593,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id2) = (column9)
             │ right cols are key
             │ pred: rowid_default != rowid
             │
@@ -1634,7 +1634,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id2) = (column9)
             │ right cols are key
             │ pred: rowid_default != rowid
             │
@@ -1677,7 +1677,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (semi)
-            │ equality: (u) = (id2)
+            │ equality: (column17) = (id2)
             │ pred: rowid_default != rowid
             │
             ├── • scan buffer
@@ -1714,7 +1714,7 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • hash join (right semi)
-│           │ equality: (id1) = (column1)
+│           │ equality: (id1) = (column8)
 │           │ right cols are key
 │           │ pred: rowid_default != rowid
 │           │
@@ -1731,7 +1731,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id2) = (column9)
             │ right cols are key
             │ pred: rowid_default != rowid
             │

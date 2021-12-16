@@ -8269,20 +8269,20 @@ with &1
  │    ├── insert abc
  │    │    ├── columns: abc.rowid:10!null
  │    │    ├── insert-mapping:
- │    │    │    ├── "?column?":20 => abc.a:7
+ │    │    │    ├── column20:20 => abc.a:7
  │    │    │    ├── b_default:21 => abc.b:8
  │    │    │    ├── b_default:21 => abc.c:9
  │    │    │    └── rowid_default:22 => abc.rowid:10
  │    │    ├── volatile, mutations
  │    │    └── project
- │    │         ├── columns: b_default:21 rowid_default:22 "?column?":20!null
+ │    │         ├── columns: b_default:21 rowid_default:22 column20:20!null
  │    │         ├── volatile
  │    │         ├── fd: ()-->(20,21)
  │    │         ├── scan abc
  │    │         └── projections
  │    │              ├── CAST(NULL AS INT8) [as=b_default:21]
  │    │              ├── unique_rowid() [as=rowid_default:22, volatile]
- │    │              └── 1 [as="?column?":20]
+ │    │              └── 1 [as=column20:20]
  │    └── projections
  │         └── 1 [as="?column?":23]
  └── values

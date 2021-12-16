@@ -690,15 +690,15 @@ with &2 (update_last_trade)
                 │    ├── insert trade_history
                 │    │    ├── columns: trade_history.th_t_id:51!null trade_history.th_st_id:53!null
                 │    │    ├── insert-mapping:
-                │    │    │    ├── tr_t_id:62 => trade_history.th_t_id:51
-                │    │    │    ├── timestamp:64 => th_dts:52
-                │    │    │    └── "?column?":63 => trade_history.th_st_id:53
+                │    │    │    ├── column62:62 => trade_history.th_t_id:51
+                │    │    │    ├── column64:64 => th_dts:52
+                │    │    │    └── column63:63 => trade_history.th_st_id:53
                 │    │    ├── input binding: &5
                 │    │    ├── volatile, mutations
                 │    │    ├── key: (51)
                 │    │    ├── fd: ()-->(53)
                 │    │    ├── project
-                │    │    │    ├── columns: tr_t_id:62!null "?column?":63!null timestamp:64!null
+                │    │    │    ├── columns: column62:62!null column63:63!null column64:64!null
                 │    │    │    ├── key: (62)
                 │    │    │    ├── fd: ()-->(63,64)
                 │    │    │    ├── with-scan &3 (request_list)
@@ -707,9 +707,9 @@ with &2 (update_last_trade)
                 │    │    │    │    │    └──  trade_request.tr_t_id:20 => tr_t_id:56
                 │    │    │    │    └── key: (56)
                 │    │    │    └── projections
-                │    │    │         ├── tr_t_id:56 [as=tr_t_id:62, outer=(56)]
-                │    │    │         ├── 'SBMT' [as="?column?":63]
-                │    │    │         └── '2020-06-15 22:27:42.148484' [as=timestamp:64]
+                │    │    │         ├── tr_t_id:56 [as=column62:62, outer=(56)]
+                │    │    │         ├── 'SBMT' [as=column63:63]
+                │    │    │         └── '2020-06-15 22:27:42.148484' [as=column64:64]
                 │    │    └── f-k-checks
                 │    │         ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
                 │    │         │    └── anti-join (lookup trade)
@@ -720,7 +720,7 @@ with &2 (update_last_trade)
                 │    │         │         ├── with-scan &5
                 │    │         │         │    ├── columns: th_t_id:65!null
                 │    │         │         │    ├── mapping:
-                │    │         │         │    │    └──  tr_t_id:62 => th_t_id:65
+                │    │         │         │    │    └──  column62:62 => th_t_id:65
                 │    │         │         │    └── key: (65)
                 │    │         │         └── filters (true)
                 │    │         └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
@@ -732,7 +732,7 @@ with &2 (update_last_trade)
                 │    │                   ├── with-scan &5
                 │    │                   │    ├── columns: th_st_id:83!null
                 │    │                   │    ├── mapping:
-                │    │                   │    │    └──  "?column?":63 => th_st_id:83
+                │    │                   │    │    └──  column63:63 => th_st_id:83
                 │    │                   │    └── fd: ()-->(83)
                 │    │                   └── filters (true)
                 │    └── projections
@@ -2967,21 +2967,21 @@ with &2 (insert_trade)
  │    ├── insert trade
  │    │    ├── columns: t_id:1!null
  │    │    ├── insert-mapping:
- │    │    │    ├── column1:33 => t_id:1
- │    │    │    ├── column2:34 => t_dts:2
- │    │    │    ├── column3:35 => trade.t_st_id:3
- │    │    │    ├── column4:36 => trade.t_tt_id:4
- │    │    │    ├── column5:37 => t_is_cash:5
- │    │    │    ├── column6:38 => trade.t_s_symb:6
- │    │    │    ├── column7:39 => t_qty:7
- │    │    │    ├── column8:40 => t_bid_price:8
- │    │    │    ├── column9:41 => trade.t_ca_id:9
- │    │    │    ├── column10:42 => t_exec_name:10
- │    │    │    ├── column11:43 => t_trade_price:11
- │    │    │    ├── column12:44 => t_chrg:12
- │    │    │    ├── column13:45 => t_comm:13
- │    │    │    ├── column14:46 => t_tax:14
- │    │    │    └── column15:47 => t_lifo:15
+ │    │    │    ├── column33:33 => t_id:1
+ │    │    │    ├── column34:34 => t_dts:2
+ │    │    │    ├── column35:35 => trade.t_st_id:3
+ │    │    │    ├── column36:36 => trade.t_tt_id:4
+ │    │    │    ├── column37:37 => t_is_cash:5
+ │    │    │    ├── column38:38 => trade.t_s_symb:6
+ │    │    │    ├── column39:39 => t_qty:7
+ │    │    │    ├── column40:40 => t_bid_price:8
+ │    │    │    ├── column41:41 => trade.t_ca_id:9
+ │    │    │    ├── column42:42 => t_exec_name:10
+ │    │    │    ├── column43:43 => t_trade_price:11
+ │    │    │    ├── column44:44 => t_chrg:12
+ │    │    │    ├── column45:45 => t_comm:13
+ │    │    │    ├── column46:46 => t_tax:14
+ │    │    │    └── column47:47 => t_lifo:15
  │    │    ├── check columns: check1:48 check2:49 check3:50 check4:51 check5:52
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [1 - 1]
@@ -2989,7 +2989,7 @@ with &2 (insert_trade)
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── values
- │    │    │    ├── columns: column1:33!null column2:34!null column3:35!null column4:36!null column5:37!null column6:38!null column7:39!null column8:40!null column9:41!null column10:42!null column11:43 column12:44!null column13:45!null column14:46!null column15:47!null check1:48!null check2:49!null check3:50!null check4:51!null check5:52!null
+ │    │    │    ├── columns: column33:33!null column34:34!null column35:35!null column36:36!null column37:37!null column38:38!null column39:39!null column40:40!null column41:41!null column42:42!null column43:43 column44:44!null column45:45!null column46:46!null column47:47!null check1:48!null check2:49!null check3:50!null check4:51!null check5:52!null
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(33-52)
@@ -3006,7 +3006,7 @@ with &2 (insert_trade)
  │    │         │         ├── with-scan &1
  │    │         │         │    ├── columns: t_st_id:53!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  column3:35 => t_st_id:53
+ │    │         │         │    │    └──  column35:35 => t_st_id:53
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
  │    │         │         │    └── fd: ()-->(53)
@@ -3022,7 +3022,7 @@ with &2 (insert_trade)
  │    │         │         ├── with-scan &1
  │    │         │         │    ├── columns: t_tt_id:58!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  column4:36 => t_tt_id:58
+ │    │         │         │    │    └──  column36:36 => t_tt_id:58
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
  │    │         │         │    └── fd: ()-->(58)
@@ -3038,7 +3038,7 @@ with &2 (insert_trade)
  │    │         │         ├── with-scan &1
  │    │         │         │    ├── columns: t_s_symb:65!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  column6:38 => t_s_symb:65
+ │    │         │         │    │    └──  column38:38 => t_s_symb:65
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
  │    │         │         │    └── fd: ()-->(65)
@@ -3054,7 +3054,7 @@ with &2 (insert_trade)
  │    │                   ├── with-scan &1
  │    │                   │    ├── columns: t_ca_id:84!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column9:41 => t_ca_id:84
+ │    │                   │    │    └──  column41:41 => t_ca_id:84
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
  │    │                   │    └── fd: ()-->(84)
@@ -3076,16 +3076,16 @@ with &2 (insert_trade)
       │    ├── insert trade_history
       │    │    ├── columns: trade_history.th_t_id:94!null trade_history.th_st_id:96!null
       │    │    ├── insert-mapping:
-      │    │    │    ├── column1:102 => trade_history.th_t_id:94
-      │    │    │    ├── column2:103 => th_dts:95
-      │    │    │    └── column3:104 => trade_history.th_st_id:96
+      │    │    │    ├── column102:102 => trade_history.th_t_id:94
+      │    │    │    ├── column103:103 => th_dts:95
+      │    │    │    └── column104:104 => trade_history.th_st_id:96
       │    │    ├── input binding: &3
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── volatile, mutations
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(94,96)
       │    │    ├── values
-      │    │    │    ├── columns: column1:102!null column2:103!null column3:104!null
+      │    │    │    ├── columns: column102:102!null column103:103!null column104:104!null
       │    │    │    ├── cardinality: [1 - 1]
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(102-104)
@@ -3102,7 +3102,7 @@ with &2 (insert_trade)
       │    │         │         ├── with-scan &3
       │    │         │         │    ├── columns: th_t_id:105!null
       │    │         │         │    ├── mapping:
-      │    │         │         │    │    └──  column1:102 => th_t_id:105
+      │    │         │         │    │    └──  column102:102 => th_t_id:105
       │    │         │         │    ├── cardinality: [1 - 1]
       │    │         │         │    ├── key: ()
       │    │         │         │    └── fd: ()-->(105)
@@ -3118,7 +3118,7 @@ with &2 (insert_trade)
       │    │                   ├── with-scan &3
       │    │                   │    ├── columns: th_st_id:123!null
       │    │                   │    ├── mapping:
-      │    │                   │    │    └──  column3:104 => th_st_id:123
+      │    │                   │    │    └──  column104:104 => th_st_id:123
       │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── key: ()
       │    │                   │    └── fd: ()-->(123)
@@ -3217,21 +3217,21 @@ with &2 (insert_trade)
  │    ├── insert trade
  │    │    ├── columns: t_id:1!null
  │    │    ├── insert-mapping:
- │    │    │    ├── column1:33 => t_id:1
- │    │    │    ├── column2:34 => t_dts:2
- │    │    │    ├── column3:35 => trade.t_st_id:3
- │    │    │    ├── column4:36 => trade.t_tt_id:4
- │    │    │    ├── column5:37 => t_is_cash:5
- │    │    │    ├── column6:38 => trade.t_s_symb:6
- │    │    │    ├── column7:39 => t_qty:7
- │    │    │    ├── column8:40 => t_bid_price:8
- │    │    │    ├── column9:41 => trade.t_ca_id:9
- │    │    │    ├── column10:42 => t_exec_name:10
- │    │    │    ├── column11:43 => t_trade_price:11
- │    │    │    ├── column12:44 => t_chrg:12
- │    │    │    ├── column13:45 => t_comm:13
- │    │    │    ├── column14:46 => t_tax:14
- │    │    │    └── column15:47 => t_lifo:15
+ │    │    │    ├── column33:33 => t_id:1
+ │    │    │    ├── column34:34 => t_dts:2
+ │    │    │    ├── column35:35 => trade.t_st_id:3
+ │    │    │    ├── column36:36 => trade.t_tt_id:4
+ │    │    │    ├── column37:37 => t_is_cash:5
+ │    │    │    ├── column38:38 => trade.t_s_symb:6
+ │    │    │    ├── column39:39 => t_qty:7
+ │    │    │    ├── column40:40 => t_bid_price:8
+ │    │    │    ├── column41:41 => trade.t_ca_id:9
+ │    │    │    ├── column42:42 => t_exec_name:10
+ │    │    │    ├── column43:43 => t_trade_price:11
+ │    │    │    ├── column44:44 => t_chrg:12
+ │    │    │    ├── column45:45 => t_comm:13
+ │    │    │    ├── column46:46 => t_tax:14
+ │    │    │    └── column47:47 => t_lifo:15
  │    │    ├── check columns: check1:48 check2:49 check3:50 check4:51 check5:52
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [1 - 1]
@@ -3239,7 +3239,7 @@ with &2 (insert_trade)
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── values
- │    │    │    ├── columns: column1:33!null column2:34!null column3:35!null column4:36!null column5:37!null column6:38!null column7:39!null column8:40!null column9:41!null column10:42!null column11:43 column12:44!null column13:45!null column14:46!null column15:47!null check1:48!null check2:49!null check3:50!null check4:51!null check5:52!null
+ │    │    │    ├── columns: column33:33!null column34:34!null column35:35!null column36:36!null column37:37!null column38:38!null column39:39!null column40:40!null column41:41!null column42:42!null column43:43 column44:44!null column45:45!null column46:46!null column47:47!null check1:48!null check2:49!null check3:50!null check4:51!null check5:52!null
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(33-52)
@@ -3256,7 +3256,7 @@ with &2 (insert_trade)
  │    │         │         ├── with-scan &1
  │    │         │         │    ├── columns: t_st_id:53!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  column3:35 => t_st_id:53
+ │    │         │         │    │    └──  column35:35 => t_st_id:53
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
  │    │         │         │    └── fd: ()-->(53)
@@ -3272,7 +3272,7 @@ with &2 (insert_trade)
  │    │         │         ├── with-scan &1
  │    │         │         │    ├── columns: t_tt_id:58!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  column4:36 => t_tt_id:58
+ │    │         │         │    │    └──  column36:36 => t_tt_id:58
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
  │    │         │         │    └── fd: ()-->(58)
@@ -3288,7 +3288,7 @@ with &2 (insert_trade)
  │    │         │         ├── with-scan &1
  │    │         │         │    ├── columns: t_s_symb:65!null
  │    │         │         │    ├── mapping:
- │    │         │         │    │    └──  column6:38 => t_s_symb:65
+ │    │         │         │    │    └──  column38:38 => t_s_symb:65
  │    │         │         │    ├── cardinality: [1 - 1]
  │    │         │         │    ├── key: ()
  │    │         │         │    └── fd: ()-->(65)
@@ -3304,7 +3304,7 @@ with &2 (insert_trade)
  │    │                   ├── with-scan &1
  │    │                   │    ├── columns: t_ca_id:84!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column9:41 => t_ca_id:84
+ │    │                   │    │    └──  column41:41 => t_ca_id:84
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
  │    │                   │    └── fd: ()-->(84)
@@ -3326,16 +3326,16 @@ with &2 (insert_trade)
       │    ├── insert trade_history
       │    │    ├── columns: trade_history.th_t_id:94!null trade_history.th_st_id:96!null
       │    │    ├── insert-mapping:
-      │    │    │    ├── column1:102 => trade_history.th_t_id:94
-      │    │    │    ├── column2:103 => th_dts:95
-      │    │    │    └── column3:104 => trade_history.th_st_id:96
+      │    │    │    ├── column102:102 => trade_history.th_t_id:94
+      │    │    │    ├── column103:103 => th_dts:95
+      │    │    │    └── column104:104 => trade_history.th_st_id:96
       │    │    ├── input binding: &3
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── volatile, mutations
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(94,96)
       │    │    ├── values
-      │    │    │    ├── columns: column1:102!null column2:103!null column3:104!null
+      │    │    │    ├── columns: column102:102!null column103:103!null column104:104!null
       │    │    │    ├── cardinality: [1 - 1]
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(102-104)
@@ -3352,7 +3352,7 @@ with &2 (insert_trade)
       │    │         │         ├── with-scan &3
       │    │         │         │    ├── columns: th_t_id:105!null
       │    │         │         │    ├── mapping:
-      │    │         │         │    │    └──  column1:102 => th_t_id:105
+      │    │         │         │    │    └──  column102:102 => th_t_id:105
       │    │         │         │    ├── cardinality: [1 - 1]
       │    │         │         │    ├── key: ()
       │    │         │         │    └── fd: ()-->(105)
@@ -3368,7 +3368,7 @@ with &2 (insert_trade)
       │    │                   ├── with-scan &3
       │    │                   │    ├── columns: th_st_id:123!null
       │    │                   │    ├── mapping:
-      │    │                   │    │    └──  column3:104 => th_st_id:123
+      │    │                   │    │    └──  column104:104 => th_st_id:123
       │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── key: ()
       │    │                   │    └── fd: ()-->(123)
@@ -3390,12 +3390,12 @@ with &2 (insert_trade)
            │    ├── insert trade_request
            │    │    ├── columns: trade_request.tr_t_id:129!null
            │    │    ├── insert-mapping:
-           │    │    │    ├── column1:143 => trade_request.tr_t_id:129
-           │    │    │    ├── column2:144 => trade_request.tr_tt_id:130
-           │    │    │    ├── column3:145 => trade_request.tr_s_symb:131
-           │    │    │    ├── column4:146 => tr_qty:132
-           │    │    │    ├── column5:147 => tr_bid_price:133
-           │    │    │    └── column6:148 => trade_request.tr_b_id:134
+           │    │    │    ├── column143:143 => trade_request.tr_t_id:129
+           │    │    │    ├── column144:144 => trade_request.tr_tt_id:130
+           │    │    │    ├── column145:145 => trade_request.tr_s_symb:131
+           │    │    │    ├── column146:146 => tr_qty:132
+           │    │    │    ├── column147:147 => tr_bid_price:133
+           │    │    │    └── column148:148 => trade_request.tr_b_id:134
            │    │    ├── check columns: check1:149 check2:150
            │    │    ├── partial index put columns: partial_index_put1:151
            │    │    ├── input binding: &5
@@ -3404,7 +3404,7 @@ with &2 (insert_trade)
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(129)
            │    │    ├── values
-           │    │    │    ├── columns: column1:143!null column2:144!null column3:145!null column4:146!null column5:147!null column6:148!null check1:149!null check2:150!null partial_index_put1:151!null
+           │    │    │    ├── columns: column143:143!null column144:144!null column145:145!null column146:146!null column147:147!null column148:148!null check1:149!null check2:150!null partial_index_put1:151!null
            │    │    │    ├── cardinality: [1 - 1]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(143-151)
@@ -3421,7 +3421,7 @@ with &2 (insert_trade)
            │    │         │         ├── with-scan &5
            │    │         │         │    ├── columns: tr_t_id:152!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  column1:143 => tr_t_id:152
+           │    │         │         │    │    └──  column143:143 => tr_t_id:152
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
            │    │         │         │    └── fd: ()-->(152)
@@ -3437,7 +3437,7 @@ with &2 (insert_trade)
            │    │         │         ├── with-scan &5
            │    │         │         │    ├── columns: tr_tt_id:170!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  column2:144 => tr_tt_id:170
+           │    │         │         │    │    └──  column144:144 => tr_tt_id:170
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
            │    │         │         │    └── fd: ()-->(170)
@@ -3453,7 +3453,7 @@ with &2 (insert_trade)
            │    │         │         ├── with-scan &5
            │    │         │         │    ├── columns: tr_s_symb:177!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  column3:145 => tr_s_symb:177
+           │    │         │         │    │    └──  column145:145 => tr_s_symb:177
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
            │    │         │         │    └── fd: ()-->(177)
@@ -3469,7 +3469,7 @@ with &2 (insert_trade)
            │    │                   ├── with-scan &5
            │    │                   │    ├── columns: tr_b_id:196!null
            │    │                   │    ├── mapping:
-           │    │                   │    │    └──  column6:148 => tr_b_id:196
+           │    │                   │    │    └──  column148:148 => tr_b_id:196
            │    │                   │    ├── cardinality: [1 - 1]
            │    │                   │    ├── key: ()
            │    │                   │    └── fd: ()-->(196)
@@ -3630,14 +3630,14 @@ INSERT INTO holding_summary (hs_ca_id, hs_s_symb, hs_qty) VALUES (0, 'ROACH', 10
 insert holding_summary
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => holding_summary.hs_ca_id:1
- │    ├── column2:10 => holding_summary.hs_s_symb:2
- │    └── column3:11 => hs_qty:3
+ │    ├── column9:9 => holding_summary.hs_ca_id:1
+ │    ├── column10:10 => holding_summary.hs_s_symb:2
+ │    └── column11:11 => hs_qty:3
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    ├── columns: column9:9!null column10:10!null column11:11!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(9-11)
@@ -3654,7 +3654,7 @@ insert holding_summary
       │         ├── with-scan &1
       │         │    ├── columns: hs_ca_id:12!null
       │         │    ├── mapping:
-      │         │    │    └──  column1:9 => hs_ca_id:12
+      │         │    │    └──  column9:9 => hs_ca_id:12
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
       │         │    └── fd: ()-->(12)
@@ -3670,7 +3670,7 @@ insert holding_summary
                 ├── with-scan &1
                 │    ├── columns: hs_s_symb:21!null
                 │    ├── mapping:
-                │    │    └──  column2:10 => hs_s_symb:21
+                │    │    └──  column10:10 => hs_s_symb:21
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(21)
@@ -3761,25 +3761,25 @@ INSERT INTO holding_history (hh_h_t_id, hh_t_id, hh_before_qty, hh_after_qty)
 insert holding_history
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── unnest:11 => holding_history.hh_h_t_id:1
- │    ├── "?column?":12 => holding_history.hh_t_id:2
- │    ├── unnest:13 => hh_before_qty:3
- │    └── unnest:14 => hh_after_qty:4
+ │    ├── column11:11 => holding_history.hh_h_t_id:1
+ │    ├── column12:12 => holding_history.hh_t_id:2
+ │    ├── column13:13 => hh_before_qty:3
+ │    └── column14:14 => hh_after_qty:4
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: "?column?":12!null unnest:11!null unnest:13!null unnest:14!null
+ │    ├── columns: column12:12!null column11:11!null column13:13!null column14:14!null
  │    ├── cardinality: [3 - 3]
  │    ├── fd: ()-->(12)
  │    ├── values
- │    │    ├── columns: unnest:11!null unnest:13!null unnest:14!null
+ │    │    ├── columns: column11:11!null column13:13!null column14:14!null
  │    │    ├── cardinality: [3 - 3]
  │    │    ├── (1, 10, 20)
  │    │    ├── (2, 20, 30)
  │    │    └── (3, 30, 40)
  │    └── projections
- │         └── 0 [as="?column?":12]
+ │         └── 0 [as=column12:12]
  └── f-k-checks
       ├── f-k-checks-item: holding_history(hh_h_t_id) -> trade(t_id)
       │    └── anti-join (lookup trade)
@@ -3790,7 +3790,7 @@ insert holding_history
       │         ├── with-scan &1
       │         │    ├── columns: hh_h_t_id:15!null
       │         │    ├── mapping:
-      │         │    │    └──  unnest:11 => hh_h_t_id:15
+      │         │    │    └──  column11:11 => hh_h_t_id:15
       │         │    └── cardinality: [3 - 3]
       │         └── filters (true)
       └── f-k-checks-item: holding_history(hh_t_id) -> trade(t_id)
@@ -3803,7 +3803,7 @@ insert holding_history
                 ├── with-scan &1
                 │    ├── columns: hh_t_id:33!null
                 │    ├── mapping:
-                │    │    └──  "?column?":12 => hh_t_id:33
+                │    │    └──  column12:12 => hh_t_id:33
                 │    ├── cardinality: [3 - 3]
                 │    └── fd: ()-->(33)
                 └── filters (true)
@@ -3867,18 +3867,18 @@ VALUES
 insert holding
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:15 => holding.h_t_id:1
- │    ├── column2:16 => holding.h_ca_id:2
- │    ├── column3:17 => holding.h_s_symb:3
- │    ├── column4:18 => h_dts:4
- │    ├── column5:19 => h_price:5
- │    └── column6:20 => h_qty:6
+ │    ├── column15:15 => holding.h_t_id:1
+ │    ├── column16:16 => holding.h_ca_id:2
+ │    ├── column17:17 => holding.h_s_symb:3
+ │    ├── column18:18 => h_dts:4
+ │    ├── column19:19 => h_price:5
+ │    └── column20:20 => h_qty:6
  ├── check columns: check1:21
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:15!null column2:16!null column3:17!null column4:18!null column5:19!null column6:20!null check1:21!null
+ │    ├── columns: column15:15!null column16:16!null column17:17!null column18:18!null column19:19!null column20:20!null check1:21!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(15-21)
@@ -3895,7 +3895,7 @@ insert holding
       │         ├── with-scan &1
       │         │    ├── columns: h_t_id:22!null
       │         │    ├── mapping:
-      │         │    │    └──  column1:15 => h_t_id:22
+      │         │    │    └──  column15:15 => h_t_id:22
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
       │         │    └── fd: ()-->(22)
@@ -3911,8 +3911,8 @@ insert holding
                 ├── with-scan &1
                 │    ├── columns: h_ca_id:40!null h_s_symb:41!null
                 │    ├── mapping:
-                │    │    ├──  column2:16 => h_ca_id:40
-                │    │    └──  column3:17 => h_s_symb:41
+                │    │    ├──  column16:16 => h_ca_id:40
+                │    │    └──  column17:17 => h_s_symb:41
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(40,41)
@@ -4302,16 +4302,16 @@ with &2 (update_trade_commission)
            │    ├── insert trade_history
            │    │    ├── columns: trade_history.th_t_id:70!null trade_history.th_st_id:72!null
            │    │    ├── insert-mapping:
-           │    │    │    ├── column1:78 => trade_history.th_t_id:70
-           │    │    │    ├── column2:79 => th_dts:71
-           │    │    │    └── column3:80 => trade_history.th_st_id:72
+           │    │    │    ├── column78:78 => trade_history.th_t_id:70
+           │    │    │    ├── column79:79 => th_dts:71
+           │    │    │    └── column80:80 => trade_history.th_st_id:72
            │    │    ├── input binding: &5
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── volatile, mutations
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(70,72)
            │    │    ├── values
-           │    │    │    ├── columns: column1:78!null column2:79!null column3:80!null
+           │    │    │    ├── columns: column78:78!null column79:79!null column80:80!null
            │    │    │    ├── cardinality: [1 - 1]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(78-80)
@@ -4328,7 +4328,7 @@ with &2 (update_trade_commission)
            │    │         │         ├── with-scan &5
            │    │         │         │    ├── columns: th_t_id:81!null
            │    │         │         │    ├── mapping:
-           │    │         │         │    │    └──  column1:78 => th_t_id:81
+           │    │         │         │    │    └──  column78:78 => th_t_id:81
            │    │         │         │    ├── cardinality: [1 - 1]
            │    │         │         │    ├── key: ()
            │    │         │         │    └── fd: ()-->(81)
@@ -4344,7 +4344,7 @@ with &2 (update_trade_commission)
            │    │                   ├── with-scan &5
            │    │                   │    ├── columns: th_st_id:99!null
            │    │                   │    ├── mapping:
-           │    │                   │    │    └──  column3:80 => th_st_id:99
+           │    │                   │    │    └──  column80:80 => th_st_id:99
            │    │                   │    ├── cardinality: [1 - 1]
            │    │                   │    ├── key: ()
            │    │                   │    └── fd: ()-->(99)
@@ -4399,17 +4399,17 @@ with &2 (insert_settlement)
  │    ├── insert settlement
  │    │    ├── columns: settlement.se_t_id:1!null
  │    │    ├── insert-mapping:
- │    │    │    ├── column1:11 => settlement.se_t_id:1
- │    │    │    ├── column2:12 => se_cash_type:2
- │    │    │    ├── column3:13 => se_cash_due_date:3
- │    │    │    └── column4:14 => se_amt:4
+ │    │    │    ├── column11:11 => settlement.se_t_id:1
+ │    │    │    ├── column12:12 => se_cash_type:2
+ │    │    │    ├── column13:13 => se_cash_due_date:3
+ │    │    │    └── column14:14 => se_amt:4
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── volatile, mutations
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── values
- │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null
+ │    │    │    ├── columns: column11:11!null column12:12!null column13:13!null column14:14!null
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(11-14)
@@ -4426,7 +4426,7 @@ with &2 (insert_settlement)
  │    │                   ├── with-scan &1
  │    │                   │    ├── columns: se_t_id:15!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column1:11 => se_t_id:15
+ │    │                   │    │    └──  column11:11 => se_t_id:15
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
  │    │                   │    └── fd: ()-->(15)
@@ -4448,17 +4448,17 @@ with &2 (insert_settlement)
       │    ├── insert cash_transaction
       │    │    ├── columns: cash_transaction.ct_t_id:34!null
       │    │    ├── insert-mapping:
-      │    │    │    ├── column1:44 => cash_transaction.ct_t_id:34
-      │    │    │    ├── column2:45 => ct_dts:35
-      │    │    │    ├── column3:46 => ct_amt:36
-      │    │    │    └── column4:47 => ct_name:37
+      │    │    │    ├── column44:44 => cash_transaction.ct_t_id:34
+      │    │    │    ├── column45:45 => ct_dts:35
+      │    │    │    ├── column46:46 => ct_amt:36
+      │    │    │    └── column47:47 => ct_name:37
       │    │    ├── input binding: &3
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── volatile, mutations
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(34)
       │    │    ├── values
-      │    │    │    ├── columns: column1:44!null column2:45!null column3:46!null column4:47!null
+      │    │    │    ├── columns: column44:44!null column45:45!null column46:46!null column47:47!null
       │    │    │    ├── cardinality: [1 - 1]
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(44-47)
@@ -4475,7 +4475,7 @@ with &2 (insert_settlement)
       │    │                   ├── with-scan &3
       │    │                   │    ├── columns: ct_t_id:48!null
       │    │                   │    ├── mapping:
-      │    │                   │    │    └──  column1:44 => ct_t_id:48
+      │    │                   │    │    └──  column44:44 => ct_t_id:48
       │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── key: ()
       │    │                   │    └── fd: ()-->(48)
@@ -4540,17 +4540,17 @@ with &2 (insert_settlement)
  │    ├── insert settlement
  │    │    ├── columns: settlement.se_t_id:1!null
  │    │    ├── insert-mapping:
- │    │    │    ├── column1:11 => settlement.se_t_id:1
- │    │    │    ├── column2:12 => se_cash_type:2
- │    │    │    ├── column3:13 => se_cash_due_date:3
- │    │    │    └── column4:14 => se_amt:4
+ │    │    │    ├── column11:11 => settlement.se_t_id:1
+ │    │    │    ├── column12:12 => se_cash_type:2
+ │    │    │    ├── column13:13 => se_cash_due_date:3
+ │    │    │    └── column14:14 => se_amt:4
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── volatile, mutations
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── values
- │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null
+ │    │    │    ├── columns: column11:11!null column12:12!null column13:13!null column14:14!null
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(11-14)
@@ -4567,7 +4567,7 @@ with &2 (insert_settlement)
  │    │                   ├── with-scan &1
  │    │                   │    ├── columns: se_t_id:15!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  column1:11 => se_t_id:15
+ │    │                   │    │    └──  column11:11 => se_t_id:15
  │    │                   │    ├── cardinality: [1 - 1]
  │    │                   │    ├── key: ()
  │    │                   │    └── fd: ()-->(15)
