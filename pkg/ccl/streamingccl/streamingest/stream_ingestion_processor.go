@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -109,6 +110,9 @@ type streamIngestionProcessor struct {
 	// cutoverCh is used to convey that the ingestion job has been signaled to
 	// cutover.
 	cutoverCh chan struct{}
+
+	// cg is used to receive the subscription of events from the source cluster.
+	cg ctxgroup.Group
 
 	// closePoller is used to shutdown the poller that checks the job for a
 	// cutover signal.
@@ -214,8 +218,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionIds))
 
 	// Initialize the event streams.
-	eventChs := make(map[string]chan streamingccl.Event)
-	errChs := make(map[string]chan error)
+	subscriptions := make(map[string]streamclient.Subscription)
+	sip.cg = ctxgroup.WithContext(ctx)
 	for i := range sip.spec.PartitionIds {
 		id := sip.spec.PartitionIds[i]
 		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
@@ -232,15 +236,15 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			}
 		}
 
-		eventCh, errCh, err := streamClient.Subscribe(ctx, streamclient.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
+		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
+		subscriptions[id] = sub
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
 		}
-		eventChs[id] = eventCh
-		errChs[id] = errCh
+		sip.cg.GoCtx(sub.Receive)
 	}
-	sip.eventCh = sip.merge(ctx, eventChs, errChs)
+	sip.eventCh = sip.merge(ctx, subscriptions)
 }
 
 // Next is part of the RowSource interface.
@@ -370,9 +374,7 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 // merge takes events from all the streams and merges them into a single
 // channel.
 func (sip *streamIngestionProcessor) merge(
-	ctx context.Context,
-	partitionStreams map[string]chan streamingccl.Event,
-	errorStreams map[string]chan error,
+	ctx context.Context, subscriptions map[string]streamclient.Subscription,
 ) chan partitionEvent {
 	merged := make(chan partitionEvent)
 
@@ -386,20 +388,16 @@ func (sip *streamIngestionProcessor) merge(
 		}
 	}
 
-	for partition, eventCh := range partitionStreams {
+	for partition, sub := range subscriptions {
 		partition := partition
-		eventCh := eventCh
-		errCh, ok := errorStreams[partition]
-		if !ok {
-			log.Fatalf(ctx, "could not find error channel for partition %q", partition)
-		}
+		sub := sub
 		g.GoCtx(func(ctx context.Context) error {
 			ctxDone := ctx.Done()
 			for {
 				select {
-				case event, ok := <-eventCh:
+				case event, ok := <-sub.Events():
 					if !ok {
-						return nil
+						return sub.Err()
 					}
 
 					pe := partitionEvent{
@@ -412,8 +410,6 @@ func (sip *streamIngestionProcessor) merge(
 					case <-ctxDone:
 						return ctx.Err()
 					}
-				case err := <-errCh:
-					return err
 				case <-ctxDone:
 					return ctx.Err()
 				}

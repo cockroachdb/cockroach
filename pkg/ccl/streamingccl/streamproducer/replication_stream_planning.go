@@ -212,16 +212,13 @@ func createReplicationStreamHook(
 }
 
 func getReplicationStreamSpec(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	initialTimestamp hlc.Timestamp,
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
 	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "Replication stream %d has error", streamID)
 	}
 	if j.Status() != jobs.StatusRunning {
 		return nil, errors.Errorf("Replication stream %d is not running", streamID)
@@ -231,7 +228,7 @@ func getReplicationStreamSpec(
 	var noTxn *kv.Txn
 	dsp := jobExecCtx.DistSQLPlanner()
 	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(), nil /* planner */, noTxn,
-		jobExecCtx.ExecCfg().Codec.ForSystemTenant() /* distribute */)
+		true /* distribute */)
 
 	replicatedSpans := j.Details().(jobspb.StreamReplicationDetails).Spans
 	spans := make([]roachpb.Span, 0, len(replicatedSpans))
@@ -256,9 +253,8 @@ func getReplicationStreamSpec(
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
-				Spans:     sp.Spans,
-				StartFrom: initialTimestamp,
-				// When absent, ExecutionConfig will be interpreted as default
+				Spans: sp.Spans,
+				// Use default ExecutionConfig for now
 			},
 		})
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -29,23 +30,19 @@ import (
 type channelFeedSource struct {
 	t               *testing.T
 	cancelIngestion context.CancelFunc
-	eventCh         chan streamingccl.Event
-	errCh           chan error
+	subscription    Subscription
 }
 
 var _ streamingtest.FeedSource = (*channelFeedSource)(nil)
 
 // Next implements the streamingtest.FeedSource interface.
 func (f *channelFeedSource) Next() (streamingccl.Event, bool) {
-	// First check for any errors.
-	select {
-	case err := <-f.errCh:
-		require.NoError(f.t, err)
+	event, haveMoreRows := <-f.subscription.Events()
+	if !haveMoreRows {
+		// Err is set after Events channel is closed.
+		require.NoError(f.t, f.subscription.Err())
 		return nil, false
-	default:
 	}
-
-	event, haveMoreRows := <-f.eventCh
 	return event, haveMoreRows
 }
 
@@ -74,6 +71,7 @@ INSERT INTO d.t2 VALUES (2);
 	t1 := catalogkv.TestingGetTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
 
 	client := &sinklessReplicationClient{remote: &h.PGUrl}
+	defer client.Close()
 
 	id, err := client.Create(ctx, h.Tenant.ID)
 	require.NoError(t, err)
@@ -91,11 +89,13 @@ INSERT INTO d.t2 VALUES (2);
 
 	t.Run("replicate_existing_tenant", func(t *testing.T) {
 		clientCtx, cancelIngestion := context.WithCancel(ctx)
-		eventCh, errCh, err := client.Subscribe(clientCtx, id, token, startTime)
+		sub, err := client.Subscribe(clientCtx, id, token, startTime)
 		require.NoError(t, err)
-		feedSource := &channelFeedSource{cancelIngestion: cancelIngestion, eventCh: eventCh, errCh: errCh}
+		feedSource := &channelFeedSource{cancelIngestion: cancelIngestion, subscription: sub}
 		feed := streamingtest.MakeReplicationFeed(t, feedSource)
 
+		cg := ctxgroup.WithContext(clientCtx)
+		cg.GoCtx(sub.Receive)
 		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
 		// version ("привет", "мир")
 		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, t1, 42, "привет", "world")
@@ -108,15 +108,18 @@ INSERT INTO d.t2 VALUES (2);
 
 		feed.ObserveResolved(ctx, secondObserved.Value.Timestamp)
 		cancelIngestion()
+		require.Error(t, cg.Wait(), "context canceled")
 	})
 
 	t.Run("stream-address-disconnects", func(t *testing.T) {
 		clientCtx, cancelIngestion := context.WithCancel(ctx)
-		eventCh, errCh, err := client.Subscribe(clientCtx, id, token, startTime)
+		sub, err := client.Subscribe(clientCtx, id, token, startTime)
 		require.NoError(t, err)
-		feedSource := &channelFeedSource{eventCh: eventCh, errCh: errCh}
+		feedSource := &channelFeedSource{subscription: sub}
 		feed := streamingtest.MakeReplicationFeed(t, feedSource)
 
+		cg := ctxgroup.WithContext(ctx)
+		cg.GoCtx(sub.Receive)
 		h.SysServer.Stopper().Stop(clientCtx)
 
 		require.True(t, feed.ObserveGeneration(clientCtx))
