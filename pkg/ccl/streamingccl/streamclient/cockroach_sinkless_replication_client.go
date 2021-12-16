@@ -63,7 +63,7 @@ func (m *sinklessReplicationClient) Plan(ctx context.Context, ID StreamID) (Topo
 	}), nil
 }
 
-// ConsumePartition implements the Client interface.
+// Subscribe implements the Client interface.
 func (m *sinklessReplicationClient) Subscribe(
 	ctx context.Context, stream StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {

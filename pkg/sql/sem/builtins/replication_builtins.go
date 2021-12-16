@@ -113,7 +113,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"stream_id", types.Int},
 				{"frontier_ts", types.String},
 			},
-			ReturnType: tree.FixedReturnType(types.String),
+			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager()
 				if err != nil {
@@ -124,11 +124,15 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				pts, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalCtx.Txn)
+				sps, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalCtx.Txn)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDString(pts.String()), nil
+				rawStatus, err := protoutil.Marshal(&sps)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawStatus)), nil
 			},
 			Info: "This function can be used on the consumer side to heartbeat its replication progress to " +
 				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
@@ -175,7 +179,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"stream_id", types.Int},
-				{"start_from", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -185,11 +188,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				initialTime, err := hlc.ParseTimestamp(string(tree.MustBeDString(args[1])))
-				if err != nil {
-					return nil, err
-				}
-				spec, err := mgr.GetReplicationStreamSpec(evalCtx, evalCtx.Txn, streaming.StreamID(streamID), initialTime)
+				spec, err := mgr.GetReplicationStreamSpec(evalCtx, evalCtx.Txn, streaming.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}

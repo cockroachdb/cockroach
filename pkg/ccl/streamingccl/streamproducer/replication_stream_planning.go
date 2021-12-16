@@ -215,12 +215,14 @@ func getReplicationStreamSpec(
 	evalCtx *tree.EvalContext,
 	txn *kv.Txn,
 	streamID streaming.StreamID,
-	initialTimestamp hlc.Timestamp,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
 	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
 	if err != nil {
+		if jobs.HasJobNotFoundError(err) {
+			return nil, errors.Wrapf(err, "Replication stream %d not found", streamID)
+		}
 		return nil, err
 	}
 	var status jobs.Status
@@ -260,9 +262,8 @@ func getReplicationStreamSpec(
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
-				Spans:     sp.Spans,
-				StartFrom: initialTimestamp,
-				// When absent, ExecutionConfig will be interpreted as default
+				Spans: sp.Spans,
+				// When absent, ExecutionConfig will be set as default
 			},
 		})
 	}

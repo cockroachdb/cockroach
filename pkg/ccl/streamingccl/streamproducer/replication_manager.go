@@ -58,9 +58,8 @@ func (r replicationStreamManagerImpl) GetReplicationStreamSpec(
 	evalCtx *tree.EvalContext,
 	txn *kv.Txn,
 	streamID streaming.StreamID,
-	initialTimestamp hlc.Timestamp,
 ) (*streampb.ReplicationStreamSpec, error) {
-	return getReplicationStreamSpec(evalCtx, txn, streamID, initialTimestamp)
+	return getReplicationStreamSpec(evalCtx, txn, streamID)
 }
 
 func init() {

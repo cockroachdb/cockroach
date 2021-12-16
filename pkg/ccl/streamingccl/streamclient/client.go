@@ -10,8 +10,10 @@ package streamclient
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -20,7 +22,7 @@ import (
 // Note on data APIs and datatypes.  As much as possible, the data that makes
 // sense to the source cluster (e.g. checkpoint records, or subscription token, etc)
 // is treated as an opaque object (e.g. []bytes) by this API.  This opacity is done
-// on purpuse as it abstracts the operations on the source cluster behind this API.
+// on purpose as it abstracts the operations on the source cluster behind this API.
 
 // StreamID identifies a stream across both its producer and consumer. It is
 // used when the consumer wishes to interact with the stream's producer.
@@ -35,6 +37,56 @@ type StreamID uint64
 // SubscriptionToken is an opaque identifier returned by Plan which can be used
 // to subscribe to a given partition.
 type SubscriptionToken []byte
+
+// CheckpointToken is an opaque identifier which can be used to represent checkpoint
+// information to start a stream processor.
+type CheckpointToken []byte
+
+// StreamPausedError is returned when the replication stream is paused.
+type StreamPausedError struct {
+	streamID StreamID
+}
+
+// Error makes StreamPausedError an error.
+func (e *StreamPausedError) Error() string {
+	return fmt.Sprintf("Replication stream %d is paused in the source cluster", e.streamID)
+}
+
+// StreamInactiveError is returned when the replication stream is not active.
+type StreamInactiveError struct {
+	streamID StreamID
+}
+
+// Error makes StreamInactiveError an error.
+func (e *StreamInactiveError) Error() string {
+	return fmt.Sprintf("Replication stream %d is not active in the source cluster", e.streamID)
+}
+
+// StreamStatusUnknownError is returned when the replication stream is in unknown status.
+type StreamStatusUnknownError struct {
+	streamID StreamID
+}
+
+// Error makes StreamStatusUnknownError an error.
+func (e *StreamStatusUnknownError) Error() string {
+	return fmt.Sprintf("Replication stream %d is in unknown status in the source cluster", e.streamID)
+}
+
+// MakeReplicationStreamError converts unhealthy jobspb.StreamReplicationStatus to an error.
+func MakeReplicationStreamError(streamID StreamID, status jobspb.StreamReplicationStatus) error {
+	switch status.StreamStatus {
+	case jobspb.StreamReplicationStatus_STREAM_ACTIVE:
+		return nil
+	case jobspb.StreamReplicationStatus_STREAM_INACTIVE:
+		return &StreamInactiveError{streamID: streamID}
+	case jobspb.StreamReplicationStatus_STREAM_PAUSED:
+		return &StreamPausedError{streamID: streamID}
+	case jobspb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY:
+		return &StreamStatusUnknownError{streamID: streamID}
+	default:
+		return errors.Errorf("unknown replication stream status: %d", status.StreamStatus)
+	}
+}
 
 // Client provides a way for the stream ingestion job to consume a
 // specified stream.
