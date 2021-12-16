@@ -1592,6 +1592,7 @@ var charts = []sectionDescription{
 				Title: "Count",
 				Metrics: []string{
 					"replicas.quiescent",
+					"replicas.unitialized",
 					"replicas",
 					"replicas.reserved",
 				},

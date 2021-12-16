@@ -3013,9 +3013,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			quiescentCount++
 		}
 
-		s.mu.Lock()
-		defer s.mu.RLock()
-		defer s.mu.RUnlock()
 		uninitializedCount = int64(len(s.mu.uninitReplicas))
 
 		if metrics.RangeCounter {
