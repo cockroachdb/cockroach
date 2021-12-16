@@ -223,14 +223,85 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	if err != nil {
 		return nil, err
 	}
-	spanConfig := zone.AsSpanConfig()
 
-	ret := make([]roachpb.SpanConfigEntry, 0)
-	prevEndKey := s.codec.TablePrefix(uint32(desc.GetID()))
+	tableStartKey := s.codec.TablePrefix(uint32(desc.GetID()))
+	tableEndKey := tableStartKey.PrefixEnd()
+	tableSpanConfig := zone.AsSpanConfig()
+
+	entries := make([]roachpb.SpanConfigEntry, 0)
+	if desc.GetID() == keys.DescriptorTableID {
+		// We have some special handling for `system.descriptor` on account of
+		// it being the first non-empty table in every tenant's keyspace.
+		if !s.codec.ForSystemTenant() {
+			// We start the span at the tenant prefix. This effectively installs
+			// the tenant's split boundary at /Tenant/<id> instead of
+			// /Tenant/<id>/Table/3. This doesn't really make a difference given
+			// there's no data within [/Tenant/<id>/ - /Tenant/<id>/Table/3),
+			// but looking at range boundaries, it's slightly less confusing
+			// this way.
+			entries = append(entries, roachpb.SpanConfigEntry{
+				Span: roachpb.Span{
+					Key:    s.codec.TenantPrefix(),
+					EndKey: tableEndKey,
+				},
+				Config: tableSpanConfig,
+			})
+		} else {
+			// The same as above, except we have named ranges preceding
+			// `system.descriptor`. Not doing anything special here would mean
+			// splitting on /Table/3 instead of /Table/0 (pretty printed as
+			// /Table/SystemConfigSpan/Start), which is benign since there's no
+			// data under /Table/{0-2}. Still, doing it this way reduces the
+			// differences between the gossip-backed subsystem and this one --
+			// somewhat useful for understandability reasons and reducing the
+			// (tiny) re-splitting costs when switching between the two
+			// subsystems.
+			entries = append(entries, roachpb.SpanConfigEntry{
+				Span: roachpb.Span{
+					Key:    keys.SystemConfigSpan.Key,
+					EndKey: tableEndKey,
+				},
+				Config: tableSpanConfig,
+			})
+		}
+
+		return entries, nil
+
+		// TODO(irfansharif): There's an attack vector here that we haven't
+		// addressed satisfactorily. By splitting only on start keys of span
+		// configs, a malicious tenant could augment their reconciliation
+		// process to install configs starting much later in their addressable
+		// keyspace. This could induce KV to consider a range boundary that
+		// starts at the previous tenant's keyspace (albeit the tail end of it)
+		// and ending within the malicious tenant's one -- that's no good. We
+		// could do two things:
+		// (i)  Have each tenant install a span config that demarcates the end of
+		//      its keyspace (in our example the previous tenant would defensively
+		//      prevent leaking its user data through this hard boundary);
+		// (ii) Have KV enforce these hard boundaries in with keyspans that
+		//      straddle tenant keyspaces.
+		//
+		// Doing (ii) feels saner, and we already do something similar when
+		// seeding `system.span_configurations` for newly created tenants. We
+		// could have secondary tenants still govern span configurations over
+		// their keyspace, but we'd always split on the tenant boundary. For
+		// malicious tenants, the config we'd apply over that range would be the
+		// fallback one KV already uses for missing spans. For non-malicious
+		// tenants, it could either be the config for (i) `system.descriptor` as
+		// done above, or (ii) whatever the tenant's RANGE DEFAULT is.
+		//
+		// See #73749.
+	}
+
+	prevEndKey := tableStartKey
 	for i := range zone.SubzoneSpans {
 		// We need to prepend the tablePrefix to the spans stored inside the
 		// SubzoneSpans field because we store the stripped version there for
 		// historical reasons.
+		//
+		// NB: Re-using tableStartKey/prevEndKey here, or pulling out a
+		// variable, would be buggy -- the underlying buffer gets mutated by the
+		// append, throwing everything else off below.
 		span := roachpb.Span{
 			Key:    append(s.codec.TablePrefix(uint32(desc.GetID())), zone.SubzoneSpans[i].Key...),
 			EndKey: append(s.codec.TablePrefix(uint32(desc.GetID())), zone.SubzoneSpans[i].EndKey...),
@@ -248,17 +319,17 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		// If there is a "hole" in the spans covered by the subzones array we fill
 		// it using the parent zone configuration.
 		if !prevEndKey.Equal(span.Key) {
-			ret = append(ret,
+			entries = append(entries,
 				roachpb.SpanConfigEntry{
 					Span:   roachpb.Span{Key: prevEndKey, EndKey: span.Key},
-					Config: spanConfig,
+					Config: tableSpanConfig,
 				},
 			)
 		}
 
 		// Add an entry for the subzone.
 		subzoneSpanConfig := zone.Subzones[zone.SubzoneSpans[i].SubzoneIndex].Config.AsSpanConfig()
-		ret = append(ret,
+		entries = append(entries,
 			roachpb.SpanConfigEntry{
 				Span:   roachpb.Span{Key: span.Key, EndKey: span.EndKey},
 				Config: subzoneSpanConfig,
@@ -268,17 +339,17 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		prevEndKey = span.EndKey
 	}
 
-	// If the last subzone span doesn't cover the entire table's keyspace then we
-	// cover the remaining key range with the table's zone configuration.
-	if !prevEndKey.Equal(s.codec.TablePrefix(uint32(desc.GetID())).PrefixEnd()) {
-		ret = append(ret,
+	// If the last subzone span doesn't cover the entire table's keyspace then
+	// we cover the remaining key range with the table's zone configuration.
+	if !prevEndKey.Equal(tableEndKey) {
+		entries = append(entries,
 			roachpb.SpanConfigEntry{
-				Span:   roachpb.Span{Key: prevEndKey, EndKey: s.codec.TablePrefix(uint32(desc.GetID())).PrefixEnd()},
-				Config: spanConfig,
+				Span:   roachpb.Span{Key: prevEndKey, EndKey: tableEndKey},
+				Config: tableSpanConfig,
 			},
 		)
 	}
-	return ret, nil
+	return entries, nil
 }
 
 // findDescendantLeafIDs finds all leaf IDs below the given ID in the zone

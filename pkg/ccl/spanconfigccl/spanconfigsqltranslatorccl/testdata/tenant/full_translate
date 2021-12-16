@@ -14,7 +14,7 @@ CREATE TABLE db.t();
 # - The user created table
 full-translate
 ----
-/Tenant/10/Table/{3-4}                     range default
+/Tenant/10{-/Table/4}                      range default
 /Tenant/10/Table/{4-5}                     range default
 /Tenant/10/Table/{5-6}                     range default
 /Tenant/10/Table/{6-7}                     range default
@@ -53,7 +53,7 @@ full-translate
 # We should expect the same for RANGE DEFAULT.
 translate named-zone=default
 ----
-/Tenant/10/Table/{3-4}                     range default
+/Tenant/10{-/Table/4}                      range default
 /Tenant/10/Table/{4-5}                     range default
 /Tenant/10/Table/{5-6}                     range default
 /Tenant/10/Table/{6-7}                     range default

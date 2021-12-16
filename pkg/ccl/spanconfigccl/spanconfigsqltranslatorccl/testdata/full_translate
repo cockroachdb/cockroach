@@ -25,7 +25,7 @@ full-translate
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
 /System{tse-/Max}                          range system
-/Table/{3-4}                               range system
+/Table/{SystemConfigSpan/Start-4}          range system
 /Table/{4-5}                               range system
 /Table/{5-6}                               range system
 /Table/{6-7}                               range system

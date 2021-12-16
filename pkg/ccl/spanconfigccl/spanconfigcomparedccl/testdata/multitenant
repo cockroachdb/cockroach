@@ -1,0 +1,120 @@
+# Setup secondary tenants and show how the current infrastructure enriches
+# the state with tenant configs while the gossip-backed system sticks only to
+# the tenant-wide span config.
+
+reconcile
+----
+
+initialize tenant=10
+----
+
+initialize tenant=11
+----
+
+# Before kicking starting off tenant reconciliation, we should find seed
+# configs for the newly initialized tenants. As yet, there are no (additional)
+# differences between the subsystems.
+configs version=current offset=37
+----
+...
+/Tenant/10                                 range default
+/Tenant/11                                 range default
+
+diff offset=24
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+
+reconcile tenant=11
+----
+
+# As soon as tenant-11 starts reconciling, we should observe more fine-grained
+# span configs within its keyspan. This isn't true for the legacy system.
+configs version=current offset=37 limit=5
+----
+...
+/Tenant/10                                 range default
+/Tenant/11                                 range default
+/Tenant/11/Table/4                         range default
+/Tenant/11/Table/5                         range default
+/Tenant/11/Table/6                         range default
+...
+
+configs version=legacy offset=43
+----
+...
+/Tenant/10                                 range default
+/Tenant/11                                 range default
+
+diff offset=24 limit=10
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+@@ -44,3 +38,36 @@
+ /Tenant/10                                 range default
+ /Tenant/11                                 range default
++/Tenant/11/Table/4                         range default
++/Tenant/11/Table/5                         range default
++/Tenant/11/Table/6                         range default
++/Tenant/11/Table/7                         range default
++/Tenant/11/Table/11                        range default
++/Tenant/11/Table/12                        range default
++/Tenant/11/Table/13                        range default
+ ...
+
+# Sanity check that new tenant tables show up correctly.
+
+exec-sql tenant=11
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+ALTER TABLE db.t1 CONFIGURE ZONE using num_replicas = 42, gc.ttlseconds = 1000;
+----
+
+diff offset=24
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+@@ -44,3 +38,38 @@
+ /Tenant/10                                 range default
+ /Tenant/11                                 range default
++/Tenant/11/Table/4                         range default
++/Tenant/11/Table/5                         range default
++/Tenant/11/Table/6                         range default
++/Tenant/11/Table/7                         range default
++/Tenant/11/Table/11                        range default
++/Tenant/11/Table/12                        range default
++/Tenant/11/Table/13                        range default
++/Tenant/11/Table/14                        range default
++/Tenant/11/Table/15                        range default
++/Tenant/11/Table/19                        range default
++/Tenant/11/Table/20                        range default
++/Tenant/11/Table/21                        range default
++/Tenant/11/Table/23                        range default
++/Tenant/11/Table/24                        range default
++/Tenant/11/Table/25                        range default
++/Tenant/11/Table/26                        range default
++/Tenant/11/Table/27                        range default
++/Tenant/11/Table/28                        range default
++/Tenant/11/NamespaceTable/30               range default
++/Tenant/11/NamespaceTable/Max              range default
++/Tenant/11/Table/32                        range default
++/Tenant/11/Table/33                        range default
++/Tenant/11/Table/34                        range default
++/Tenant/11/Table/35                        range default
++/Tenant/11/Table/36                        range default
++/Tenant/11/Table/37                        range default
++/Tenant/11/Table/39                        range default
++/Tenant/11/Table/40                        range default
++/Tenant/11/Table/41                        range default
++/Tenant/11/Table/42                        range default
++/Tenant/11/Table/43                        range default
++/Tenant/11/Table/44                        range default
++/Tenant/11/Table/46                        range default
++/Tenant/11/Table/56                        ttl_seconds=1000 num_replicas=42
++/Tenant/11/Table/57                        range default
+
+# vim:ft=diff

@@ -2084,7 +2084,7 @@ func (s *Store) GetConfReader() (spanconfig.StoreReader, error) {
 	}
 
 	if s.cfg.SpanConfigsEnabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return spanconfigstore.NewShadowReader(s.cfg.SpanConfigSubscriber, sysCfg), nil
+		return s.cfg.SpanConfigSubscriber, nil
 	}
 
 	return sysCfg, nil
