@@ -1052,17 +1052,17 @@ insert assn_cast
  ├── insert-mapping:
  │    ├── column12:12 => c:1
  │    ├── column13:13 => qc:2
- │    ├── column14:14 => i:3
- │    ├── column15:15 => s:4
- │    └── rowid_default:16 => rowid:5
+ │    ├── column3:10 => i:3
+ │    ├── column14:14 => s:4
+ │    └── rowid_default:15 => rowid:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: rowid_default:16 column12:12 column13:13!null column14:14!null column15:15!null
+      ├── columns: rowid_default:15 column3:10!null column12:12 column13:13!null column14:14!null
       ├── cardinality: [2 - 2]
       ├── volatile
       ├── values
-      │    ├── columns: column12:12 column13:13!null column14:14!null column15:15!null
+      │    ├── columns: column12:12 column13:13!null column3:10!null column14:14!null
       │    ├── cardinality: [2 - 2]
       │    ├── immutable
       │    ├── ('', 'f', 1, '2')
@@ -1073,7 +1073,7 @@ insert assn_cast
       │         ├── 10
       │         └── '20'
       └── projections
-           └── unique_rowid() [as=rowid_default:16, volatile]
+           └── unique_rowid() [as=rowid_default:15, volatile]
 
 # Push assignment cast projections if all the values are not constant.
 norm expect=PushAssignmentCastsIntoValues
@@ -1084,17 +1084,17 @@ insert assn_cast
  ├── insert-mapping:
  │    ├── column12:12 => c:1
  │    ├── column13:13 => qc:2
- │    ├── column14:14 => i:3
- │    ├── column15:15 => s:4
- │    └── rowid_default:16 => rowid:5
+ │    ├── column3:10 => i:3
+ │    ├── column4:11 => s:4
+ │    └── rowid_default:14 => rowid:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations, has-placeholder
  └── project
-      ├── columns: rowid_default:16 column12:12 column13:13 column14:14 column15:15
+      ├── columns: rowid_default:14 column3:10 column4:11 column12:12 column13:13
       ├── cardinality: [2 - 2]
       ├── volatile, has-placeholder
       ├── values
-      │    ├── columns: column12:12 column13:13 column14:14 column15:15
+      │    ├── columns: column12:12 column13:13 column3:10 column4:11
       │    ├── cardinality: [2 - 2]
       │    ├── immutable, has-placeholder
       │    ├── ('', 'f', 1, 'bar')
@@ -1106,7 +1106,7 @@ insert assn_cast
       │         ├── $3
       │         └── $4
       └── projections
-           └── unique_rowid() [as=rowid_default:16, volatile]
+           └── unique_rowid() [as=rowid_default:14, volatile]
 
 # Push assignment cast projections if there are other projections that are not
 # assignment casts.
@@ -1118,27 +1118,27 @@ insert assn_cast
  ├── insert-mapping:
  │    ├── column12:12 => c:1
  │    ├── column13:13 => qc:2
- │    ├── column14:14 => i:3
- │    ├── column15:15 => s:4
- │    └── rowid_default:16 => rowid:5
+ │    ├── "?column?":11 => i:3
+ │    ├── column14:14 => s:4
+ │    └── rowid_default:15 => rowid:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: rowid_default:16 column12:12!null column13:13!null column14:14!null column15:15!null
+      ├── columns: rowid_default:15 column12:12!null column13:13!null "?column?":11!null column14:14!null
       ├── cardinality: [3 - 3]
       ├── volatile
-      ├── fd: ()-->(12-14)
+      ├── fd: ()-->(11-13)
       ├── values
-      │    ├── columns: column15:15!null
+      │    ├── columns: column14:14!null
       │    ├── cardinality: [3 - 3]
       │    ├── ('1',)
       │    ├── ('2',)
       │    └── ('3',)
       └── projections
-           ├── unique_rowid() [as=rowid_default:16, volatile]
+           ├── unique_rowid() [as=rowid_default:15, volatile]
            ├── '' [as=column12:12]
            ├── 'f' [as=column13:13]
-           └── 1 [as=column14:14]
+           └── 1 [as="?column?":11]
 
 # Do not push assignment casts into values when other projections reference the
 # column being casted.
@@ -1148,28 +1148,28 @@ INSERT INTO assn_cast (i, s) SELECT x, (x + 1)::STRING FROM (VALUES (1), (2)) AS
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── c_default:12 => c:1
- │    ├── qc_default:13 => qc:2
- │    ├── column10:10 => i:3
- │    ├── column11:11 => s:4
- │    └── rowid_default:14 => rowid:5
+ │    ├── c_default:10 => c:1
+ │    ├── qc_default:11 => qc:2
+ │    ├── column1:8 => i:3
+ │    ├── text:9 => s:4
+ │    └── rowid_default:12 => rowid:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: c_default:12 qc_default:13 rowid_default:14 column11:11!null column10:10!null
+      ├── columns: c_default:10 qc_default:11 rowid_default:12 text:9!null column1:8!null
       ├── cardinality: [2 - 2]
       ├── volatile
-      ├── fd: ()-->(12,13), (10)-->(11)
+      ├── fd: ()-->(10,11), (8)-->(9)
       ├── values
-      │    ├── columns: column10:10!null
+      │    ├── columns: column1:8!null
       │    ├── cardinality: [2 - 2]
       │    ├── (1,)
       │    └── (2,)
       └── projections
-           ├── CAST(NULL AS CHAR) [as=c_default:12]
-           ├── CAST(NULL AS "char") [as=qc_default:13]
-           ├── unique_rowid() [as=rowid_default:14, volatile]
-           └── (column10:10 + 1)::STRING [as=column11:11, outer=(10), immutable]
+           ├── CAST(NULL AS CHAR) [as=c_default:10]
+           ├── CAST(NULL AS "char") [as=qc_default:11]
+           ├── unique_rowid() [as=rowid_default:12, volatile]
+           └── (column1:8 + 1)::STRING [as=text:9, outer=(8), immutable]
 
 # Do not match if there are no assignment cast projections.
 norm expect-not=PushAssignmentCastsIntoValues

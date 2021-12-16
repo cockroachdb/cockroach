@@ -1242,22 +1242,22 @@ VALUES (1, FALSE, '2020-03-01', 'the-account', 'the-customer', '70F03EB1-4F58-4C
 insert transactions
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column16:16 => dealerid:1
- │    ├── column17:17 => isbuy:2
- │    ├── column18:18 => date:3
- │    ├── column19:19 => accountname:4
- │    ├── column20:20 => customername:5
- │    ├── column21:21 => operationid:6
- │    └── version_default:22 => version:7
+ │    ├── column1:10 => dealerid:1
+ │    ├── column2:11 => isbuy:2
+ │    ├── column3:12 => date:3
+ │    ├── column16:16 => accountname:4
+ │    ├── column17:17 => customername:5
+ │    ├── column6:15 => operationid:6
+ │    └── version_default:18 => version:7
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column16:16!null column17:17!null column18:18!null column19:19!null column20:20!null column21:21!null version_default:22
+      ├── columns: column1:10!null column2:11!null column3:12!null column6:15!null column16:16!null column17:17!null version_default:18
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
-      ├── fd: ()-->(16-22)
-      └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp())
+      ├── fd: ()-->(10-12,15-18)
+      └── (1, false, '2020-03-01 00:00:00+00:00', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', 'the-account', 'the-customer', cluster_logical_timestamp())
 
 # Upsert buy or sell transaction.
 opt

@@ -3492,18 +3492,18 @@ INSERT INTO checks (a, c, d) VALUES (1, 3, 4)
 insert checks
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column10:10 => a:1
- │    ├── b_default:13 => b:2
- │    ├── column11:11 => c:3
- │    └── column12:12 => d:4
- ├── check columns: check1:14 check2:15 check3:16
+ │    ├── column1:7 => a:1
+ │    ├── b_default:10 => b:2
+ │    ├── column2:8 => c:3
+ │    └── column3:9 => d:4
+ ├── check columns: check1:11 check2:12 check3:13
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column10:10!null column11:11!null column12:12!null b_default:13!null check1:14!null check2:15!null check3:16!null
+      ├── columns: column1:7!null column2:8!null column3:9!null b_default:10!null check1:11!null check2:12!null check3:13!null
       ├── cardinality: [1 - 1]
       ├── key: ()
-      ├── fd: ()-->(10-16)
+      ├── fd: ()-->(7-13)
       └── (1, 3, 4, 20, true, true, false)
 
 # Do not prune check columns for an upsert that does not require a scan.

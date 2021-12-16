@@ -817,21 +817,21 @@ vectorized: true
     │ arbiter indexes: t_pkey
     │
     └── • lookup join (anti)
-        │ columns: (column8, column9, v_comp)
+        │ columns: (column1, column2, v_comp)
         │ estimated row count: 0 (missing stats)
         │ table: t@t_pkey
-        │ equality: (column8) = (a)
+        │ equality: (column1) = (a)
         │ equality cols are key
         │
         └── • render
-            │ columns: (v_comp, column8, column9)
+            │ columns: (v_comp, column1, column2)
             │ estimated row count: 2
-            │ render v_comp: column8 + column9
-            │ render column8: column8
-            │ render column9: column9
+            │ render v_comp: column1 + column2
+            │ render column1: column1
+            │ render column2: column2
             │
             └── • values
-                  columns: (column8, column9)
+                  columns: (column1, column2)
                   size: 2 columns, 2 rows
                   row 0, expr 0: 5
                   row 0, expr 1: 51
@@ -1117,20 +1117,20 @@ vectorized: true
     │ arbiter indexes: t_idx_pkey, t_idx_w_key
     │
     └── • distinct
-        │ columns: (column11, column12, column13, v_comp, w_comp)
+        │ columns: (column1, column2, column3, v_comp, w_comp)
         │ estimated row count: 0 (missing stats)
         │ distinct on: w_comp
         │ nulls are distinct
         │
         └── • lookup join (anti)
-            │ columns: (v_comp, w_comp, column11, column12, column13)
+            │ columns: (v_comp, w_comp, column1, column2, column3)
             │ estimated row count: 0 (missing stats)
             │ table: t_idx@t_idx_pkey
-            │ equality: (column11) = (a)
+            │ equality: (column1) = (a)
             │ equality cols are key
             │
             └── • hash join (right anti)
-                │ columns: (v_comp, w_comp, column11, column12, column13)
+                │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 0 (missing stats)
                 │ equality: (w) = (w_comp)
                 │
@@ -1146,16 +1146,16 @@ vectorized: true
                 │         spans: FULL SCAN
                 │
                 └── • render
-                    │ columns: (v_comp, w_comp, column11, column12, column13)
+                    │ columns: (v_comp, w_comp, column1, column2, column3)
                     │ estimated row count: 3
-                    │ render v_comp: column11 + column12
-                    │ render w_comp: column13 + 1
-                    │ render column11: column11
-                    │ render column12: column12
-                    │ render column13: column13
+                    │ render v_comp: column1 + column2
+                    │ render w_comp: column3 + 1
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
                     │
                     └── • values
-                          columns: (column11, column12, column13)
+                          columns: (column1, column2, column3)
                           size: 3 columns, 3 rows
                           row 0, expr 0: 4
                           row 0, expr 1: 41

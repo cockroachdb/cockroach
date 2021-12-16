@@ -1625,7 +1625,7 @@ vectorized: true
 │
 └── • lookup join (anti)
     │ table: u@u_v_key
-    │ equality: (column8) = (v)
+    │ equality: (column2) = (v)
     │ equality cols are key
     │
     └── • cross join (anti)

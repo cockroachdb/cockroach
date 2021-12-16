@@ -315,11 +315,11 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (column11, column12, rowid_default)
+    │ columns: (x, v, rowid_default)
     │ estimated row count: 10 (missing stats)
     │ render rowid_default: unique_rowid()
-    │ render column11: x
-    │ render column12: v
+    │ render x: x
+    │ render v: v
     │
     └── • top-k
         │ columns: (x, v)
@@ -352,11 +352,11 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (column11, column12, rowid_default)
+    │ columns: (x, v, rowid_default)
     │ estimated row count: 1 (missing stats)
     │ render rowid_default: unique_rowid()
-    │ render column11: x
-    │ render column12: v
+    │ render x: x
+    │ render v: v
     │
     └── • scan
           columns: (x, v)
@@ -468,11 +468,11 @@ vectorized: true
     │ into: insert_t(x, v, rowid)
     │
     └── • render
-        │ columns: (column13, column14, rowid_default)
+        │ columns: (length, "?column?", rowid_default)
         │ estimated row count: 10 (missing stats)
         │ render rowid_default: unique_rowid()
-        │ render column13: length
-        │ render column14: "?column?"
+        │ render length: length
+        │ render ?column?: "?column?"
         │
         └── • top-k
             │ columns: (length, "?column?", column12)
@@ -597,12 +597,12 @@ vectorized: true
                 │ into: xyz(x, y, z, rowid)
                 │
                 └── • render
-                    │ columns: (column13, column14, column15, rowid_default)
+                    │ columns: (a, b, c, rowid_default)
                     │ estimated row count: 1,000 (missing stats)
                     │ render rowid_default: unique_rowid()
-                    │ render column13: a
-                    │ render column14: b
-                    │ render column15: c
+                    │ render a: a
+                    │ render b: b
+                    │ render c: c
                     │
                     └── • scan
                           columns: (a, b, c)

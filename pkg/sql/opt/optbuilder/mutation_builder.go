@@ -1391,7 +1391,7 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 }
 
 // addAssignmentCasts builds a projection that wraps columns in srcCols with
-// assignment casts when possible so that the resulting columns have types
+// assignment casts when necessary so that the resulting columns have types
 // identical to their target column types.
 //
 // srcCols should be either insertColIDs, updateColIDs, or upsertColsIDs where
@@ -1401,14 +1401,6 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 //
 // If there is no valid assignment cast from a column type in srcCols to its
 // corresponding target column type, then this function throws an error.
-//
-// Assignment casts always wrap mutation columns even if the type of a mutation
-// column is identical to its target type. This is required in order to
-// correctly cast placeholder values. When a memo is built at PREPARE-time,
-// the exact type (e.g. int2 vs int8) of a placeholder value provided at
-// EXECUTE-time cannot be known. If a value provided does not have a type
-// identical to its target column's type, an assignment cast must be performed.
-// If the value's type is the correct type, the assignment cast is a no-op.
 func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 	projectionScope := mb.outScope.push()
 	projectionScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
@@ -1424,6 +1416,14 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 			panic(errors.AssertionFailedf("could not find column %d in srcCols", colID))
 		}
 		targetType := mb.tab.Column(ord).DatumType()
+
+		// An assignment cast is not necessary if the source and target types
+		// are identical. Add the column to the projection scope so that it
+		// becomes a passthrough column.
+		if srcType.Identical(targetType) {
+			projectionScope.appendColumn(&mb.outScope.cols[i])
+			continue
+		}
 
 		// Check if an assignment cast is available from the inScope column
 		// type to the out type.

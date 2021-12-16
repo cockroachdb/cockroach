@@ -12,32 +12,27 @@ INSERT INTO child VALUES (100, 1), (200, 1)
 insert child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => child.p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7!null column8:8!null
- │    ├── values
- │    │    ├── columns: column1:5!null column2:6!null
- │    │    ├── (100, 1)
- │    │    └── (200, 1)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column7:7]
- │         │    └── column1:5
- │         └── assignment-cast: INT8 [as=column8:8]
- │              └── column2:6
+ │    ├── columns: column1:5!null column2:6!null
+ │    └── values
+ │         ├── columns: column1:5!null column2:6!null
+ │         ├── (100, 1)
+ │         └── (200, 1)
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:9!null
+                ├── columns: p:7!null
                 ├── with-scan &1
-                │    ├── columns: p:9!null
+                │    ├── columns: p:7!null
                 │    └── mapping:
-                │         └──  column8:8 => p:9
+                │         └──  column2:6 => p:7
                 ├── scan parent
-                │    └── columns: parent.p:10!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── p:9 = parent.p:10
+                     └── p:7 = parent.p:8
 
 build
 INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
@@ -46,44 +41,39 @@ insert child
  ├── columns: <none>
  ├── arbiter indexes: child_pkey
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => child.p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child.p:2
  ├── input binding: &1
  ├── upsert-distinct-on
- │    ├── columns: column7:7!null column8:8!null
- │    ├── grouping columns: column7:7!null
+ │    ├── columns: column1:5!null column2:6!null
+ │    ├── grouping columns: column1:5!null
  │    ├── anti-join (hash)
- │    │    ├── columns: column7:7!null column8:8!null
+ │    │    ├── columns: column1:5!null column2:6!null
  │    │    ├── project
- │    │    │    ├── columns: column7:7!null column8:8!null
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:5!null column2:6!null
- │    │    │    │    ├── (100, 1)
- │    │    │    │    └── (200, 1)
- │    │    │    └── projections
- │    │    │         ├── assignment-cast: INT8 [as=column7:7]
- │    │    │         │    └── column1:5
- │    │    │         └── assignment-cast: INT8 [as=column8:8]
- │    │    │              └── column2:6
+ │    │    │    ├── columns: column1:5!null column2:6!null
+ │    │    │    └── values
+ │    │    │         ├── columns: column1:5!null column2:6!null
+ │    │    │         ├── (100, 1)
+ │    │    │         └── (200, 1)
  │    │    ├── scan child
- │    │    │    └── columns: c:9!null child.p:10!null
+ │    │    │    └── columns: c:7!null child.p:8!null
  │    │    └── filters
- │    │         └── column7:7 = c:9
+ │    │         └── column1:5 = c:7
  │    └── aggregations
- │         └── first-agg [as=column8:8]
- │              └── column8:8
+ │         └── first-agg [as=column2:6]
+ │              └── column2:6
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:13!null
+                ├── columns: p:11!null
                 ├── with-scan &1
-                │    ├── columns: p:13!null
+                │    ├── columns: p:11!null
                 │    └── mapping:
-                │         └──  column8:8 => p:13
+                │         └──  column2:6 => p:11
                 ├── scan parent
-                │    └── columns: parent.p:14!null
+                │    └── columns: parent.p:12!null
                 └── filters
-                     └── p:13 = parent.p:14
+                     └── p:11 = parent.p:12
 
 # Use a non-constant input.
 exec-ddl
@@ -96,32 +86,27 @@ INSERT INTO child SELECT x, y FROM xy
 insert child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column10:10 => c:1
- │    └── column11:11 => child.p:2
+ │    ├── x:5 => c:1
+ │    └── y:6 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column10:10 column11:11
- │    ├── project
- │    │    ├── columns: x:5 y:6
- │    │    └── scan xy
- │    │         └── columns: x:5 y:6 rowid:7!null xy.crdb_internal_mvcc_timestamp:8 xy.tableoid:9
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column10:10]
- │         │    └── x:5
- │         └── assignment-cast: INT8 [as=column11:11]
- │              └── y:6
+ │    ├── columns: x:5 y:6
+ │    └── project
+ │         ├── columns: x:5 y:6
+ │         └── scan xy
+ │              └── columns: x:5 y:6 rowid:7!null xy.crdb_internal_mvcc_timestamp:8 xy.tableoid:9
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:12
+                ├── columns: p:10
                 ├── with-scan &1
-                │    ├── columns: p:12
+                │    ├── columns: p:10
                 │    └── mapping:
-                │         └──  column11:11 => p:12
+                │         └──  y:6 => p:10
                 ├── scan parent
-                │    └── columns: parent.p:13!null
+                │    └── columns: parent.p:11!null
                 └── filters
-                     └── p:12 = parent.p:13
+                     └── p:10 = parent.p:11
 
 exec-ddl
 CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
@@ -135,36 +120,31 @@ INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
 insert child_nullable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => child_nullable.p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child_nullable.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7!null column8:8
- │    ├── values
- │    │    ├── columns: column1:5!null column2:6
- │    │    ├── (100, 1)
- │    │    └── (200, NULL::INT8)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column7:7]
- │         │    └── column1:5
- │         └── assignment-cast: INT8 [as=column8:8]
- │              └── column2:6
+ │    ├── columns: column1:5!null column2:6
+ │    └── values
+ │         ├── columns: column1:5!null column2:6
+ │         ├── (100, 1)
+ │         └── (200, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:9!null
+                ├── columns: p:7!null
                 ├── select
-                │    ├── columns: p:9!null
+                │    ├── columns: p:7!null
                 │    ├── with-scan &1
-                │    │    ├── columns: p:9
+                │    │    ├── columns: p:7
                 │    │    └── mapping:
-                │    │         └──  column8:8 => p:9
+                │    │         └──  column2:6 => p:7
                 │    └── filters
-                │         └── p:9 IS NOT NULL
+                │         └── p:7 IS NOT NULL
                 ├── scan parent
-                │    └── columns: parent.p:10!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── p:9 = parent.p:10
+                     └── p:7 = parent.p:8
 
 # The column is nullable but we know that the input is not null, so we don't
 # need to plan the filter.
@@ -174,32 +154,27 @@ INSERT INTO child_nullable VALUES (100, 1), (200, 1)
 insert child_nullable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => child_nullable.p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child_nullable.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7!null column8:8!null
- │    ├── values
- │    │    ├── columns: column1:5!null column2:6!null
- │    │    ├── (100, 1)
- │    │    └── (200, 1)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column7:7]
- │         │    └── column1:5
- │         └── assignment-cast: INT8 [as=column8:8]
- │              └── column2:6
+ │    ├── columns: column1:5!null column2:6!null
+ │    └── values
+ │         ├── columns: column1:5!null column2:6!null
+ │         ├── (100, 1)
+ │         └── (200, 1)
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:9!null
+                ├── columns: p:7!null
                 ├── with-scan &1
-                │    ├── columns: p:9!null
+                │    ├── columns: p:7!null
                 │    └── mapping:
-                │         └──  column8:8 => p:9
+                │         └──  column2:6 => p:7
                 ├── scan parent
-                │    └── columns: parent.p:10!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── p:9 = parent.p:10
+                     └── p:7 = parent.p:8
 
 # In this case, we know that we are inserting *only* NULL values, so we don't
 # need to check any FKs.
@@ -211,10 +186,10 @@ INSERT INTO child_nullable VALUES (100, NULL), (200, NULL)
 insert child_nullable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => p:2
  └── values
-      ├── columns: column7:7!null column8:8
+      ├── columns: column1:5!null column2:6
       ├── (100, NULL)
       └── (200, NULL)
 
@@ -225,21 +200,18 @@ INSERT INTO child_nullable (c) VALUES (100), (200)
 insert child_nullable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column6:6 => c:1
- │    └── p_default:7 => p:2
+ │    ├── column1:5 => c:1
+ │    └── p_default:6 => p:2
  └── project
-      ├── columns: p_default:7 column6:6!null
+      ├── columns: p_default:6 column1:5!null
       ├── project
-      │    ├── columns: column6:6!null
-      │    ├── values
-      │    │    ├── columns: column1:5!null
-      │    │    ├── (100,)
-      │    │    └── (200,)
-      │    └── projections
-      │         └── assignment-cast: INT8 [as=column6:6]
-      │              └── column1:5
+      │    ├── columns: column1:5!null
+      │    └── values
+      │         ├── columns: column1:5!null
+      │         ├── (100,)
+      │         └── (200,)
       └── projections
-           └── NULL::INT8 [as=p_default:7]
+           └── NULL::INT8 [as=p_default:6]
 
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
@@ -253,36 +225,31 @@ INSERT INTO child_nullable_full VALUES (100, 1), (200, NULL)
 insert child_nullable_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => child_nullable_full.p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child_nullable_full.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7!null column8:8
- │    ├── values
- │    │    ├── columns: column1:5!null column2:6
- │    │    ├── (100, 1)
- │    │    └── (200, NULL::INT8)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column7:7]
- │         │    └── column1:5
- │         └── assignment-cast: INT8 [as=column8:8]
- │              └── column2:6
+ │    ├── columns: column1:5!null column2:6
+ │    └── values
+ │         ├── columns: column1:5!null column2:6
+ │         ├── (100, 1)
+ │         └── (200, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: child_nullable_full(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:9!null
+                ├── columns: p:7!null
                 ├── select
-                │    ├── columns: p:9!null
+                │    ├── columns: p:7!null
                 │    ├── with-scan &1
-                │    │    ├── columns: p:9
+                │    │    ├── columns: p:7
                 │    │    └── mapping:
-                │    │         └──  column8:8 => p:9
+                │    │         └──  column2:6 => p:7
                 │    └── filters
-                │         └── p:9 IS NOT NULL
+                │         └── p:7 IS NOT NULL
                 ├── scan parent
-                │    └── columns: parent.p:10!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── p:9 = parent.p:10
+                     └── p:7 = parent.p:8
 
 # No FK check needed.
 build
@@ -291,21 +258,18 @@ INSERT INTO child_nullable_full (c) VALUES (100), (200)
 insert child_nullable_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column6:6 => c:1
- │    └── p_default:7 => p:2
+ │    ├── column1:5 => c:1
+ │    └── p_default:6 => p:2
  └── project
-      ├── columns: p_default:7 column6:6!null
+      ├── columns: p_default:6 column1:5!null
       ├── project
-      │    ├── columns: column6:6!null
-      │    ├── values
-      │    │    ├── columns: column1:5!null
-      │    │    ├── (100,)
-      │    │    └── (200,)
-      │    └── projections
-      │         └── assignment-cast: INT8 [as=column6:6]
-      │              └── column1:5
+      │    ├── columns: column1:5!null
+      │    └── values
+      │         ├── columns: column1:5!null
+      │         ├── (100,)
+      │         └── (200,)
       └── projections
-           └── NULL::INT8 [as=p_default:7]
+           └── NULL::INT8 [as=p_default:6]
 
 # Tests with multicolumn FKs.
 exec-ddl
@@ -327,48 +291,39 @@ INSERT INTO multi_col_child VALUES (4, NULL, NULL, NULL), (5, 1, 2, 3)
 insert multi_col_child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child.p:2
- │    ├── column13:13 => multi_col_child.q:3
- │    └── column14:14 => multi_col_child.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child.p:2
+ │    ├── column3:9 => multi_col_child.q:3
+ │    └── column4:10 => multi_col_child.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12 column13:13 column14:14
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8 column3:9 column4:10
- │    │    ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
- │    │    └── (5, 1, 2, 3)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8 column3:9 column4:10
+ │    └── values
+ │         ├── columns: column1:7!null column2:8 column3:9 column4:10
+ │         ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │         └── (5, 1, 2, 3)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15!null q:16!null r:17!null
+                ├── columns: p:11!null q:12!null r:13!null
                 ├── select
-                │    ├── columns: p:15!null q:16!null r:17!null
+                │    ├── columns: p:11!null q:12!null r:13!null
                 │    ├── with-scan &1
-                │    │    ├── columns: p:15 q:16 r:17
+                │    │    ├── columns: p:11 q:12 r:13
                 │    │    └── mapping:
-                │    │         ├──  column12:12 => p:15
-                │    │         ├──  column13:13 => q:16
-                │    │         └──  column14:14 => r:17
+                │    │         ├──  column2:8 => p:11
+                │    │         ├──  column3:9 => q:12
+                │    │         └──  column4:10 => r:13
                 │    └── filters
-                │         ├── p:15 IS NOT NULL
-                │         ├── q:16 IS NOT NULL
-                │         └── r:17 IS NOT NULL
+                │         ├── p:11 IS NOT NULL
+                │         ├── q:12 IS NOT NULL
+                │         └── r:13 IS NOT NULL
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 # Only p and q are nullable.
 build
@@ -377,47 +332,38 @@ INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
 insert multi_col_child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child.p:2
- │    ├── column13:13 => multi_col_child.q:3
- │    └── column14:14 => multi_col_child.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child.p:2
+ │    ├── column3:9 => multi_col_child.q:3
+ │    └── column4:10 => multi_col_child.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12 column13:13 column14:14!null
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8 column3:9 column4:10!null
- │    │    ├── (2, NULL::INT8, 20, 20)
- │    │    └── (3, 20, NULL::INT8, 20)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8 column3:9 column4:10!null
+ │    └── values
+ │         ├── columns: column1:7!null column2:8 column3:9 column4:10!null
+ │         ├── (2, NULL::INT8, 20, 20)
+ │         └── (3, 20, NULL::INT8, 20)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15!null q:16!null r:17!null
+                ├── columns: p:11!null q:12!null r:13!null
                 ├── select
-                │    ├── columns: p:15!null q:16!null r:17!null
+                │    ├── columns: p:11!null q:12!null r:13!null
                 │    ├── with-scan &1
-                │    │    ├── columns: p:15 q:16 r:17!null
+                │    │    ├── columns: p:11 q:12 r:13!null
                 │    │    └── mapping:
-                │    │         ├──  column12:12 => p:15
-                │    │         ├──  column13:13 => q:16
-                │    │         └──  column14:14 => r:17
+                │    │         ├──  column2:8 => p:11
+                │    │         ├──  column3:9 => q:12
+                │    │         └──  column4:10 => r:13
                 │    └── filters
-                │         ├── p:15 IS NOT NULL
-                │         └── q:16 IS NOT NULL
+                │         ├── p:11 IS NOT NULL
+                │         └── q:12 IS NOT NULL
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -426,41 +372,32 @@ INSERT INTO multi_col_child VALUES (1, 10, 10, 10)
 insert multi_col_child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child.p:2
- │    ├── column13:13 => multi_col_child.q:3
- │    └── column14:14 => multi_col_child.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child.p:2
+ │    ├── column3:9 => multi_col_child.q:3
+ │    └── column4:10 => multi_col_child.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12!null column13:13!null column14:14!null
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │    │    └── (1, 10, 10, 10)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    └── values
+ │         ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │         └── (1, 10, 10, 10)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15!null q:16!null r:17!null
+                ├── columns: p:11!null q:12!null r:13!null
                 ├── with-scan &1
-                │    ├── columns: p:15!null q:16!null r:17!null
+                │    ├── columns: p:11!null q:12!null r:13!null
                 │    └── mapping:
-                │         ├──  column12:12 => p:15
-                │         ├──  column13:13 => q:16
-                │         └──  column14:14 => r:17
+                │         ├──  column2:8 => p:11
+                │         ├──  column3:9 => q:12
+                │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 # No FK check needed - we have only NULL values for a FK column.
 # NOTE: We use the norm directive here so that assignment casts are eliminated
@@ -471,12 +408,12 @@ INSERT INTO multi_col_child VALUES (1, 10, NULL, 10)
 insert multi_col_child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => p:2
- │    ├── column13:13 => q:3
- │    └── column14:14 => r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => p:2
+ │    ├── column3:9 => q:3
+ │    └── column4:10 => r:4
  └── values
-      ├── columns: column11:11!null column12:12!null column13:13 column14:14!null
+      ├── columns: column1:7!null column2:8!null column3:9 column4:10!null
       └── (1, 10, NULL, 10)
 
 exec-ddl
@@ -494,46 +431,37 @@ INSERT INTO multi_col_child_full VALUES (4, NULL, NULL, NULL), (5, 1, 2, 3)
 insert multi_col_child_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child_full.p:2
- │    ├── column13:13 => multi_col_child_full.q:3
- │    └── column14:14 => multi_col_child_full.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child_full.p:2
+ │    ├── column3:9 => multi_col_child_full.q:3
+ │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12 column13:13 column14:14
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8 column3:9 column4:10
- │    │    ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
- │    │    └── (5, 1, 2, 3)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8 column3:9 column4:10
+ │    └── values
+ │         ├── columns: column1:7!null column2:8 column3:9 column4:10
+ │         ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │         └── (5, 1, 2, 3)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15 q:16 r:17
+                ├── columns: p:11 q:12 r:13
                 ├── select
-                │    ├── columns: p:15 q:16 r:17
+                │    ├── columns: p:11 q:12 r:13
                 │    ├── with-scan &1
-                │    │    ├── columns: p:15 q:16 r:17
+                │    │    ├── columns: p:11 q:12 r:13
                 │    │    └── mapping:
-                │    │         ├──  column12:12 => p:15
-                │    │         ├──  column13:13 => q:16
-                │    │         └──  column14:14 => r:17
+                │    │         ├──  column2:8 => p:11
+                │    │         ├──  column3:9 => q:12
+                │    │         └──  column4:10 => r:13
                 │    └── filters
-                │         └── ((p:15 IS NOT NULL) OR (q:16 IS NOT NULL)) OR (r:17 IS NOT NULL)
+                │         └── ((p:11 IS NOT NULL) OR (q:12 IS NOT NULL)) OR (r:13 IS NOT NULL)
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 # Only p and q are nullable; no filter necessary.
 build
@@ -542,42 +470,33 @@ INSERT INTO multi_col_child_full VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
 insert multi_col_child_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child_full.p:2
- │    ├── column13:13 => multi_col_child_full.q:3
- │    └── column14:14 => multi_col_child_full.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child_full.p:2
+ │    ├── column3:9 => multi_col_child_full.q:3
+ │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12 column13:13 column14:14!null
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8 column3:9 column4:10!null
- │    │    ├── (2, NULL::INT8, 20, 20)
- │    │    └── (3, 20, NULL::INT8, 20)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8 column3:9 column4:10!null
+ │    └── values
+ │         ├── columns: column1:7!null column2:8 column3:9 column4:10!null
+ │         ├── (2, NULL::INT8, 20, 20)
+ │         └── (3, 20, NULL::INT8, 20)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15 q:16 r:17!null
+                ├── columns: p:11 q:12 r:13!null
                 ├── with-scan &1
-                │    ├── columns: p:15 q:16 r:17!null
+                │    ├── columns: p:11 q:12 r:13!null
                 │    └── mapping:
-                │         ├──  column12:12 => p:15
-                │         ├──  column13:13 => q:16
-                │         └──  column14:14 => r:17
+                │         ├──  column2:8 => p:11
+                │         ├──  column3:9 => q:12
+                │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -586,41 +505,32 @@ INSERT INTO multi_col_child_full VALUES (1, 10, 10, 10)
 insert multi_col_child_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child_full.p:2
- │    ├── column13:13 => multi_col_child_full.q:3
- │    └── column14:14 => multi_col_child_full.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child_full.p:2
+ │    ├── column3:9 => multi_col_child_full.q:3
+ │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12!null column13:13!null column14:14!null
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │    │    └── (1, 10, 10, 10)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    └── values
+ │         ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │         └── (1, 10, 10, 10)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15!null q:16!null r:17!null
+                ├── columns: p:11!null q:12!null r:13!null
                 ├── with-scan &1
-                │    ├── columns: p:15!null q:16!null r:17!null
+                │    ├── columns: p:11!null q:12!null r:13!null
                 │    └── mapping:
-                │         ├──  column12:12 => p:15
-                │         ├──  column13:13 => q:16
-                │         └──  column14:14 => r:17
+                │         ├──  column2:8 => p:11
+                │         ├──  column3:9 => q:12
+                │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 # No FK check needed when all FK columns only have NULL values.
 # NOTE: We use the norm directive here so that assignment casts are eliminated
@@ -631,12 +541,12 @@ INSERT INTO multi_col_child_full VALUES (1, NULL, NULL, NULL)
 insert multi_col_child_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => p:2
- │    ├── column13:13 => q:3
- │    └── column14:14 => r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => p:2
+ │    ├── column3:9 => q:3
+ │    └── column4:10 => r:4
  └── values
-      ├── columns: column11:11!null column12:12 column13:13 column14:14
+      ├── columns: column1:7!null column2:8 column3:9 column4:10
       └── (1, NULL, NULL, NULL)
 
 # But with MATCH FULL, the FK check is needed when only a subset of the columns
@@ -647,41 +557,32 @@ INSERT INTO multi_col_child_full VALUES (1, NULL, 2, NULL)
 insert multi_col_child_full
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => multi_col_child_full.p:2
- │    ├── column13:13 => multi_col_child_full.q:3
- │    └── column14:14 => multi_col_child_full.r:4
+ │    ├── column1:7 => c:1
+ │    ├── column2:8 => multi_col_child_full.p:2
+ │    ├── column3:9 => multi_col_child_full.q:3
+ │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12 column13:13!null column14:14
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8 column3:9!null column4:10
- │    │    └── (1, NULL::INT8, 2, NULL::INT8)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8 column3:9!null column4:10
+ │    └── values
+ │         ├── columns: column1:7!null column2:8 column3:9!null column4:10
+ │         └── (1, NULL::INT8, 2, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
-                ├── columns: p:15 q:16!null r:17
+                ├── columns: p:11 q:12!null r:13
                 ├── with-scan &1
-                │    ├── columns: p:15 q:16!null r:17
+                │    ├── columns: p:11 q:12!null r:13
                 │    └── mapping:
-                │         ├──  column12:12 => p:15
-                │         ├──  column13:13 => q:16
-                │         └──  column14:14 => r:17
+                │         ├──  column2:8 => p:11
+                │         ├──  column3:9 => q:12
+                │         └──  column4:10 => r:13
                 ├── scan multi_col_parent
-                │    └── columns: multi_col_parent.p:18!null multi_col_parent.q:19!null multi_col_parent.r:20!null
+                │    └── columns: multi_col_parent.p:14!null multi_col_parent.q:15!null multi_col_parent.r:16!null
                 └── filters
-                     ├── p:15 = multi_col_parent.p:18
-                     ├── q:16 = multi_col_parent.q:19
-                     └── r:17 = multi_col_parent.r:20
+                     ├── p:11 = multi_col_parent.p:14
+                     ├── q:12 = multi_col_parent.q:15
+                     └── r:13 = multi_col_parent.r:16
 
 exec-ddl
 CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
@@ -708,61 +609,52 @@ INSERT INTO multi_ref_child VALUES (1, 1, NULL, NULL), (2, NULL, 2, NULL), (3, N
 insert multi_ref_child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => k:1
- │    ├── column12:12 => multi_ref_child.a:2
- │    ├── column13:13 => multi_ref_child.b:3
- │    └── column14:14 => multi_ref_child.c:4
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => multi_ref_child.a:2
+ │    ├── column3:9 => multi_ref_child.b:3
+ │    └── column4:10 => multi_ref_child.c:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11!null column12:12 column13:13 column14:14
- │    ├── values
- │    │    ├── columns: column1:7!null column2:8 column3:9 column4:10
- │    │    ├── (1, 1, NULL::INT8, NULL::INT8)
- │    │    ├── (2, NULL::INT8, 2, NULL::INT8)
- │    │    └── (3, NULL::INT8, NULL::INT8, 3)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column11:11]
- │         │    └── column1:7
- │         ├── assignment-cast: INT8 [as=column12:12]
- │         │    └── column2:8
- │         ├── assignment-cast: INT8 [as=column13:13]
- │         │    └── column3:9
- │         └── assignment-cast: INT8 [as=column14:14]
- │              └── column4:10
+ │    ├── columns: column1:7!null column2:8 column3:9 column4:10
+ │    └── values
+ │         ├── columns: column1:7!null column2:8 column3:9 column4:10
+ │         ├── (1, 1, NULL::INT8, NULL::INT8)
+ │         ├── (2, NULL::INT8, 2, NULL::INT8)
+ │         └── (3, NULL::INT8, NULL::INT8, 3)
  └── f-k-checks
       ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join (hash)
-      │         ├── columns: a:15!null
+      │         ├── columns: a:11!null
       │         ├── select
-      │         │    ├── columns: a:15!null
+      │         │    ├── columns: a:11!null
       │         │    ├── with-scan &1
-      │         │    │    ├── columns: a:15
+      │         │    │    ├── columns: a:11
       │         │    │    └── mapping:
-      │         │    │         └──  column12:12 => a:15
+      │         │    │         └──  column2:8 => a:11
       │         │    └── filters
-      │         │         └── a:15 IS NOT NULL
+      │         │         └── a:11 IS NOT NULL
       │         ├── scan multi_ref_parent_a
-      │         │    └── columns: multi_ref_parent_a.a:16!null
+      │         │    └── columns: multi_ref_parent_a.a:12!null
       │         └── filters
-      │              └── a:15 = multi_ref_parent_a.a:16
+      │              └── a:11 = multi_ref_parent_a.a:12
       └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
            └── anti-join (hash)
-                ├── columns: b:20!null c:21!null
+                ├── columns: b:16!null c:17!null
                 ├── select
-                │    ├── columns: b:20!null c:21!null
+                │    ├── columns: b:16!null c:17!null
                 │    ├── with-scan &1
-                │    │    ├── columns: b:20 c:21
+                │    │    ├── columns: b:16 c:17
                 │    │    └── mapping:
-                │    │         ├──  column13:13 => b:20
-                │    │         └──  column14:14 => c:21
+                │    │         ├──  column3:9 => b:16
+                │    │         └──  column4:10 => c:17
                 │    └── filters
-                │         ├── b:20 IS NOT NULL
-                │         └── c:21 IS NOT NULL
+                │         ├── b:16 IS NOT NULL
+                │         └── c:17 IS NOT NULL
                 ├── scan multi_ref_parent_bc
-                │    └── columns: multi_ref_parent_bc.b:22!null multi_ref_parent_bc.c:23!null
+                │    └── columns: multi_ref_parent_bc.b:18!null multi_ref_parent_bc.c:19!null
                 └── filters
-                     ├── b:20 = multi_ref_parent_bc.b:22
-                     └── c:21 = multi_ref_parent_bc.c:23
+                     ├── b:16 = multi_ref_parent_bc.b:18
+                     └── c:17 = multi_ref_parent_bc.c:19
 
 # NOTE: We use the norm directive here so that assignment casts are eliminated
 # by normalization rules, allowing removal of FK checks.
@@ -772,12 +664,12 @@ INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
 insert multi_ref_child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => k:1
- │    ├── column12:12 => a:2
- │    ├── column13:13 => b:3
- │    └── column14:14 => c:4
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => a:2
+ │    ├── column3:9 => b:3
+ │    └── column4:10 => c:4
  └── values
-      ├── columns: column11:11!null column12:12 column13:13 column14:14
+      ├── columns: column1:7!null column2:8 column3:9 column4:10
       └── (1, NULL, NULL, NULL)
 
 # Verify that the join hint is set.
@@ -787,30 +679,25 @@ INSERT INTO child VALUES (100, 1), (200, 1)
 insert child
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => c:1
- │    └── column8:8 => child.p:2
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7!null column8:8!null
- │    ├── values
- │    │    ├── columns: column1:5!null column2:6!null
- │    │    ├── (100, 1)
- │    │    └── (200, 1)
- │    └── projections
- │         ├── assignment-cast: INT8 [as=column7:7]
- │         │    └── column1:5
- │         └── assignment-cast: INT8 [as=column8:8]
- │              └── column2:6
+ │    ├── columns: column1:5!null column2:6!null
+ │    └── values
+ │         ├── columns: column1:5!null column2:6!null
+ │         ├── (100, 1)
+ │         └── (200, 1)
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
-                ├── columns: p:9!null
+                ├── columns: p:7!null
                 ├── flags: prefer lookup join (into right side)
                 ├── with-scan &1
-                │    ├── columns: p:9!null
+                │    ├── columns: p:7!null
                 │    └── mapping:
-                │         └──  column8:8 => p:9
+                │         └──  column2:6 => p:7
                 ├── scan parent
-                │    └── columns: parent.p:10!null
+                │    └── columns: parent.p:8!null
                 └── filters
-                     └── p:9 = parent.p:10
+                     └── p:7 = parent.p:8

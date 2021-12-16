@@ -94,24 +94,24 @@ insert usertable
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column25:25 => ycsb_key:1
- │    ├── column26:26 => field0:2
- │    ├── column27:27 => field1:3
- │    ├── column28:28 => field2:4
- │    ├── column29:29 => field3:5
- │    ├── column30:30 => field4:6
- │    ├── column31:31 => field5:7
- │    ├── column32:32 => field6:8
- │    ├── column33:33 => field7:9
- │    ├── column34:34 => field8:10
- │    └── column35:35 => field9:11
+ │    ├── column2:15 => field0:2
+ │    ├── column3:16 => field1:3
+ │    ├── column4:17 => field2:4
+ │    ├── column5:18 => field3:5
+ │    ├── column6:19 => field4:6
+ │    ├── column7:20 => field5:7
+ │    ├── column8:21 => field6:8
+ │    ├── column9:22 => field7:9
+ │    ├── column10:23 => field8:10
+ │    └── column11:24 => field9:11
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column25:25!null column26:26!null column27:27!null column28:28!null column29:29!null column30:30!null column31:31!null column32:32!null column33:33!null column34:34!null column35:35!null
+      ├── columns: column2:15!null column3:16!null column4:17!null column5:18!null column6:19!null column7:20!null column8:21!null column9:22!null column10:23!null column11:24!null column25:25!null
       ├── cardinality: [1 - 1]
       ├── key: ()
-      ├── fd: ()-->(25-35)
-      └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data')
+      ├── fd: ()-->(15-25)
+      └── ('field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data', 'user123')
 
 # --------------------------------------------------
 # Workload E: Short ranges
