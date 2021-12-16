@@ -219,7 +219,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 		// A PTS record can be updated with a new Timestamp to protect, and so we
 		// need to ensure that we are not seeing the old version of the record in
 		// case the cache has not been updated.
-		if r.ID == args.RecordID && args.Protected.LessEq(r.Timestamp) {
+		if r.ID.GetUUID() == args.RecordID && args.Protected.LessEq(r.Timestamp) {
 			seen = true
 		}
 	})

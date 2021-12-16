@@ -3373,7 +3373,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 		mkRecord      = func() ptpb.Record {
 			return ptpb.Record{
-				ID:        uuid.MakeV4(),
+				ID:        uuid.MakeV4().GetBytes(),
 				Timestamp: tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
 				Spans:     []roachpb.Span{tableSpan},
 			}
@@ -3521,7 +3521,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}))
 		assertScanRejected(t)
 
-		require.NoError(t, ptp.Verify(ctx, rec.ID))
+		require.NoError(t, ptp.Verify(ctx, rec.ID.GetUUID()))
 		assertScanOk(t)
 
 		// Transfer the lease and demonstrate that the query succeeds because we're

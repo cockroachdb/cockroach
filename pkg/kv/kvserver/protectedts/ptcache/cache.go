@@ -245,7 +245,7 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 		}
 		for i := range state.Records {
 			r := &state.Records[i]
-			c.mu.recordsByID[r.ID] = r
+			c.mu.recordsByID[r.ID.GetUUID()] = r
 		}
 	}
 	return nil
