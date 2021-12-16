@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -251,6 +252,10 @@ type Tracer struct {
 	debugUseAfterFinish bool
 
 	testing TracerTestingKnobs
+
+	// stack is populated in NewTracer and is printed in assertions related to
+	// mixing tracers.
+	stack string
 }
 
 // spanRegistry is a map that references all non-Finish'ed local root spans,
@@ -392,6 +397,7 @@ func (t *Tracer) SetRedactable(to bool) {
 // backends.
 func NewTracer() *Tracer {
 	t := &Tracer{
+		stack:               string(debug.Stack()),
 		activeSpansRegistry: makeSpanRegistry(),
 		// These might be overridden in NewTracerWithOpt.
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
@@ -762,15 +768,21 @@ func (t *Tracer) startSpanGeneric(
 			// WithParent.
 			panic("invalid sterile parent")
 		}
-		if opts.Parent.Tracer() != t {
+		if s := opts.Parent.Tracer(); s != t {
 			// Creating a child with a different Tracer than the parent is not allowed
 			// because it would become unclear which active span registry the new span
 			// should belong to. In particular, the child could end up in the parent's
 			// registry if the parent Finish()es before the child, and then it would
 			// be leaked because Finish()ing the child would attempt to remove the
 			// span from the child tracer's registry.
-			panic(fmt.Sprintf("attempting to start span with parent from different Tracer. parent: %s, child: %s",
-				opts.Parent.OperationName(), opName))
+			panic(fmt.Sprintf(`attempting to start span with parent from different Tracer.
+parent operation: %s, tracer created at:
+
+%s
+
+child operation: %s, tracer created at:
+%s`,
+				opts.Parent.OperationName(), s.stack, opName, t.stack))
 		}
 		if opts.Parent.IsNoop() {
 			// If the parent is a no-op, we'll create a root span.
