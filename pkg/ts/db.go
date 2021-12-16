@@ -161,7 +161,8 @@ func (db *DB) PollSource(
 func (p *poller) start() {
 	// Poll once immediately and synchronously.
 	p.poll()
-	_ = p.stopper.RunAsyncTask(context.TODO(), "ts-poller", func(context.Context) {
+	bgCtx := p.AnnotateCtx(context.Background())
+	_ = p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(context.Context) {
 		ticker := time.NewTicker(p.frequency)
 		defer ticker.Stop()
 		for {
