@@ -59,6 +59,7 @@ func Init() {
 	providerInstance.OperationTimeout = 10 * time.Minute
 	providerInstance.SyncDelete = false
 	if _, err := providerInstance.getAuthToken(); err != nil {
+		fmt.Printf("Azure inactive due to: %v\n", err)
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
 		return
 	}

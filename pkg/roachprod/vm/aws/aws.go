@@ -69,6 +69,7 @@ func Init() {
 		return true
 	}
 	if !haveRequiredVersion() {
+		fmt.Println("AWS inactive because it doesn't have the required version")
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
 		return
 	}
@@ -86,6 +87,7 @@ func Init() {
 		return false
 	}
 	if !haveCredentials() {
+		fmt.Println("AWS inactive due to missing/invalid credentials")
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, noCredentials)
 		return
 	}
