@@ -20,12 +20,11 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, util, SortSetting } from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import "./index.styl";
 import { statusOptions } from "./jobStatusOptions";
 import { JobTable } from "src/views/jobs/jobTable";
@@ -78,12 +77,12 @@ export const formatDuration = (d: moment.Duration) =>
     .join(":");
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "jobs/sort_setting",
+  "sortSetting/Jobs",
   s => s.localSettings,
-  { sortKey: 3 /* creation time */, ascending: false },
+  { columnTitle: "creationTime", ascending: false },
 );
 
-export interface JobsTableProps {
+export interface JobsTableOwnProps {
   sort: SortSetting;
   status: string;
   show: string;
@@ -96,7 +95,47 @@ export interface JobsTableProps {
   jobs: CachedDataReducerState<JobsResponse>;
 }
 
+export type JobsTableProps = JobsTableOwnProps & RouteComponentProps<any>;
+
 export class JobsTable extends React.Component<JobsTableProps> {
+  constructor(props: JobsTableProps) {
+    super(props);
+
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+
+    // Sort Settings.
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting = this.props.sort;
+    if (
+      this.props.setSort &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.setSort({ columnTitle, ascending });
+    }
+
+    // Filter Status.
+    const status = searchParams.get("status") || undefined;
+    if (this.props.setStatus && status && status != this.props.status) {
+      this.props.setStatus(status);
+    }
+
+    // Filter Show.
+    const show = searchParams.get("show") || undefined;
+    if (this.props.setShow && show && show != this.props.show) {
+      this.props.setShow(show);
+    }
+
+    // Filter Type.
+    const type = parseInt(searchParams.get("type"), 10) || undefined;
+    if (this.props.setType && type && type != this.props.type) {
+      this.props.setType(type);
+    }
+  }
+
   refresh(props = this.props) {
     props.refreshJobs(
       new JobsRequest({
@@ -125,6 +164,13 @@ export class JobsTable extends React.Component<JobsTableProps> {
     const filter = selected.value === "" ? "all" : selected.value;
     trackFilter("Status", filter);
     this.props.setStatus(selected.value);
+
+    util.syncHistory(
+      {
+        status: selected.value,
+      },
+      this.props.history,
+    );
   };
 
   onTypeSelected = (selected: DropdownOption) => {
@@ -132,10 +178,38 @@ export class JobsTable extends React.Component<JobsTableProps> {
     const typeLabel = typeOptions[type].label;
     trackFilter("Type", typeLabel);
     this.props.setType(type);
+
+    util.syncHistory(
+      {
+        type: type.toString(),
+      },
+      this.props.history,
+    );
   };
 
   onShowSelected = (selected: DropdownOption) => {
     this.props.setShow(selected.value);
+
+    util.syncHistory(
+      {
+        show: selected.value,
+      },
+      this.props.history,
+    );
+  };
+
+  changeSortSetting = (ss: SortSetting): void => {
+    if (this.props.setSort) {
+      this.props.setSort(ss);
+    }
+
+    util.syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
   };
 
   render() {
@@ -181,7 +255,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
                   this.props.status.length > 0 || this.props.type > 0
                 }
                 jobs={this.props.jobs}
-                setSort={this.props.setSort}
+                setSort={this.changeSortSetting}
                 sort={this.props.sort}
               />
             )}
