@@ -52,7 +52,17 @@ func TestPreSeedSpanConfigsWrittenWhenActive(t *testing.T) {
 	ts := tc.Server(0)
 
 	tenantID := roachpb.MakeTenantID(10)
-	_, err := ts.StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+	_, err := ts.StartTenant(ctx, base.TestTenantArgs{
+		TenantID: tenantID,
+		TestingKnobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				// Disable the tenant's span config reconciliation process,
+				// it'll muck with the tenant's span configs that we check
+				// below.
+				ManagerDisableJobCreation: true,
+			},
+		},
+	})
 	require.NoError(t, err)
 
 	scKVAccessor := ts.SpanConfigKVAccessor().(spanconfig.KVAccessor)
@@ -101,7 +111,17 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 	tenantSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()}
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
 	{
-		_, err := ts.StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+		_, err := ts.StartTenant(ctx, base.TestTenantArgs{
+			TenantID: tenantID,
+			TestingKnobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					// Disable the tenant's span config reconciliation process,
+					// it'll muck with the tenant's span configs that we check
+					// below.
+					ManagerDisableJobCreation: true,
+				},
+			},
+		})
 		require.NoError(t, err)
 	}
 
@@ -159,7 +179,17 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 	tenantSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()}
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
 	{
-		_, err := ts.StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+		_, err := ts.StartTenant(ctx, base.TestTenantArgs{
+			TenantID: tenantID,
+			TestingKnobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					// Disable the tenant's span config reconciliation process,
+					// it'll muck with the tenant's span configs that we check
+					// below.
+					ManagerDisableJobCreation: true,
+				},
+			},
+		})
 		require.NoError(t, err)
 	}
 
