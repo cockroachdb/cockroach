@@ -322,6 +322,13 @@ func TestBestRebalanceTarget(t *testing.T) {
 
 	candidates := []rebalanceOptions{
 		{
+			existing: candidate{
+				store:          roachpb.StoreDescriptor{StoreID: 1},
+				valid:          true,
+				necessary:      true,
+				diversityScore: 0,
+				rangeCount:     1,
+			},
 			candidates: []candidate{
 				{
 					store:          roachpb.StoreDescriptor{StoreID: 11},
@@ -338,17 +345,15 @@ func TestBestRebalanceTarget(t *testing.T) {
 					rangeCount:     12,
 				},
 			},
-			existingCandidates: []candidate{
-				{
-					store:          roachpb.StoreDescriptor{StoreID: 1},
-					valid:          true,
-					necessary:      true,
-					diversityScore: 0,
-					rangeCount:     1,
-				},
-			},
 		},
 		{
+			existing: candidate{
+				store:          roachpb.StoreDescriptor{StoreID: 2},
+				valid:          true,
+				necessary:      false,
+				diversityScore: 0,
+				rangeCount:     2,
+			},
 			candidates: []candidate{
 				{
 					store:          roachpb.StoreDescriptor{StoreID: 13},
@@ -365,32 +370,42 @@ func TestBestRebalanceTarget(t *testing.T) {
 					rangeCount:     14,
 				},
 			},
-			existingCandidates: []candidate{
+		},
+		{
+			existing: candidate{
+				store:          roachpb.StoreDescriptor{StoreID: 3},
+				valid:          false,
+				necessary:      false,
+				diversityScore: 0,
+				rangeCount:     3,
+			},
+			candidates: []candidate{
 				{
-					store:          roachpb.StoreDescriptor{StoreID: 2},
+					store:          roachpb.StoreDescriptor{StoreID: 13},
 					valid:          true,
-					necessary:      false,
-					diversityScore: 0,
-					rangeCount:     2,
+					necessary:      true,
+					diversityScore: 1.0,
+					rangeCount:     13,
 				},
 				{
-					store:          roachpb.StoreDescriptor{StoreID: 3},
+					store:          roachpb.StoreDescriptor{StoreID: 14},
 					valid:          false,
 					necessary:      false,
-					diversityScore: 0,
-					rangeCount:     3,
+					diversityScore: 0.0,
+					rangeCount:     14,
 				},
 			},
 		},
 	}
 
-	expected := []roachpb.StoreID{13, 11, 12}
+	expectedTargets := []roachpb.StoreID{13, 13, 11, 12}
+	expectedExistingRepls := []roachpb.StoreID{3, 2, 1, 1}
 	allocRand := makeAllocatorRand(rand.NewSource(0))
 	var i int
 	for {
 		i++
 		target, existing := bestRebalanceTarget(allocRand, candidates)
-		if len(expected) == 0 {
+		if len(expectedTargets) == 0 {
 			if target == nil {
 				break
 			}
@@ -398,12 +413,13 @@ func TestBestRebalanceTarget(t *testing.T) {
 			continue
 		}
 		if target == nil {
-			t.Errorf("round %d: expected s%d, got nil", i, expected[0])
-		} else if target.store.StoreID != expected[0] {
-			t.Errorf("round %d: expected s%d, got target=%+v, existing=%+v",
-				i, expected[0], target, existing)
+			t.Errorf("round %d: expected s%d, got nil", i, expectedTargets[0])
+		} else if target.store.StoreID != expectedTargets[0] || existing.store.StoreID != expectedExistingRepls[0] {
+			t.Errorf("round %d: expected s%d to s%d, got target=%+v, existing=%+v",
+				i, expectedExistingRepls[0], expectedTargets[0], target, existing)
 		}
-		expected = expected[1:]
+		expectedTargets = expectedTargets[1:]
+		expectedExistingRepls = expectedExistingRepls[1:]
 	}
 }
 

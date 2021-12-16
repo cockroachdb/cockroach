@@ -770,15 +770,13 @@ func candidateListForRemoval(
 
 // rebalanceOptions contains two candidate lists:
 //
-// 1. a ranked list of existing replicas ordered from best to worst -- i.e.
-// least qualified for rebalancing to most qualified (see `candidateList.best()`
-// and `candidateList.worst()`)
+// 1. an existing replica.
 // 2. a corresponding list of comparable stores that could be legal replacements
 // for the aforementioned existing replicas -- also ordered from `best()` to
 // `worst()`.
 type rebalanceOptions struct {
-	existingCandidates candidateList
-	candidates         candidateList
+	existing   candidate
+	candidates candidateList
 }
 
 // rankedCandidateListForRebalancing returns a list of `rebalanceOptions`, i.e.
@@ -848,28 +846,28 @@ func rankedCandidateListForRebalancing(
 	// also include node Attributes or store Attributes. We could try to group
 	// stores by attributes as well, but it's simplest to just run this for each
 	// store.
+
+	// equivalenceClass captures the set of "equivalent" replacement candidates
+	// for each existing replica. "equivalent" here means the candidates that are
+	// just as diverse as the existing replica, conform to zone config constraints
+	// on the range and don't have a full disk.
+	// Following are a few examples:
+	// 1. Consider a 3 region cluster with regions A, B and C. Assume there is a
+	// range that has 1 replica in each of those regions. For each existing
+	// replica, its equivalence class would contain all the other stores in its
+	// own region.
+	// 2. Consider a cluster with 10 racks, each with 2 stores (on 2 different
+	// nodes). Assume that racks 1, 2 and 3 each have a replica for a range. For
+	// the existing replica in rack 1, its equivalence class would contain its
+	// neighboring store in rack 1 and all stores in racks 4...10.
 	type equivalenceClass struct {
-		existing    []roachpb.StoreDescriptor
+		existing    roachpb.StoreDescriptor
 		candidateSL StoreList
 		candidates  candidateList
 	}
 	var equivalenceClasses []equivalenceClass
 	var needRebalanceTo bool
 	for _, existing := range existingStores {
-		// If this store is equivalent in both Locality and Node/Store Attributes to
-		// some other existing store, then we can treat them the same. We have to
-		// include Node/Store Attributes because they affect constraints.
-		var matchedOtherExisting bool
-		for i, eqClass := range equivalenceClasses {
-			if sameLocalityAndAttrs(eqClass.existing[0], existing.store) {
-				equivalenceClasses[i].existing = append(equivalenceClasses[i].existing, existing.store)
-				matchedOtherExisting = true
-				break
-			}
-		}
-		if matchedOtherExisting {
-			continue
-		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
 			// Only process replacement candidates, not existing stores.
@@ -948,7 +946,7 @@ func rankedCandidateListForRebalancing(
 		}
 		equivalenceClasses = append(
 			equivalenceClasses, equivalenceClass{
-				existing:    []roachpb.StoreDescriptor{existing.store},
+				existing:    existing.store,
 				candidateSL: makeStoreList(bestStores),
 				candidates:  bestCands,
 			})
@@ -965,11 +963,9 @@ func rankedCandidateListForRebalancing(
 			var candidateSL StoreList
 		outer:
 			for _, comparable := range equivalenceClasses {
-				for _, existingCand := range comparable.existing {
-					if existing.store.StoreID == existingCand.StoreID {
-						candidateSL = comparable.candidateSL
-						break outer
-					}
+				if existing.store.StoreID == comparable.existing.StoreID {
+					candidateSL = comparable.candidateSL
+					break outer
 				}
 			}
 			// NB: If we have any candidates that are at least as good as the existing
@@ -990,20 +986,16 @@ func rankedCandidateListForRebalancing(
 	// have to make a separate set of these for each group of equivalenceClasses.
 	results := make([]rebalanceOptions, 0, len(equivalenceClasses))
 	for _, comparable := range equivalenceClasses {
-		var existingCandidates candidateList
 		var candidates candidateList
-		for _, existingDesc := range comparable.existing {
-			existing, ok := existingStores[existingDesc.StoreID]
-			if !ok {
-				log.Errorf(ctx, "BUG: missing candidate for existing store %+v; stores: %+v",
-					existingDesc, existingStores)
-				continue
-			}
-			if !existing.valid {
-				existing.details = "constraint check fail"
-				existingCandidates = append(existingCandidates, existing)
-				continue
-			}
+		existing, ok := existingStores[comparable.existing.StoreID]
+		if !ok {
+			log.Errorf(ctx, "BUG: missing candidate struct for existing store %+v; stores: %+v",
+				comparable.existing, existingStores)
+			continue
+		}
+		if !existing.valid {
+			existing.details = "constraint check fail"
+		} else {
 			// Similarly to in candidateListForRemoval, any replica whose
 			// removal would not converge the range stats to their mean is given a
 			// constraint score boost of 1 to make it less attractive for removal.
@@ -1012,7 +1004,6 @@ func rankedCandidateListForRebalancing(
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
 			existing.rangeCount = int(existing.store.Capacity.RangeCount)
-			existingCandidates = append(existingCandidates, existing)
 		}
 
 		for _, cand := range comparable.candidates {
@@ -1032,29 +1023,27 @@ func rankedCandidateListForRebalancing(
 			candidates = append(candidates, cand)
 		}
 
-		if len(existingCandidates) == 0 || len(candidates) == 0 {
+		if len(candidates) == 0 {
 			continue
 		}
 
 		if options.deterministicForTesting() {
-			sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
 			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
 		} else {
-			sort.Sort(sort.Reverse(byScore(existingCandidates)))
 			sort.Sort(sort.Reverse(byScore(candidates)))
 		}
 
-		// Only return candidates better than the worst existing replica.
-		improvementCandidates := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
+		// Only return candidates better than the existing replica.
+		improvementCandidates := candidates.betterThan(existing)
 		if len(improvementCandidates) == 0 {
 			continue
 		}
 		results = append(results, rebalanceOptions{
-			existingCandidates: existingCandidates,
-			candidates:         improvementCandidates,
+			existing:   existing,
+			candidates: improvementCandidates,
 		})
 		log.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %s",
-			len(results), results[len(results)-1].candidates, results[len(results)-1].existingCandidates)
+			len(results), results[len(results)-1].candidates, results[len(results)-1].existing)
 	}
 
 	return results
@@ -1066,7 +1055,7 @@ func rankedCandidateListForRebalancing(
 // Returns nil if there are no more targets worth rebalancing to.
 func bestRebalanceTarget(
 	randGen allocatorRand, options []rebalanceOptions,
-) (*candidate, candidateList) {
+) (*candidate, *candidate) {
 	bestIdx := -1
 	var bestTarget *candidate
 	var replaces candidate
@@ -1078,7 +1067,7 @@ func bestRebalanceTarget(
 		if target == nil {
 			continue
 		}
-		existing := option.existingCandidates[len(option.existingCandidates)-1]
+		existing := option.existing
 		if betterRebalanceTarget(target, &existing, bestTarget, &replaces) == target {
 			bestIdx = i
 			bestTarget = target
@@ -1093,7 +1082,7 @@ func bestRebalanceTarget(
 	// to a different candidate than intended due to movement within the slice.
 	copiedTarget := *bestTarget
 	options[bestIdx].candidates = options[bestIdx].candidates.removeCandidate(copiedTarget)
-	return &copiedTarget, options[bestIdx].existingCandidates
+	return &copiedTarget, &options[bestIdx].existing
 }
 
 // betterRebalanceTarget returns whichever of target1 or target2 is a larger
@@ -1143,19 +1132,6 @@ func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicationTarg
 		}
 	}
 	return false
-}
-
-func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
-	if !s1.Locality().Equals(s2.Locality()) {
-		return false
-	}
-	if !s1.Node.Attrs.Equals(s2.Node.Attrs) {
-		return false
-	}
-	if !s1.Attrs.Equals(s2.Attrs) {
-		return false
-	}
-	return true
 }
 
 // constraintsCheckFn determines whether the given store is a valid and/or
