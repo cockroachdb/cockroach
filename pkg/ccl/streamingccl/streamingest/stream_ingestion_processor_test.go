@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -58,35 +59,54 @@ var _ streamclient.Client = &mockStreamClient{}
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
 	ctx context.Context, target roachpb.TenantID,
-) (streamclient.StreamID, error) {
+) (streaming.StreamID, error) {
 	panic("unimplemented")
 }
 
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
-	ctx context.Context, ID streamclient.StreamID, _ hlc.Timestamp,
+	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
 ) error {
 	panic("unimplemented")
 }
 
 // Plan implements the Client interface.
 func (m *mockStreamClient) Plan(
-	ctx context.Context, _ streamclient.StreamID,
+	ctx context.Context, _ streaming.StreamID,
 ) (streamclient.Topology, error) {
 	panic("unimplemented mock method")
 }
 
-// ConsumePartition implements the Client interface.
+type mockSubscription struct {
+	eventsCh chan streamingccl.Event
+}
+
+// Subscribe implements the Subscription interface.
+func (m *mockSubscription) Subscribe(ctx context.Context) error {
+	return nil
+}
+
+// Events implements the Subscription interface.
+func (m *mockSubscription) Events() <-chan streamingccl.Event {
+	return m.eventsCh
+}
+
+// Err implements the Subscription interface.
+func (m *mockSubscription) Err() error {
+	return nil
+}
+
+// Subscribe implements the Client interface.
 func (m *mockStreamClient) Subscribe(
 	ctx context.Context,
-	stream streamclient.StreamID,
+	stream streaming.StreamID,
 	spec streamclient.SubscriptionToken,
 	checkpoint hlc.Timestamp,
-) (chan streamingccl.Event, chan error, error) {
+) (streamclient.Subscription, error) {
 	var events []streamingccl.Event
 	var ok bool
 	if events, ok = m.partitionEvents[string(spec)]; !ok {
-		return nil, nil, errors.Newf("no events found for paritition %s", string(spec))
+		return nil, errors.Newf("no events found for paritition %s", string(spec))
 	}
 
 	log.Infof(ctx, "%q emitting %d events", string(spec), len(events))
@@ -97,8 +117,12 @@ func (m *mockStreamClient) Subscribe(
 	}
 	log.Infof(ctx, "%q done emitting %d events", string(spec), len(events))
 	close(eventCh)
+	return &mockSubscription{eventsCh: eventCh}, nil
+}
 
-	return eventCh, nil, nil
+// Close implements the Client interface.
+func (m *mockStreamClient) Close() error {
+	return nil
 }
 
 // errorStreamClient always returns an error when consuming a partition.
@@ -109,11 +133,11 @@ var _ streamclient.Client = &errorStreamClient{}
 // ConsumePartition implements the streamclient.Client interface.
 func (m *errorStreamClient) Subscribe(
 	ctx context.Context,
-	stream streamclient.StreamID,
+	stream streaming.StreamID,
 	spec streamclient.SubscriptionToken,
 	checkpoint hlc.Timestamp,
-) (chan streamingccl.Event, chan error, error) {
-	return nil, nil, errors.New("this client always returns an error")
+) (streamclient.Subscription, error) {
+	return nil, errors.New("this client always returns an error")
 }
 
 func TestStreamIngestionProcessor(t *testing.T) {
@@ -212,6 +236,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}}
 		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
 			partitions, startTime, nil /* interceptEvents */, mockClient, streamingTestingKnob)
+		defer func() {
+			require.NoError(t, sip.forceClientForTests.Close())
+		}()
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
@@ -463,6 +490,9 @@ func runStreamIngestionProcessor(
 	// Ensure that all the outputs are properly closed.
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
+	}
+	if err := sip.forceClientForTests.Close(); err != nil {
+		return nil, err
 	}
 	return out, err
 }
