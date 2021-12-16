@@ -194,6 +194,9 @@ CREATE TABLE regional_by_row_table (
 ) LOCALITY REGIONAL BY ROW
 
 statement ok
+INSERT INTO regional_by_row_table VALUES (1, 1, 1, 1, NULL), (2, 1, 1, 2, NULL)
+
+statement ok
 CREATE TABLE regional_by_table_in_primary_region (
   pk INT PRIMARY KEY,
   i INT,
@@ -1016,17 +1019,158 @@ TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_cen
                                          voter_constraints = '[+region=ca-central-1]',
                                          lease_preferences = '[[+region=ca-central-1]]'
 
-statement error cannot backup individual table
+# Backup and restore individual multi-region tables.
+subtest multiregion_table_backup_and_restore
+
+statement ok
 BACKUP TABLE regional_by_row_table TO 'nodelocal://1/rbr_table/';
 
-statement error cannot backup individual table
-BACKUP TABLE regional_by_table_in_primary_region TO 'nodelocal://1/rbr_table/';
+statement ok
+BACKUP TABLE regional_by_table_in_primary_region TO 'nodelocal://1/rbt_table_in_primary_region/';
 
-statement error cannot backup individual table
-BACKUP TABLE regional_by_table_in_ca_central_1 TO 'nodelocal://1/rbr_table/';
+statement ok
+BACKUP TABLE regional_by_table_in_ca_central_1 TO 'nodelocal://1/rbt_table_in_ca_central_1/';
 
-statement error cannot backup individual table
-BACKUP TABLE global_table TO 'nodelocal://1/rbr_table/';
+statement ok
+BACKUP TABLE global_table TO 'nodelocal://1/global_table/';
+
+statement ok
+DROP TABLE regional_by_row_table;
+DROP TABLE regional_by_table_in_primary_region;
+DROP TABLE regional_by_table_in_ca_central_1;
+DROP TABLE global_table;
+
+statement ok
+RESTORE TABLE regional_by_row_table FROM 'nodelocal://1/rbr_table/';
+
+statement ok
+RESTORE TABLE regional_by_table_in_primary_region FROM 'nodelocal://1/rbt_table_in_primary_region/';
+
+statement ok
+RESTORE TABLE regional_by_table_in_ca_central_1 FROM 'nodelocal://1/rbt_table_in_ca_central_1/';
+
+statement ok
+RESTORE TABLE global_table FROM 'nodelocal://1/global_table/';
+
+query IIIIT
+SELECT * FROM regional_by_row_table;
+----
+1  1  1  1  NULL
+2  1  1  2  NULL
+
+query TTT
+SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table]
+ORDER BY partition_name, index_name
+----
+ap-southeast-2  regional_by_row_table@primary  num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ap-southeast-2                                    regional_by_row_table@regional_by_row_table_a_idx  num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ap-southeast-2                                    regional_by_row_table@regional_by_row_table_b_key  num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ap-southeast-2                                    regional_by_row_table@regional_by_row_table_j_idx  num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'
+ca-central-1                                      regional_by_row_table@primary  num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+ca-central-1                                    regional_by_row_table@regional_by_row_table_a_idx  num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+ca-central-1                                    regional_by_row_table@regional_by_row_table_b_key  num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+ca-central-1                                    regional_by_row_table@regional_by_row_table_j_idx  num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'
+us-east-1                                       regional_by_row_table@primary  num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+us-east-1                                    regional_by_row_table@regional_by_row_table_a_idx  num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+us-east-1                                    regional_by_row_table@regional_by_row_table_b_key  num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+us-east-1                                    regional_by_row_table@regional_by_row_table_j_idx  num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW CREATE TABLE regional_by_row_table
+----
+regional_by_row_table       CREATE TABLE public.regional_by_row_table (
+                            pk INT8 NOT NULL,
+                            pk2 INT8 NOT NULL,
+                            a INT8 NOT NULL,
+                            b INT8 NOT NULL,
+                            j JSONB NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                            INDEX regional_by_row_table_a_idx (a ASC),
+                            UNIQUE INDEX regional_by_row_table_b_key (b ASC),
+                            INVERTED INDEX regional_by_row_table_j_idx (j),
+                            FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query TTT
+SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_primary_region]
+ORDER BY partition_name, index_name
+----
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
+----
+DATABASE "mr-backup-2"  ALTER DATABASE "mr-backup-2" CONFIGURE ZONE USING
+                        range_min_bytes = 134217728,
+                        range_max_bytes = 536870912,
+                        gc.ttlseconds = 90000,
+                        num_replicas = 5,
+                        num_voters = 3,
+                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                        voter_constraints = '[+region=ap-southeast-2]',
+                        lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TTT
+SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE regional_by_table_in_ca_central_1]
+ORDER BY partition_name, index_name
+----
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_ca_central_1
+----
+TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_central_1 CONFIGURE ZONE USING
+                                         range_min_bytes = 134217728,
+                                         range_max_bytes = 536870912,
+                                         gc.ttlseconds = 90000,
+                                         num_replicas = 5,
+                                         num_voters = 3,
+                                         constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                         voter_constraints = '[+region=ca-central-1]',
+                                         lease_preferences = '[[+region=ca-central-1]]'
+
+query TTT
+SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE global_table]
+ORDER BY partition_name, index_name
+----
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE global_table
+----
+TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    global_reads = true,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ap-southeast-2]',
+                    lease_preferences = '[[+region=ap-southeast-2]]'
+
 
 statement ok
 CREATE DATABASE non_mr_backup;

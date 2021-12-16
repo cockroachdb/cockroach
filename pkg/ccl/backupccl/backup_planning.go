@@ -811,10 +811,6 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := validateMultiRegionBackup(backupStmt, targetDescs, tables); err != nil {
-			return err
-		}
-
 		clusterID := p.ExecCfg().ClusterID()
 		for i := range prevBackups {
 			// IDs are how we identify tables, and those are only meaningful in the
