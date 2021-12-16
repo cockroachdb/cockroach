@@ -623,8 +623,29 @@ func (desc *Mutable) MaybeFillColumnID(
 }
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
-// or index which has an ID of 0.
+// or index which has an ID of 0. It's the same as AllocateIDsWithoutValidation,
+// but does validation on the table elements.
 func (desc *Mutable) AllocateIDs(ctx context.Context) error {
+	if err := desc.AllocateIDsWithoutValidation(ctx); err != nil {
+		return err
+	}
+
+	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
+	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
+	// before AllocateIDs.
+	savedID := desc.ID
+	if desc.ID == 0 {
+		desc.ID = keys.MinUserDescID
+	}
+	err := catalog.ValidateSelf(desc)
+	desc.ID = savedID
+
+	return err
+}
+
+// AllocateIDsWithoutValidation allocates column, family, and index ids for any
+// column, family, or index which has an ID of 0.
+func (desc *Mutable) AllocateIDsWithoutValidation(ctx context.Context) error {
 	// Only tables with physical data can have / need a primary key.
 	if desc.IsPhysicalTable() {
 		if err := desc.ensurePrimaryKey(); err != nil {
@@ -654,16 +675,7 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 		}
 	}
 
-	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
-	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
-	// before AllocateIDs.
-	savedID := desc.ID
-	if desc.ID == 0 {
-		desc.ID = keys.MinUserDescID
-	}
-	err := catalog.ValidateSelf(desc)
-	desc.ID = savedID
-	return err
+	return nil
 }
 
 func (desc *Mutable) ensurePrimaryKey() error {
