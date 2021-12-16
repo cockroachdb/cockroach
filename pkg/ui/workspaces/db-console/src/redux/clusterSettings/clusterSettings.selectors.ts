@@ -12,7 +12,7 @@ import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
 import moment from "moment";
-import { durationFromISO8601String } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 
 export const selectClusterSettings = createSelector(
   (state: AdminUIState) => state.cachedData.settings?.data,
@@ -27,7 +27,7 @@ export const selectResolution10sStorageTTL = createSelector(
       return undefined;
     }
     const value = settings["timeseries.storage.resolution_10s.ttl"]?.value;
-    return durationFromISO8601String(value);
+    return util.durationFromISO8601String(value);
   },
 );
 
@@ -38,6 +38,6 @@ export const selectResolution30mStorageTTL = createSelector(
       return undefined;
     }
     const value = settings["timeseries.storage.resolution_30m.ttl"]?.value;
-    return durationFromISO8601String(value);
+    return util.durationFromISO8601String(value);
   },
 );

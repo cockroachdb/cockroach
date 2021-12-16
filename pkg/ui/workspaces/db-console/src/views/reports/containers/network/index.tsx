@@ -26,7 +26,7 @@ import {
   selectNodeRequestStatus,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { LongToMoment, NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { trackFilter, trackCollapseNodes } from "src/util/analytics";
 import {
@@ -359,7 +359,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         nodeID: status.desc.node_id,
         address: status.desc.address.address_field,
         locality: localityToString(status.desc.locality),
-        updatedAt: LongToMoment(status.updated_at),
+        updatedAt: util.LongToMoment(status.updated_at),
       });
     });
 
@@ -411,7 +411,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         .without(nodeIDa)
         .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].activity[nodeIDb])
         .filter(activity => !_.isNil(activity) && !_.isNil(activity.latency))
-        .map(activity => NanoToMilli(FixLong(activity.latency).toNumber()))
+        .map(activity => util.NanoToMilli(FixLong(activity.latency).toNumber()))
         .filter(ms => _.isFinite(ms) && ms > 0)
         .value(),
     );

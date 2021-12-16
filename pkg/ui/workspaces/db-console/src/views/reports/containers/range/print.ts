@@ -13,7 +13,7 @@ import Long from "long";
 import moment from "moment";
 
 import * as protos from "src/js/protos";
-import { LongToMoment, TimestampToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 
 export const dateFormat = "Y-MM-DD HH:mm:ss";
 
@@ -50,11 +50,13 @@ export function PrintTimestamp(
 ) {
   let time: moment.Moment = null;
   if (_.has(timestamp, "wall_time")) {
-    time = LongToMoment(
+    time = util.LongToMoment(
       (timestamp as protos.cockroach.util.hlc.ITimestamp).wall_time,
     );
   } else if (_.has(timestamp, "seconds") || _.has(timestamp, "nanos")) {
-    time = TimestampToMoment(timestamp as protos.google.protobuf.ITimestamp);
+    time = util.TimestampToMoment(
+      timestamp as protos.google.protobuf.ITimestamp,
+    );
   } else {
     return "";
   }
@@ -92,8 +94,8 @@ export function PrintTimestampDelta(
   if (_.isNil(oldTimestamp) || _.isNil(newTimestamp)) {
     return "";
   }
-  const newTime = LongToMoment(newTimestamp.wall_time);
-  const oldTime = LongToMoment(oldTimestamp.wall_time);
+  const newTime = util.LongToMoment(newTimestamp.wall_time);
+  const oldTime = util.LongToMoment(oldTimestamp.wall_time);
   const diff = moment.duration(newTime.diff(oldTime));
   return PrintDuration(diff);
 }
@@ -108,7 +110,7 @@ export function PrintTimestampDeltaFromNow(
   if (_.isNil(timestamp)) {
     return "";
   }
-  const time: moment.Moment = LongToMoment(timestamp.wall_time);
+  const time: moment.Moment = util.LongToMoment(timestamp.wall_time);
   if (now.isAfter(time)) {
     const diff = moment.duration(now.diff(time));
     return `${PrintDuration(diff)} ago`;

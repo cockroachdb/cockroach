@@ -15,7 +15,7 @@ import moment from "moment";
 import React from "react";
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
-import { LongToMoment, NanoToMilli, SecondsToNano } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
 import Lease from "src/views/reports/containers/range/lease";
@@ -294,7 +294,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentNanos(nanos: Long): RangeTableCellContent {
-    const humanized = Print.Time(LongToMoment(nanos));
+    const humanized = Print.Time(util.LongToMoment(nanos));
     return {
       value: [humanized],
       title: [humanized, nanos.toString()],
@@ -303,7 +303,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
   contentDuration(nanos: Long): RangeTableCellContent {
     const humanized = Print.Duration(
-      moment.duration(NanoToMilli(nanos.toNumber())),
+      moment.duration(util.NanoToMilli(nanos.toNumber())),
     );
     return {
       value: [humanized],
@@ -351,7 +351,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (!deadBytes.eq(0)) {
       const avgDeadByteAgeSec = mvcc.gc_bytes_age.div(deadBytes);
       return this.contentDuration(
-        Long.fromNumber(SecondsToNano(avgDeadByteAgeSec.toNumber())),
+        Long.fromNumber(util.SecondsToNano(avgDeadByteAgeSec.toNumber())),
       );
     } else {
       return this.contentDuration(Long.fromNumber(0));
@@ -367,7 +367,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (!mvcc.intent_count.eq(0)) {
       const avgIntentAgeSec = mvcc.intent_age.div(mvcc.intent_count);
       return this.contentDuration(
-        Long.fromNumber(SecondsToNano(avgIntentAgeSec.toNumber())),
+        Long.fromNumber(util.SecondsToNano(avgIntentAgeSec.toNumber())),
       );
     } else {
       return this.contentDuration(Long.fromNumber(0));

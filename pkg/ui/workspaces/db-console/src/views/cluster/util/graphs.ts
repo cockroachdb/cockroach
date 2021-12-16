@@ -15,7 +15,7 @@ import * as d3 from "d3";
 import moment from "moment";
 
 import * as protos from "src/js/protos";
-import { NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import {
   BytesFitScale,
   ComputeByteScale,
@@ -325,8 +325,8 @@ export function calculateYAxisDomain(
 
 export function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   const xExtent: Extent = [
-    NanoToMilli(timeInfo.start.toNumber()),
-    NanoToMilli(timeInfo.end.toNumber()),
+    util.NanoToMilli(timeInfo.start.toNumber()),
+    util.NanoToMilli(timeInfo.end.toNumber()),
   ];
   return ComputeTimeAxisDomain(xExtent);
 }
@@ -383,7 +383,7 @@ export function InitLineChart(chart: nvd3.LineChart) {
   chart
     .x(
       (d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) =>
-        new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())),
+        new Date(util.NanoToMilli(d && d.timestamp_nanos.toNumber())),
     )
     .y((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
     .useInteractiveGuideline(true)

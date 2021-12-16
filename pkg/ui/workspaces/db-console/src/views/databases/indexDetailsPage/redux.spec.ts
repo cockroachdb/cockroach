@@ -16,6 +16,7 @@ import { bindActionCreators, Store } from "redux";
 import {
   IndexDetailPageActions,
   IndexDetailsPageData,
+  util,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -27,7 +28,6 @@ import {
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import moment from "moment";
-import { TimestampToMoment } from "src/util/convert";
 import { makeTimestamp } from "src/views/databases/utils";
 
 function fakeRouteComponentProps(
@@ -187,10 +187,10 @@ describe("Index Details Page", function() {
         createStatement:
           "CREATE INDEX jobs_created_by_type_created_by_id_idx ON system.public.jobs USING btree (created_by_type ASC, created_by_id ASC) STORING (status)",
         totalReads: 2,
-        lastRead: TimestampToMoment(
+        lastRead: util.TimestampToMoment(
           makeTimestamp("2021-11-19T23:01:05.167627Z"),
         ),
-        lastReset: TimestampToMoment(
+        lastReset: util.TimestampToMoment(
           makeTimestamp("2021-11-12T20:18:22.167627Z"),
         ),
       },
