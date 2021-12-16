@@ -67,7 +67,9 @@ type virtualTableGeneratorResponse struct {
 // * cleanup: Performs all cleanup. This function must be called exactly once
 //   to ensure that resources are cleaned up.
 func setupGenerator(
-	ctx context.Context, worker func(pusher rowPusher) error, stopper *stop.Stopper,
+	ctx context.Context,
+	worker func(ctx context.Context, pusher rowPusher) error,
+	stopper *stop.Stopper,
 ) (next virtualTableGenerator, cleanup cleanupFunc, setupError error) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -117,7 +119,7 @@ func setupGenerator(
 			return
 		case <-comm:
 		}
-		err := worker(funcRowPusher(addRow))
+		err := worker(ctx, funcRowPusher(addRow))
 		// If the query was canceled, next() will already return a
 		// QueryCanceledError, so just exit here.
 		if errors.Is(err, cancelchecker.QueryCanceledError) {
@@ -299,7 +301,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		idxConstraint.InitSingleSpan(&v.run.keyCtx, &span)
 
 		// Create the generation function for the index constraint.
-		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(params.ctx,
+		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(
 			params.p, v.db, v.index,
 			v.run.indexKeyDatums,
 			catalog.ColumnIDToOrdinalMap(v.table.PublicColumns()),
@@ -310,7 +312,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		v.run.row = append(v.run.row[:0], inputRow...)
 		// Finally, we're ready to do the lookup. This invocation will push all of
 		// the looked-up rows into v.run.rows.
-		if err := genFunc(v); err != nil {
+		if err := genFunc(params.ctx, v); err != nil {
 			return false, err
 		}
 		if v.run.rows.Len() == 0 && v.joinType == descpb.LeftOuterJoin {
