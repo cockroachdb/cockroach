@@ -211,6 +211,7 @@ func New(c Config) *IntentResolver {
 		gcBatchSize = c.TestingKnobs.MaxGCBatchSize
 	}
 	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
+		AmbientCtx:      c.AmbientCtx,
 		Name:            "intent_resolver_gc_batcher",
 		MaxMsgsPerBatch: gcBatchSize,
 		MaxWait:         c.MaxGCBatchWait,
@@ -225,6 +226,7 @@ func New(c Config) *IntentResolver {
 		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
+		AmbientCtx:      c.AmbientCtx,
 		Name:            "intent_resolver_ir_batcher",
 		MaxMsgsPerBatch: intentResolutionBatchSize,
 		MaxWait:         c.MaxIntentResolutionBatchWait,
@@ -233,6 +235,7 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
+		AmbientCtx:         c.AmbientCtx,
 		Name:               "intent_resolver_ir_range_batcher",
 		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
 		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
