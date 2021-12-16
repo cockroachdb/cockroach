@@ -1462,3 +1462,24 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
 	}
 }
+
+// CheckPausepoint returns a PauseRequestError if the named pause-point is
+// set.
+//
+// This can be called in the middle of some job implementation to effectively
+// define a 'breakpoint' which, when reached, will cause the job to pause. This
+// can be very useful in allowing inspection of the persisted job state at that
+// point, without worrying about catching it before the job progresses further
+// or completes. These pause points can be set or removed at runtime.
+func (r *Registry) CheckPausepoint(name string) error {
+	s := debugPausepoints.Get(&r.settings.SV)
+	if s == "" {
+		return nil
+	}
+	for _, point := range strings.Split(s, ",") {
+		if name == point {
+			return MarkPauseRequestError(errors.Newf("pause point hit: %s", name))
+		}
+	}
+	return nil
+}
