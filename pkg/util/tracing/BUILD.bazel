@@ -72,6 +72,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/tracing/tracingpb",

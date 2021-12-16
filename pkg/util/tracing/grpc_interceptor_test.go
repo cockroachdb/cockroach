@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/grpcutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -70,10 +71,12 @@ func TestGRPCInterceptors(t *testing.T) {
 		return types.MarshalAny(&recs[0])
 	}
 
-	s := stop.NewStopper()
-	defer s.Stop(context.Background())
-
 	tr := tracing.NewTracer()
+	ac := log.MakeDummyAmbientContext(tr)
+	ctx := ac.AnnotateContext(context.Background())
+	s := stop.NewStopper(stop.WithTracer(tr))
+	defer s.Stop(ctx)
+
 	srv := grpc.NewServer(
 		grpc.UnaryInterceptor(tracing.ServerInterceptor(tr)),
 		grpc.StreamInterceptor(tracing.StreamServerInterceptor(tr)),
@@ -116,12 +119,12 @@ func TestGRPCInterceptors(t *testing.T) {
 	defer srv.GracefulStop()
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	require.NoError(t, err)
-	require.NoError(t, s.RunAsyncTask(context.Background(), "serve", func(ctx context.Context) {
+	require.NoError(t, s.RunAsyncTask(ctx, "serve", func(ctx context.Context) {
 		if err := srv.Serve(ln); err != nil {
 			t.Error(err)
 		}
 	}))
-	conn, err := grpc.DialContext(context.Background(), ln.Addr().String(),
+	conn, err := grpc.DialContext(ctx, ln.Addr().String(),
 		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
 			func(_ context.Context) bool { return false }, /* compatibilityMode */
@@ -189,7 +192,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, sp := tr.StartSpanCtx(context.Background(), "root", tracing.WithRecording(tracing.RecordingVerbose))
+			ctx, sp := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracing.RecordingVerbose))
 			recAny, err := tc.do(ctx)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan

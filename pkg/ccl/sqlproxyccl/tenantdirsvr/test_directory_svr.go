@@ -54,14 +54,14 @@ func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 		mu.Lock()
 		defer mu.Unlock()
 		if subStopper == nil {
-			subStopper = stop.NewStopper()
+			subStopper = stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
 		}
 		subStopper.Stop(context.Background())
 	}))
 	mu.Lock()
 	defer mu.Unlock()
 	if subStopper == nil {
-		subStopper = stop.NewStopper()
+		subStopper = stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
 	}
 	return subStopper
 }
@@ -219,7 +219,8 @@ func (s *TestDirectoryServer) WatchPods(
 	s.listen.Lock()
 	elem := s.listen.eventListeners.PushBack(c)
 	s.listen.Unlock()
-	err := s.stopper.RunTask(context.Background(), "watch-pods-server",
+	ac := log.MakeDummyAmbientContext(s.stopper.Tracer())
+	err := s.stopper.RunTask(ac.AnnotateCtx(context.Background()), "watch-pods-server",
 		func(ctx context.Context) {
 		out:
 			for {

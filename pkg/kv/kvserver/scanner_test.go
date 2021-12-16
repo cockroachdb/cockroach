@@ -127,7 +127,8 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 		tq.Unlock()
 	}
 
-	if err := stopper.RunAsyncTask(context.Background(), "testqueue", func(context.Context) {
+	bgCtx := context.Background() // skip AmbientContext linter
+	if err := stopper.RunAsyncTask(bgCtx, "testqueue", func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
