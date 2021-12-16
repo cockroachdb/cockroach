@@ -69,7 +69,7 @@ var (
 	)
 
 	// List of config settings, used by SetOnChange.
-	configSettings = [...]settings.WritableSetting{
+	configSettings = [...]settings.NonMaskedSetting{
 		readRequestCost,
 		readCostPerMB,
 		writeRequestCost,

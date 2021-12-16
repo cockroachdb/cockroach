@@ -112,7 +112,7 @@ var (
 	)
 
 	// List of config settings, used to set up "on change" notifiers.
-	configSettings = [...]settings.WritableSetting{
+	configSettings = [...]settings.NonMaskedSetting{
 		kvcuRateLimit,
 		kvcuBurstLimitSeconds,
 		readRequestCost,

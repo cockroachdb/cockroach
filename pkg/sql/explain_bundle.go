@@ -522,7 +522,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 	// printing all session settings.
 	relevantSettings := []struct {
 		sessionSetting string
-		clusterSetting settings.WritableSetting
+		clusterSetting settings.NonMaskedSetting
 		convFunc       func(string) string
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},

@@ -98,7 +98,7 @@ func (u updater) Set(ctx context.Context, key, rawValue string, vt string) error
 		}
 		setting.set(ctx, u.sv, b)
 		return nil
-	case numericSetting: // includes *EnumSetting
+	case numericSetting:
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err

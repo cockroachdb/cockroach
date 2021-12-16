@@ -20,7 +20,7 @@ type BoolSetting struct {
 	defaultValue bool
 }
 
-var _ extendedSetting = &BoolSetting{}
+var _ internalSetting = &BoolSetting{}
 
 // Get retrieves the bool value in the setting.
 func (b *BoolSetting) Get(sv *Values) bool {
