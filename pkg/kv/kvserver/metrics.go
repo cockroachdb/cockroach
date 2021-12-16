@@ -1155,6 +1155,12 @@ not occurring.
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAddSSTableAsWrites = metric.Metadata{
+		Name:        "addsstable.aswrites",
+		Help:        "Number of SSTables ingested as write batches",
+		Measurement: "Ingestions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaAddSSTableEvalTotalDelay = metric.Metadata{
 		Name:        "addsstable.delay.total",
 		Help:        "Amount by which evaluation of AddSSTable requests was delayed",
@@ -1418,6 +1424,7 @@ type StoreMetrics struct {
 	AddSSTableProposals           *metric.Counter
 	AddSSTableApplications        *metric.Counter
 	AddSSTableApplicationCopies   *metric.Counter
+	AddSSTableAsWrites            *metric.Counter
 	AddSSTableProposalTotalDelay  *metric.Counter
 	AddSSTableProposalEngineDelay *metric.Counter
 
@@ -1853,6 +1860,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications:        metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableAsWrites:            metric.NewCounter(metaAddSSTableAsWrites),
 		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
 		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
@@ -1968,6 +1976,9 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.ResolveAbort = 0
 	sm.ResolvePoisonCount.Inc(int64(metric.ResolvePoison))
 	metric.ResolvePoison = 0
+
+	sm.AddSSTableAsWrites.Inc(int64(metric.AddSSTableAsWrites))
+	metric.AddSSTableAsWrites = 0
 
 	if metric != (result.Metrics{}) {
 		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
