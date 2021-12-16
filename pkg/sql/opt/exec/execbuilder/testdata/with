@@ -97,7 +97,7 @@ vectorized: true
                 │ into: x(a, rowid)
                 │
                 └── • values
-                      columns: (column6, rowid_default)
+                      columns: (column1, rowid_default)
                       size: 2 columns, 1 row
                       row 0, expr 0: 1
                       row 0, expr 1: unique_rowid()
