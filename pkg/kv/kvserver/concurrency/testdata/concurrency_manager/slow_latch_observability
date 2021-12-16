@@ -1,0 +1,55 @@
+#  This test sets up the following situation:
+#
+#     e     <- put  (waiting)
+#  b---f    <- scan (waiting)
+#   c       <- put  (sequenced, slow)
+#
+# Of interest is whether put(e) gets traces that explain why it is blocked. At
+# the time of writing, it learns that it is waiting for scan(b,f) where
+# optimally it would learn that is really the put that is causing the queue to
+# form in the first place. To keep things interesting, put(e) and put(c) don't
+# overlap but are only connected by the interspersed scan.
+new-request txn=none name=putc ts=10,0
+  put key=c value=hi
+----
+
+sequence req=putc
+----
+[1] sequence putc: sequencing request
+[1] sequence putc: acquiring latches
+[1] sequence putc: scanning lock table for conflicting locks
+[1] sequence putc: sequencing complete, returned guard
+
+new-request txn=none name=readbf ts=11,1
+  scan key=b endkey=f
+----
+
+sequence req=readbf
+----
+[2] sequence readbf: sequencing request
+[2] sequence readbf: acquiring latches
+[2] sequence readbf: waiting to acquire read latch {b-f}@11.000000000,1, held by write latch c@10.000000000,0
+[2] sequence readbf: blocked on select in spanlatch.(*Manager).waitForSignal
+
+new-request txn=none name=pute ts=11,0
+  put key=e value=hi
+----
+
+sequence req=pute
+----
+[3] sequence pute: sequencing request
+[3] sequence pute: acquiring latches
+[3] sequence pute: waiting to acquire write latch e@11.000000000,0, held by read latch {b-f}@11.000000000,1
+[3] sequence pute: blocked on select in spanlatch.(*Manager).waitForSignal
+
+finish req=putc
+----
+[-] finish putc: finishing request
+[2] sequence readbf: scanning lock table for conflicting locks
+[2] sequence readbf: sequencing complete, returned guard
+
+finish req=readbf
+----
+[-] finish readbf: finishing request
+[3] sequence pute: scanning lock table for conflicting locks
+[3] sequence pute: sequencing complete, returned guard
