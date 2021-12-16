@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -87,13 +88,15 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	})
 }
 
-func newMockSpanConfigSubscriber(store spanconfig.Store) *mockSpanConfigSubscriber {
-	return &mockSpanConfigSubscriber{Store: store}
-}
-
 type mockSpanConfigSubscriber struct {
 	callback func(config roachpb.Span)
 	spanconfig.Store
+}
+
+var _ spanconfig.KVSubscriber = &mockSpanConfigSubscriber{}
+
+func newMockSpanConfigSubscriber(store spanconfig.Store) *mockSpanConfigSubscriber {
+	return &mockSpanConfigSubscriber{Store: store}
 }
 
 func (m *mockSpanConfigSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
@@ -112,8 +115,10 @@ func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	return m.Store.GetSpanConfigForKey(ctx, key)
 }
 
+func (m *mockSpanConfigSubscriber) LastUpdated() hlc.Timestamp {
+	panic("unimplemented")
+}
+
 func (m *mockSpanConfigSubscriber) Subscribe(callback func(roachpb.Span)) {
 	m.callback = callback
 }
-
-var _ spanconfig.KVSubscriber = &mockSpanConfigSubscriber{}
