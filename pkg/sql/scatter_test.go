@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func TestScatterRandomizeLeases(t *testing.T) {
@@ -125,6 +127,21 @@ func TestScatterResponse(t *testing.T) {
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Range split decisions happen asynchronously and in this test we check for
+	// the actual split boundaries. Wait until the table itself is split off
+	// into its own range.
+	testutils.SucceedsSoon(t, func() error {
+		row := r.QueryRow(t, `SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = $1`,
+			tableDesc.GetID())
+		var nRanges int
+		row.Scan(&nRanges)
+		if nRanges != 1 {
+			return errors.Newf("expected to find single range for table, found %d", nRanges)
+		}
+		return nil
+	})
+
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 	rows := r.Query(t, "ALTER TABLE test.t SCATTER")
 
