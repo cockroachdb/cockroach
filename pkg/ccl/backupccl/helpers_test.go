@@ -100,6 +100,8 @@ func backupRestoreTestSetupWithParams(
 		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
 
+	ac := tc.Server(0).AmbientCtx()
+	ctx = ac.AnnotateCtx(ctx)
 	return ctx, tc, sqlDB, dir, cleanupFn
 }
 
