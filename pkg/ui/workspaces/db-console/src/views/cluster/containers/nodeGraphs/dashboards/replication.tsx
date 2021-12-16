@@ -119,6 +119,13 @@ export default function(props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Replica Uninitialized" sources={storeSources}>
+      <Axis label="replicas">
+        <Metric name="cr.store.replicas" title="Replicas" />
+        <Metric name="cr.store.replicas.uninitialized" title="Uninitialized" />
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="Range Operations" sources={storeSources}>
       <Axis label="ranges">
         <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
