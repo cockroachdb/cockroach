@@ -147,11 +147,11 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	return nil
 }
 
-// MakeIndexDescriptor creates an index descriptor from a CreateIndex node and optionally
+// makeIndexDescriptor creates an index descriptor from a CreateIndex node and optionally
 // adds a hidden computed shard column (along with its check constraint) in case the index
 // is hash sharded. Note that `tableDesc` will be modified when this method is called for
 // a hash sharded index.
-func MakeIndexDescriptor(
+func makeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
 	// Ensure that the columns we want to index are accessible before trying to
@@ -629,7 +629,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
-	indexDesc, err := MakeIndexDescriptor(params, *n.n, n.tableDesc)
+	indexDesc, err := makeIndexDescriptor(params, *n.n, n.tableDesc)
 	if err != nil {
 		return err
 	}
