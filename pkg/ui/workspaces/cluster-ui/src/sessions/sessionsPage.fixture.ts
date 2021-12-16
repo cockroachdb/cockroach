@@ -165,6 +165,7 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},
+  uiConfig: { showTerminateActions: true },
   onSortingChange: () => {},
 };
 
@@ -191,5 +192,6 @@ export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},
+  uiConfig: { showTerminateActions: true },
   onSortingChange: () => {},
 };

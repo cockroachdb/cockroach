@@ -116,7 +116,7 @@ const StatementTableCell = (props: { session: ISession }) => {
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
-  isCloud?: boolean,
+  enableTerminateActions?: boolean,
   onSessionClick?: () => void,
   onTerminateSessionClick?: () => void,
   onTerminateStatementClick?: () => void,
@@ -246,5 +246,5 @@ export function makeSessionsColumns(
     },
   };
 
-  return isCloud ? columns : columns.concat([actions]);
+  return enableTerminateActions ? columns.concat([actions]) : columns;
 }
