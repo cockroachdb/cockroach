@@ -863,17 +863,24 @@ type Store struct {
 
 	mu struct {
 		syncutil.RWMutex
-		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica). This
-		// includes `uninitReplicas`. May be read without holding Store.mu.
+		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica).
+		// May be read without holding Store.mu.
 		replicasByRangeID rangeIDReplicaMap
 		// A btree key containing objects of type *Replica or *ReplicaPlaceholder.
 		// Both types have an associated key range; the btree is keyed on their
 		// start keys.
-		replicasByKey  *storeReplicaBTree
+		//
+		// INVARIANT: Any ReplicaPlaceholder in this map is also in replicaPlaceholders.
+		// INVARIANT: Any Replica with Replica.IsInitialized()==true is also in replicasByRangeID.
+		replicasByKey *storeReplicaBTree
+		// All *Replica objects for which Replica.IsInitialized is false.
+		//
+		// INVARIANT: any entry in this map is also in replicasByRangeID.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
-		// be directly accessed and cleared after stepping all raft groups. This
-		// is always in sync with the placeholders in replicasByKey.
+		// be directly accessed and cleared after stepping all raft groups.
+		//
+		// INVARIANT: any entry in this map is also in replicasByKey.
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
