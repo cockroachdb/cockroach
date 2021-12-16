@@ -82,15 +82,6 @@ type uncommittedDescriptors struct {
 	descNames nstree.Set
 }
 
-func makeUncommittedDescriptors() uncommittedDescriptors {
-	ud := uncommittedDescriptors{
-		descs:     nstree.MakeMap(),
-		descNames: nstree.MakeSet(),
-	}
-	ud.reset()
-	return ud
-}
-
 func (ud *uncommittedDescriptors) reset() {
 	ud.descs.Clear()
 	ud.descNames.Clear()

@@ -53,14 +53,14 @@ import (
 //
 func TestMapDataDriven(t *testing.T) {
 	datadriven.Walk(t, "testdata/map", func(t *testing.T, path string) {
-		tr := MakeMap()
+		var tr Map
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			return testMapDataDriven(t, d, tr)
+			return testMapDataDriven(t, d, &tr)
 		})
 	})
 }
 
-func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr Map) string {
+func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
 	switch d.Cmd {
 	case "add":
 		a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
