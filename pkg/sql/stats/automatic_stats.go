@@ -189,6 +189,7 @@ const (
 // sent.
 //
 type Refresher struct {
+	log.AmbientContext
 	st      *cluster.Settings
 	ex      sqlutil.InternalExecutor
 	cache   *TableStatisticsCache
@@ -222,6 +223,7 @@ type mutation struct {
 
 // MakeRefresher creates a new Refresher.
 func MakeRefresher(
+	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	ex sqlutil.InternalExecutor,
 	cache *TableStatisticsCache,
@@ -230,6 +232,7 @@ func MakeRefresher(
 	randSource := rand.NewSource(rand.Int63())
 
 	return &Refresher{
+		AmbientContext: ambientCtx,
 		st:             st,
 		ex:             ex,
 		cache:          cache,
@@ -247,7 +250,8 @@ func MakeRefresher(
 func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
-	_ = stopper.RunAsyncTask(context.Background(), "refresher", func(ctx context.Context) {
+	bgCtx := r.AnnotateCtx(context.Background())
+	_ = stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime

@@ -73,7 +73,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// There should not be any stats yet.
 	if err := checkStatsCount(ctx, cache, descA, 0 /* expected */); err != nil {
@@ -153,7 +153,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// curTime is used as the current time throughout the test to ensure that the
 	// calculated average refresh time is consistent even if there are delays due
@@ -402,7 +402,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 
@@ -450,7 +450,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	r := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
+	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(

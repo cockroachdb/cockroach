@@ -22,6 +22,7 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/uuid",
