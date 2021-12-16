@@ -43,7 +43,7 @@ var providerInstance = &Provider{}
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
 // If the aws tool is not available on the local path, the provider is a stub.
-func Init() {
+func Init() error {
 	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
 	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
 	// The latter prefix will base64-encode the file contents. See
@@ -70,7 +70,7 @@ func Init() {
 	}
 	if !haveRequiredVersion() {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
-		return
+		return errors.New("doesn't have the required version")
 	}
 
 	// NB: This is a bit hacky, but using something like `aws iam get-user` is
@@ -87,9 +87,10 @@ func Init() {
 	}
 	if !haveCredentials() {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, noCredentials)
-		return
+		return errors.New("missing/invalid credentials")
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 // ebsDisk represent EBS disk device.
