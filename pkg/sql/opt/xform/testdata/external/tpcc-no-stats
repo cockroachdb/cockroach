@@ -138,19 +138,19 @@ VALUES (100, 5, 10, 50, '2019-08-26 16:50:41', 10, 1)
 insert order
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:18 => o_id:1
- │    ├── column2:19 => "order".o_d_id:2
- │    ├── column3:20 => "order".o_w_id:3
- │    ├── column4:21 => "order".o_c_id:4
- │    ├── column5:22 => o_entry_d:5
+ │    ├── column18:18 => o_id:1
+ │    ├── column19:19 => "order".o_d_id:2
+ │    ├── column20:20 => "order".o_w_id:3
+ │    ├── column21:21 => "order".o_c_id:4
+ │    ├── column22:22 => o_entry_d:5
  │    ├── o_carrier_id_default:25 => o_carrier_id:6
- │    ├── column6:23 => o_ol_cnt:7
- │    └── column7:24 => o_all_local:8
+ │    ├── column23:23 => o_ol_cnt:7
+ │    └── column24:24 => o_all_local:8
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:18!null column2:19!null column3:20!null column4:21!null column5:22!null column6:23!null column7:24!null o_carrier_id_default:25
+ │    ├── columns: column18:18!null column19:19!null column20:20!null column21:21!null column22:22!null column23:23!null column24:24!null o_carrier_id_default:25
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(18-25)
@@ -167,9 +167,9 @@ insert order
                 ├── with-scan &1
                 │    ├── columns: o_w_id:26!null o_d_id:27!null o_c_id:28!null
                 │    ├── mapping:
-                │    │    ├──  column3:20 => o_w_id:26
-                │    │    ├──  column2:19 => o_d_id:27
-                │    │    └──  column4:21 => o_c_id:28
+                │    │    ├──  column20:20 => o_w_id:26
+                │    │    ├──  column19:19 => o_d_id:27
+                │    │    └──  column21:21 => o_c_id:28
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(26-28)
@@ -181,14 +181,14 @@ INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES (2000, 100, 10)
 insert new_order
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => new_order.no_o_id:1
- │    ├── column2:10 => new_order.no_d_id:2
- │    └── column3:11 => new_order.no_w_id:3
+ │    ├── column9:9 => new_order.no_o_id:1
+ │    ├── column10:10 => new_order.no_d_id:2
+ │    └── column11:11 => new_order.no_w_id:3
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:9!null column2:10!null column3:11!null
+ │    ├── columns: column9:9!null column10:10!null column11:11!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(9-11)
@@ -205,9 +205,9 @@ insert new_order
                 ├── with-scan &1
                 │    ├── columns: no_w_id:12!null no_d_id:13!null no_o_id:14!null
                 │    ├── mapping:
-                │    │    ├──  column3:11 => no_w_id:12
-                │    │    ├──  column2:10 => no_d_id:13
-                │    │    └──  column1:9 => no_o_id:14
+                │    │    ├──  column11:11 => no_w_id:12
+                │    │    ├──  column10:10 => no_d_id:13
+                │    │    └──  column9:9 => no_o_id:14
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(12-14)
@@ -355,25 +355,25 @@ VALUES
 insert order_line
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:22 => order_line.ol_o_id:1
- │    ├── column2:23 => order_line.ol_d_id:2
- │    ├── column3:24 => order_line.ol_w_id:3
- │    ├── column4:25 => ol_number:4
- │    ├── column5:26 => order_line.ol_i_id:5
- │    ├── column6:27 => order_line.ol_supply_w_id:6
+ │    ├── column22:22 => order_line.ol_o_id:1
+ │    ├── column23:23 => order_line.ol_d_id:2
+ │    ├── column24:24 => order_line.ol_w_id:3
+ │    ├── column25:25 => ol_number:4
+ │    ├── column26:26 => order_line.ol_i_id:5
+ │    ├── column27:27 => order_line.ol_supply_w_id:6
  │    ├── ol_delivery_d_default:31 => ol_delivery_d:7
- │    ├── column7:28 => ol_quantity:8
- │    ├── column8:29 => ol_amount:9
- │    └── column9:30 => ol_dist_info:10
+ │    ├── column28:28 => ol_quantity:8
+ │    ├── column29:29 => ol_amount:9
+ │    └── column30:30 => ol_dist_info:10
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: ol_delivery_d_default:31 column1:22!null column2:23!null column3:24!null column4:25!null column5:26!null column6:27!null column7:28!null column8:29!null column9:30!null
+ │    ├── columns: ol_delivery_d_default:31 column22:22!null column23:23!null column24:24!null column25:25!null column26:26!null column27:27!null column28:28!null column29:29!null column30:30!null
  │    ├── cardinality: [6 - 6]
  │    ├── fd: ()-->(31)
  │    ├── values
- │    │    ├── columns: column1:22!null column2:23!null column3:24!null column4:25!null column5:26!null column6:27!null column7:28!null column8:29!null column9:30!null
+ │    │    ├── columns: column22:22!null column23:23!null column24:24!null column25:25!null column26:26!null column27:27!null column28:28!null column29:29!null column30:30!null
  │    │    ├── cardinality: [6 - 6]
  │    │    ├── (3045, 2, 10, 3, 648, 0, 9, 394.47, 'YhgLRrwsmd68P2bElAgrnp8u')
  │    │    ├── (3045, 2, 10, 5, 25393, 0, 10, 830.60, 'dLXe0YhgLRrwsmd68P2bElAg')
@@ -393,9 +393,9 @@ insert order_line
       │         ├── with-scan &1
       │         │    ├── columns: ol_w_id:32!null ol_d_id:33!null ol_o_id:34!null
       │         │    ├── mapping:
-      │         │    │    ├──  column3:24 => ol_w_id:32
-      │         │    │    ├──  column2:23 => ol_d_id:33
-      │         │    │    └──  column1:22 => ol_o_id:34
+      │         │    │    ├──  column24:24 => ol_w_id:32
+      │         │    │    ├──  column23:23 => ol_d_id:33
+      │         │    │    └──  column22:22 => ol_o_id:34
       │         │    └── cardinality: [6 - 6]
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
@@ -407,8 +407,8 @@ insert order_line
                 ├── with-scan &1
                 │    ├── columns: ol_supply_w_id:45!null ol_i_id:46!null
                 │    ├── mapping:
-                │    │    ├──  column6:27 => ol_supply_w_id:45
-                │    │    └──  column5:26 => ol_i_id:46
+                │    │    ├──  column27:27 => ol_supply_w_id:45
+                │    │    └──  column26:26 => ol_i_id:46
                 │    └── cardinality: [6 - 6]
                 └── filters (true)
 
@@ -596,19 +596,19 @@ insert history
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── rowid_default:28 => rowid:1
- │    ├── column1:20 => history.h_c_id:2
- │    ├── column2:21 => history.h_c_d_id:3
- │    ├── column3:22 => history.h_c_w_id:4
- │    ├── column4:23 => history.h_d_id:5
- │    ├── column5:24 => history.h_w_id:6
- │    ├── column7:26 => h_date:7
- │    ├── column6:25 => h_amount:8
- │    └── column8:27 => h_data:9
+ │    ├── column20:20 => history.h_c_id:2
+ │    ├── column21:21 => history.h_c_d_id:3
+ │    ├── column22:22 => history.h_c_w_id:4
+ │    ├── column23:23 => history.h_d_id:5
+ │    ├── column24:24 => history.h_w_id:6
+ │    ├── column26:26 => h_date:7
+ │    ├── column25:25 => h_amount:8
+ │    └── column27:27 => h_data:9
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:20!null column2:21!null column3:22!null column4:23!null column5:24!null column6:25!null column7:26!null column8:27!null rowid_default:28
+ │    ├── columns: column20:20!null column21:21!null column22:22!null column23:23!null column24:24!null column25:25!null column26:26!null column27:27!null rowid_default:28
  │    ├── cardinality: [1 - 1]
  │    ├── volatile
  │    ├── key: ()
@@ -626,9 +626,9 @@ insert history
       │         ├── with-scan &1
       │         │    ├── columns: h_c_w_id:29!null h_c_d_id:30!null h_c_id:31!null
       │         │    ├── mapping:
-      │         │    │    ├──  column3:22 => h_c_w_id:29
-      │         │    │    ├──  column2:21 => h_c_d_id:30
-      │         │    │    └──  column1:20 => h_c_id:31
+      │         │    │    ├──  column22:22 => h_c_w_id:29
+      │         │    │    ├──  column21:21 => h_c_d_id:30
+      │         │    │    └──  column20:20 => h_c_id:31
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
       │         │    └── fd: ()-->(29-31)
@@ -644,8 +644,8 @@ insert history
                 ├── with-scan &1
                 │    ├── columns: h_w_id:55!null h_d_id:56!null
                 │    ├── mapping:
-                │    │    ├──  column5:24 => h_w_id:55
-                │    │    └──  column4:23 => h_d_id:56
+                │    │    ├──  column24:24 => h_w_id:55
+                │    │    └──  column23:23 => h_d_id:56
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── fd: ()-->(55,56)

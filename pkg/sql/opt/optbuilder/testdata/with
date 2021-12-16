@@ -660,13 +660,13 @@ with &1 (t)
       └── insert x
            ├── columns: x.a:6 b:7 rowid:8!null
            ├── insert-mapping:
-           │    ├── "?column?":13 => x.a:6
+           │    ├── column13:13 => x.a:6
            │    ├── b_default:14 => b:7
            │    └── rowid_default:15 => rowid:8
            └── project
-                ├── columns: b_default:14 rowid_default:15 "?column?":13
+                ├── columns: b_default:14 rowid_default:15 column13:13
                 ├── project
-                │    ├── columns: "?column?":13
+                │    ├── columns: column13:13
                 │    ├── project
                 │    │    ├── columns: "?column?":12
                 │    │    ├── with-scan &1 (t)
@@ -676,7 +676,7 @@ with &1 (t)
                 │    │    └── projections
                 │    │         └── a:11 + 20 [as="?column?":12]
                 │    └── projections
-                │         └── assignment-cast: INT8 [as="?column?":13]
+                │         └── assignment-cast: INT8 [as=column13:13]
                 │              └── "?column?":12
                 └── projections
                      ├── NULL::INT8 [as=b_default:14]
@@ -1446,21 +1446,21 @@ with &2
  │    └── insert x
  │         ├── columns: x.a:7!null x.b:8!null rowid:9!null
  │         ├── insert-mapping:
- │         │    ├── column1:14 => x.a:7
- │         │    ├── column2:15 => x.b:8
+ │         │    ├── column14:14 => x.a:7
+ │         │    ├── column15:15 => x.b:8
  │         │    └── rowid_default:16 => rowid:9
  │         └── project
- │              ├── columns: rowid_default:16 column1:14!null column2:15!null
+ │              ├── columns: rowid_default:16 column14:14!null column15:15!null
  │              ├── project
- │              │    ├── columns: column1:14!null column2:15!null
+ │              │    ├── columns: column14:14!null column15:15!null
  │              │    ├── values
  │              │    │    ├── columns: column1:12!null column2:13!null
  │              │    │    ├── (1, 1)
  │              │    │    └── (2, 2)
  │              │    └── projections
- │              │         ├── assignment-cast: INT8 [as=column1:14]
+ │              │         ├── assignment-cast: INT8 [as=column14:14]
  │              │         │    └── column1:12
- │              │         └── assignment-cast: INT8 [as=column2:15]
+ │              │         └── assignment-cast: INT8 [as=column15:15]
  │              │              └── column2:13
  │              └── projections
  │                   └── unique_rowid() [as=rowid_default:16]
@@ -1679,17 +1679,17 @@ explain
       │    └── insert y
       │         ├── columns: y.a:1!null rowid:2!null
       │         ├── insert-mapping:
-      │         │    ├── column1:6 => y.a:1
+      │         │    ├── column6:6 => y.a:1
       │         │    └── rowid_default:7 => rowid:2
       │         └── project
-      │              ├── columns: rowid_default:7 column1:6!null
+      │              ├── columns: rowid_default:7 column6:6!null
       │              ├── project
-      │              │    ├── columns: column1:6!null
+      │              │    ├── columns: column6:6!null
       │              │    ├── values
       │              │    │    ├── columns: column1:5!null
       │              │    │    └── (1,)
       │              │    └── projections
-      │              │         └── assignment-cast: INT8 [as=column1:6]
+      │              │         └── assignment-cast: INT8 [as=column6:6]
       │              │              └── column1:5
       │              └── projections
       │                   └── unique_rowid() [as=rowid_default:7]
@@ -1715,12 +1715,12 @@ with &1 (b)
  └── insert a
       ├── columns: <none>
       ├── insert-mapping:
-      │    ├── w:8 => x:1
+      │    ├── column8:8 => x:1
       │    └── rowid_default:9 => rowid:2
       └── project
-           ├── columns: rowid_default:9 w:8!null
+           ├── columns: rowid_default:9 column8:8!null
            ├── project
-           │    ├── columns: w:8!null
+           │    ├── columns: column8:8!null
            │    ├── project
            │    │    ├── columns: w:7!null
            │    │    ├── with-scan &1 (b)
@@ -1730,7 +1730,7 @@ with &1 (b)
            │    │    └── projections
            │    │         └── z:6 + 1 [as=w:7]
            │    └── projections
-           │         └── assignment-cast: INT8 [as=w:8]
+           │         └── assignment-cast: INT8 [as=column8:8]
            │              └── w:7
            └── projections
                 └── unique_rowid() [as=rowid_default:9]

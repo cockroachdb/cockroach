@@ -1769,29 +1769,29 @@ sort
       ├── insert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
       │    ├── insert-mapping:
-      │    │    ├── x:11 => abc.a:1
-      │    │    ├── y:12 => abc.b:2
-      │    │    └── z:13 => abc.c:3
+      │    │    ├── column11:11 => abc.a:1
+      │    │    ├── column12:12 => abc.b:2
+      │    │    └── column13:13 => abc.c:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    ├── key: (1-3)
       │    └── project
-      │         ├── columns: x:11!null y:12!null z:13!null
+      │         ├── columns: column11:11!null column12:12!null column13:13!null
       │         ├── cardinality: [0 - 2]
       │         ├── key: (11-13)
       │         ├── top-k
-      │         │    ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
+      │         │    ├── columns: x:6!null y:7!null z:8!null
       │         │    ├── internal-ordering: +7,+8
       │         │    ├── k: 2
       │         │    ├── cardinality: [0 - 2]
       │         │    ├── key: (6-8)
       │         │    └── scan xyz
-      │         │         ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
+      │         │         ├── columns: x:6!null y:7!null z:8!null
       │         │         └── key: (6-8)
       │         └── projections
-      │              ├── xyz.x:6 [as=x:11, outer=(6)]
-      │              ├── xyz.y:7 [as=y:12, outer=(7)]
-      │              └── xyz.z:8 [as=z:13, outer=(8)]
+      │              ├── x:6 [as=column11:11, outer=(6)]
+      │              ├── y:7 [as=column12:12, outer=(7)]
+      │              └── z:8 [as=column13:13, outer=(8)]
       └── with-scan &1
            ├── columns: a:14!null b:15!null c:16!null
            ├── mapping:
@@ -1819,21 +1819,21 @@ sort
       ├── insert xyz
       │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
       │    ├── insert-mapping:
-      │    │    ├── b:13 => xyz.x:1
-      │    │    ├── c:14 => xyz.y:2
-      │    │    └── d:15 => xyz.z:3
+      │    │    ├── column13:13 => xyz.x:1
+      │    │    ├── column14:14 => xyz.y:2
+      │    │    └── column15:15 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    └── project
-      │         ├── columns: b:13 c:14 d:15
+      │         ├── columns: column13:13 column14:14 column15:15
       │         ├── cardinality: [0 - 2]
       │         ├── scan abcd@cd
-      │         │    ├── columns: abcd.b:7 abcd.c:8 abcd.d:9
+      │         │    ├── columns: b:7 c:8 d:9
       │         │    └── limit: 2
       │         └── projections
-      │              ├── abcd.b:7 [as=b:13, outer=(7)]
-      │              ├── abcd.c:8 [as=c:14, outer=(8)]
-      │              └── abcd.d:9 [as=d:15, outer=(9)]
+      │              ├── b:7 [as=column13:13, outer=(7)]
+      │              ├── c:8 [as=column14:14, outer=(8)]
+      │              └── d:9 [as=column15:15, outer=(9)]
       └── with-scan &1
            ├── columns: x:16!null y:17!null z:18!null
            ├── mapping:
@@ -1864,21 +1864,21 @@ sort
       ├── insert xyz
       │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
       │    ├── insert-mapping:
-      │    │    ├── b:13 => xyz.x:1
-      │    │    ├── c:14 => xyz.y:2
-      │    │    └── d:15 => xyz.z:3
+      │    │    ├── column13:13 => xyz.x:1
+      │    │    ├── column14:14 => xyz.y:2
+      │    │    └── column15:15 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    └── project
-      │         ├── columns: b:13 c:14 d:15
+      │         ├── columns: column13:13 column14:14 column15:15
       │         ├── cardinality: [0 - 2]
       │         ├── scan abcd@cd
-      │         │    ├── columns: abcd.b:7 abcd.c:8 abcd.d:9
+      │         │    ├── columns: b:7 c:8 d:9
       │         │    └── limit: 2
       │         └── projections
-      │              ├── abcd.b:7 [as=b:13, outer=(7)]
-      │              ├── abcd.c:8 [as=c:14, outer=(8)]
-      │              └── abcd.d:9 [as=d:15, outer=(9)]
+      │              ├── b:7 [as=column13:13, outer=(7)]
+      │              ├── c:8 [as=column14:14, outer=(8)]
+      │              └── d:9 [as=column15:15, outer=(9)]
       └── select
            ├── columns: x:16!null y:17!null z:18!null
            ├── cardinality: [0 - 2]
@@ -1904,21 +1904,21 @@ with &1
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
  │    ├── insert-mapping:
- │    │    ├── x:11 => abc.a:1
- │    │    ├── y:12 => abc.b:2
- │    │    └── z:13 => abc.c:3
+ │    │    ├── column11:11 => abc.a:1
+ │    │    ├── column12:12 => abc.b:2
+ │    │    └── column13:13 => abc.c:3
  │    ├── volatile, mutations
  │    ├── key: (1-3)
  │    └── project
- │         ├── columns: x:11!null y:12!null z:13!null
+ │         ├── columns: column11:11!null column12:12!null column13:13!null
  │         ├── key: (11-13)
  │         ├── scan xyz
- │         │    ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
+ │         │    ├── columns: x:6!null y:7!null z:8!null
  │         │    └── key: (6-8)
  │         └── projections
- │              ├── xyz.x:6 [as=x:11, outer=(6)]
- │              ├── xyz.y:7 [as=y:12, outer=(7)]
- │              └── xyz.z:8 [as=z:13, outer=(8)]
+ │              ├── x:6 [as=column11:11, outer=(6)]
+ │              ├── y:7 [as=column12:12, outer=(7)]
+ │              └── z:8 [as=column13:13, outer=(8)]
  └── with-scan &1
       ├── columns: a:14!null b:15!null c:16!null
       ├── mapping:

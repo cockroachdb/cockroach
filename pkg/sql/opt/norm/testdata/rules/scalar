@@ -232,11 +232,11 @@ INSERT INTO u VALUES ('b1621d9e-df89-4e8a-89f5-82262bca907b')
 insert u
  ├── columns: <none>
  ├── insert-mapping:
- │    └── column1:5 => u:1
+ │    └── column5:5 => u:1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:5!null
+      ├── columns: column5:5!null
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5)
@@ -249,11 +249,11 @@ INSERT INTO u VALUES (gen_random_uuid())
 insert u
  ├── columns: <none>
  ├── insert-mapping:
- │    └── column1:5 => u:1
+ │    └── column5:5 => u:1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:5
+      ├── columns: column5:5
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
@@ -267,15 +267,15 @@ INSERT INTO a (k, s) VALUES (1, 'b1621d9e-df89-4e8a-89f5-82262bca907b'::UUID)
 insert a
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:10 => k:1
+ │    ├── column10:10 => k:1
  │    ├── i_default:12 => i:2
  │    ├── f_default:13 => f:3
- │    ├── column2:11 => s:4
+ │    ├── column11:11 => s:4
  │    └── arr_default:14 => arr:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:10!null column2:11 i_default:12 f_default:13 arr_default:14
+      ├── columns: column10:10!null column11:11 i_default:12 f_default:13 arr_default:14
       ├── cardinality: [1 - 1]
       ├── immutable
       ├── key: ()

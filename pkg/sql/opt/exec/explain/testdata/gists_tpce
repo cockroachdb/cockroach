@@ -337,7 +337,7 @@ explain(shape):
 │       │
 │       └── • lookup join (anti)
 │           │ table: trade@trade_pkey
-│           │ equality: (tr_t_id) = (t_id)
+│           │ equality: (column62) = (t_id)
 │           │ equality cols are key
 │           │
 │           └── • scan buffer
@@ -349,7 +349,7 @@ explain(shape):
 │       │
 │       └── • lookup join (anti)
 │           │ table: status_type@status_type_pkey
-│           │ equality: (?column?) = (st_id)
+│           │ equality: (column63) = (st_id)
 │           │ equality cols are key
 │           │
 │           └── • scan buffer
