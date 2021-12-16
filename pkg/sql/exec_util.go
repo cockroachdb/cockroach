@@ -1208,6 +1208,11 @@ func (cfg *ExecutorConfig) SV() *settings.Values {
 	return &cfg.Settings.SV
 }
 
+// GetJobRegistry returns the value of cfg.JobRegistry.
+func (cfg *ExecutorConfig) GetJobRegistry() interface{} {
+	return cfg.JobRegistry
+}
+
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -3350,3 +3350,90 @@ func TestJobsRetry(t *testing.T) {
 		rts.check(t, jobs.StatusFailed)
 	})
 }
+
+func TestPausepoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	registry := s.JobRegistry().(*jobs.Registry)
+	defer s.Stopper().Stop(ctx)
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				if err := registry.CheckPausepoint("test_pause_foo"); err != nil {
+					return err
+				}
+				return nil
+			},
+		}
+	})
+
+	rec := jobs.Record{
+		DescriptorIDs: []descpb.ID{1},
+		Details:       jobspb.ImportDetails{},
+		Progress:      jobspb.ImportProgress{},
+	}
+
+	type toggle struct {
+		name    string
+		enabled bool
+	}
+
+	for _, tc := range []struct {
+		name     string
+		points   []toggle
+		expected jobs.Status
+	}{
+		{"none",
+			nil,
+			jobs.StatusSucceeded,
+		},
+		{"pausepoint-only",
+			[]toggle{{"test_pause_foo", true}},
+			jobs.StatusPaused,
+		},
+		{"other-var-only",
+			[]toggle{{"test_pause_bar", true}},
+			jobs.StatusSucceeded,
+		},
+		{"pausepoint-and-other",
+			[]toggle{{"test_pause_bar", true}, {"test_pause_foo", true}, {"test_pause_baz", true}},
+			jobs.StatusPaused,
+		},
+		{"on-then-off",
+			[]toggle{{"test_pause_foo", true}, {"test_pause_bar", true}, {"test_pause_foo", false}},
+			jobs.StatusSucceeded,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := sqlDB.Exec("SELECT crdb_internal.set_job_debug_pausepoint($1, $2)", "all", false)
+			require.NoError(t, err)
+			for _, point := range tc.points {
+				_, err := sqlDB.Exec("SELECT crdb_internal.set_job_debug_pausepoint($1, $2)", point.name, point.enabled)
+				require.NoError(t, err)
+			}
+
+			jobID := registry.MakeJobID()
+			var sj *jobs.StartableJob
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				return registry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, rec)
+			}))
+			require.NoError(t, sj.Start(ctx))
+			require.NoError(t, sj.AwaitCompletion(ctx))
+			status, err := sj.CurrentStatus(ctx, nil)
+			// Map pause-requested to paused to avoid races.
+			if status == jobs.StatusPauseRequested {
+				status = jobs.StatusPaused
+			}
+			require.Equal(t, tc.expected, status)
+			require.NoError(t, err)
+		})
+	}
+}

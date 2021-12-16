@@ -6223,6 +6223,33 @@ table's zone configuration this will return NULL.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.set_job_debug_pausepoint": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categorySystemInfo,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"name", types.String}, {"enabled", types.Bool}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := string(tree.MustBeDString(args[0]))
+				enabled := tree.MustBeDBool(args[1])
+
+				registry := evalCtx.Planner.ExecutorConfig().(interface {
+					GetJobRegistry() interface{}
+				}).GetJobRegistry().(interface {
+					SetPausepoint(name string, enabled bool)
+				})
+
+				registry.SetPausepoint(name, bool(enabled))
+
+				return args[1], nil
+			},
+			Info:       "This function is used to start a SQL stats compaction job.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
