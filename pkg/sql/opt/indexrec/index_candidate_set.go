@@ -39,6 +39,10 @@ import (
 //     - J is all indexes that come from rules 3 and 4.
 //     From these groups, construct the following multi-column index
 //     combinations: EQ, EQ + R, J + R, EQ + J, EQ + J + R.
+//  6. Construct two single/multi-column candidates for the output columns of
+//     set operations. This is in order to allow streaming set operations to
+//     be performed. All set operations are considered, except for UNION ALL,
+//     because indexes do not benefit here.
 // TODO(nehageorge): Add a rule for columns that are referenced in the statement
 // but do not fall into one of these categories. In order to account for this,
 // *memo.VariableExpr would be the final case in the switch statement, hit only
@@ -134,10 +138,27 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 		ics.addJoinIndexes(expr.On)
 	case *memo.AntiJoinExpr:
 		ics.addJoinIndexes(expr.On)
+	case *memo.UnionExpr:
+		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
+	case *memo.IntersectExpr:
+		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
+	case *memo.IntersectAllExpr:
+		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
+	case *memo.ExceptExpr:
+		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
+	case *memo.ExceptAllExpr:
+		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		ics.categorizeIndexCandidates(expr.Child(i))
 	}
+}
+
+// addSetOperationIndexes is used to add index candidates on the output columns
+// of set operations (UNION, INTERSECT, INTERSECT ALL, EXCEPT, EXCEPT ALL).
+func (ics *indexCandidateSet) addSetOperationIndexes(leftCols, rightCols opt.ColList) {
+	addMultiColumnIndex(leftCols, nil /* desc */, ics.md, ics.overallCandidates)
+	addMultiColumnIndex(rightCols, nil /* desc */, ics.md, ics.overallCandidates)
 }
 
 // addOrderingIndex adds indexes for a *memo.SortExpr. One index is constructed

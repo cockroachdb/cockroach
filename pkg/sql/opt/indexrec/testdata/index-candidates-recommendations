@@ -923,3 +923,200 @@ sort (segmented)
            │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │                   └── 1
            └── filters (true)
+
+# Tests for set operation indexes. See rule 6 in indexrec.FindIndexCandidates.
+index-candidates
+SELECT k FROM t1 UNION SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 UNION SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+union
+ ├── columns: k:15
+ ├── left columns: t1.k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +15
+ ├── cost: 2171.26
+ ├── key: (15)
+ ├── scan t1@_hyp_1
+ │    ├── columns: t1.k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 INTERSECT SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 INTERSECT SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+intersect
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2170.26
+ ├── key: (1)
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 INTERSECT ALL SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 INTERSECT ALL SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+intersect-all
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2179.26
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 EXCEPT SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 EXCEPT SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+except
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2170.26
+ ├── key: (1)
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 EXCEPT ALL SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 EXCEPT ALL SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+except-all
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2179.26
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k, f FROM t1 UNION SELECT i, f FROM t1
+----
+t1:
+ (i, f)
+ (k, f)
+
+index-recommendations
+SELECT k, f FROM t1 UNION SELECT i, f FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k, f);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i, f);
+--
+Optimal Plan.
+union
+ ├── columns: k:15 f:16
+ ├── left columns: t1.k:1 t1.f:3
+ ├── right columns: i:9 t1.f:10
+ ├── internal-ordering: +15,+16
+ ├── cost: 2209.46
+ ├── key: (15,16)
+ ├── scan t1@_hyp_1
+ │    ├── columns: t1.k:1 t1.f:3
+ │    ├── cost: 1094.72
+ │    └── ordering: +1,+3
+ └── scan t1@_hyp_2
+      ├── columns: i:9 t1.f:10
+      ├── cost: 1094.72
+      └── ordering: +9,+10

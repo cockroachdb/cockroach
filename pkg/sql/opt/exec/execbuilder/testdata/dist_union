@@ -23,6 +23,12 @@ vectorized: true
       missing stats
       table: uniontest@uniontest_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON uniontest (v);
+2. type: index creation
+   SQL command: CREATE INDEX ON uniontest (k);
 
 query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
