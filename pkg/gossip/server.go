@@ -385,8 +385,9 @@ func (s *server) start(addr net.Addr) {
 
 		broadcast()
 	}
-	if err := s.stopper.RunAsyncTask(context.Background(), "gossip-wait-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(context.Background())
+	bgCtx := s.AnnotateCtx(context.Background())
+	if err := s.stopper.RunAsyncTask(bgCtx, "gossip-wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(bgCtx)
 	}
 }
 
