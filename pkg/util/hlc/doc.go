@@ -18,6 +18,22 @@ which provides timestamps that are a combination of physical and logical time.
 Physical time is based on a node’s coarsely-synchronized system clock, and
 logical time is based on Lamport’s clocks.
 
+Underpinning this discussion, recall CockroachDB's transactional model: we
+guarantee serializability (transactions appear to be executed in _some_ serial
+order), and linearizability (transactions appear to execute in real-time order)
+for transactions that have overlapping read/write sets. Notably, we are not
+strictly serializable, so transactions with disjoint read/write sets can appear
+to execute in any order.
+
+This linearizability guarantee is important to note as two sequential (in real
+time) transactions via two different gateway nodes can get assigned timestamps
+in reverse order (the second gateway's clock may be behind), but must still see
+results according to real-time order if they access overlapping keys (e.g. B
+must see A's write). Also keep in mind that an intent's written timestamp
+signifies when the intent itself was written, but the final value will be
+resolved to the transaction's commit timestamp, which may be in the future of
+the written timestamp.
+
 Hybrid-logical clocks provide a few important properties:
 
 Causality tracking
