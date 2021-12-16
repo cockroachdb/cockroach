@@ -19,7 +19,9 @@ go_library(
 go_test(
     name = "errwrap_test",
     srcs = ["errwrap_test.go"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
     deps = [
         ":errwrap",
         "//pkg/build/bazel",
