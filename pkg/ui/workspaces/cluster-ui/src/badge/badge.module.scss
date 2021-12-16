@@ -1,4 +1,5 @@
 @import '../core/index.module.scss';
+@import "~@cockroachlabs/design-tokens/dist/web/tokens";
 
 .badge {
   display: flex;
@@ -23,8 +24,8 @@
 }
 
 .badge--status-success {
-  color: $colors--primary-green-3;
-  background-color: $colors--primary-green-1;
+  color: $color-intent-success-4;
+  background-color: $color-intent-success-1;
   border-radius: 3px;
 }
 

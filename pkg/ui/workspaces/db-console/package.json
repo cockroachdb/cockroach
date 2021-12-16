@@ -20,6 +20,7 @@
     "@cockroachlabs/cluster-ui": "link:../cluster-ui",
     "@cockroachlabs/crdb-protobuf-client": "link:./src/js",
     "@cockroachlabs/icons": "0.3.0",
+    "@cockroachlabs/design-tokens": "0.4.5",
     "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
