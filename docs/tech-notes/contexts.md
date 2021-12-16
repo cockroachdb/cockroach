@@ -1,6 +1,33 @@
-# context.Context and how it relates to logging and tracing in CockroachDB
+# `context.Context` and how it relates to logging and tracing in CockroachDB
 
-Original author: Andrei Matei
+Authors: Andrei Matei, knz
+
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [`context.Context` and how it relates to logging and tracing in CockroachDB](#contextcontext-and-how-it-relates-to-logging-and-tracing-in-cockroachdb)
+    - [Introduction](#introduction)
+    - [Core concepts](#core-concepts)
+        - [What is a `context.Context`?](#what-is-a-contextcontext)
+        - [What is an `AmbientContext`?](#what-is-an-ambientcontext)
+    - [Motivations for contexts in CockroachDB](#motivations-for-contexts-in-cockroachdb)
+        - [Contexts for logging](#contexts-for-logging)
+        - [Contexts for tracing](#contexts-for-tracing)
+        - [Creating traces programmatically](#creating-traces-programmatically)
+        - [Context cancellation](#context-cancellation)
+    - [Technical notes](#technical-notes)
+        - [Integration between logging and `Contexts`](#integration-between-logging-and-contexts)
+        - [Integration between tracing and `Contexts`](#integration-between-tracing-and-contexts)
+        - [What operations do we track in crdb? Where do we track traces and spans?](#what-operations-do-we-track-in-crdb-where-do-we-track-traces-and-spans)
+    - [FAQs](#faqs)
+        - [What about background operations?](#what-about-background-operations)
+        - [What’s `context.Background()`? What’s `context.TODO()` and what do I do when I see one?](#whats-contextbackground-whats-contexttodo-and-what-do-i-do-when-i-see-one)
+        - [When should I just add some logging tags vs. create a tracing span vs. annotate from an `AmbientContext`?](#when-should-i-just-add-some-logging-tags-vs-create-a-tracing-span-vs-annotate-from-an-ambientcontext)
+    - [Alternatives](#alternatives)
+    - [Future directions](#future-directions)
+
+<!-- markdown-toc end -->
+
 
 ## Introduction
 
@@ -8,11 +35,14 @@ You might have noticed that much of our codebase passes around
 `context.Context` to functions all over the place. You can go a long
 way without understanding exactly what the point is (until you can’t),
 but that’s no way to live. You might have heard that we don’t like
-`context.TODO()` or that “storing `Contexts` in structs is bad” and
-you might be wondering what that’s about. This document is to serve as
-an explanation of Context-related topics.
+`context.TODO()`, that “storing `Contexts` in structs is bad” and that
+“using `AmbientContext` is important” and you might be wondering what
+that’s about. This document is to serve as an explanation of
+Context-related topics.
 
-## What is a `context.Context` ?
+## Core concepts
+
+### What is a `context.Context`?
 
 `context.Context` is an interface defined in the `context` package of
 Go’s standard library.
@@ -57,6 +87,38 @@ This is the interface definition:
         Value(key interface{}) interface{}
     }
 
+### What is an `AmbientContext`?
+
+`AmbientContext` is an abstraction defined inside CockroachDB to
+identify components in logs and traces.
+
+It serves two purposes:
+
+- to attach the identity of a component instance to a context (what
+  it's about, e.g.  a `Node` vs a `Store` vs a `Replica`) so that this
+  identity gets revealed in traces and logs.
+
+  We do this at API boundaries between components.
+
+- to re-attach common data items to contexts, when starting a
+  chain of contexts “from scratch” e.g. in an asynchronous task.
+
+In any case, *it is very important to use ambient contexts as much as
+possible*, to ensure that the common information is effectively shared
+between a new goroutine/task and the goroutine/task it was spawned
+from. Using `context.Background()` without annotation from a nearest
+AC will cause the task/activity to become “detached” from the identity
+of the component, and invisible to tracing, unrecognizable in logging
+etc.
+
+Here are some example data items that an AmbientContext can re-attach:
+
+- root logging tags (e.g. public identity of a component, such as a
+  store ID).
+- server identifiers and crash reporting details.
+- root span, if the AmbientContext is also used to create a new span.
+- other `context.Values` that certain components in CockroachDB would
+  like to see shared by all other components under a given server.
 
 ## Motivations for contexts in CockroachDB
 
@@ -247,17 +309,16 @@ Here’s how the code looks like:
 The Executor creates a root span:
 
     // Create a root span for this SQL txn.
-    tracer := e.cfg.AmbientCtx.Tracer
-    sp = tracer.StartSpan("sql txn")
-    // Put the new span in the context.
-    ctx = opentracing.ContextWithSpan(ctx, sp)
-    // sp needs to be Finish()ed by the state machine when this transaction 
+    ambient := e.cfg.AmbientCtx
+    ctx, sp := ambient.Tracer.StartSpanCtx(ctx, "sql txn")
+    // sp needs to be Finish()ed by the state machine when this transaction
     // is committed or rolled back.
+	defer sp.Finish()
 
 The sub-operations create sub-spans and fork the `Context`:
 
-    ctx, span := tracing.ChildSpan(ctx, "join reader")
-    defer tracing.FinishSpan(span)
+    ctx, span := ambient.AnnnotateCtxWithSpan(ctx, "join reader")
+    defer span.Finish()
 
 ### Context cancellation
 
@@ -302,9 +363,11 @@ prefer a different pattern. These tags are specific to an instance of
 an object used to perform part of an operation - e.g. a `replica`
 instance. The same `replica` instance is used across many operations,
 but it always wants to provide the same annotations. And different
-instances want to provide different annotations. We use an
-`AmbientContext` - a container for a bunch of tags that an operation’s
-`Context` will be annotated with.
+instances want to provide different annotations.
+
+For this, we associate that component instance with its own
+`AmbientContext`, and pre-populate it with annotations that we want
+to propagate to the control flow of tasks/requests under that instance.
 
 For example, a `replica` initializes its `AmbientContext`
 [like so](https://github.com/cockroachdb/cockroach/blob/281777256787cef83e7b1a8485648010442ffe48/pkg/storage/replica.go#L576):
@@ -447,13 +510,12 @@ in the following log messages. In other cases, we do explicitly for a
 `rangeDescriptorCache` identifies a sub-operation worthy of having a
 log tag:
 
-    ctx = log.WithLogTag(ctx, "range-lookup", nil)
+    ctx = logtags.AddTag(ctx, "range-lookup", nil /* value */)
     descs, prefetched, pErr := rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
 
 In cases like this, we should probably also be creating a child span,
 so that opentracing also displays the range lookup more prominently as
-a logically separate operation.
-
+a logically separate operation. See the FAQ below.
 
 
 ## FAQs
@@ -573,6 +635,11 @@ We want to use `context.Background()` as the root for most of our
 other `Contexts` - operation contexts should be derived from it,
 background work contexts should be derived from it.
 
+Note that when invoking `context.Background()`, it's likely that the
+first thing you'll want is to *annotate* it with the nearest
+`AmbientContext` to re-attach shared annotations and the annotations
+specific to the local component's identity.
+
 `context.TODO()` is technically equivalent, except we (and Go
 itself) use it to mark places where a proper `Context` has not yet
 been plumbed to. So when you see this guy, it means that someone was
@@ -596,6 +663,87 @@ first point. We should be using context.Background in tests, never
 context.TODO. Andrei: well it’s not technically Background() work. In
 fact, you can argue that Background() would be even worse, at it’d
 combine the test’s operations with background server activity.”
+
+### When should I just add some logging tags vs. create a tracing span vs. annotate from an `AmbientContext`?
+
+When starting some logic, we have a choice between:
+
+1. just adding some logging tags: `ctx = logtags.AddTag(ctx, "what-i-do", ...)`
+2. annnotate from an `AmbientContext`: `ctx = myComponent.AnnotateCtx(ctx)`
+3. just add a span: `ctx, span := tracer.StartSpanCtx(ctx, "what-i-do")`
+4. (1) and (2) above combined:
+   ```
+   ctx = myComponent.AnnotateCtx(ctx)
+   ctx = logtags.AddTag(ctx, "what-i-do", ...)
+   ```
+5. (2) and (3) above combined: `ctx, span := myComponent.AnnotateCtxWithSpan(ctx, "what-i-do")`
+
+Which one should one use?
+
+It's important to understand that each of the options (1), (2) and (3)
+above get different, mostly orthogonal results, with options (4) and (5)
+available to combine them.
+
+| Option       | Identifies the current operation in logs/traces | Identifies the current *component* in logs/traces           | Splits the trace into a sub-operation |
+|--------------|-------------------------------------------------|-------------------------------------------------------------|---------------------------------------|
+| (1) just tag | Yes                                             | Not guaranteed (only if incoming ctx was already annotated) | No                                    |
+| (2) annotate | No                                              | Yes                                                         | No                                    |
+| (3) sub-span | Yes                                             | No                                                          | Yes                                   |
+| (1)+(2)      | Yes                                             | Yes                                                         | No                                    |
+| (2)+(3)      | Yes                                             | Yes                                                         | Yes                                   |
+
+In a nutshell:
+
+- at API boundaries *between components*, i.e. in the entry point of
+  an API function likely to be called by another component, we want to
+  *annotate* from an `AmbientContext`.
+
+  We do not need to annotate when we have confidence that the incoming
+  context is annotated already for the current component. If we are
+  careful to annotate at every API entry point, internal functions
+  inside the component do not need to annotate again.
+  (NB: annotation without creating a tracing span is idempotent.)
+
+  An example of this is a network handler function inside a
+  CockroachDB component which is given a context from the Go runtime;
+  the Go runtime contexts are not pre-annotated. In that case, we want
+  to also annotate inside the handler.
+
+- when we create a `Context` that happens "under" a concept
+  that an external human observer cares about,
+  e.g. something that corresponds to a publicly visible aspect of the
+  system, we likely want to *add a log tag*. We do this for example:
+
+  - for the node ID, store ID, replica ID, because these are publicly
+    documented and are very often relevant when analying the behavior.
+  - the client IP address/port, because it's relevant when
+    troubleshooting or analyzing security incidents.
+  - for background tasks that run periodically, so that we can
+    recognize their logging output easily in log files.
+
+  The choice of what is worthy of a log tag is a bit subjective. We do
+  not want _too many_ log tags in a context either, because there is
+  some cost associated to them.
+
+- when we start an computation *in response* to an important event
+  in the system, and that request-response relationship is particularly
+  important when analyzing the behavior, or when troubleshooting issues,
+  we want to *create a span*.
+
+  We also create spans for each iteration of a periodic or repeated
+  behavior, so that we can easily distinguish each iteration in traces.
+
+This also explains why we often use the combinations of (1)+(2) and (2)+(3):
+
+- when an API boundary is also a request handler that will provide a
+  response (e.g. the KV Batch request), we want to annotate (component
+  boundary) and also create a span (request-response). That's what
+  `AnnotateCtxWithSpan()` is for.
+
+- when an API boundary is associating the current logic with a concept
+  that's user-visible and interesting to see in logs and traces, we
+  want to annotate (component boundary) and also add a log tag. That's
+  why this combination is frequently seen in the source code.
 
 ## Alternatives
 
