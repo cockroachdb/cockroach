@@ -570,7 +570,10 @@ func (bq *baseQueue) Async(
 		log.InfofDepth(ctx, 2, "%s", log.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
-	if err := bq.store.stopper.RunAsyncTaskEx(context.Background(),
+	bgCtx := bq.AnnotateCtx(context.Background())
+	// TODO(knz): Do we want to propagate context tags from the parent
+	// ctx to the bgCtx? This may contain details about the replica, etc.
+	if err := bq.store.stopper.RunAsyncTaskEx(bgCtx,
 		stop.TaskOpts{
 			TaskName:   opName,
 			Sem:        bq.addOrMaybeAddSem,
