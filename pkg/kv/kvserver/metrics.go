@@ -68,6 +68,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaUninitializedCount = metric.Metadata{
+		Name:        "replicas.uninitialized",
+		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Range metrics.
 	metaRangeCount = metric.Metadata{
@@ -1252,6 +1258,7 @@ type StoreMetrics struct {
 	RaftLeaderCount               *metric.Gauge
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
+	UninitializedCount            *metric.Gauge
 	QuiescentCount                *metric.Gauge
 
 	// Range metrics.
@@ -1685,6 +1692,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
