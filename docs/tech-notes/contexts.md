@@ -90,7 +90,7 @@ results in the following message being output:
     I170312 15:02:30.732131 179 storage/replica.go:1046  [n1,s1,r1/1:/{Min-Table/0},@c420498a80] request range lease (attempt #1)
 
 Notice how the prefix `[n1,s1,r1/1:/{Min-Table/0},@c420498a80]` is not
-part of the logging command. It’s just prepended auto-magically
+part of the logging call. It’s just prepended auto-magically
 through the `ctx` argument that’s passed to the logging method - the
 `ctx` had been populated with values describing the replica executing
 the operation that lead to the range lease acquisition (node 1, store
@@ -228,7 +228,7 @@ The mechanism for this is threefold:
   we store `Span` objects in `Context` to represent the stacking/nesting
   of "current operations" in CockroachDB.
 - Whenever a logging method is invoked, the logging module inspects
-  the `Context` object from the head, check whether it contains a
+  the `Context` object from the head, checks whether it contains a
   span, and if it does, extracts the first span from the `Context`,
   sends a copy of the log event to its tracer, before printing them to
   the log file.
@@ -262,13 +262,14 @@ The sub-operations create sub-spans and fork the `Context`:
 ### Context cancellation
 
 Contexts make distributed cancellation easy.
+
 A context object has a broadcast "cancellation" channel which
 client components can check to see if the work is still "useful".
-For example a context for the worker of a network connection
+For example, a context for the worker of a network connection
 will be canceled by `net.Conn` if the remote connection
-is closed, and the worker can check that periodically and spontaneously
+is closed, and the worker can check that periodically, then spontaneously
 abort, instead of checking the error status of trying to send
-data through the connection,
+data through the connection.
 
 This is really cool for things like backup/restore or distSQL that
 kick off a lot of work throughout the cluster.
@@ -276,9 +277,9 @@ kick off a lot of work throughout the cluster.
 Of note:
 
 - a cancellable sub-context of a cancellable context means there is a
-  goroutine spawn under you for propagating the parents cancellation,
+  goroutine spawn under you for propagating the parent's cancellation,
   so it can be expensive.
-- it's stil la bit unclear how context cancellation crosses gRPC and
+- it's still a bit unclear how context cancellation crosses gRPC and
   libpq boundaries.  People are working on this.
 
 
@@ -564,7 +565,7 @@ seem to have stopped doing that for our queues.
 
 As we’ve seen, `Contexts` are hierarchical, which means there has
 to be a root `Context`. There are, in fact, two roots provided by the
-`context` package - `context.Background()`and
+`context` package - `context.Background()` and
 `context.TODO()`. These are empty `Contexts` - no values, deadline
 or cancellation.
 
