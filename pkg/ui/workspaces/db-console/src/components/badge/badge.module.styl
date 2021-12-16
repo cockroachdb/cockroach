@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 @require '~src/components/core/index.styl'
+@require "~@cockroachlabs/design-tokens/dist/web/tokens";
 
 .badge
   display flex
@@ -32,8 +33,8 @@
   letter-spacing 1.5px
 
 .badge--status-success
-  color $colors--primary-green-3
-  background-color $colors--primary-green-1
+  color $color-intent-success-4
+  background-color $color-intent-success-1
   border-radius 3px
 
 .badge--status-danger
