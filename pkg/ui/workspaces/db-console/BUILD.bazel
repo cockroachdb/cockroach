@@ -119,6 +119,7 @@ DEV_DEPENDENCIES = [
 
 DEPENDENCIES = [
     "@npm//@cockroachlabs/icons",
+    "@npm//@cockroachlabs/design-tokens",
     "@npm//analytics-node",
     "@npm//antd",
     "@npm//babel-polyfill",

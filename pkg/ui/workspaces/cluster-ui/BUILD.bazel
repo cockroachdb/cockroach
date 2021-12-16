@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@npm//@cockroachlabs/eslint-config",
     "@npm//@cockroachlabs/icons",
     "@npm//@cockroachlabs/ui-components",
+    "@npm//@cockroachlabs/design-tokens",
     "@npm//@popperjs/core",
     "@npm//@reduxjs/toolkit",
     "@npm//@storybook/addon-actions",
