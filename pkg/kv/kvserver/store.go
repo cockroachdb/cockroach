@@ -2999,6 +2999,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
 		quiescentCount                int64
+		uninitializedCount            int64
 		averageQueriesPerSecond       float64
 		averageWritesPerSecond        float64
 
@@ -3022,6 +3023,10 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
 	}
 	clusterNodes := s.ClusterNodeCount()
+
+	s.mu.RLock()
+	uninitializedCount = int64(len(s.mu.uninitReplicas))
+	s.mu.RUnlock()
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
@@ -3082,6 +3087,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
+	s.metrics.UninitializedCount.Update(uninitializedCount)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
 	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
