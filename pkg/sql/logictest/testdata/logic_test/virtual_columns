@@ -17,14 +17,6 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error primary index column "v" cannot be virtual
-CREATE TABLE t (
-  a INT,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  PRIMARY KEY (b,v)
-)
-
 statement error index "t_b_idx" cannot store virtual column "v"
 CREATE TABLE t (
   a INT PRIMARY KEY,
