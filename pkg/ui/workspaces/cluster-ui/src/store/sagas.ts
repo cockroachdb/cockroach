@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { SagaIterator } from "redux-saga";
 import { all, fork } from "redux-saga/effects";
 
 import { localStorageSaga } from "./localStorage";
@@ -19,13 +20,14 @@ import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
 import { sqlStatsSaga } from "./sqlStats";
 
-export function* sagas(cacheInvalidationPeriod?: number) {
+export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
     fork(localStorageSaga),
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
     fork(sessionsSaga),
+    fork(terminateSaga),
     fork(notifificationsSaga),
     fork(sqlStatsSaga),
   ]);

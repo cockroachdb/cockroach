@@ -38,6 +38,7 @@ import TerminateSessionModal, {
   TerminateSessionModalRef,
 } from "./terminateSessionModal";
 
+import { UIConfigState } from "src/store";
 import {
   ICancelSessionRequest,
   ICancelQueryRequest,
@@ -56,7 +57,7 @@ export interface OwnProps {
   refreshSessions: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
-  isCloud?: boolean;
+  uiConfig?: UIConfigState["pages"]["sessions"];
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
     name: string,
@@ -80,6 +81,9 @@ export class SessionsPage extends React.Component<
 > {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
+  static defaultProps = {
+    uiConfig: { showTerminateActions: true },
+  };
 
   constructor(props: SessionsPageProps) {
     super(props);
@@ -172,7 +176,7 @@ export class SessionsPage extends React.Component<
             columns={makeSessionsColumns(
               this.terminateSessionRef,
               this.terminateQueryRef,
-              this.props.isCloud,
+              this.props.uiConfig?.showTerminateActions,
               this.props.onSessionClick,
               this.props.onTerminateStatementClick,
               this.props.onTerminateSessionClick,
