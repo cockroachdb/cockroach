@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import moment, { Moment } from "moment";
 import {
   aggregateStatementStats,
   appAttr,

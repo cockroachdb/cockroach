@@ -11,7 +11,6 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";

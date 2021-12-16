@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { TimestampToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import {
   isRunning,
   JOB_STATUS_SUCCEEDED,
@@ -28,9 +28,9 @@ export class Duration extends React.PureComponent<{
     // Parse timestamp to default value NULL instead of Date.now.
     // Conversion dates to Date.now causes trailing dates and constant
     // duration increase even when job is finished.
-    const startedAt = TimestampToMoment(job.started, null);
-    const modifiedAt = TimestampToMoment(job.modified, null);
-    const finishedAt = TimestampToMoment(job.finished, null);
+    const startedAt = util.TimestampToMoment(job.started, null);
+    const modifiedAt = util.TimestampToMoment(job.modified, null);
+    const finishedAt = util.TimestampToMoment(job.finished, null);
 
     if (isRunning(job.status)) {
       const fractionCompleted = job.fraction_completed;
