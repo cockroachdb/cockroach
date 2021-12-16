@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -474,6 +475,13 @@ func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	return nil
 }
 
+// AmbientCtx implements serverutils.TestTenantInterface. This
+// retrieves the ambient context for this server. This is intended for
+// exclusive use by test code.
+func (ts *TestServer) AmbientCtx() log.AmbientContext {
+	return ts.Cfg.AmbientCtx
+}
+
 // TestingKnobs returns the TestingKnobs used by the TestServer.
 func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 	if ts != nil {
@@ -582,6 +590,13 @@ func (t *TestTenant) Stopper() *stop.Stopper {
 // Clock is part of TestTenantInterface.
 func (t *TestTenant) Clock() *hlc.Clock {
 	return t.SQLServer.execCfg.Clock
+}
+
+// AmbientCtx implements serverutils.TestTenantInterface. This
+// retrieves the ambient context for this server. This is intended for
+// exclusive use by test code.
+func (t *TestTenant) AmbientCtx() log.AmbientContext {
+	return t.Cfg.AmbientCtx
 }
 
 // TestingKnobs is part TestTenantInterface.
