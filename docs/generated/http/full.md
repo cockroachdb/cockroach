@@ -3668,6 +3668,51 @@ Support status: [reserved](#support-status)
 
 
 
+## CancelStatementDiagnosticsReport
+
+`POST /_status/stmtdiagreports/cancel`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statement_fingerprint | [string](#cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| canceled | [bool](#cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse-bool) |  | canceled indicates whether the request for the given fingerprint was actually canceled. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse-string) |  | error is set only if canceled is false. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## StatementDiagnosticsRequests
 
 `GET /_status/stmtdiagreports`

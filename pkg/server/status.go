@@ -420,10 +420,14 @@ type StmtDiagnosticsRequester interface {
 	// stay active.
 	InsertRequest(
 		ctx context.Context,
-		fprint string,
+		stmtFingerprint string,
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 	) error
+	// CancelRequest updates an entry in system.statement_diagnostics_requests
+	// for tracing a query with the given fingerprint to be expired (thus,
+	// canceling any new tracing for it).
+	CancelRequest(ctx context.Context, stmtFingerprint string) error
 }
 
 // newStatusServer allocates and returns a statusServer.
