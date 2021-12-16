@@ -478,6 +478,18 @@ func (desc *Mutable) SetDefaultPrivilegeDescriptor(
 	desc.DefaultPrivileges = defaultPrivilegeDescriptor
 }
 
+// AddSchemaToDatabase adds a schemaName and schemaInfo entry into the
+// database's Schemas map. If the map is nil, then we create a map before
+// adding the entry.
+func (desc *Mutable) AddSchemaToDatabase(
+	schemaName string, schemaInfo descpb.DatabaseDescriptor_SchemaInfo,
+) {
+	if desc.Schemas == nil {
+		desc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+	}
+	desc.Schemas[schemaName] = schemaInfo
+}
+
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the
 // database itself which was added due to a bug in prior versions when dropping any user-defined schema.
 // The bug inserted an entry for the database rather than the schema being dropped. This function fixes the
