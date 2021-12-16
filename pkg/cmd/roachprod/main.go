@@ -856,8 +856,20 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var getProvidersCmd = &cobra.Command{
+	Use:   `get-providers`,
+	Short: `print providers state (active/inactive)`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		providers := roachprod.InitProviders()
+		for provider, state := range providers {
+			fmt.Printf("%s: %s\n", provider, state)
+		}
+		return nil
+	},
+}
+
 func main() {
-	roachprod.InitProviders()
+	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
@@ -897,6 +909,7 @@ func main() {
 		pprofCmd,
 		cachedHostsCmd,
 		versionCmd,
+		getProvidersCmd,
 	)
 	setBashCompletionFunction()
 

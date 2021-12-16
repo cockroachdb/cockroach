@@ -51,7 +51,7 @@ var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 //
 // If the gcloud tool is not available on the local path, the provider is a
 // stub.
-func Init() {
+func Init() error {
 	providerInstance.Projects = []string{defaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
@@ -61,9 +61,10 @@ func Init() {
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
-		return
+		return errors.New("gcloud not found")
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {

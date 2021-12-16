@@ -1184,11 +1184,34 @@ func StageURL(applicationName, version, stageOS string) ([]*url.URL, error) {
 	return urls, nil
 }
 
-// InitProviders initializes the vm.Providers.
-func InitProviders() {
-	// Initialize providers.
-	aws.Init()
-	gce.Init()
-	azure.Init()
-	local.Init(localVMStorage{})
+// InitProviders initializes providers and returns a map that indicates
+// if a provider is active or inactive.
+func InitProviders() map[string]string {
+	providersState := make(map[string]string, 4)
+
+	if err := aws.Init(); err != nil {
+		providersState[aws.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[aws.ProviderName] = "Active"
+	}
+
+	if err := gce.Init(); err != nil {
+		providersState[gce.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[gce.ProviderName] = "Active"
+	}
+
+	if err := azure.Init(); err != nil {
+		providersState[azure.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[azure.ProviderName] = "Active"
+	}
+
+	if err := local.Init(localVMStorage{}); err != nil {
+		providersState[local.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[local.ProviderName] = "Active"
+	}
+
+	return providersState
 }
