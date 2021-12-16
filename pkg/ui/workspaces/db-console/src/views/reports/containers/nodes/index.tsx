@@ -22,7 +22,7 @@ import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { LongToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import {
   getFilters,
@@ -112,9 +112,9 @@ function printTimestampValue(value: string) {
     if (!_.has(status, value)) {
       return null;
     }
-    return LongToMoment(FixLong(_.get(status, value) as Long)).format(
-      dateFormat,
-    );
+    return util
+      .LongToMoment(FixLong(_.get(status, value) as Long))
+      .format(dateFormat);
   };
 }
 
@@ -136,7 +136,7 @@ function titleTimestampValue(value: string) {
       return null;
     }
     const raw = FixLong(_.get(status, value) as Long);
-    return `${LongToMoment(raw).format(dateFormat)}\n${raw.toString()}`;
+    return `${util.LongToMoment(raw).format(dateFormat)}\n${raw.toString()}`;
   };
 }
 

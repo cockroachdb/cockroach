@@ -20,7 +20,7 @@ import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
-import { LongToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
@@ -58,13 +58,13 @@ export class NodeView extends React.Component<NodeViewProps> {
         }
 
         const deadTime = liveness.expiration.wall_time;
-        const deadMoment = LongToMoment(deadTime);
+        const deadMoment = util.LongToMoment(deadTime);
         return `dead for ${moment
           .duration(deadMoment.diff(moment()))
           .humanize()}`;
       }
       case NodeLivenessStatus.NODE_STATUS_LIVE: {
-        const startTime = LongToMoment(node.started_at);
+        const startTime = util.LongToMoment(node.started_at);
         return `up for ${moment.duration(startTime.diff(moment())).humanize()}`;
       }
       default:

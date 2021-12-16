@@ -13,7 +13,7 @@ import { cockroach } from "src/js/protos";
 import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 import { JobStatus } from "./jobStatus";
 import { isRetrying } from "src/views/jobs/jobStatusOptions";
-import { TimestampToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import Job = cockroach.server.serverpb.IJobResponse;
@@ -50,7 +50,7 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
           <>
             Next Execution Time:
             <br />
-            {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
+            {util.TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
           </>
         }
       >

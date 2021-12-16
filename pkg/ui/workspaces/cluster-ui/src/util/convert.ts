@@ -19,6 +19,10 @@ export function NanoToMilli(nano: number): number {
   return nano / 1.0e6;
 }
 
+export function MilliToSeconds(milli: number): number {
+  return milli / 1.0e3;
+}
+
 /**
  * MilliToNano converts a millisecond value into nanoseconds.
  */
@@ -108,3 +112,15 @@ export function DurationToNumber(
   }
   return duration.seconds.toNumber() + NanoToMilli(duration.nanos) * 1e-3;
 }
+
+// durationFromISO8601String function converts a string date in ISO8601 format to moment.Duration
+export const durationFromISO8601String = (value: string): moment.Duration => {
+  if (!value) {
+    return undefined;
+  }
+  value = value.toUpperCase();
+  if (!value.startsWith("P")) {
+    value = `PT${value}`;
+  }
+  return moment.duration(value);
+};
