@@ -2021,6 +2021,8 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 			_, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
 			if !errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("expected replica to be garbage collected, got %v %T", err, err)
 			}
 			return nil

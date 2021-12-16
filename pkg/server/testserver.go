@@ -1107,8 +1107,8 @@ func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, err
 	rs, _, err := kv.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
-		return roachpb.RangeDescriptor{}, errors.Errorf(
-			"%q: lookup range unexpected error: %s", key, err)
+		return roachpb.RangeDescriptor{}, errors.Wrapf(
+			err, "%q: lookup range unexpected error", key)
 	}
 	return rs[0], nil
 }
@@ -1408,6 +1408,11 @@ func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
 // CollectionFactory is part of the TestServerInterface.
 func (ts *TestServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
+}
+
+// SpanConfigKVSubscriber is part of the TestServerInterface.
+func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
+	return ts.node.storeCfg.SpanConfigSubscriber
 }
 
 type testServerFactoryImpl struct{}

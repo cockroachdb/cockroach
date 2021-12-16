@@ -248,7 +248,7 @@ var ReorderJoinsLimitClusterValue = settings.RegisterIntSetting(
 		}
 		return nil
 	},
-)
+).WithPublic()
 
 var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.require_explicit_primary_keys.enabled",
@@ -2709,6 +2709,10 @@ func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
+}
+
+func (m *sessionDataMutator) SetIndexRecommendationsEnabled(val bool) {
+	m.data.IndexRecommendationsEnabled = val
 }
 
 func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(

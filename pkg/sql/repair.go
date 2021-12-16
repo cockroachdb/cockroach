@@ -117,7 +117,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 		existingVersion = mut.GetVersion()
 		marshaled, err := protoutil.Marshal(mut.DescriptorProto())
 		if err != nil {
-			return errors.AssertionFailedf("failed to marshal existing descriptor %v: %v", mut, err)
+			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to marshal existing descriptor %v", mut)
 		}
 		existingStr = hex.EncodeToString(marshaled)
 		previousOwner = mut.GetPrivileges().Owner().Normalized()

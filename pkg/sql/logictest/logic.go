@@ -2087,8 +2087,8 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 				err = errors.New("invalid count")
 			}
 			if err != nil {
-				return errors.Errorf("%s:%d invalid repeat line: %s",
-					path, s.line+subtest.lineLineIndexIntoFile, err,
+				return errors.Wrapf(err, "%s:%d invalid repeat line",
+					path, s.line+subtest.lineLineIndexIntoFile,
 				)
 			}
 			repeat = count
@@ -2105,8 +2105,8 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 				err = errors.New("invalid duration")
 			}
 			if err != nil {
-				return errors.Errorf("%s:%d invalid sleep line: %s",
-					path, s.line+subtest.lineLineIndexIntoFile, err,
+				return errors.Wrapf(err, "%s:%d invalid sleep line",
+					path, s.line+subtest.lineLineIndexIntoFile,
 				)
 			}
 			time.Sleep(duration)

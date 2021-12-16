@@ -219,12 +219,12 @@ func compareRevisionHistories(
 ) error {
 	decodedExpected, err := decodeVersionedValues(expectedHistory, false)
 	if err != nil {
-		return errors.Newf("error while decoding revision history %s", err)
+		return errors.Wrap(err, "error while decoding revision history")
 	}
 
 	decodedDeletePreserving, err := decodeVersionedValues(deletePreservingHistory, true)
 	if err != nil {
-		return errors.Newf("error while decoding revision history for delete-preserving encoding %s", err)
+		return errors.Wrap(err, "error while decoding revision history for delete-preserving encoding")
 	}
 
 	return compareVersionedValueWrappers(decodedExpected, expectedPrefixLength, decodedDeletePreserving, deletePreservingPrefixLength)

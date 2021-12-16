@@ -91,6 +91,8 @@ func (p *planner) showVersionSetting(
 
 					localRawVal := []byte(s.Get(&st.SV))
 					if !bytes.Equal(localRawVal, kvRawVal) {
+						// NB: errors.Wrapf(nil, ...) returns nil.
+						// nolint:errwrap
 						return errors.Errorf(
 							"value differs between local setting (%v) and KV (%v); try again later (%v after %s)",
 							localRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))

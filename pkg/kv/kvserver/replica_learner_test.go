@@ -778,6 +778,8 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 				return err
 			}
 			if !strings.Contains(processErr.Error(), `descriptor changed`) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
 			}
 			formattedTrace := trace.String()
@@ -917,6 +919,8 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 			_, pErr := repl.Send(sendCtx, req)
 			err := pErr.GoError()
 			if !testutils.IsError(err, `not lease holder`) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
 			}
 			const msg = `cannot serve follower reads`

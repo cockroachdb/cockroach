@@ -688,7 +688,8 @@ func (s *Container) MergeApplicationStatementStats(
 		// Calling Iterate.*Stats() function with a visitor function that does not
 		// return error should not cause any error.
 		panic(
-			errors.AssertionFailedf("unexpected error returned when iterating through application stats: %s", err))
+			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
+		)
 	}
 
 	return discardedStats
@@ -720,7 +721,8 @@ func (s *Container) MergeApplicationTransactionStats(
 		// Calling Iterate.*Stats() function with a visitor function that does not
 		// return error should not cause any error.
 		panic(
-			errors.AssertionFailedf("unexpected error returned when iterating through application stats: %s", err))
+			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
+		)
 	}
 
 	return discardedStats

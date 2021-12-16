@@ -13,37 +13,13 @@ package fmtsafe
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // requireConstMsg records functions for which the last string
 // argument must be a constant string.
 var requireConstMsg = map[string]bool{
-	"errors.New": true,
-
-	"github.com/pkg/errors.New":  true,
-	"github.com/pkg/errors.Wrap": true,
-
-	"github.com/cockroachdb/errors.New":                        true,
-	"github.com/cockroachdb/errors.Error":                      true,
-	"github.com/cockroachdb/errors.NewWithDepth":               true,
-	"github.com/cockroachdb/errors.WithMessage":                true,
-	"github.com/cockroachdb/errors.Wrap":                       true,
-	"github.com/cockroachdb/errors.WrapWithDepth":              true,
-	"github.com/cockroachdb/errors.AssertionFailed":            true,
-	"github.com/cockroachdb/errors.HandledWithMessage":         true,
-	"github.com/cockroachdb/errors.HandledInDomainWithMessage": true,
-
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.New": true,
-
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.New":                true,
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssue":       true,
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssueDetail": true,
-
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire.newAdminShutdownErr": true,
-
-	"(*github.com/cockroachdb/cockroach/pkg/parser/lexer).Error": true,
-
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shout":     true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Event":     true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.VEvent":    true,
@@ -145,66 +121,15 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.kafkaLogAdapter).Printf": true,
 
-	// Error things.
-	"fmt.Errorf": true,
-
-	"github.com/pkg/errors.Errorf": true,
-	"github.com/pkg/errors.Wrapf":  true,
-
-	"github.com/cockroachdb/errors.Newf":                             true,
-	"github.com/cockroachdb/errors.Errorf":                           true,
-	"github.com/cockroachdb/errors.NewWithDepthf":                    true,
-	"github.com/cockroachdb/errors.WithMessagef":                     true,
-	"github.com/cockroachdb/errors.Wrapf":                            true,
-	"github.com/cockroachdb/errors.WrapWithDepthf":                   true,
-	"github.com/cockroachdb/errors.AssertionFailedf":                 true,
-	"github.com/cockroachdb/errors.AssertionFailedWithDepthf":        true,
-	"github.com/cockroachdb/errors.NewAssertionErrorWithWrappedErrf": true,
-	"github.com/cockroachdb/errors.WithSafeDetails":                  true,
-
 	"github.com/cockroachdb/redact.Sprintf":              true,
 	"github.com/cockroachdb/redact.Fprintf":              true,
 	"(github.com/cockroachdb/redact.SafePrinter).Printf": true,
 	"(github.com/cockroachdb/redact.SafeWriter).Printf":  true,
 	"(*github.com/cockroachdb/redact.printer).Printf":    true,
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb.NewErrorf": true,
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl.makeRowErr": true,
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl.wrapRowErr": true,
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors.NewSyntaxErrorf":          true,
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors.NewDependentObjectErrorf": true,
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree.newSourceNotFoundError": true,
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree.decorateTypeCheckError": true,
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder.unimplementedWithIssueDetailf": true,
-
 	"(*github.com/cockroachdb/cockroach/pkg/sql/pgwire.authPipe).Logf": true,
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.Newf":                true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.NewWithDepthf":       true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.DangerousStatementf": true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.Wrapf":               true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.WrapWithDepthf":      true,
-
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice.Newf":                                   true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice.NewWithSeverityf":                       true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase.NewProtocolViolationErrorf":           true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase.NewInvalidBinaryRepresentationErrorf": true,
-
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil.UnexpectedWithIssueErrorf": true,
-
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.Newf":                  true,
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithDepthf":         true,
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssuef":         true,
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssueDetailf":   true,
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.unimplementedInternal": true,
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate.inputErrorf": true,
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl.newErrorf": true,
+	// Error things are populated in the init() message.
 }
 
 func init() {
@@ -237,5 +162,13 @@ func init() {
 		requireConstFmt["(github.com/cockroachdb/cockroach/pkg/util/log.logger"+capch+").Shoutf"] = true
 		// log.Ops.Shout, log.Dev.Shout, etc.
 		requireConstMsg["(github.com/cockroachdb/cockroach/pkg/util/log.logger"+capch+").Shout"] = true
+	}
+
+	for errorFn, formatStringIndex := range errwrap.ErrorFnFormatStringIndex {
+		if formatStringIndex < 0 {
+			requireConstMsg[errorFn] = true
+		} else {
+			requireConstFmt[errorFn] = true
+		}
 	}
 }

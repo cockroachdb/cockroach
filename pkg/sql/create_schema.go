@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -110,8 +111,13 @@ func CreateUserDefinedSchemaDescriptor(
 		}
 	}
 
-	privs := db.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
-		db.GetID(), user, tree.Schemas, db.GetPrivileges(),
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		db.GetDefaultPrivilegeDescriptor(),
+		nil, /* schemaDefaultPrivilegeDescriptor */
+		db.GetID(),
+		user,
+		tree.Schemas,
+		db.GetPrivileges(),
 	)
 
 	if !n.AuthRole.Undefined() {

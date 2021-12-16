@@ -76,7 +76,7 @@ func PrivateKeyToPEM(key crypto.PrivateKey) (*pem.Block, error) {
 	case *ecdsa.PrivateKey:
 		bytes, err := x509.MarshalECPrivateKey(k)
 		if err != nil {
-			return nil, errors.Errorf("error marshaling ECDSA key: %s", err)
+			return nil, errors.Wrap(err, "error marshaling ECDSA key")
 		}
 		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: bytes}, nil
 	default:

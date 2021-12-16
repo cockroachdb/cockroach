@@ -54,7 +54,7 @@ func (s *Store) MergeRange(
 		// runPreApplyTriggersAfterStagingWriteBatch.
 		DestroyData: false,
 	}); err != nil {
-		return errors.Errorf("cannot remove range: %s", err)
+		return errors.Wrap(err, "cannot remove range")
 	}
 
 	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
