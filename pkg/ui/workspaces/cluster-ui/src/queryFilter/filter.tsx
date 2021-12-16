@@ -529,7 +529,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           className={checkbox.input}
         />
         <label htmlFor="full-table-scan-toggle" className={checkbox.label}>
-          Only show statements that contain queries with full table scans
+          Only show statements with full table scans
         </label>
       </div>
     );
@@ -549,7 +549,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}
             <div className={filterLabel.margin}>
-              Query fingerprint runs longer than
+              Statement fingerprint runs longer than
             </div>
             <section className={timePair.wrapper}>
               <Input
