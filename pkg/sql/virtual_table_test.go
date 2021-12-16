@@ -30,7 +30,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	t.Run("test cleanup", func(t *testing.T) {
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -53,7 +53,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 
 	t.Run("test worker error", func(t *testing.T) {
 		// Test that if the worker returns an error we catch it.
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -75,7 +75,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 
 	t.Run("test no next", func(t *testing.T) {
 		// Test we don't leak anything if we call cleanup before next.
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return nil
 		}
 		_, cleanup, setupError := setupGenerator(ctx, worker, stopper)
@@ -86,7 +86,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 	t.Run("test context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// Test cancellation before asking for any rows.
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -138,7 +138,7 @@ func BenchmarkVirtualTableGenerators(b *testing.B) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	worker := func(pusher rowPusher) error {
+	worker := func(ctx context.Context, pusher rowPusher) error {
 		for {
 			if err := pusher.pushRow(tree.NewDInt(tree.DInt(1))); err != nil {
 				return err

@@ -359,7 +359,7 @@ CREATE TABLE crdb_internal.tables (
 )`,
 	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 			if err != nil {
 				return err
@@ -2536,7 +2536,7 @@ CREATE TABLE crdb_internal.table_columns (
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 8)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
@@ -2597,7 +2597,7 @@ CREATE TABLE crdb_internal.table_indexes (
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
 		row := make(tree.Datums, 7)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
@@ -4012,7 +4012,7 @@ CREATE TABLE crdb_internal.partitions (
 		if dbContext != nil {
 			dbName = dbContext.GetName()
 		}
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
@@ -4964,7 +4964,7 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 		indexStats := idxusage.NewLocalIndexUsageStatsFromExistingStats(&idxusage.Config{}, stats.Statistics)
 
 		row := make(tree.Datums, 4 /* number of columns for this virtual table */)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := table.GetID()
@@ -5046,7 +5046,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 		}, memSQLStats)
 
 		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
@@ -5194,7 +5194,7 @@ CREATE TABLE crdb_internal.transaction_statistics (
 		}, memSQLStats)
 
 		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
