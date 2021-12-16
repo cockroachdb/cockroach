@@ -67,7 +67,7 @@ type Registry struct {
 		requestFingerprints map[RequestID]Request
 		// ids of unconditional requests that this node is in the process of
 		// servicing.
-		ongoing map[RequestID]struct{}
+		ongoing map[RequestID]Request
 
 		// epoch is observed before reading system.statement_diagnostics_requests, and then
 		// checked again before loading the tables contents. If the value changed in
@@ -83,6 +83,10 @@ type Registry struct {
 	// request has been added. The gossip callback will not block sending on this
 	// channel.
 	gossipUpdateChan chan RequestID
+	// gossipCancelChan is used to notify the polling loop that a diagnostics
+	// request has been canceled. The gossip callback will not block sending on
+	// this channel.
+	gossipCancelChan chan RequestID
 }
 
 // Request describes a statement diagnostics request along with some conditional
@@ -110,6 +114,7 @@ func NewRegistry(
 		db:               db,
 		gossip:           gw,
 		gossipUpdateChan: make(chan RequestID, 1),
+		gossipCancelChan: make(chan RequestID, 1),
 		st:               st,
 	}
 	// Some tests pass a nil gossip, and gossip is not available on SQL tenant
@@ -173,6 +178,13 @@ func (r *Registry) poll(ctx context.Context) {
 				continue // request already exists, don't do anything
 			}
 			// Poll the data.
+		case reqID := <-r.gossipCancelChan:
+			if !r.cancelRequest(reqID) {
+				continue // request already didn't exist, don't do anything
+			}
+			// Poll the data.
+			// TODO(yuzefovich): it seems ok to just delete the pending request
+			// without having to poll the data from scratch.
 		case <-timer.C:
 			timer.Read = true
 		case <-ctx.Done():
@@ -239,6 +251,22 @@ func (r *Registry) findRequestLocked(requestID RequestID) bool {
 	}
 	_, ok = r.mu.ongoing[requestID]
 	return ok
+}
+
+// cancelRequest removes the request with the given RequestID from the Registry
+// if present. It returns whether such a request was found.
+func (r *Registry) cancelRequest(requestID RequestID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.mu.requestFingerprints[requestID]; ok {
+		delete(r.mu.requestFingerprints, requestID)
+		return true
+	}
+	if _, ok := r.mu.ongoing[requestID]; ok {
+		delete(r.mu.ongoing, requestID)
+		return true
+	}
+	return false
 }
 
 // InsertRequest is part of the StmtDiagnosticsRequester interface.
@@ -351,6 +379,55 @@ func (r *Registry) insertRequestInternal(
 	return reqID, nil
 }
 
+// CancelRequest is part of the server.StmtDiagnosticsRequester interface.
+func (r *Registry) CancelRequest(ctx context.Context, fprint string) error {
+	g, err := r.gossip.OptionalErr(48274)
+	if err != nil {
+		return err
+	}
+
+	if !r.isMinExecutionLatencySupported(ctx) {
+		// If conditional diagnostics are not supported for this cluster yet,
+		// then we cannot cancel the request.
+		return errors.New(
+			"statement diagnostics can only be canceled after 22.1 version migrations have completed",
+		)
+	}
+
+	row, err := r.ie.QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: security.RootUserName(),
+		},
+		// Rather than deleting the row from the table, we choose to mark the
+		// request as "expired" by setting `expires_at` into the past. This will
+		// allow any queries that are currently being traced for this request to
+		// write their collected bundles.
+		fmt.Sprintf("UPDATE system.statement_diagnostics_requests SET expires_at = '1970-01-01' "+
+			"WHERE completed = false AND statement_fingerprint = '%s' "+
+			"AND (expires_at IS NULL OR expires_at > now()) RETURNING id;", fprint),
+	)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		// There is no pending diagnostics request with the given fingerprint,
+		// so there is nothing to cancel.
+		return nil
+	}
+	reqID := RequestID(*row[0].(*tree.DInt))
+
+	r.cancelRequest(reqID)
+
+	// Notify all the other nodes that they have to poll.
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, uint64(reqID))
+	if err := g.AddInfo(gossip.KeyGossipStatementDiagnosticsRequestCancellation, buf, 0 /* ttl */); err != nil {
+		log.Warningf(ctx, "error notifying of diagnostics request: %s", err)
+	}
+
+	return nil
+}
+
 // IsExecLatencyConditionMet returns true if the completed request's execution
 // latency satisfies the request's condition. If false is returned, it inlines
 // the logic of RemoveOngoing.
@@ -420,9 +497,10 @@ func (r *Registry) ShouldCollectDiagnostics(
 
 	if !req.isConditional() {
 		if r.mu.ongoing == nil {
-			r.mu.ongoing = make(map[RequestID]struct{})
+			r.mu.ongoing = make(map[RequestID]Request)
 		}
-		r.mu.ongoing[reqID] = struct{}{}
+		r.mu.ongoing[reqID] = req
+		delete(r.mu.requestFingerprints, reqID)
 	}
 	return true, reqID, req
 }
@@ -631,14 +709,22 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 // gossipNotification is called in response to a gossip update informing us that
 // we need to poll.
 func (r *Registry) gossipNotification(s string, value roachpb.Value) {
-	if s != gossip.KeyGossipStatementDiagnosticsRequest {
-		// We don't expect any other notifications. Perhaps in a future version we
-		// added other keys with the same prefix.
-		return
-	}
-	select {
-	case r.gossipUpdateChan <- RequestID(binary.LittleEndian.Uint64(value.RawBytes)):
+	switch s {
+	case gossip.KeyGossipStatementDiagnosticsRequest:
+		select {
+		case r.gossipUpdateChan <- RequestID(binary.LittleEndian.Uint64(value.RawBytes)):
+		default:
+			// Don't pile up on these requests and don't block gossip.
+		}
+	case gossip.KeyGossipStatementDiagnosticsRequestCancellation:
+		select {
+		case r.gossipCancelChan <- RequestID(binary.LittleEndian.Uint64(value.RawBytes)):
+		default:
+			// Don't pile up on these requests and don't block gossip.
+		}
 	default:
-		// Don't pile up on these requests and don't block gossip.
+		// We don't expect any other notifications. Perhaps in a future version
+		// we added other keys with the same prefix.
+		return
 	}
 }
