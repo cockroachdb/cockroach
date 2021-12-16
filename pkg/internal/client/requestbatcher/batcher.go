@@ -92,6 +92,8 @@ import (
 
 // Config contains the dependencies and configuration for a Batcher.
 type Config struct {
+	// AmbientCtx for the batcher, used for logging, tracing etc.
+	AmbientCtx log.AmbientContext
 
 	// Name of the batcher, used for logging, timeout errors, and the stopper.
 	Name string
@@ -197,7 +199,8 @@ func New(cfg Config) *RequestBatcher {
 		sendDoneChan: make(chan struct{}),
 	}
 	b.sendBatchOpName = b.cfg.Name + ".sendBatch"
-	if err := cfg.Stopper.RunAsyncTask(context.Background(), b.cfg.Name, b.run); err != nil {
+	bgCtx := cfg.AmbientCtx.AnnotateCtx(context.Background())
+	if err := cfg.Stopper.RunAsyncTask(bgCtx, b.cfg.Name, b.run); err != nil {
 		panic(err)
 	}
 	return b
