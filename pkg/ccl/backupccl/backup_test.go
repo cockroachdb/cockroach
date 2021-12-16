@@ -8839,3 +8839,46 @@ DROP INDEX foo@bar;
 
 	sqlRunner.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://0/foo' WITH revision_history`)
 }
+
+// TestRestoreSchemaDescriptorsRollBack is a regression test that ensures that a
+// failed restore properly cleans up the database, schema and the database
+// descriptors Schemas slice. Prior to the fix, the order in which we performed
+// the cleanup would leave a dangling entry in the system.descriptor table for
+// the cleaned up database. This caused the subsequent backup to fail when
+// resolving the targets to backup with a "duplicate database" error.
+func TestRestoreSchemaDescriptorsRollBack(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+
+	for _, server := range tc.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.beforePublishingDescriptors = func() error {
+					return errors.New("boom")
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB.Exec(t, `
+CREATE DATABASE db;
+CREATE SCHEMA db.s;
+`)
+
+	sqlDB.Exec(t, `BACKUP DATABASE db TO 'nodelocal://0/test/1'`)
+	sqlDB.Exec(t, `DROP DATABASE db`)
+	sqlDB.ExpectErr(t, "boom", `RESTORE DATABASE db FROM 'nodelocal://0/test/1'`)
+
+	sqlDB.Exec(t, `
+CREATE DATABASE db;
+CREATE SCHEMA db.s;
+`)
+
+	sqlDB.Exec(t, `BACKUP DATABASE db TO 'nodelocal://0/test/2'`)
+}

@@ -2287,7 +2287,43 @@ func (r *restoreResumer) dropDescriptors(
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
+	// For each database that had a child schema deleted (regardless of whether
+	// the db was created in the restore job), if it wasn't deleted just now,
+	// delete the now-deleted child schema from its schema map.
+	//
+	// This cleanup must be done prior to dropping the database descriptors in the
+	// loop below so that we do not accidentally `b.Put` the descriptor with the
+	// modified schema slice after we have issued a `b.Del` to drop it.
+	for dbID, schemas := range dbsWithDeletedSchemas {
+		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
+		desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
+		if err != nil {
+			return err
+		}
+		db := desc.(*dbdesc.Mutable)
+		for _, sc := range schemas {
+			if schemaInfo, ok := db.Schemas[sc.GetName()]; !ok {
+				log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
+					sc.GetName(), dbID)
+			} else if schemaInfo.ID != sc.GetID() {
+				log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
+					schemaInfo.ID, sc.GetName(), dbID, sc.GetID())
+			} else {
+				delete(db.Schemas, sc.GetName())
+			}
+		}
+		if err := descsCol.WriteDescToBatch(
+			ctx, false /* kvTrace */, db, b,
+		); err != nil {
+			return err
+		}
+	}
+
 	// Delete the database descriptors.
+	//
+	// This should be the last step in mutating the database descriptors to ensure
+	// that no batch requests are queued after the `b.Del` to delete the dropped
+	// database descriptor.
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
 
@@ -2320,34 +2356,6 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(nameKey)
 		descsCol.AddDeletedDescriptor(db)
 		deletedDBs[db.GetID()] = struct{}{}
-	}
-
-	// For each database that had a child schema deleted (regardless of whether
-	// the db was created in the restore job), if it wasn't deleted just now,
-	// delete the now-deleted child schema from its schema map.
-	for dbID, schemas := range dbsWithDeletedSchemas {
-		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
-		if err != nil {
-			return err
-		}
-		db := desc.(*dbdesc.Mutable)
-		for _, sc := range schemas {
-			if schemaInfo, ok := db.Schemas[sc.GetName()]; !ok {
-				log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
-					sc.GetName(), dbID)
-			} else if schemaInfo.ID != sc.GetID() {
-				log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
-					schemaInfo.ID, sc.GetName(), dbID, sc.GetID())
-			} else {
-				delete(db.Schemas, sc.GetName())
-			}
-		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, db, b,
-		); err != nil {
-			return err
-		}
 	}
 
 	if err := txn.Run(ctx, b); err != nil {
