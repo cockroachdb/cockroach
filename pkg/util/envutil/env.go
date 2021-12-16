@@ -81,6 +81,17 @@ func getEnv(varName string, depth int) (string, bool) {
 	return v, found
 }
 
+// GetRaw reads a raw env var directly from the environment, bypassing the cache
+// and validation that only one caller exists, and thus its access is not noted
+// by the cache for inclusion of used vars. Bypassing the cache can be important
+// for reading variable that might be mutated for testing, but this should only
+// be used for such testing-only variables, as it also bypasses the reporting on
+// what variables may be influencing behavior.
+func GetRaw(name string) (string, bool) {
+	checkVarName(name)
+	return os.LookupEnv(name)
+}
+
 // ClearEnvCache clears saved environment values so that
 // a new read access the environment again. (Used for testing)
 func ClearEnvCache() {

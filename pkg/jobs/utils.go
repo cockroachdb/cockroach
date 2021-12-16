@@ -12,11 +12,13 @@ package jobs
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -72,4 +74,29 @@ ORDER BY created`
 		}
 	}
 	return false /* exists */, err
+}
+
+const pausePointsEnvVar = "COCKROACH_DEBUG_JOB_PAUSEPOINTS"
+
+// TestingCheckPausepoint returns a PauseRequestError if the named pausepoint is
+// in the comma-separated list in the COCKROACH_DEBUG_JOB_PAUSEPOINTS env var.
+//
+// This can be called in the middle of some job implementation to effectively
+// define a 'breakpoint' which, when reached, will cause the job to pause. This
+// can be very useful in allowing inspection of the persisted job state at that
+// point, without worrying about catching it before the job progresses further
+// or completes. Checking an env var, instead of a plumbed testing knob, allows
+// using this even outside test binaries, such as with demo or even production
+// clusters.
+func TestingCheckPausepoint(name string) error {
+	s, ok := envutil.GetRaw(pausePointsEnvVar)
+	if !ok {
+		return nil
+	}
+	for _, point := range strings.Split(s, ",") {
+		if point == name {
+			return PauseRequestError("pause point hit: " + name)
+		}
+	}
+	return nil
 }
