@@ -3230,39 +3230,35 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 	sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 
 	testCases := []struct {
-		existing []roachpb.StoreID
+		existing roachpb.StoreID
 		excluded []roachpb.StoreID
 		expected []roachpb.StoreID
 	}{
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2},
-			[]roachpb.StoreID{3, 4},
+			existing: 1,
+			excluded: []roachpb.StoreID{2},
+			expected: []roachpb.StoreID{3, 4},
 		},
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2, 3},
-			[]roachpb.StoreID{4},
+			existing: 1,
+			excluded: []roachpb.StoreID{2, 3},
+			expected: []roachpb.StoreID{4},
 		},
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2, 3, 4},
-			[]roachpb.StoreID{},
+			existing: 1,
+			excluded: []roachpb.StoreID{2, 3, 4},
+			expected: []roachpb.StoreID{},
 		},
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2, 4},
-			[]roachpb.StoreID{3},
+			existing: 1,
+			excluded: []roachpb.StoreID{2, 4},
+			expected: []roachpb.StoreID{3},
 		},
 	}
 
 	for testIdx, tc := range testCases {
-		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
-		for i, storeID := range tc.existing {
-			existingRepls[i] = roachpb.ReplicaDescriptor{
-				NodeID:  roachpb.NodeID(storeID),
-				StoreID: storeID,
-			}
+		existingRepls := []roachpb.ReplicaDescriptor{
+			{NodeID: roachpb.NodeID(tc.existing), StoreID: tc.existing},
 		}
 		// No constraints.
 		conf := roachpb.SpanConfig{}
@@ -3319,11 +3315,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 					candidateStores[i] = cand.store.StoreID
 				}
 				require.ElementsMatch(t, tc.expected, candidateStores)
-				existingStores := make([]roachpb.StoreID, len(rebalanceOpts[0].existingCandidates))
-				for i, cand := range rebalanceOpts[0].existingCandidates {
-					existingStores[i] = cand.store.StoreID
-				}
-				require.ElementsMatch(t, tc.existing, existingStores)
+				require.Equal(t, tc.existing, rebalanceOpts[0].existing.store.StoreID)
 			} else {
 				require.Len(t, rebalanceOpts, 0)
 			}
@@ -4170,7 +4162,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 	// stores would be best to remove if we had to remove one purely on the basis
 	// of constraint-matching and locality diversity.
 	type rebalanceStoreIDs struct {
-		existing   []roachpb.StoreID
+		existing   roachpb.StoreID
 		candidates []roachpb.StoreID
 	}
 	testCases := []struct {
@@ -4203,11 +4195,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 			},
@@ -4218,11 +4210,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{5, 6},
 				},
 			},
@@ -4233,7 +4225,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{5, 6},
 				},
 			},
@@ -4244,15 +4236,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 			},
@@ -4263,11 +4255,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 7, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{8},
+					existing:   8,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 			},
@@ -4284,11 +4276,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{1},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1},
 				},
 			},
@@ -4299,15 +4291,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4318,7 +4310,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{2},
 				},
 			},
@@ -4329,11 +4321,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4344,11 +4336,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{3, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 			},
@@ -4359,11 +4351,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{2},
 				},
 			},
@@ -4380,11 +4372,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{2},
 				},
 			},
@@ -4395,15 +4387,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{3, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 			},
@@ -4426,11 +4418,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4441,15 +4433,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4460,11 +4452,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 			},
@@ -4475,15 +4467,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{2, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{4, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4494,15 +4486,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4525,11 +4517,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4540,15 +4532,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4559,11 +4551,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 			},
@@ -4574,15 +4566,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{2, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{4, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4593,15 +4585,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4624,7 +4616,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3},
 				},
 			},
@@ -4635,11 +4627,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3, 4, 8},
 				},
 			},
@@ -4650,7 +4642,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4661,7 +4653,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4672,7 +4664,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4683,11 +4675,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1},
 				},
 			},
@@ -4698,15 +4690,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{5, 6, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 			},
@@ -4717,15 +4709,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{6, 7, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 				{
-					existing:   []roachpb.StoreID{8},
+					existing:   8,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 			},
@@ -4736,11 +4728,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 6, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3},
 				},
 				{
-					existing:   []roachpb.StoreID{8},
+					existing:   8,
 					candidates: []roachpb.StoreID{3},
 				},
 			},
@@ -4751,11 +4743,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4, 8},
 				},
 			},
@@ -4788,11 +4780,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 			},
@@ -4804,11 +4796,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 			},
@@ -4820,15 +4812,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4840,15 +4832,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{3, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 			},
@@ -4860,11 +4852,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4876,11 +4868,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4892,15 +4884,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{5, 6, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 			},
@@ -4949,10 +4941,10 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			match = false
 		} else {
 			sort.Slice(results, func(i, j int) bool {
-				return results[i].existingCandidates[0].store.StoreID < results[j].existingCandidates[0].store.StoreID
+				return results[i].existing.store.StoreID < results[j].existing.store.StoreID
 			})
 			for i := range tc.expected {
-				if !expectedStoreIDsMatch(tc.expected[i].existing, results[i].existingCandidates) ||
+				if tc.expected[i].existing != results[i].existing.store.StoreID ||
 					!expectedStoreIDsMatch(tc.expected[i].candidates, results[i].candidates) {
 					match = false
 					break
