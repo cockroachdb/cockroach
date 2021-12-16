@@ -67,7 +67,9 @@ type virtualTableGeneratorResponse struct {
 // * cleanup: Performs all cleanup. This function must be called exactly once
 //   to ensure that resources are cleaned up.
 func setupGenerator(
-	ctx context.Context, worker func(pusher rowPusher) error, stopper *stop.Stopper,
+	ctx context.Context,
+	worker func(ctx context.Context, pusher rowPusher) error,
+	stopper *stop.Stopper,
 ) (next virtualTableGenerator, cleanup cleanupFunc, setupError error) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -105,31 +107,36 @@ func setupGenerator(
 	}
 
 	wg.Add(1)
-	if setupError = stopper.RunAsyncTask(ctx, "sql.rowPusher: send rows", func(ctx context.Context) {
-		defer wg.Done()
-		// We wait until a call to next before starting the worker. This prevents
-		// concurrent transaction usage during the startup phase. We also have to
-		// wait on done here if cleanup is called before any calls to next() to
-		// avoid leaking this goroutine. Lastly, we check if the context has
-		// been canceled before any rows are even requested.
-		select {
-		case <-ctx.Done():
-			return
-		case <-comm:
-		}
-		err := worker(funcRowPusher(addRow))
-		// If the query was canceled, next() will already return a
-		// QueryCanceledError, so just exit here.
-		if errors.Is(err, cancelchecker.QueryCanceledError) {
-			return
-		}
-		// Notify that we are done sending rows.
-		select {
-		case <-ctx.Done():
-			return
-		case comm <- virtualTableGeneratorResponse{err: err}:
-		}
-	}); setupError != nil {
+	if setupError = stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName: "sql.rowPusher: send rows",
+			SpanOpt:  stop.ChildSpan,
+		},
+		func(ctx context.Context) {
+			defer wg.Done()
+			// We wait until a call to next before starting the worker. This prevents
+			// concurrent transaction usage during the startup phase. We also have to
+			// wait on done here if cleanup is called before any calls to next() to
+			// avoid leaking this goroutine. Lastly, we check if the context has
+			// been canceled before any rows are even requested.
+			select {
+			case <-ctx.Done():
+				return
+			case <-comm:
+			}
+			err := worker(ctx, funcRowPusher(addRow))
+			// If the query was canceled, next() will already return a
+			// QueryCanceledError, so just exit here.
+			if errors.Is(err, cancelchecker.QueryCanceledError) {
+				return
+			}
+			// Notify that we are done sending rows.
+			select {
+			case <-ctx.Done():
+				return
+			case comm <- virtualTableGeneratorResponse{err: err}:
+			}
+		}); setupError != nil {
 		// The presence of an error means the goroutine never started,
 		// thus wg.Done() is never called, which can result in
 		// cleanup() being blocked indefinitely on wg.Wait(). We call
@@ -299,7 +306,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		idxConstraint.InitSingleSpan(&v.run.keyCtx, &span)
 
 		// Create the generation function for the index constraint.
-		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(params.ctx,
+		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(
 			params.p, v.db, v.index,
 			v.run.indexKeyDatums,
 			catalog.ColumnIDToOrdinalMap(v.table.PublicColumns()),
@@ -310,7 +317,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		v.run.row = append(v.run.row[:0], inputRow...)
 		// Finally, we're ready to do the lookup. This invocation will push all of
 		// the looked-up rows into v.run.rows.
-		if err := genFunc(v); err != nil {
+		if err := genFunc(params.ctx, v); err != nil {
 			return false, err
 		}
 		if v.run.rows.Len() == 0 && v.joinType == descpb.LeftOuterJoin {
