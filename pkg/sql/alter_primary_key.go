@@ -386,6 +386,20 @@ func (p *planner) AlterPrimaryKey(
 				}
 			}
 		}
+
+		if !idx.Primary() {
+			newPrimaryKeyColIDs := catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...)
+			for _, colID := range idx.CollectKeySuffixColumnIDs().Ordered() {
+				col, err := tableDesc.FindColumnWithID(colID)
+				if err != nil {
+					return false, err
+				}
+				if col.IsVirtual() && !newPrimaryKeyColIDs.Contains(colID) {
+					return true, err
+				}
+			}
+		}
+
 		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
 	}
 	var indexesToRewrite []catalog.Index

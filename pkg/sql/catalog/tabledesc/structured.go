@@ -661,9 +661,9 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	if desc.ID == 0 {
 		desc.ID = keys.MinUserDescID
 	}
-	err := catalog.ValidateSelf(desc)
 	desc.ID = savedID
-	return err
+
+	return nil
 }
 
 func (desc *Mutable) ensurePrimaryKey() error {

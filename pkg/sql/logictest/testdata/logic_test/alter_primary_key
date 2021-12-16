@@ -495,7 +495,7 @@ BEGIN
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
-statement error pq: relation "t" \([0-9]+\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change
+statement error pgcode XX000 ...
 CREATE INDEX ON t (y)
 
 statement ok
@@ -511,7 +511,7 @@ BEGIN
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
-statement error pq: relation "t" \([0-9]+\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change
+statement error pgcode XX000 ...
 ALTER TABLE t ADD COLUMN z INT
 
 statement ok
@@ -1207,3 +1207,169 @@ query II
 SELECT * FROM t71553@t71553_b_key
 ----
 1  1
+
+subtest virtual_primary_index
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  k INT NOT NULL AS (a+b) VIRTUAL,
+  PRIMARY KEY (a),
+  INDEX t_idx_b_k (b, k),
+  FAMILY "primary" (a, b)
+);
+
+statement ok
+INSERT INTO t VALUES (1,2), (3,4);
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey;
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k;
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NOT NULL,
+    k INT8 NOT NULL AS (a + b) VIRTUAL,
+    CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+    UNIQUE INDEX t_a_key (a ASC),
+    INDEX t_idx_b_k (b ASC, k ASC),
+    FAMILY "primary" (a, b)
+)
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_a_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NOT NULL,
+    k INT8 NOT NULL AS (a + b) VIRTUAL,
+    CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+    UNIQUE INDEX t_k_key (k ASC),
+    UNIQUE INDEX t_a_key (a ASC),
+    INDEX t_idx_b_k (b ASC, k ASC),
+    FAMILY "primary" (a, b)
+)
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_a_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_k_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NOT NULL,
+    k INT8 NOT NULL AS (a + b) VIRTUAL,
+    CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+    UNIQUE INDEX t_b_k_key (b ASC, k ASC),
+    UNIQUE INDEX t_k_key (k ASC),
+    UNIQUE INDEX t_a_key (a ASC),
+    INDEX t_idx_b_k (b ASC, k ASC),
+    FAMILY "primary" (a, b)
+)
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_a_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_k_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_b_k_key
+----
+a  b  k
+1  2  3
+3  4  7
