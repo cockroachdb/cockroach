@@ -18,13 +18,12 @@ import * as protos from "src/js/protos";
 import { INodeStatus } from "src/util/proto";
 import { nodeIDAttr } from "src/util/constants";
 import { LogEntriesResponseMessage } from "src/util/api";
-import { LongToMoment } from "src/util/convert";
 import { AdminUIState } from "src/redux/state";
 import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { getDisplayName } from "src/redux/nodes";
-import { Loading, SortedTable } from "@cockroachlabs/cluster-ui";
+import { Loading, SortedTable, util } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 import "./logs.styl";
 
@@ -56,7 +55,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         title: "Time",
         name: "time",
         cell: (logEntry: LogEntries) =>
-          LongToMoment(logEntry.time).format("YYYY-MM-DD HH:mm:ss"),
+          util.LongToMoment(logEntry.time).format("YYYY-MM-DD HH:mm:ss"),
       },
       {
         title: "Severity",

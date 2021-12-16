@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -81,18 +83,31 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 				// Keep test cluster in sync.
 				defer execStmts()
 
+				// Wait for any jobs due to previous schema changes to finish.
+				sctestdeps.WaitForNoRunningSchemaChanges(t, tdb)
 				var deps *sctestdeps.TestState
-				testingKnobs := &scrun.TestingKnobs{
-					BeforeStage: func(p scplan.Plan, stageIdx int) error {
-						deps.LogSideEffectf("## %s", p.StagesForCurrentPhase()[stageIdx].String())
-						return nil
-					},
-				}
 				// Create test dependencies and execute the schema changer.
 				// The schema changer test dependencies do not hold any reference to the
 				// test cluster, here the SQLRunner is only used to populate the mocked
 				// catalog state.
-				deps = sctestdeps.NewTestDependencies(ctx, t, tdb, testingKnobs, []string{stmt.SQL})
+				deps = sctestdeps.NewTestDependencies(
+					sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)),
+					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb)),
+					sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
+					sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
+						sd *sessiondata.SessionData,
+					) {
+						// For setting up a builder inside tests we will ensure that the new schema
+						// changer will allow non-fully implemented operations.
+						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+					})),
+					sctestdeps.WithTestingKnobs(&scrun.TestingKnobs{
+						BeforeStage: func(p scplan.Plan, stageIdx int) error {
+							deps.LogSideEffectf("## %s", p.StagesForCurrentPhase()[stageIdx].String())
+							return nil
+						},
+					}),
+					sctestdeps.WithStatements(stmt.SQL))
 				execStatementWithTestDeps(ctx, t, deps, stmt)
 				return deps.SideEffectLog()
 

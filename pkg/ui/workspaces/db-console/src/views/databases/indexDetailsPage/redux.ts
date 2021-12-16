@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { IndexDetailsPageData } from "@cockroachlabs/cluster-ui";
+import { IndexDetailsPageData, util } from "@cockroachlabs/cluster-ui";
 import { AdminUIState } from "src/redux/state";
 import { RouteComponentProps } from "react-router";
 import { getMatchParamByName } from "src/util/query";
@@ -23,7 +23,6 @@ import {
   refreshIndexStats,
   refreshNodes,
 } from "src/redux/apiReducers";
-import { TimestampToMoment } from "src/util/convert";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { longToInt } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
@@ -52,8 +51,8 @@ export const mapStateToProps = createSelector(
         createStatement: details?.create_statement || "",
         totalReads:
           longToInt(details?.statistics?.stats?.total_read_count) || 0,
-        lastRead: TimestampToMoment(details?.statistics?.stats?.last_read),
-        lastReset: TimestampToMoment(stats?.data?.last_reset),
+        lastRead: util.TimestampToMoment(details?.statistics?.stats?.last_read),
+        lastReset: util.TimestampToMoment(stats?.data?.last_reset),
       },
     };
   },

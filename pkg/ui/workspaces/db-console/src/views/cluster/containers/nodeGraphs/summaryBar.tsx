@@ -15,7 +15,7 @@ import * as d3 from "d3";
 
 import { NodesSummary } from "src/redux/nodes";
 import { Bytes } from "src/util/format";
-import { NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 
 import { EventBox } from "src/views/cluster/containers/events";
 import { Metric } from "src/views/shared/components/metricQuery";
@@ -102,7 +102,7 @@ const ClusterNodeTotals = connect(
 const formatOnePlace = d3.format(".1f");
 const formatPercentage = d3.format(".2%");
 function formatNanosAsMillis(n: number) {
-  return formatOnePlace(NanoToMilli(n)) + " ms";
+  return formatOnePlace(util.NanoToMilli(n)) + " ms";
 }
 
 /**

@@ -11,7 +11,7 @@
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 import _ from "lodash";
-import { DatabaseTablePageData } from "@cockroachlabs/cluster-ui";
+import { DatabaseTablePageData, util } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
@@ -30,7 +30,6 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
-import { TimestampToMoment } from "src/util/convert";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 
 const {
@@ -63,11 +62,11 @@ export const mapStateToProps = createSelector(
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
     const indexStats = indexUsageStats[generateTableID(database, table)];
-    const lastReset = TimestampToMoment(indexStats?.data?.last_reset);
+    const lastReset = util.TimestampToMoment(indexStats?.data?.last_reset);
     const indexStatsData = _.flatMap(
       indexStats?.data?.statistics,
       indexStat => {
-        const lastRead = TimestampToMoment(
+        const lastRead = util.TimestampToMoment(
           indexStat.statistics?.stats?.last_read,
         );
         let lastUsed, lastUsedType;

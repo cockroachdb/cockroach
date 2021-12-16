@@ -15,8 +15,7 @@ import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
-import { Loading } from "@cockroachlabs/cluster-ui";
-import { TimestampToMoment } from "src/util/convert";
+import { Loading, util } from "@cockroachlabs/cluster-ui";
 
 interface LogTableProps {
   rangeID: Long;
@@ -102,7 +101,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     // Sort by descending timestamp.
     const events = _.orderBy(
       log && log.data && log.data.events,
-      event => TimestampToMoment(event.event.timestamp).valueOf(),
+      event => util.TimestampToMoment(event.event.timestamp).valueOf(),
       "desc",
     );
 

@@ -10,7 +10,6 @@
 
 import React, { MouseEvent } from "react";
 import { cockroach } from "src/js/protos";
-import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { JobStatusCell } from "src/views/jobs/jobStatusCell";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -23,6 +22,7 @@ import {
   Pagination,
   ResultsPerPageLabel,
   SortSetting,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import {
   jobsCancel,
@@ -140,8 +140,9 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         {"Creation Time (UTC)"}
       </Tooltip>
     ),
-    cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
-    sort: job => TimestampToMoment(job?.created).valueOf(),
+    cell: job =>
+      util.TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
+    sort: job => util.TimestampToMoment(job?.created).valueOf(),
   },
   {
     name: "lastExecutionTime",
@@ -154,8 +155,9 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         {"Last Execution Time (UTC)"}
       </Tooltip>
     ),
-    cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
-    sort: job => TimestampToMoment(job?.last_run).valueOf(),
+    cell: job =>
+      util.TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
+    sort: job => util.TimestampToMoment(job?.last_run).valueOf(),
   },
   {
     name: "executionCount",

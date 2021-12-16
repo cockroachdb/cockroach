@@ -24,7 +24,6 @@ import {
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
-import { LongToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
@@ -33,7 +32,7 @@ import {
   SummaryLabel,
   SummaryValue,
 } from "src/views/shared/components/summaryBar";
-import { Button } from "@cockroachlabs/cluster-ui";
+import { Button, util } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import "./nodeOverview.styl";
 import {
@@ -287,7 +286,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               />
               <SummaryValue
                 title="Last Update"
-                value={LongToMoment(node.updated_at).format(DATE_FORMAT)}
+                value={util.LongToMoment(node.updated_at).format(DATE_FORMAT)}
               />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue

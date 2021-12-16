@@ -20,7 +20,6 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
 import { appAttr } from "src/util/constants";
-import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
@@ -223,7 +222,7 @@ export const selectLastReset = createSelector(
     if (!state.data) {
       return "unknown";
     }
-    return PrintTime(TimestampToMoment(state.data.last_reset));
+    return PrintTime(util.TimestampToMoment(state.data.last_reset));
   },
 );
 

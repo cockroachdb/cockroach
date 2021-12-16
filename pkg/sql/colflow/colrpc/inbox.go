@@ -78,6 +78,9 @@ type Inbox struct {
 	// goroutine should exit while waiting for a stream.
 	timeoutCh chan error
 
+	// flowCtxDone is the Done() channel of the flow context of the Inbox host.
+	flowCtxDone <-chan struct{}
+
 	// errCh is the channel that RunWithStream will block on, waiting until the
 	// Inbox does not need a stream any more. An error will only be sent on this
 	// channel in the event of a cancellation or a non-io.EOF error originating
@@ -155,16 +158,33 @@ func NewInbox(
 	return i, nil
 }
 
+// NewInboxWithFlowCtxDone creates a new Inbox when the done channel of the flow
+// context is available.
+func NewInboxWithFlowCtxDone(
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
+) (*Inbox, error) {
+	i, err := NewInbox(allocator, typs, streamID)
+	if err != nil {
+		return nil, err
+	}
+	i.flowCtxDone = flowCtxDone
+	return i, nil
+}
+
 // NewInboxWithAdmissionControl creates a new Inbox that does admission
 // control on responses received from DistSQL.
 func NewInboxWithAdmissionControl(
 	allocator *colmem.Allocator,
 	typs []*types.T,
 	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
 	admissionQ *admission.WorkQueue,
 	admissionInfo admission.WorkInfo,
 ) (*Inbox, error) {
-	i, err := NewInbox(allocator, typs, streamID)
+	i, err := NewInboxWithFlowCtxDone(allocator, typs, streamID, flowCtxDone)
 	if err != nil {
 		return nil, err
 	}
@@ -185,15 +205,22 @@ func (i *Inbox) close() {
 	}
 }
 
+// checkFlowCtxCancellation returns an error if the flow context has already
+// been canceled.
+func (i *Inbox) checkFlowCtxCancellation() error {
+	select {
+	case <-i.flowCtxDone:
+		return cancelchecker.QueryCanceledError
+	default:
+		return nil
+	}
+}
+
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
-// canceled, a caller of Next cancels the context passed into Init, or any error
-// is encountered on the stream by the Next goroutine.
-//
-// flowCtxDone is listened on only during the setup of the handler, before the
-// readerCtx is received. This is needed in case Inbox.Init is never called.
-func (i *Inbox) RunWithStream(
-	streamCtx context.Context, stream flowStreamServer, flowCtxDone <-chan struct{},
-) error {
+// canceled, the Inbox's host cancels the flow context, a caller of Next cancels
+// the context passed into Init, or any error is encountered on the stream by
+// the Next goroutine.
+func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
 	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
 	defer log.VEvent(streamCtx, 2, "Inbox exited stream handler")
@@ -209,7 +236,7 @@ func (i *Inbox) RunWithStream(
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return errors.Wrap(streamCtx.Err(), "streamCtx error while waiting for reader (remote client canceled)")
-	case <-flowCtxDone:
+	case <-i.flowCtxDone:
 		// The flow context of the inbox host has been canceled. This can occur
 		// e.g. when the query is canceled, or when another stream encountered
 		// an unrecoverable error forcing it to shutdown the flow.
@@ -219,18 +246,21 @@ func (i *Inbox) RunWithStream(
 	// Now wait for one of the events described in the method comment. If a
 	// cancellation is encountered, nothing special must be done to cancel the
 	// reader goroutine as returning from the handler will close the stream.
-	//
-	// Note that we don't listen for cancellation on flowCtxDone because
-	// readerCtx must be the child of the flow context.
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
 		return err
+	case <-i.flowCtxDone:
+		// The flow context of the inbox host has been canceled. This can occur
+		// e.g. when the query is canceled, or when another stream encountered
+		// an unrecoverable error forcing it to shutdown the flow.
+		return cancelchecker.QueryCanceledError
 	case <-readerCtx.Done():
-		// The reader canceled the stream meaning that it no longer needs any
-		// more data from the outbox. This is a graceful termination, so we
-		// return nil.
-		return nil
+		// readerCtx is canceled, but we don't know whether it was because the
+		// flow context was canceled or for other reason. In the former case we
+		// have an ungraceful shutdown whereas in the latter case we have a
+		// graceful one.
+		return i.checkFlowCtxCancellation()
 	case <-streamCtx.Done():
 		// The client canceled the stream.
 		return errors.Wrap(streamCtx.Err(), "streamCtx error in Inbox stream handler (remote client canceled)")
@@ -260,12 +290,15 @@ func (i *Inbox) Init(ctx context.Context) {
 		case err := <-i.timeoutCh:
 			i.errCh <- errors.Wrap(err, "remote stream arrived too late")
 			return err
+		case <-i.flowCtxDone:
+			i.errCh <- cancelchecker.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case <-i.Ctx.Done():
-			// Our reader canceled the context meaning that it no longer needs
-			// any more data from the outbox. This is a graceful termination, so
-			// we don't send any error on errCh and only return an error. This
-			// will close the inbox (making the stream handler exit gracefully)
-			// and will stop the current goroutine from proceeding further.
+			if err := i.checkFlowCtxCancellation(); err != nil {
+				// This is an ungraceful termination because the flow context
+				// has been canceled.
+				i.errCh <- err
+			}
 			return i.Ctx.Err()
 		}
 

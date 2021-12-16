@@ -19,6 +19,7 @@ import {
   DatabaseTablePageDataDetails,
   DatabaseTablePageDataStats,
   DatabaseTablePageIndexStats,
+  util,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -26,7 +27,6 @@ import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import moment from "moment";
-import { TimestampToMoment } from "src/util/convert";
 import { makeTimestamp } from "src/views/databases/utils";
 
 function fakeRouteComponentProps(
@@ -269,13 +269,13 @@ describe("Database Table Page", function() {
         {
           indexName: "jobs_status_created_idx",
           totalReads: 2,
-          lastUsed: TimestampToMoment(
+          lastUsed: util.TimestampToMoment(
             makeTimestamp("2021-11-19T23:01:05.167627Z"),
           ),
           lastUsedType: "read",
         },
       ],
-      lastReset: TimestampToMoment(
+      lastReset: util.TimestampToMoment(
         makeTimestamp("2021-11-12T20:18:22.167627Z"),
       ),
     });
