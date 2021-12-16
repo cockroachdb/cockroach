@@ -54,14 +54,14 @@ func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 		mu.Lock()
 		defer mu.Unlock()
 		if subStopper == nil {
-			subStopper = stop.NewStopper()
+			subStopper = stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
 		}
 		subStopper.Stop(context.Background())
 	}))
 	mu.Lock()
 	defer mu.Unlock()
 	if subStopper == nil {
-		subStopper = stop.NewStopper()
+		subStopper = stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
 	}
 	return subStopper
 }
