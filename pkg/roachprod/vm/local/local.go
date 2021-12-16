@@ -53,11 +53,12 @@ func VMDir(clusterName string, nodeIdx int) string {
 }
 
 // Init initializes the Local provider and registers it into vm.Providers.
-func Init(storage VMStorage) {
+func Init(storage VMStorage) error {
 	vm.Providers[ProviderName] = &Provider{
 		clusters: make(cloud.Clusters),
 		storage:  storage,
 	}
+	return nil
 }
 
 // AddCluster adds the metadata of a local cluster; used when loading the saved

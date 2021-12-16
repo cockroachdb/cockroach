@@ -54,7 +54,7 @@ import (
 )
 
 func init() {
-	roachprod.InitProviders()
+	_ = roachprod.InitProviders()
 }
 
 var (
