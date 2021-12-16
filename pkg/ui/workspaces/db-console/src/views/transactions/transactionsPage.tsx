@@ -17,13 +17,13 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
 
-import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 
 import {
   TransactionsPage,
   Filters,
   defaultFilters,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
@@ -49,7 +49,7 @@ export const selectLastReset = createSelector(
       return "unknown";
     }
 
-    return PrintTime(TimestampToMoment(state.data.last_reset));
+    return PrintTime(util.TimestampToMoment(state.data.last_reset));
   },
 );
 
