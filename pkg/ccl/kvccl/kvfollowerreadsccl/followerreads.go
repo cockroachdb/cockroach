@@ -73,9 +73,9 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 // checkEnterpriseEnabled checks whether the enterprise feature for follower
 // reads is enabled, returning a detailed error if not. It is not suitable for
 // use in hot paths since a new error may be instantiated on each call.
-func checkEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) error {
+func checkEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) error {
 	org := sql.ClusterOrganization.Get(&st.SV)
-	return utilccl.CheckEnterpriseEnabled(st, clusterID, org, "follower reads")
+	return utilccl.CheckEnterpriseEnabled(st, logicalClusterID, org, "follower reads")
 }
 
 // isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
@@ -92,8 +92,10 @@ func checkFollowerReadsEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
 	return isEnterpriseEnabled(clusterID, st)
 }
 
-func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Duration, error) {
-	if err := checkEnterpriseEnabled(clusterID, st); err != nil {
+func evalFollowerReadOffset(
+	logicalClusterID uuid.UUID, st *cluster.Settings,
+) (time.Duration, error) {
+	if err := checkEnterpriseEnabled(logicalClusterID, st); err != nil {
 		return 0, err
 	}
 	// NOTE: we assume that at least some of the ranges being queried use a
@@ -151,7 +153,7 @@ type followerReadOracle struct {
 
 func newFollowerReadOracle(cfg replicaoracle.Config) replicaoracle.Oracle {
 	return &followerReadOracle{
-		clusterID:  cfg.RPCContext.ClusterID,
+		clusterID:  cfg.RPCContext.StorageClusterID,
 		st:         cfg.Settings,
 		clock:      cfg.RPCContext.Clock,
 		closest:    replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),

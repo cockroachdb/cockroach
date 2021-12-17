@@ -57,7 +57,7 @@ func StartMockDistSQLServer(
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	return rpcContext.ClusterID.Get(), mock, ln.Addr(), nil
+	return rpcContext.StorageClusterID.Get(), mock, ln.Addr(), nil
 }
 
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows

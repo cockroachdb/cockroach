@@ -106,6 +106,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
@@ -305,7 +306,7 @@ type sqlServerArgs struct {
 	// Used to query status information useful for debugging on the server.
 	tenantStatusServer serverpb.TenantStatusServer
 
-	// Used for multi-tenant cost control (on the host cluster side).
+	// Used for multi-tenant cost control (on the storage cluster side).
 	tenantUsageServer multitenant.TenantUsageServer
 
 	// Used for multi-tenant cost control (on the tenant side).
@@ -427,7 +428,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.clock,
 			cfg.db,
 			cfg.circularInternalExecutor,
-			cfg.ClusterIDContainer,
+			cfg.rpcContext.LogicalClusterID,
 			cfg.nodeIDContainer,
 			cfg.sqlLivenessProvider,
 			cfg.Settings,
@@ -555,12 +556,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		hydratedTablesCache,
 	)
 
+	clusterIDForSQL := cfg.rpcContext.LogicalClusterID
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext: cfg.AmbientCtx,
 		Settings:       cfg.Settings,
 		RuntimeStats:   cfg.runtime,
-		ClusterID:      cfg.rpcContext.ClusterID,
+		ClusterID:      clusterIDForSQL,
 		ClusterName:    cfg.ClusterName,
 		NodeID:         cfg.nodeIDContainer,
 		Locality:       cfg.Locality,
@@ -632,10 +635,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	nodeInfo := sql.NodeInfo{
-		AdminURL:  cfg.AdminURL,
-		PGURL:     cfg.rpcContext.PGURL,
-		ClusterID: cfg.rpcContext.ClusterID.Get,
-		NodeID:    cfg.nodeIDContainer,
+		AdminURL:         cfg.AdminURL,
+		PGURL:            cfg.rpcContext.PGURL,
+		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
+		NodeID:           cfg.nodeIDContainer,
 	}
 
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
@@ -991,7 +994,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AmbientCtx:    &cfg.AmbientCtx,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
-		ClusterID:     cfg.rpcContext.ClusterID.Get,
+		ClusterID:     clusterIDForSQL.Get,
 		TenantID:      cfg.rpcContext.TenantID,
 		SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
 		SQLServer:     pgServer.SQLServer,
@@ -1373,4 +1376,8 @@ func (s *SQLServer) startServeSQL(
 	s.isReady.Set(true)
 
 	return nil
+}
+
+func (s *SQLServer) SQLClusterID() uuid.UUID {
+	return s.execCfg.LogicalClusterID()
 }
