@@ -655,8 +655,7 @@ func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExp
 		}
 	}
 	switch typ.Family() {
-	case types.BoolFamily, types.AnyFamily:
-	default:
+	case types.AnyFamily, types.VoidFamily:
 		return nil, false
 	}
 	return tree.NewTypedComparisonExpr(
