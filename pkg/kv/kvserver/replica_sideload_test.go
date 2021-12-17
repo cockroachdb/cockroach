@@ -90,7 +90,8 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 		testSideloadingSideloadedStorage(t, eng)
 	})
 	t.Run("Disk", func(t *testing.T) {
-		cleanup, eng := newOnDiskEngine(t)
+		ctx := context.Background()
+		cleanup, eng := newOnDiskEngine(ctx, t)
 		defer cleanup()
 		defer eng.Close()
 		testSideloadingSideloadedStorage(t, eng)
@@ -562,7 +563,8 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 			eng = storage.NewDefaultInMemForTesting()
 		} else {
 			var cleanup func()
-			cleanup, eng = newOnDiskEngine(t)
+			ctx := context.Background()
+			cleanup, eng = newOnDiskEngine(ctx, t)
 			defer cleanup()
 		}
 		defer eng.Close()
@@ -576,14 +578,15 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
 	tc := testContext{}
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
-	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
+	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()
 
 	const (
@@ -667,10 +670,10 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	verifyLogSizeInSync(t, tc.repl)
 }
 
-func newOnDiskEngine(t *testing.T) (func(), storage.Engine) {
+func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine) {
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
-		context.Background(),
+		ctx,
 		storage.Filesystem(dir),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
@@ -691,7 +694,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	// Disable log truncation to make sure our proposal stays in the log.
 	tc.store.SetRaftLogQueueActive(false)
@@ -779,9 +782,9 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
 	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	const count = 10
 

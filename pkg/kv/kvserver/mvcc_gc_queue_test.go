@@ -466,7 +466,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	const intentAgeThreshold = 2 * time.Hour
 
@@ -836,7 +836,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	tc := testContext{manualClock: manual}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	manual.Set(testTime)
 
 	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
@@ -966,7 +966,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	tc.manualClock.Set(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
@@ -1040,7 +1040,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	// Create two last processed times both at the range start key and
 	// also at some mid-point key in order to simulate a merge.
@@ -1113,7 +1113,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	tc := testContext{manualClock: manual}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	const keyCount = 100
 	if gc.KeyVersionChunkBytes%keyCount != 0 {

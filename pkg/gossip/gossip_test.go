@@ -40,10 +40,11 @@ import (
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
@@ -61,10 +62,11 @@ func TestGossipInfoStore(t *testing.T) {
 // gets properly updated in gossip.
 func TestGossipMoveNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodes []*roachpb.NodeDescriptor
 	for i := 1; i <= 3; i++ {
@@ -105,8 +107,9 @@ func TestGossipMoveNode(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	addresses := []util.UnresolvedAddr{
 		util.MakeUnresolvedAddr("tcp", "127.0.0.1:9000"),
@@ -115,7 +118,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	server := rpc.NewServer(rpcContext)
 	g := NewTest(0, nil, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	g.setAddresses(addresses)
@@ -139,10 +142,11 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 
 func TestGossipLocalityResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 
 	gossipLocalityAdvertiseList := roachpb.Locality{}
 	tier := roachpb.Tier{}
@@ -678,6 +682,8 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 	var clusterIDs []uuid.UUID
 	var addrs []net.Addr
 
+	ctx := context.Background()
+
 	// Create three gossip nodes, init the first two with no bootstrap
 	// hosts, but unique cluster IDs. The third host has the first two
 	// hosts as bootstrap hosts, but has the same cluster ID as the
@@ -689,7 +695,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 			select {
 			case <-stopper.ShouldQuiesce():
 			default:
-				stopper.Stop(context.Background())
+				stopper.Stop(ctx)
 			}
 		}()
 
@@ -702,7 +708,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		}
 		clusterIDs = append(clusterIDs, clusterID)
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-		rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
 		server := rpc.NewServer(rpcContext)
 
@@ -750,7 +756,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 	})
 
 	// Kill node 0 to force node 2 to bootstrap with node 1.
-	stoppers[0].Stop(context.Background())
+	stoppers[0].Stop(ctx)
 	// Wait for twice the bootstrap interval, and verify that
 	// node 2 still has not connected to node 1.
 	time.Sleep(2 * interval)

@@ -21,35 +21,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
 )
 
-func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	ac := log.MakeTestingAmbientContext(stopper.Tracer())
+func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Context {
 	nc := &base.NodeIDContainer{}
-	ac.AddLogTag("n", nc)
-	return rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		NodeID:     nc,
-		AmbientCtx: ac,
-		Config:     &base.Config{Insecure: true},
-		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-	})
+	ctx = logtags.AddTag(ctx, "n", nc)
+	return rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			NodeID:   nc,
+			Config:   &base.Config{Insecure: true},
+			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+			Stopper:  stopper,
+			Settings: cluster.MakeTestingClusterSettings(),
+		})
 }
 
 // StartMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
 func StartMockDistSQLServer(
-	clock *hlc.Clock, stopper *stop.Stopper, nodeID roachpb.NodeID,
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, nodeID roachpb.NodeID,
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
-	rpcContext := newInsecureRPCContext(stopper)
+	rpcContext := newInsecureRPCContext(ctx, stopper)
 	rpcContext.NodeID.Set(context.TODO(), nodeID)
 	server := rpc.NewServer(rpcContext)
 	mock := newMockDistSQLServer()

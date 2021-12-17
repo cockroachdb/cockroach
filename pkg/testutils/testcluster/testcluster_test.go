@@ -206,21 +206,22 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: server1.AmbientCtx(),
-		Config:     server1.RPCContext().Config,
-		Clock:      server1.Clock(),
-		Stopper:    tc.Stopper(),
-		Settings:   tc.Server(1).ClusterSettings(),
+	ctx := context.Background()
+	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   server1.RPCContext().Config,
+		Clock:    server1.Clock(),
+		Stopper:  tc.Stopper(),
+		Settings: server1.ClusterSettings(),
 	})
 	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
+		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusClient1 := serverpb.NewStatusClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	var cancel func()
+	ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if _, err := statusClient1.Metrics(ctx, &serverpb.MetricsRequest{NodeId: "local"}); err != nil {
 		t.Fatal(err)

@@ -34,7 +34,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newOnDiskEngine(t)
+	cleanup, eng := newOnDiskEngine(ctx, t)
 	defer cleanup()
 	defer eng.Close()
 
@@ -115,14 +115,16 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newOnDiskEngine(t)
+	ctx := context.Background()
+	cleanup, eng := newOnDiskEngine(ctx, t)
 	defer cleanup()
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
 	f, err := scratch.NewFile(ctx, 0)
 	require.NoError(t, err)
 	defer func() {
@@ -151,7 +153,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newOnDiskEngine(t)
+	cleanup, eng := newOnDiskEngine(ctx, t)
 	defer cleanup()
 	defer eng.Close()
 

@@ -178,6 +178,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			Stopper:           s.Stopper(),
 		},
 		NewDistSenderForLocalTestCluster(
+			ctx,
 			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
 			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
 		),

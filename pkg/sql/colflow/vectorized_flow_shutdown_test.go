@@ -121,9 +121,10 @@ func (c callbackCloser) Close() error {
 func TestVectorizedFlowShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
+	defer stopper.Stop(ctx)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
 	require.NoError(t, err)
@@ -136,8 +137,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	for run := 0; run < 10; run++ {
 		for _, scenario := range testScenarios {
 			t.Run(fmt.Sprintf("testScenario=%s", scenario.string), func(t *testing.T) {
-				ctxLocal, cancelLocal := context.WithCancel(context.Background())
-				ctxRemote, cancelRemote := context.WithCancel(context.Background())
+				ctxLocal, cancelLocal := context.WithCancel(ctx)
+				ctxRemote, cancelRemote := context.WithCancel(ctx)
 				// Linter says there is a possibility of "context leak" because
 				// cancelRemote variable may not be used, so we defer the call to it.
 				// This does not change anything about the test since we're blocking on
@@ -325,7 +326,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 
 				var input colexecop.Operator
-				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
+				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(ctx)
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
