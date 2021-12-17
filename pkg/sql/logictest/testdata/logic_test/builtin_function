@@ -3079,3 +3079,56 @@ SELECT crdb_internal.check_password_hash_format(('SCRAM-SHA-256$'||'4096:B5VaTCv
 ----
 scram-sha-256
 
+# NB: CockroachDB currently differs from Postgres, since the shaX functions
+# return a string in CockroachDB, while Postgres returns bytea.
+query BTT
+SELECT
+  encode(digest('abc', alg), 'hex') = expected, digest(NULL, alg), digest('abc', NULL)
+FROM
+  (
+    VALUES
+      ('md5', md5('abc')),
+      ('sha1', sha1('abc')),
+      ('sha224', sha224('abc')),
+      ('sha256', sha256('abc')),
+      ('sha384', sha384('abc')),
+      ('sha512', sha512('abc'))
+  )
+    AS v (alg, expected);
+----
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+
+query T
+SELECT digest(NULL, 'made up alg')
+----
+NULL
+
+statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
+SELECT digest('cat', 'made up alg')
+
+# NB: These results were manually confirmed to match the hashed values
+# created by Postgres.
+query T
+SELECT encode(hmac('abc', 'key', alg), 'hex')
+FROM (VALUES ('md5'), ('sha1'), ('sha224'), ('sha256'), ('sha384'), ('sha512')) v(alg)
+----
+d2fe98063f876b03193afb49b4979591
+4fd0b215276ef12f2b3e4c8ecac2811498b656fc
+f524670b7e34f31467de0aa96593861cf65117d414fb2d86158d760e
+9c196e32dc0175f86f4b1cb89289d6619de6bee699e4c378e68309ed97a1a6ab
+30ddb9c8f347cffbfb44e519d814f074cf4047a55d6f563324f1c6a33920e5edfb2a34bac60bdc96cd33a95623d7d638
+3926a207c8c42b0c41792cbd3e1a1aaaf5f7a25704f62dfc939c4987dd7ce060009c5bb1c2447355b3216f10b537e9afa7b64a4e5391b0d631172d07939e087a
+
+query TTT
+SELECT hmac('abc', 'key', NULL), hmac('abc', NULL, 'made up alg'), hmac(NULL, 'key', 'sha256')
+----
+NULL  NULL  NULL
+
+statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
+SELECT hmac('dog', 'key', 'made up alg')
+
