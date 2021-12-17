@@ -625,29 +625,25 @@ explain(gist):
 gist-explain-roundtrip
 INSERT INTO abc SELECT * from abc
 ----
-hash: 8314977196645465964
-plan-gist: AgFuAgAHAAAABwYfbgE=
+hash: 16772965416642504445
+plan-gist: AgFuAgAHAAAAH24B
 explain(shape):
 • insert
 │ into: abc(a, b, c)
 │ auto commit
 │
-└── • render
-    │
-    └── • scan
-          missing stats
-          table: abc@abc_pkey
-          spans: FULL SCAN
+└── • scan
+      missing stats
+      table: abc@abc_pkey
+      spans: FULL SCAN
 explain(gist):
 • insert
 │ into: abc()
 │ auto commit
 │
-└── • render
-    │
-    └── • scan
-          table: abc@abc_pkey
-          spans: FULL SCAN
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
 
 # ConstructUpdate
 gist-explain-roundtrip
@@ -930,8 +926,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM [INSERT INTO abc SELECT a, b, c FROM abc RETURNING a] ORDER BY a
 ----
-hash: 7687402044975188737
-plan-gist: AgFuAgAHAAAABwYfbgAwMREGAg==
+hash: 15302623232936960462
+plan-gist: AgFuAgAHAAAAH24AMDERBgI=
 explain(shape):
 • root
 │
@@ -952,12 +948,10 @@ explain(shape):
         └── • insert
             │ into: abc(a, b, c)
             │
-            └── • render
-                │
-                └── • scan
-                      missing stats
-                      table: abc@abc_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: abc@abc_pkey
+                  spans: FULL SCAN
 explain(gist):
 • root
 │
@@ -977,11 +971,9 @@ explain(gist):
         └── • insert
             │ into: abc()
             │
-            └── • render
-                │
-                └── • scan
-                      table: abc@abc_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  table: abc@abc_pkey
+                  spans: FULL SCAN
 
 # ConstructRecursiveCTE/recursiveCTEOp
 gist-explain-roundtrip

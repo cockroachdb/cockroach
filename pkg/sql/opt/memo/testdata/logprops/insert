@@ -23,66 +23,63 @@ INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z LIMIT 10
 insert abcde
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── y:14 => a:1
- │    ├── y:15 => b:2
- │    ├── c_default:16 => c:3
- │    ├── d_comp:19 => d:4
- │    ├── rowid_default:17 => rowid:5
- │    └── e_default:18 => e:6
+ │    ├── y:10 => a:1
+ │    ├── y:10 => b:2
+ │    ├── c_default:14 => c:3
+ │    ├── d_comp:17 => d:4
+ │    ├── rowid_default:15 => rowid:5
+ │    └── e_default:16 => e:6
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: d_comp:19(int!null) y:14(int!null) y:15(int!null) c_default:16(int!null) rowid_default:17(int) e_default:18(int)
+      ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
       ├── cardinality: [0 - 10]
       ├── volatile
-      ├── fd: ()-->(16,18), (15)-->(19)
-      ├── prune: (14-19)
+      ├── fd: ()-->(14,16), (10)-->(17)
+      ├── prune: (10,14-17)
+      ├── interesting orderings: (+10 opt(14,16))
       ├── project
-      │    ├── columns: c_default:16(int!null) rowid_default:17(int) e_default:18(int) y:14(int!null) y:15(int!null)
+      │    ├── columns: c_default:14(int!null) rowid_default:15(int) e_default:16(int) y:10(int!null)
       │    ├── cardinality: [0 - 10]
       │    ├── volatile
-      │    ├── fd: ()-->(16,18)
-      │    ├── prune: (14-18)
+      │    ├── fd: ()-->(14,16)
+      │    ├── prune: (10,14-16)
+      │    ├── interesting orderings: (+10 opt(14,16))
       │    ├── project
-      │    │    ├── columns: y:14(int!null) y:15(int!null)
+      │    │    ├── columns: y:10(int!null)
       │    │    ├── cardinality: [0 - 10]
-      │    │    ├── immutable
-      │    │    ├── prune: (14,15)
-      │    │    ├── limit
-      │    │    │    ├── columns: xyz.y:10(int!null) z:11(float)
-      │    │    │    ├── internal-ordering: +10,+11
-      │    │    │    ├── cardinality: [0 - 10]
-      │    │    │    ├── interesting orderings: (+10,+11)
-      │    │    │    ├── sort
-      │    │    │    │    ├── columns: xyz.y:10(int!null) z:11(float)
-      │    │    │    │    ├── ordering: +10,+11
-      │    │    │    │    ├── limit hint: 10.00
-      │    │    │    │    ├── prune: (10,11)
-      │    │    │    │    └── project
-      │    │    │    │         ├── columns: xyz.y:10(int!null) z:11(float)
-      │    │    │    │         ├── prune: (10,11)
-      │    │    │    │         └── scan xyz
-      │    │    │    │              ├── columns: x:9(string!null) xyz.y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-      │    │    │    │              ├── key: (9)
-      │    │    │    │              ├── fd: (9)-->(10-13)
-      │    │    │    │              ├── prune: (9-13)
-      │    │    │    │              └── interesting orderings: (+9)
-      │    │    │    └── const: 10 [type=int]
-      │    │    └── projections
-      │    │         ├── assignment-cast: INT8 [as=y:14, type=int, outer=(10), immutable]
-      │    │         │    └── variable: xyz.y:10 [type=int]
-      │    │         └── assignment-cast: INT8 [as=y:15, type=int, outer=(10), immutable]
-      │    │              └── variable: xyz.y:10 [type=int]
+      │    │    ├── prune: (10)
+      │    │    ├── interesting orderings: (+10)
+      │    │    └── limit
+      │    │         ├── columns: y:10(int!null) z:11(float)
+      │    │         ├── internal-ordering: +10,+11
+      │    │         ├── cardinality: [0 - 10]
+      │    │         ├── interesting orderings: (+10,+11)
+      │    │         ├── sort
+      │    │         │    ├── columns: y:10(int!null) z:11(float)
+      │    │         │    ├── ordering: +10,+11
+      │    │         │    ├── limit hint: 10.00
+      │    │         │    ├── prune: (10,11)
+      │    │         │    └── project
+      │    │         │         ├── columns: y:10(int!null) z:11(float)
+      │    │         │         ├── prune: (10,11)
+      │    │         │         └── scan xyz
+      │    │         │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+      │    │         │              ├── key: (9)
+      │    │         │              ├── fd: (9)-->(10-13)
+      │    │         │              ├── prune: (9-13)
+      │    │         │              └── interesting orderings: (+9)
+      │    │         └── const: 10 [type=int]
       │    └── projections
-      │         ├── const: 10 [as=c_default:16, type=int]
-      │         ├── function: unique_rowid [as=rowid_default:17, type=int, volatile]
-      │         └── cast: INT8 [as=e_default:18, type=int, immutable]
+      │         ├── const: 10 [as=c_default:14, type=int]
+      │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
+      │         └── cast: INT8 [as=e_default:16, type=int, immutable]
       │              └── null [type=unknown]
       └── projections
-           └── plus [as=d_comp:19, type=int, outer=(15,16), immutable]
+           └── plus [as=d_comp:17, type=int, outer=(10,14), immutable]
                 ├── plus [type=int]
-                │    ├── variable: y:15 [type=int]
-                │    └── variable: c_default:16 [type=int]
+                │    ├── variable: y:10 [type=int]
+                │    └── variable: c_default:14 [type=int]
                 └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
@@ -93,72 +90,69 @@ project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── cardinality: [0 - 10]
  ├── volatile, mutations
- ├── fd: ()-->(3), (2)-->(4)
+ ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
  ├── prune: (1-4)
  └── insert abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
       ├── insert-mapping:
-      │    ├── y:14 => a:1
-      │    ├── y:15 => b:2
-      │    ├── c_default:16 => c:3
-      │    ├── d_comp:19 => d:4
-      │    ├── rowid_default:17 => rowid:5
-      │    └── e_default:18 => e:6
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── rowid_default:15 => rowid:5
+      │    └── e_default:16 => e:6
       ├── cardinality: [0 - 10]
       ├── volatile, mutations
-      ├── fd: ()-->(3), (2)-->(4)
+      ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
       └── project
-           ├── columns: d_comp:19(int!null) y:14(int!null) y:15(int!null) c_default:16(int!null) rowid_default:17(int) e_default:18(int)
+           ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
            ├── cardinality: [0 - 10]
            ├── volatile
-           ├── fd: ()-->(16,18), (15)-->(19)
-           ├── prune: (14-19)
+           ├── fd: ()-->(14,16), (10)-->(17)
+           ├── prune: (10,14-17)
+           ├── interesting orderings: (+10 opt(14,16))
            ├── project
-           │    ├── columns: c_default:16(int!null) rowid_default:17(int) e_default:18(int) y:14(int!null) y:15(int!null)
+           │    ├── columns: c_default:14(int!null) rowid_default:15(int) e_default:16(int) y:10(int!null)
            │    ├── cardinality: [0 - 10]
            │    ├── volatile
-           │    ├── fd: ()-->(16,18)
-           │    ├── prune: (14-18)
+           │    ├── fd: ()-->(14,16)
+           │    ├── prune: (10,14-16)
+           │    ├── interesting orderings: (+10 opt(14,16))
            │    ├── project
-           │    │    ├── columns: y:14(int!null) y:15(int!null)
+           │    │    ├── columns: y:10(int!null)
            │    │    ├── cardinality: [0 - 10]
-           │    │    ├── immutable
-           │    │    ├── prune: (14,15)
-           │    │    ├── limit
-           │    │    │    ├── columns: xyz.y:10(int!null) z:11(float)
-           │    │    │    ├── internal-ordering: +10,+11
-           │    │    │    ├── cardinality: [0 - 10]
-           │    │    │    ├── interesting orderings: (+10,+11)
-           │    │    │    ├── sort
-           │    │    │    │    ├── columns: xyz.y:10(int!null) z:11(float)
-           │    │    │    │    ├── ordering: +10,+11
-           │    │    │    │    ├── limit hint: 10.00
-           │    │    │    │    ├── prune: (10,11)
-           │    │    │    │    └── project
-           │    │    │    │         ├── columns: xyz.y:10(int!null) z:11(float)
-           │    │    │    │         ├── prune: (10,11)
-           │    │    │    │         └── scan xyz
-           │    │    │    │              ├── columns: x:9(string!null) xyz.y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │    │    │              ├── key: (9)
-           │    │    │    │              ├── fd: (9)-->(10-13)
-           │    │    │    │              ├── prune: (9-13)
-           │    │    │    │              └── interesting orderings: (+9)
-           │    │    │    └── const: 10 [type=int]
-           │    │    └── projections
-           │    │         ├── assignment-cast: INT8 [as=y:14, type=int, outer=(10), immutable]
-           │    │         │    └── variable: xyz.y:10 [type=int]
-           │    │         └── assignment-cast: INT8 [as=y:15, type=int, outer=(10), immutable]
-           │    │              └── variable: xyz.y:10 [type=int]
+           │    │    ├── prune: (10)
+           │    │    ├── interesting orderings: (+10)
+           │    │    └── limit
+           │    │         ├── columns: y:10(int!null) z:11(float)
+           │    │         ├── internal-ordering: +10,+11
+           │    │         ├── cardinality: [0 - 10]
+           │    │         ├── interesting orderings: (+10,+11)
+           │    │         ├── sort
+           │    │         │    ├── columns: y:10(int!null) z:11(float)
+           │    │         │    ├── ordering: +10,+11
+           │    │         │    ├── limit hint: 10.00
+           │    │         │    ├── prune: (10,11)
+           │    │         │    └── project
+           │    │         │         ├── columns: y:10(int!null) z:11(float)
+           │    │         │         ├── prune: (10,11)
+           │    │         │         └── scan xyz
+           │    │         │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │         │              ├── key: (9)
+           │    │         │              ├── fd: (9)-->(10-13)
+           │    │         │              ├── prune: (9-13)
+           │    │         │              └── interesting orderings: (+9)
+           │    │         └── const: 10 [type=int]
            │    └── projections
-           │         ├── const: 10 [as=c_default:16, type=int]
-           │         ├── function: unique_rowid [as=rowid_default:17, type=int, volatile]
-           │         └── cast: INT8 [as=e_default:18, type=int, immutable]
+           │         ├── const: 10 [as=c_default:14, type=int]
+           │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
+           │         └── cast: INT8 [as=e_default:16, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
-                └── plus [as=d_comp:19, type=int, outer=(15,16), immutable]
+                └── plus [as=d_comp:17, type=int, outer=(10,14), immutable]
                      ├── plus [type=int]
-                     │    ├── variable: y:15 [type=int]
-                     │    └── variable: c_default:16 [type=int]
+                     │    ├── variable: y:10 [type=int]
+                     │    └── variable: c_default:14 [type=int]
                      └── const: 1 [type=int]
 
 # Properties with RETURNING clause.
@@ -168,57 +162,51 @@ INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z RETURNING *
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── volatile, mutations
- ├── fd: ()-->(3), (2)-->(4)
+ ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
  ├── prune: (1-4)
  └── insert abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
       ├── insert-mapping:
-      │    ├── y:14 => a:1
-      │    ├── y:15 => b:2
-      │    ├── c_default:16 => c:3
-      │    ├── d_comp:19 => d:4
-      │    ├── rowid_default:17 => rowid:5
-      │    └── e_default:18 => e:6
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── rowid_default:15 => rowid:5
+      │    └── e_default:16 => e:6
       ├── volatile, mutations
-      ├── fd: ()-->(3), (2)-->(4)
+      ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
       └── project
-           ├── columns: d_comp:19(int!null) y:14(int!null) y:15(int!null) c_default:16(int!null) rowid_default:17(int) e_default:18(int)
+           ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
            ├── volatile
-           ├── fd: ()-->(16,18), (15)-->(19)
-           ├── prune: (14-19)
+           ├── fd: ()-->(14,16), (10)-->(17)
+           ├── prune: (10,14-17)
            ├── project
-           │    ├── columns: c_default:16(int!null) rowid_default:17(int) e_default:18(int) y:14(int!null) y:15(int!null)
+           │    ├── columns: c_default:14(int!null) rowid_default:15(int) e_default:16(int) y:10(int!null)
            │    ├── volatile
-           │    ├── fd: ()-->(16,18)
-           │    ├── prune: (14-18)
+           │    ├── fd: ()-->(14,16)
+           │    ├── prune: (10,14-16)
            │    ├── project
-           │    │    ├── columns: y:14(int!null) y:15(int!null)
-           │    │    ├── immutable
-           │    │    ├── prune: (14,15)
-           │    │    ├── project
-           │    │    │    ├── columns: xyz.y:10(int!null) z:11(float)
-           │    │    │    ├── prune: (10,11)
-           │    │    │    └── scan xyz
-           │    │    │         ├── columns: x:9(string!null) xyz.y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │    │         ├── key: (9)
-           │    │    │         ├── fd: (9)-->(10-13)
-           │    │    │         ├── prune: (9-13)
-           │    │    │         └── interesting orderings: (+9)
-           │    │    └── projections
-           │    │         ├── assignment-cast: INT8 [as=y:14, type=int, outer=(10), immutable]
-           │    │         │    └── variable: xyz.y:10 [type=int]
-           │    │         └── assignment-cast: INT8 [as=y:15, type=int, outer=(10), immutable]
-           │    │              └── variable: xyz.y:10 [type=int]
+           │    │    ├── columns: y:10(int!null)
+           │    │    ├── prune: (10)
+           │    │    └── project
+           │    │         ├── columns: y:10(int!null) z:11(float)
+           │    │         ├── prune: (10,11)
+           │    │         └── scan xyz
+           │    │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │              ├── key: (9)
+           │    │              ├── fd: (9)-->(10-13)
+           │    │              ├── prune: (9-13)
+           │    │              └── interesting orderings: (+9)
            │    └── projections
-           │         ├── const: 10 [as=c_default:16, type=int]
-           │         ├── function: unique_rowid [as=rowid_default:17, type=int, volatile]
-           │         └── cast: INT8 [as=e_default:18, type=int, immutable]
+           │         ├── const: 10 [as=c_default:14, type=int]
+           │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
+           │         └── cast: INT8 [as=e_default:16, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
-                └── plus [as=d_comp:19, type=int, outer=(15,16), immutable]
+                └── plus [as=d_comp:17, type=int, outer=(10,14), immutable]
                      ├── plus [type=int]
-                     │    ├── variable: y:15 [type=int]
-                     │    └── variable: c_default:16 [type=int]
+                     │    ├── variable: y:10 [type=int]
+                     │    └── variable: c_default:14 [type=int]
                      └── const: 1 [type=int]
 
 # Input is cardinality 1 VALUES expression.
@@ -228,61 +216,55 @@ INSERT INTO abcde (a, b) (VALUES (1, 2)) RETURNING *, rowid;
 insert abcde
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
  ├── insert-mapping:
- │    ├── column1:11 => a:1
- │    ├── column2:12 => b:2
- │    ├── c_default:13 => c:3
- │    ├── d_comp:16 => d:4
- │    ├── rowid_default:14 => rowid:5
- │    └── e_default:15 => e:6
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:14 => d:4
+ │    ├── rowid_default:12 => rowid:5
+ │    └── e_default:13 => e:6
  ├── cardinality: [1 - 1]
  ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── project
-      ├── columns: d_comp:16(int!null) column1:11(int!null) column2:12(int!null) c_default:13(int!null) rowid_default:14(int) e_default:15(int)
+      ├── columns: d_comp:14(int!null) column1:9(int!null) column2:10(int!null) c_default:11(int!null) rowid_default:12(int) e_default:13(int)
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
-      ├── fd: ()-->(11-16)
-      ├── prune: (11-16)
+      ├── fd: ()-->(9-14)
+      ├── prune: (9-14)
       ├── project
-      │    ├── columns: c_default:13(int!null) rowid_default:14(int) e_default:15(int) column1:11(int!null) column2:12(int!null)
+      │    ├── columns: c_default:11(int!null) rowid_default:12(int) e_default:13(int) column1:9(int!null) column2:10(int!null)
       │    ├── cardinality: [1 - 1]
       │    ├── volatile
       │    ├── key: ()
-      │    ├── fd: ()-->(11-15)
-      │    ├── prune: (11-15)
+      │    ├── fd: ()-->(9-13)
+      │    ├── prune: (9-13)
       │    ├── project
-      │    │    ├── columns: column1:11(int!null) column2:12(int!null)
+      │    │    ├── columns: column1:9(int!null) column2:10(int!null)
       │    │    ├── cardinality: [1 - 1]
-      │    │    ├── immutable
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(11,12)
-      │    │    ├── prune: (11,12)
-      │    │    ├── values
-      │    │    │    ├── columns: column1:9(int!null) column2:10(int!null)
-      │    │    │    ├── cardinality: [1 - 1]
-      │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(9,10)
-      │    │    │    ├── prune: (9,10)
-      │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │         ├── const: 1 [type=int]
-      │    │    │         └── const: 2 [type=int]
-      │    │    └── projections
-      │    │         ├── assignment-cast: INT8 [as=column1:11, type=int, outer=(9), immutable]
-      │    │         │    └── variable: column1:9 [type=int]
-      │    │         └── assignment-cast: INT8 [as=column2:12, type=int, outer=(10), immutable]
-      │    │              └── variable: column2:10 [type=int]
+      │    │    ├── fd: ()-->(9,10)
+      │    │    ├── prune: (9,10)
+      │    │    └── values
+      │    │         ├── columns: column1:9(int!null) column2:10(int!null)
+      │    │         ├── cardinality: [1 - 1]
+      │    │         ├── key: ()
+      │    │         ├── fd: ()-->(9,10)
+      │    │         ├── prune: (9,10)
+      │    │         └── tuple [type=tuple{int, int}]
+      │    │              ├── const: 1 [type=int]
+      │    │              └── const: 2 [type=int]
       │    └── projections
-      │         ├── const: 10 [as=c_default:13, type=int]
-      │         ├── function: unique_rowid [as=rowid_default:14, type=int, volatile]
-      │         └── cast: INT8 [as=e_default:15, type=int, immutable]
+      │         ├── const: 10 [as=c_default:11, type=int]
+      │         ├── function: unique_rowid [as=rowid_default:12, type=int, volatile]
+      │         └── cast: INT8 [as=e_default:13, type=int, immutable]
       │              └── null [type=unknown]
       └── projections
-           └── plus [as=d_comp:16, type=int, outer=(12,13), immutable]
+           └── plus [as=d_comp:14, type=int, outer=(10,11), immutable]
                 ├── plus [type=int]
-                │    ├── variable: column2:12 [type=int]
-                │    └── variable: c_default:13 [type=int]
+                │    ├── variable: column2:10 [type=int]
+                │    └── variable: c_default:11 [type=int]
                 └── const: 1 [type=int]
 
 # Filter FD set.
@@ -297,68 +279,63 @@ project
  └── insert abcde
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── insert-mapping:
-      │    ├── y:15 => a:1
-      │    ├── int8:16 => b:2
-      │    ├── c_default:17 => c:3
-      │    ├── d_comp:20 => d:4
-      │    ├── rowid_default:18 => rowid:5
-      │    └── e_default:19 => e:6
+      │    ├── y:10 => a:1
+      │    ├── int8:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:18 => d:4
+      │    ├── rowid_default:16 => rowid:5
+      │    └── e_default:17 => e:6
       ├── volatile, mutations
       ├── fd: ()-->(1,3), (2)-->(4)
       └── project
-           ├── columns: d_comp:20(int) y:15(int!null) int8:16(int) c_default:17(int!null) rowid_default:18(int) e_default:19(int)
+           ├── columns: d_comp:18(int) y:10(int!null) int8:14(int) c_default:15(int!null) rowid_default:16(int) e_default:17(int)
            ├── volatile
-           ├── fd: ()-->(15,17,19), (16)-->(20)
-           ├── prune: (15-20)
+           ├── fd: ()-->(10,15,17), (14)-->(18)
+           ├── prune: (10,14-18)
            ├── project
-           │    ├── columns: c_default:17(int!null) rowid_default:18(int) e_default:19(int) y:15(int!null) int8:16(int)
+           │    ├── columns: c_default:15(int!null) rowid_default:16(int) e_default:17(int) y:10(int!null) int8:14(int)
            │    ├── volatile
-           │    ├── fd: ()-->(15,17,19)
-           │    ├── prune: (15-19)
+           │    ├── fd: ()-->(10,15,17)
+           │    ├── prune: (10,14-17)
            │    ├── project
-           │    │    ├── columns: y:15(int!null) int8:16(int)
+           │    │    ├── columns: y:10(int!null) int8:14(int)
            │    │    ├── immutable
-           │    │    ├── fd: ()-->(15)
-           │    │    ├── prune: (15,16)
-           │    │    ├── project
-           │    │    │    ├── columns: int8:14(int) xyz.y:10(int!null)
-           │    │    │    ├── immutable
-           │    │    │    ├── fd: ()-->(10)
-           │    │    │    ├── prune: (10,14)
-           │    │    │    ├── select
-           │    │    │    │    ├── columns: x:9(string!null) xyz.y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │    │    │    ├── key: (9)
-           │    │    │    │    ├── fd: ()-->(10), (9)-->(11-13)
-           │    │    │    │    ├── prune: (9,11-13)
-           │    │    │    │    ├── interesting orderings: (+9 opt(10))
-           │    │    │    │    ├── scan xyz
-           │    │    │    │    │    ├── columns: x:9(string!null) xyz.y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │    │    │    │    ├── key: (9)
-           │    │    │    │    │    ├── fd: (9)-->(10-13)
-           │    │    │    │    │    ├── prune: (9-13)
-           │    │    │    │    │    └── interesting orderings: (+9)
-           │    │    │    │    └── filters
-           │    │    │    │         └── eq [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
-           │    │    │    │              ├── variable: xyz.y:10 [type=int]
-           │    │    │    │              └── const: 1 [type=int]
-           │    │    │    └── projections
-           │    │    │         └── cast: INT8 [as=int8:14, type=int, outer=(11), immutable]
-           │    │    │              └── plus [type=float]
-           │    │    │                   ├── variable: z:11 [type=float]
-           │    │    │                   └── const: 1.0 [type=float]
-           │    │    └── projections
-           │    │         ├── assignment-cast: INT8 [as=y:15, type=int, outer=(10), immutable]
-           │    │         │    └── variable: xyz.y:10 [type=int]
-           │    │         └── assignment-cast: INT8 [as=int8:16, type=int, outer=(14), immutable]
-           │    │              └── variable: int8:14 [type=int]
+           │    │    ├── fd: ()-->(10)
+           │    │    ├── prune: (10,14)
+           │    │    └── project
+           │    │         ├── columns: int8:14(int) y:10(int!null)
+           │    │         ├── immutable
+           │    │         ├── fd: ()-->(10)
+           │    │         ├── prune: (10,14)
+           │    │         ├── select
+           │    │         │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │         │    ├── key: (9)
+           │    │         │    ├── fd: ()-->(10), (9)-->(11-13)
+           │    │         │    ├── prune: (9,11-13)
+           │    │         │    ├── interesting orderings: (+9 opt(10))
+           │    │         │    ├── scan xyz
+           │    │         │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │         │    │    ├── key: (9)
+           │    │         │    │    ├── fd: (9)-->(10-13)
+           │    │         │    │    ├── prune: (9-13)
+           │    │         │    │    └── interesting orderings: (+9)
+           │    │         │    └── filters
+           │    │         │         └── eq [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+           │    │         │              ├── variable: y:10 [type=int]
+           │    │         │              └── const: 1 [type=int]
+           │    │         └── projections
+           │    │              └── cast: INT8 [as=int8:14, type=int, outer=(11), immutable]
+           │    │                   └── plus [type=float]
+           │    │                        ├── variable: z:11 [type=float]
+           │    │                        └── const: 1.0 [type=float]
            │    └── projections
-           │         ├── const: 10 [as=c_default:17, type=int]
-           │         ├── function: unique_rowid [as=rowid_default:18, type=int, volatile]
-           │         └── cast: INT8 [as=e_default:19, type=int, immutable]
+           │         ├── const: 10 [as=c_default:15, type=int]
+           │         ├── function: unique_rowid [as=rowid_default:16, type=int, volatile]
+           │         └── cast: INT8 [as=e_default:17, type=int, immutable]
            │              └── null [type=unknown]
            └── projections
-                └── plus [as=d_comp:20, type=int, outer=(16,17), immutable]
+                └── plus [as=d_comp:18, type=int, outer=(14,15), immutable]
                      ├── plus [type=int]
-                     │    ├── variable: int8:16 [type=int]
-                     │    └── variable: c_default:17 [type=int]
+                     │    ├── variable: int8:14 [type=int]
+                     │    └── variable: c_default:15 [type=int]
                      └── const: 1 [type=int]

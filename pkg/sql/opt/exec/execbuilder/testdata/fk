@@ -59,12 +59,10 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: xy@xy_pkey
-│                 spans: FULL SCAN
+│       └── • scan
+│             missing stats
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
 │
 └── • constraint-check
     │

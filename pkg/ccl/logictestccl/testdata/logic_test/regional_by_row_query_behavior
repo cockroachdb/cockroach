@@ -1833,7 +1833,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │           │
 │           └── • lookup join
 │               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
-│               │ equality: (lookup_join_const_col_@37, v_comp) = (crdb_region,v)
+│               │ equality: (lookup_join_const_col_@34, v_comp) = (crdb_region,v)
 │               │ equality cols are key
 │               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │               │
@@ -1855,7 +1855,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
             │
             └── • lookup join
                 │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
-                │ equality: (lookup_join_const_col_@51, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+                │ equality: (lookup_join_const_col_@48, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
                 │ equality cols are key
                 │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
                 │
@@ -2011,7 +2011,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │           │
 │           └── • lookup join
 │               │ table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
-│               │ equality: (lookup_join_const_col_@39, v_comp) = (crdb_region,v)
+│               │ equality: (lookup_join_const_col_@36, v_comp) = (crdb_region,v)
 │               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │               │
 │               └── • cross join
@@ -2036,7 +2036,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │           │
 │           └── • lookup join
 │               │ table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
-│               │ equality: (lookup_join_const_col_@53, v_comp) = (crdb_region,v)
+│               │ equality: (lookup_join_const_col_@50, v_comp) = (crdb_region,v)
 │               │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │               │
 │               └── • cross join
@@ -2061,7 +2061,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
             │
             └── • lookup join
                 │ table: regional_by_row_table_virt_partial@a_plus_10_v_gt_0 (partial index)
-                │ equality: (lookup_join_const_col_@67, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
+                │ equality: (lookup_join_const_col_@64, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
                 │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
                 │
                 └── • cross join

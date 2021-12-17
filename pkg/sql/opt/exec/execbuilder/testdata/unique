@@ -421,12 +421,10 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: other@other_pkey
-│                 spans: FULL SCAN
+│       └── • scan
+│             missing stats
+│             table: other@other_pkey
+│             spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -790,18 +788,18 @@ vectorized: true
 │               │ estimated row count: 1 (missing stats)
 │               │
 │               └── • lookup join (semi)
-│                   │ columns: ("lookup_join_const_col_@16", column1, column3)
+│                   │ columns: ("lookup_join_const_col_@12", column1, column3)
 │                   │ table: uniq_enum@uniq_enum_pkey
-│                   │ equality: (lookup_join_const_col_@16, column3) = (r,i)
+│                   │ equality: (lookup_join_const_col_@12, column3) = (r,i)
 │                   │ equality cols are key
 │                   │ pred: column1 != r
 │                   │
 │                   └── • cross join (inner)
-│                       │ columns: ("lookup_join_const_col_@16", column1, column3)
+│                       │ columns: ("lookup_join_const_col_@12", column1, column3)
 │                       │ estimated row count: 6
 │                       │
 │                       ├── • values
-│                       │     columns: ("lookup_join_const_col_@16")
+│                       │     columns: ("lookup_join_const_col_@12")
 │                       │     size: 1 column, 3 rows
 │                       │     row 0, expr 0: 'us-east'
 │                       │     row 1, expr 0: 'us-west'
@@ -829,18 +827,18 @@ vectorized: true
                 │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@26", column1, column2, column3, column4)
+                    │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4)
                     │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (lookup_join_const_col_@26, column2, column4) = (r,s,j)
+                    │ equality: (lookup_join_const_col_@22, column2, column4) = (r,s,j)
                     │ equality cols are key
                     │ pred: (column1 != r) OR (column3 != i)
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@26", column1, column2, column3, column4)
+                        │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4)
                         │ estimated row count: 6
                         │
                         ├── • values
-                        │     columns: ("lookup_join_const_col_@26")
+                        │     columns: ("lookup_join_const_col_@22")
                         │     size: 1 column, 3 rows
                         │     row 0, expr 0: 'us-east'
                         │     row 1, expr 0: 'us-west'
@@ -913,18 +911,18 @@ vectorized: true
                 │ estimated row count: 1 (missing stats)
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@14", r_default, column2)
+                    │ columns: ("lookup_join_const_col_@12", r_default, column2)
                     │ table: uniq_enum@uniq_enum_pkey
-                    │ equality: (lookup_join_const_col_@14, column2) = (r,i)
+                    │ equality: (lookup_join_const_col_@12, column2) = (r,i)
                     │ equality cols are key
                     │ pred: r_default != r
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@14", r_default, column2)
+                        │ columns: ("lookup_join_const_col_@12", r_default, column2)
                         │ estimated row count: 6
                         │
                         ├── • values
-                        │     columns: ("lookup_join_const_col_@14")
+                        │     columns: ("lookup_join_const_col_@12")
                         │     size: 1 column, 3 rows
                         │     row 0, expr 0: 'us-east'
                         │     row 1, expr 0: 'us-west'
@@ -1241,12 +1239,10 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: other@other_pkey
-│                 spans: FULL SCAN
+│       └── • scan
+│             missing stats
+│             table: other@other_pkey
+│             spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -1336,23 +1332,23 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (right semi)
-            │ equality: (b) = (v)
+        └── • hash join (semi)
+            │ equality: (v) = (b)
             │ pred: rowid_default != rowid
             │
             ├── • filter
-            │   │ filter: c > 0
+            │   │ filter: x > 0
             │   │
-            │   └── • scan
-            │         missing stats
-            │         table: uniq_partial_hidden_pk@uniq_partial_hidden_pk_pkey
-            │         spans: FULL SCAN
+            │   └── • scan buffer
+            │         label: buffer 1
             │
             └── • filter
-                │ filter: x > 0
+                │ filter: c > 0
                 │
-                └── • scan buffer
-                      label: buffer 1
+                └── • scan
+                      missing stats
+                      table: uniq_partial_hidden_pk@uniq_partial_hidden_pk_pkey
+                      spans: FULL SCAN
 ·
 index recommendations: 1
 1. type: index creation
@@ -1413,17 +1409,17 @@ vectorized: true
                 │ estimated row count: 1
                 │
                 └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@17", column1, column2, column3, column4)
+                    │ columns: ("lookup_join_const_col_@13", column1, column2, column3, column4)
                     │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@17, column3) = (r,b)
+                    │ equality: (lookup_join_const_col_@13, column3) = (r,b)
                     │ pred: (column1 != r) OR (column2 != a)
                     │
                     └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@17", column1, column2, column3, column4)
+                        │ columns: ("lookup_join_const_col_@13", column1, column2, column3, column4)
                         │ estimated row count: 6
                         │
                         ├── • values
-                        │     columns: ("lookup_join_const_col_@17")
+                        │     columns: ("lookup_join_const_col_@13")
                         │     size: 1 column, 3 rows
                         │     row 0, expr 0: 'us-east'
                         │     row 1, expr 0: 'us-west'

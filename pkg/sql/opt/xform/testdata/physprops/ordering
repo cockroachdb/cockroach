@@ -1756,50 +1756,42 @@ opt
 SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z LIMIT 2 RETURNING *] ORDER BY b
 ----
 sort
- ├── columns: a:14!null b:15!null c:16!null
+ ├── columns: a:11!null b:12!null c:13!null
  ├── cardinality: [0 - 2]
  ├── volatile, mutations
- ├── key: (14-16)
- ├── ordering: +15
+ ├── key: (11-13)
+ ├── ordering: +12
  └── with &1
-      ├── columns: a:14!null b:15!null c:16!null
+      ├── columns: a:11!null b:12!null c:13!null
       ├── cardinality: [0 - 2]
       ├── volatile, mutations
-      ├── key: (14-16)
+      ├── key: (11-13)
       ├── insert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
       │    ├── insert-mapping:
-      │    │    ├── x:11 => abc.a:1
-      │    │    ├── y:12 => abc.b:2
-      │    │    └── z:13 => abc.c:3
+      │    │    ├── x:6 => abc.a:1
+      │    │    ├── y:7 => abc.b:2
+      │    │    └── z:8 => abc.c:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    ├── key: (1-3)
-      │    └── project
-      │         ├── columns: x:11!null y:12!null z:13!null
+      │    └── top-k
+      │         ├── columns: x:6!null y:7!null z:8!null
+      │         ├── internal-ordering: +7,+8
+      │         ├── k: 2
       │         ├── cardinality: [0 - 2]
-      │         ├── key: (11-13)
-      │         ├── top-k
-      │         │    ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
-      │         │    ├── internal-ordering: +7,+8
-      │         │    ├── k: 2
-      │         │    ├── cardinality: [0 - 2]
-      │         │    ├── key: (6-8)
-      │         │    └── scan xyz
-      │         │         ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
-      │         │         └── key: (6-8)
-      │         └── projections
-      │              ├── xyz.x:6 [as=x:11, outer=(6)]
-      │              ├── xyz.y:7 [as=y:12, outer=(7)]
-      │              └── xyz.z:8 [as=z:13, outer=(8)]
+      │         ├── key: (6-8)
+      │         └── scan xyz
+      │              ├── columns: x:6!null y:7!null z:8!null
+      │              └── key: (6-8)
       └── with-scan &1
-           ├── columns: a:14!null b:15!null c:16!null
+           ├── columns: a:11!null b:12!null c:13!null
            ├── mapping:
-           │    ├──  abc.a:1 => a:14
-           │    ├──  abc.b:2 => b:15
-           │    └──  abc.c:3 => c:16
+           │    ├──  abc.a:1 => a:11
+           │    ├──  abc.b:2 => b:12
+           │    └──  abc.c:3 => c:13
            ├── cardinality: [0 - 2]
-           └── key: (14-16)
+           └── key: (11-13)
 
 # Verify that provided orderings are derived correctly.
 opt
@@ -1808,38 +1800,31 @@ FROM [INSERT INTO xyz SELECT b, c, d FROM abcd ORDER BY c, d LIMIT 2 RETURNING *
 ORDER BY y
 ----
 sort
- ├── columns: x:16!null y:17!null z:18!null
+ ├── columns: x:13!null y:14!null z:15!null
  ├── cardinality: [0 - 2]
  ├── volatile, mutations
- ├── ordering: +17
+ ├── ordering: +14
  └── with &1
-      ├── columns: x:16!null y:17!null z:18!null
+      ├── columns: x:13!null y:14!null z:15!null
       ├── cardinality: [0 - 2]
       ├── volatile, mutations
       ├── insert xyz
       │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
       │    ├── insert-mapping:
-      │    │    ├── b:13 => xyz.x:1
-      │    │    ├── c:14 => xyz.y:2
-      │    │    └── d:15 => xyz.z:3
+      │    │    ├── b:7 => xyz.x:1
+      │    │    ├── c:8 => xyz.y:2
+      │    │    └── d:9 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
-      │    └── project
-      │         ├── columns: b:13 c:14 d:15
-      │         ├── cardinality: [0 - 2]
-      │         ├── scan abcd@cd
-      │         │    ├── columns: abcd.b:7 abcd.c:8 abcd.d:9
-      │         │    └── limit: 2
-      │         └── projections
-      │              ├── abcd.b:7 [as=b:13, outer=(7)]
-      │              ├── abcd.c:8 [as=c:14, outer=(8)]
-      │              └── abcd.d:9 [as=d:15, outer=(9)]
+      │    └── scan abcd@cd
+      │         ├── columns: b:7 c:8 d:9
+      │         └── limit: 2
       └── with-scan &1
-           ├── columns: x:16!null y:17!null z:18!null
+           ├── columns: x:13!null y:14!null z:15!null
            ├── mapping:
-           │    ├──  xyz.x:1 => x:16
-           │    ├──  xyz.y:2 => y:17
-           │    └──  xyz.z:3 => z:18
+           │    ├──  xyz.x:1 => x:13
+           │    ├──  xyz.y:2 => y:14
+           │    └──  xyz.z:3 => z:15
            └── cardinality: [0 - 2]
 
 # Verify that provided orderings are derived correctly with equivalence FD.
@@ -1851,81 +1836,67 @@ WHERE x=y
 ORDER BY y
 ----
 sort
- ├── columns: x:16!null y:17!null z:18!null
+ ├── columns: x:13!null y:14!null z:15!null
  ├── cardinality: [0 - 2]
  ├── volatile, mutations
- ├── fd: (16)==(17), (17)==(16)
- ├── ordering: +(16|17) [actual: +16]
+ ├── fd: (13)==(14), (14)==(13)
+ ├── ordering: +(13|14) [actual: +13]
  └── with &1
-      ├── columns: x:16!null y:17!null z:18!null
+      ├── columns: x:13!null y:14!null z:15!null
       ├── cardinality: [0 - 2]
       ├── volatile, mutations
-      ├── fd: (16)==(17), (17)==(16)
+      ├── fd: (13)==(14), (14)==(13)
       ├── insert xyz
       │    ├── columns: xyz.x:1!null xyz.y:2!null xyz.z:3!null
       │    ├── insert-mapping:
-      │    │    ├── b:13 => xyz.x:1
-      │    │    ├── c:14 => xyz.y:2
-      │    │    └── d:15 => xyz.z:3
+      │    │    ├── b:7 => xyz.x:1
+      │    │    ├── c:8 => xyz.y:2
+      │    │    └── d:9 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
-      │    └── project
-      │         ├── columns: b:13 c:14 d:15
-      │         ├── cardinality: [0 - 2]
-      │         ├── scan abcd@cd
-      │         │    ├── columns: abcd.b:7 abcd.c:8 abcd.d:9
-      │         │    └── limit: 2
-      │         └── projections
-      │              ├── abcd.b:7 [as=b:13, outer=(7)]
-      │              ├── abcd.c:8 [as=c:14, outer=(8)]
-      │              └── abcd.d:9 [as=d:15, outer=(9)]
+      │    └── scan abcd@cd
+      │         ├── columns: b:7 c:8 d:9
+      │         └── limit: 2
       └── select
-           ├── columns: x:16!null y:17!null z:18!null
+           ├── columns: x:13!null y:14!null z:15!null
            ├── cardinality: [0 - 2]
-           ├── fd: (16)==(17), (17)==(16)
+           ├── fd: (13)==(14), (14)==(13)
            ├── with-scan &1
-           │    ├── columns: x:16!null y:17!null z:18!null
+           │    ├── columns: x:13!null y:14!null z:15!null
            │    ├── mapping:
-           │    │    ├──  xyz.x:1 => x:16
-           │    │    ├──  xyz.y:2 => y:17
-           │    │    └──  xyz.z:3 => z:18
+           │    │    ├──  xyz.x:1 => x:13
+           │    │    ├──  xyz.y:2 => y:14
+           │    │    └──  xyz.z:3 => z:15
            │    └── cardinality: [0 - 2]
            └── filters
-                └── x:16 = y:17 [outer=(16,17), fd=(16)==(17), (17)==(16)]
+                └── x:13 = y:14 [outer=(13,14), fd=(13)==(14), (14)==(13)]
 
 # Ignore internal ordering.
 opt
 SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *]
 ----
 with &1
- ├── columns: a:14!null b:15!null c:16!null
+ ├── columns: a:11!null b:12!null c:13!null
  ├── volatile, mutations
- ├── key: (14-16)
+ ├── key: (11-13)
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
  │    ├── insert-mapping:
- │    │    ├── x:11 => abc.a:1
- │    │    ├── y:12 => abc.b:2
- │    │    └── z:13 => abc.c:3
+ │    │    ├── x:6 => abc.a:1
+ │    │    ├── y:7 => abc.b:2
+ │    │    └── z:8 => abc.c:3
  │    ├── volatile, mutations
  │    ├── key: (1-3)
- │    └── project
- │         ├── columns: x:11!null y:12!null z:13!null
- │         ├── key: (11-13)
- │         ├── scan xyz
- │         │    ├── columns: xyz.x:6!null xyz.y:7!null xyz.z:8!null
- │         │    └── key: (6-8)
- │         └── projections
- │              ├── xyz.x:6 [as=x:11, outer=(6)]
- │              ├── xyz.y:7 [as=y:12, outer=(7)]
- │              └── xyz.z:8 [as=z:13, outer=(8)]
+ │    └── scan xyz
+ │         ├── columns: x:6!null y:7!null z:8!null
+ │         └── key: (6-8)
  └── with-scan &1
-      ├── columns: a:14!null b:15!null c:16!null
+      ├── columns: a:11!null b:12!null c:13!null
       ├── mapping:
-      │    ├──  abc.a:1 => a:14
-      │    ├──  abc.b:2 => b:15
-      │    └──  abc.c:3 => c:16
-      └── key: (14-16)
+      │    ├──  abc.a:1 => a:11
+      │    ├──  abc.b:2 => b:12
+      │    └──  abc.c:3 => c:13
+      └── key: (11-13)
 
 # --------------------------------------------------
 # Update operator.

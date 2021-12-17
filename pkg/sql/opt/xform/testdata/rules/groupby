@@ -2246,38 +2246,38 @@ memo (optimized, ~32KB, required=[presentation: w:12] [ordering: +13,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~26KB, required=[])
+memo (optimized, ~25KB, required=[])
  ├── G1: (insert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 xyz)
- │         └── cost: 2209.02
- ├── G2: (upsert-distinct-on G5 G6 cols=(13)) (upsert-distinct-on G5 G6 cols=(13),ordering=+13 opt(15))
+ │         └── cost: 2188.92
+ ├── G2: (upsert-distinct-on G5 G6 cols=(8)) (upsert-distinct-on G5 G6 cols=(8),ordering=+8 opt(12))
  │    └── []
- │         ├── best: (upsert-distinct-on G5 G6 cols=(13))
- │         └── cost: 2209.01
+ │         ├── best: (upsert-distinct-on G5 G6 cols=(8))
+ │         └── cost: 2188.91
  ├── G3: (unique-checks)
  ├── G4: (f-k-checks)
- ├── G5: (anti-join G7 G8 G9) (merge-join G7 G8 G10 anti-join,+13,+16) (lookup-join G7 G10 xyz,keyCols=[13],outCols=(13-16)) (lookup-join G7 G10 xyz@xy,keyCols=[13],outCols=(13-16))
- │    ├── [ordering: +13 opt(15)]
- │    │    ├── best: (merge-join G7="[ordering: +13 opt(15)]" G8="[ordering: +16]" G10 anti-join,+13,+16)
- │    │    └── cost: 2208.98
+ ├── G5: (anti-join G7 G8 G9) (merge-join G7 G8 G10 anti-join,+8,+13) (lookup-join G7 G10 xyz,keyCols=[8],outCols=(8,9,12,13)) (lookup-join G7 G10 xyz@xy,keyCols=[8],outCols=(8,9,12,13))
+ │    ├── [ordering: +8 opt(12)]
+ │    │    ├── best: (merge-join G7="[ordering: +8 opt(12)]" G8="[ordering: +13]" G10 anti-join,+8,+13)
+ │    │    └── cost: 2188.88
  │    └── []
- │         ├── best: (merge-join G7="[ordering: +13 opt(15)]" G8="[ordering: +16]" G10 anti-join,+13,+16)
- │         └── cost: 2208.98
+ │         ├── best: (merge-join G7="[ordering: +8 opt(12)]" G8="[ordering: +13]" G10 anti-join,+8,+13)
+ │         └── cost: 2188.88
  ├── G6: (aggregations G11 G12)
- ├── G7: (project G13 G14)
- │    ├── [ordering: +13 opt(15)]
- │    │    ├── best: (project G13="[ordering: +8]" G14)
- │    │    └── cost: 1124.64
+ ├── G7: (project G13 G14 v w)
+ │    ├── [ordering: +8 opt(12)]
+ │    │    ├── best: (project G13="[ordering: +8]" G14 v w)
+ │    │    └── cost: 1104.64
  │    └── []
- │         ├── best: (project G13 G14)
- │         └── cost: 1124.64
- ├── G8: (scan xyz,cols=(16)) (scan xyz@xy,cols=(16)) (scan xyz@zyx,cols=(16)) (scan xyz@yy,cols=(16))
- │    ├── [ordering: +16]
- │    │    ├── best: (scan xyz@xy,cols=(16))
+ │         ├── best: (project G13 G14 v w)
+ │         └── cost: 1104.64
+ ├── G8: (scan xyz,cols=(13)) (scan xyz@xy,cols=(13)) (scan xyz@zyx,cols=(13)) (scan xyz@yy,cols=(13))
+ │    ├── [ordering: +13]
+ │    │    ├── best: (scan xyz@xy,cols=(13))
  │    │    └── cost: 1054.32
  │    └── []
- │         ├── best: (scan xyz@xy,cols=(16))
+ │         ├── best: (scan xyz@xy,cols=(13))
  │         └── cost: 1054.32
  ├── G9: (filters G15)
  ├── G10: (filters)
@@ -2290,15 +2290,13 @@ memo (optimized, ~26KB, required=[])
  │    └── []
  │         ├── best: (scan kuvw,cols=(8,9))
  │         └── cost: 1084.62
- ├── G14: (projections G18 G19 G20)
- ├── G15: (eq G21 G22)
+ ├── G14: (projections G18)
+ ├── G15: (eq G19 G20)
  ├── G16: (variable w)
  ├── G17: (variable "?column?")
- ├── G18: (variable kuvw.v)
- ├── G19: (variable kuvw.w)
- ├── G20: (const 1.0)
- ├── G21: (variable v)
- └── G22: (variable x)
+ ├── G18: (const 1.0)
+ ├── G19: (variable v)
+ └── G20: (variable x)
 
 # Ensure that streaming ensure-upsert-distinct-on will be used.
 memo
