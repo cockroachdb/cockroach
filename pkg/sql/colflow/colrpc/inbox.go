@@ -294,12 +294,15 @@ func (i *Inbox) Init(ctx context.Context) {
 			i.errCh <- cancelchecker.QueryCanceledError
 			return cancelchecker.QueryCanceledError
 		case <-i.Ctx.Done():
+			// errToThrow is propagated to the reader of the Inbox.
+			errToThrow := i.Ctx.Err()
 			if err := i.checkFlowCtxCancellation(); err != nil {
 				// This is an ungraceful termination because the flow context
 				// has been canceled.
 				i.errCh <- err
+				errToThrow = err
 			}
-			return i.Ctx.Err()
+			return errToThrow
 		}
 
 		if i.ctxInterceptorFn != nil {

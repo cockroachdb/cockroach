@@ -422,8 +422,18 @@ func TestOutboxInbox(t *testing.T) {
 			// treated as an ungraceful termination of the stream, so we expect
 			// an error from the stream handler.
 			require.True(t, errors.Is(streamHandlerErr, cancelchecker.QueryCanceledError))
-			// The Inbox propagates this cancellation on its host.
-			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
+			// The Inbox propagates this cancellation on its host. Depending on
+			// when the cancellation is noticed by the reader, a different error
+			// is used, so we allow for both of them.
+			//
+			// QueryCanceledError is used when the flow ctx cancellation is
+			// observed before the stream arrived whereas wrapped
+			// context.Canceled error is used when the inbox handler goroutine
+			// notices the cancellation first and ungracefully shuts down the
+			// stream.
+			ok := errors.Is(readerErr, cancelchecker.QueryCanceledError) ||
+				testutils.IsError(readerErr, "context canceled")
+			require.True(t, ok, readerErr)
 
 			// In the production setup, the watchdog goroutine of the outbox
 			// would receive non-io.EOF error indicating an ungraceful
