@@ -164,7 +164,9 @@ func (p *planner) CheckGrantOption(
 	ctx context.Context, descriptor catalog.Descriptor, privList privilege.List, isGrant bool,
 ) error {
 	// Always allow the command to go through if performed by a superuser or the owner of the object
-	if admin, _ := p.UserHasAdminRole(ctx, p.User()); admin {
+	if isAdmin, err := p.UserHasAdminRole(ctx, p.User()); err != nil {
+		return err
+	} else if isAdmin {
 		return nil
 	}
 
