@@ -74,9 +74,6 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	return testCmd
 }
 
-// TODO(irfansharif): Add tests for the various bazel commands that get
-// generated from the set of provided user flags.
-
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
@@ -93,9 +90,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		verbose     = mustGetFlagBool(cmd, vFlag)
 		showLogs    = mustGetFlagBool(cmd, showLogsFlag)
 	)
-	if rewriteArg != "" && rewrite == "" {
-		rewrite = "-rewrite"
-	}
 
 	var args []string
 	args = append(args, "test")
