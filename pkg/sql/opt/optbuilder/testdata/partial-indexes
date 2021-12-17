@@ -97,29 +97,22 @@ INSERT INTO partial_indexes VALUES (2, 1, 'bar')
 insert partial_indexes
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    └── column3:11 => c:3
- ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:14 partial_index_put4:15
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── column3:8 => c:3
+ ├── partial index put columns: partial_index_put1:9 partial_index_put2:10 partial_index_put3:11 partial_index_put4:12
  └── project
-      ├── columns: partial_index_put1:12!null partial_index_put2:13!null partial_index_put3:14!null partial_index_put4:15!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:9!null partial_index_put2:10!null partial_index_put3:11!null partial_index_put4:12!null column1:6!null column2:7!null column3:8!null
       ├── project
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── values
-      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    └── (2, 1, 'bar')
-      │    └── projections
-      │         ├── assignment-cast: INT8 [as=column1:9]
-      │         │    └── column1:6
-      │         ├── assignment-cast: INT8 [as=column2:10]
-      │         │    └── column2:7
-      │         └── assignment-cast: STRING [as=column3:11]
-      │              └── column3:8
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    └── values
+      │         ├── columns: column1:6!null column2:7!null column3:8!null
+      │         └── (2, 1, 'bar')
       └── projections
-           ├── column3:11 = 'foo' [as=partial_index_put1:12]
-           ├── (column1:9 > column2:10) AND (column3:11 = 'bar') [as=partial_index_put2:13]
-           ├── column3:11 = 'delete-only' [as=partial_index_put3:14]
-           └── column3:11 = 'write-only' [as=partial_index_put4:15]
+           ├── column3:8 = 'foo' [as=partial_index_put1:9]
+           ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:10]
+           ├── column3:8 = 'delete-only' [as=partial_index_put3:11]
+           └── column3:8 = 'write-only' [as=partial_index_put4:12]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -129,38 +122,31 @@ INSERT INTO ambig (partial_index_put1, partial_index_del1, check1) VALUES (1, 2,
 insert ambig
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:10 => ambig.partial_index_put1:1
- │    ├── column2:11 => partial_index_del1:2
- │    ├── column3:12 => ambig.check1:3
- │    └── rowid_default:13 => rowid:4
- ├── check columns: check1:14
- ├── partial index put columns: partial_index_put1:15 partial_index_put2:16 partial_index_put3:17
+ │    ├── column1:7 => ambig.partial_index_put1:1
+ │    ├── column2:8 => partial_index_del1:2
+ │    ├── column3:9 => ambig.check1:3
+ │    └── rowid_default:10 => rowid:4
+ ├── check columns: check1:11
+ ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:14
  └── project
-      ├── columns: partial_index_put1:15!null partial_index_put2:16!null partial_index_put3:17!null column1:10!null column2:11!null column3:12!null rowid_default:13 check1:14!null
+      ├── columns: partial_index_put1:12!null partial_index_put2:13!null partial_index_put3:14!null column1:7!null column2:8!null column3:9!null rowid_default:10 check1:11!null
       ├── project
-      │    ├── columns: check1:14!null column1:10!null column2:11!null column3:12!null rowid_default:13
+      │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null rowid_default:10
       │    ├── project
-      │    │    ├── columns: rowid_default:13 column1:10!null column2:11!null column3:12!null
+      │    │    ├── columns: rowid_default:10 column1:7!null column2:8!null column3:9!null
       │    │    ├── project
-      │    │    │    ├── columns: column1:10!null column2:11!null column3:12!null
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
-      │    │    │    │    └── (1, 2, 3)
-      │    │    │    └── projections
-      │    │    │         ├── assignment-cast: INT8 [as=column1:10]
-      │    │    │         │    └── column1:7
-      │    │    │         ├── assignment-cast: INT8 [as=column2:11]
-      │    │    │         │    └── column2:8
-      │    │    │         └── assignment-cast: INT8 [as=column3:12]
-      │    │    │              └── column3:9
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    └── values
+      │    │    │         ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │         └── (1, 2, 3)
       │    │    └── projections
-      │    │         └── unique_rowid() [as=rowid_default:13]
+      │    │         └── unique_rowid() [as=rowid_default:10]
       │    └── projections
-      │         └── column1:10 > 10 [as=check1:14]
+      │         └── column1:7 > 10 [as=check1:11]
       └── projections
-           ├── column1:10 > 0 [as=partial_index_put1:15]
-           ├── column2:11 > 0 [as=partial_index_put2:16]
-           └── column3:12 > 0 [as=partial_index_put3:17]
+           ├── column1:7 > 0 [as=partial_index_put1:12]
+           ├── column2:8 > 0 [as=partial_index_put2:13]
+           └── column3:9 > 0 [as=partial_index_put3:14]
 
 build
 INSERT INTO comp (a, b, c) VALUES (2, 1, 'Foo')
@@ -168,34 +154,27 @@ INSERT INTO comp (a, b, c) VALUES (2, 1, 'Foo')
 insert comp
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:11 => a:1
- │    ├── column2:12 => b:2
- │    ├── column3:13 => c:3
- │    ├── d_comp:14 => d:4
- │    └── e_comp:15 => e:5
- ├── partial index put columns: partial_index_put1:16 partial_index_put2:17
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    ├── d_comp:11 => d:4
+ │    └── e_comp:12 => e:5
+ ├── partial index put columns: partial_index_put1:13 partial_index_put2:14
  └── project
-      ├── columns: partial_index_put1:16 partial_index_put2:17 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      ├── columns: partial_index_put1:13 partial_index_put2:14 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       ├── project
-      │    ├── columns: d_comp:14 e_comp:15 column1:11!null column2:12!null column3:13!null
+      │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
       │    ├── project
-      │    │    ├── columns: column1:11!null column2:12!null column3:13!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    └── (2, 1, 'Foo')
-      │    │    └── projections
-      │    │         ├── assignment-cast: INT8 [as=column1:11]
-      │    │         │    └── column1:8
-      │    │         ├── assignment-cast: INT8 [as=column2:12]
-      │    │         │    └── column2:9
-      │    │         └── assignment-cast: STRING [as=column3:13]
-      │    │              └── column3:10
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    └── values
+      │    │         ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │         └── (2, 1, 'Foo')
       │    └── projections
-      │         ├── lower(column3:13) [as=d_comp:14]
-      │         └── upper(column3:13) [as=e_comp:15]
+      │         ├── lower(column3:10) [as=d_comp:11]
+      │         └── upper(column3:10) [as=e_comp:12]
       └── projections
-           ├── d_comp:14 = 'foo' [as=partial_index_put1:16]
-           └── e_comp:15 = 'FOO' [as=partial_index_put2:17]
+           ├── d_comp:11 = 'foo' [as=partial_index_put1:13]
+           └── e_comp:12 = 'FOO' [as=partial_index_put2:14]
 
 # Regression test for issue #52546. Building partial index predicate expressions
 # that are only a single column reference should not panic.
@@ -210,24 +189,19 @@ INSERT INTO t52546 VALUES (1, true)
 insert t52546
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:8 => a:1
- │    ├── column2:9 => b:2
- │    └── rowid_default:10 => rowid:3
- ├── partial index put columns: column2:9
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── rowid_default:8 => rowid:3
+ ├── partial index put columns: column2:7
  └── project
-      ├── columns: rowid_default:10 column1:8!null column2:9!null
+      ├── columns: rowid_default:8 column1:6!null column2:7!null
       ├── project
-      │    ├── columns: column1:8!null column2:9!null
-      │    ├── values
-      │    │    ├── columns: column1:6!null column2:7!null
-      │    │    └── (1, true)
-      │    └── projections
-      │         ├── assignment-cast: INT8 [as=column1:8]
-      │         │    └── column1:6
-      │         └── assignment-cast: BOOL [as=column2:9]
-      │              └── column2:7
+      │    ├── columns: column1:6!null column2:7!null
+      │    └── values
+      │         ├── columns: column1:6!null column2:7!null
+      │         └── (1, true)
       └── projections
-           └── unique_rowid() [as=rowid_default:10]
+           └── unique_rowid() [as=rowid_default:8]
 
 # -- DELETE tests --
 
@@ -628,74 +602,67 @@ insert partial_indexes
  ├── columns: <none>
  ├── arbiter indexes: partial_indexes_pkey partial_indexes_b_c_key
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    └── column3:11 => c:3
- ├── partial index put columns: partial_index_put1:22 partial_index_put2:23 partial_index_put3:24 partial_index_put4:25
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── column3:8 => c:3
+ ├── partial index put columns: partial_index_put1:19 partial_index_put2:20 partial_index_put3:21 partial_index_put4:22
  └── project
-      ├── columns: partial_index_put1:22!null partial_index_put2:23!null partial_index_put3:24!null partial_index_put4:25!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:19!null partial_index_put2:20!null partial_index_put3:21!null partial_index_put4:22!null column1:6!null column2:7!null column3:8!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── grouping columns: column2:10!null column3:11!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null column3:8!null
       │    ├── upsert-distinct-on
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    ├── grouping columns: column1:9!null
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    │    │    └── (2, 1, 'bar')
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │    │    │    │    │         │    └── column1:6
-      │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
-      │    │    │    │    │         │    └── column2:7
-      │    │    │    │    │         └── assignment-cast: STRING [as=column3:11]
-      │    │    │    │    │              └── column3:8
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    └── values
+      │    │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │         └── (2, 1, 'bar')
       │    │    │    │    ├── scan partial_indexes
-      │    │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │    │    │    │    │    └── partial index predicates
       │    │    │    │    │         ├── partial_indexes_b_idx1: filters
-      │    │    │    │    │         │    └── c:14 = 'foo'
+      │    │    │    │    │         │    └── c:11 = 'foo'
       │    │    │    │    │         ├── partial_indexes_c_idx: filters
-      │    │    │    │    │         │    └── (a:12 > b:13) AND (c:14 = 'bar')
+      │    │    │    │    │         │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    │         ├── b: filters
-      │    │    │    │    │         │    └── c:14 = 'delete-only'
+      │    │    │    │    │         │    └── c:11 = 'delete-only'
       │    │    │    │    │         └── b: filters
-      │    │    │    │    │              └── c:14 = 'write-only'
+      │    │    │    │    │              └── c:11 = 'write-only'
       │    │    │    │    └── filters
-      │    │    │    │         └── column1:9 = a:12
+      │    │    │    │         └── column1:6 = a:9
       │    │    │    ├── scan partial_indexes
-      │    │    │    │    ├── columns: a:17!null b:18 c:19
+      │    │    │    │    ├── columns: a:14!null b:15 c:16
       │    │    │    │    └── partial index predicates
       │    │    │    │         ├── partial_indexes_b_idx1: filters
-      │    │    │    │         │    └── c:19 = 'foo'
+      │    │    │    │         │    └── c:16 = 'foo'
       │    │    │    │         ├── partial_indexes_c_idx: filters
-      │    │    │    │         │    └── (a:17 > b:18) AND (c:19 = 'bar')
+      │    │    │    │         │    └── (a:14 > b:15) AND (c:16 = 'bar')
       │    │    │    │         ├── b: filters
-      │    │    │    │         │    └── c:19 = 'delete-only'
+      │    │    │    │         │    └── c:16 = 'delete-only'
       │    │    │    │         └── b: filters
-      │    │    │    │              └── c:19 = 'write-only'
+      │    │    │    │              └── c:16 = 'write-only'
       │    │    │    └── filters
-      │    │    │         ├── column2:10 = b:18
-      │    │    │         └── column3:11 = c:19
+      │    │    │         ├── column2:7 = b:15
+      │    │    │         └── column3:8 = c:16
       │    │    └── aggregations
-      │    │         ├── first-agg [as=column2:10]
-      │    │         │    └── column2:10
-      │    │         └── first-agg [as=column3:11]
-      │    │              └── column3:11
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
       │    └── aggregations
-      │         └── first-agg [as=column1:9]
-      │              └── column1:9
+      │         └── first-agg [as=column1:6]
+      │              └── column1:6
       └── projections
-           ├── column3:11 = 'foo' [as=partial_index_put1:22]
-           ├── (column1:9 > column2:10) AND (column3:11 = 'bar') [as=partial_index_put2:23]
-           ├── column3:11 = 'delete-only' [as=partial_index_put3:24]
-           └── column3:11 = 'write-only' [as=partial_index_put4:25]
+           ├── column3:8 = 'foo' [as=partial_index_put1:19]
+           ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:20]
+           ├── column3:8 = 'delete-only' [as=partial_index_put3:21]
+           └── column3:8 = 'write-only' [as=partial_index_put4:22]
 
 build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT (b, c) DO UPDATE SET b = partial_indexes.b + 1, c = 'baz'
@@ -836,66 +803,59 @@ insert comp
  ├── columns: <none>
  ├── arbiter indexes: comp_pkey
  ├── insert-mapping:
- │    ├── column1:11 => a:1
- │    ├── column2:12 => b:2
- │    ├── column3:13 => c:3
- │    ├── d_comp:14 => d:4
- │    └── e_comp:15 => e:5
- ├── partial index put columns: partial_index_put1:23 partial_index_put2:24
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    ├── d_comp:11 => d:4
+ │    └── e_comp:12 => e:5
+ ├── partial index put columns: partial_index_put1:20 partial_index_put2:21
  └── project
-      ├── columns: partial_index_put1:23 partial_index_put2:24 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      ├── columns: partial_index_put1:20 partial_index_put2:21 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       ├── upsert-distinct-on
-      │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
-      │    ├── grouping columns: column1:11!null
+      │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
+      │    ├── grouping columns: column1:8!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │    │    ├── project
-      │    │    │    ├── columns: d_comp:14 e_comp:15 column1:11!null column2:12!null column3:13!null
+      │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    │    └── (2, 1, 'Foo')
-      │    │    │    │    └── projections
-      │    │    │    │         ├── assignment-cast: INT8 [as=column1:11]
-      │    │    │    │         │    └── column1:8
-      │    │    │    │         ├── assignment-cast: INT8 [as=column2:12]
-      │    │    │    │         │    └── column2:9
-      │    │    │    │         └── assignment-cast: STRING [as=column3:13]
-      │    │    │    │              └── column3:10
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    └── values
+      │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │         └── (2, 1, 'Foo')
       │    │    │    └── projections
-      │    │    │         ├── lower(column3:13) [as=d_comp:14]
-      │    │    │         └── upper(column3:13) [as=e_comp:15]
+      │    │    │         ├── lower(column3:10) [as=d_comp:11]
+      │    │    │         └── upper(column3:10) [as=e_comp:12]
       │    │    ├── project
-      │    │    │    ├── columns: d:19 a:16!null b:17 c:18 e:20
+      │    │    │    ├── columns: d:16 a:13!null b:14 c:15 e:17
       │    │    │    ├── scan comp
-      │    │    │    │    ├── columns: a:16!null b:17 c:18 e:20
+      │    │    │    │    ├── columns: a:13!null b:14 c:15 e:17
       │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    ├── d:19
-      │    │    │    │    │    │    └── lower(c:18)
-      │    │    │    │    │    └── e:20
-      │    │    │    │    │         └── upper(c:18)
+      │    │    │    │    │    ├── d:16
+      │    │    │    │    │    │    └── lower(c:15)
+      │    │    │    │    │    └── e:17
+      │    │    │    │    │         └── upper(c:15)
       │    │    │    │    └── partial index predicates
       │    │    │    │         ├── comp_b_idx: filters
-      │    │    │    │         │    └── lower(c:18) = 'foo'
+      │    │    │    │         │    └── lower(c:15) = 'foo'
       │    │    │    │         └── comp_b_idx1: filters
-      │    │    │    │              └── e:20 = 'FOO'
+      │    │    │    │              └── e:17 = 'FOO'
       │    │    │    └── projections
-      │    │    │         └── lower(c:18) [as=d:19]
+      │    │    │         └── lower(c:15) [as=d:16]
       │    │    └── filters
-      │    │         └── column1:11 = a:16
+      │    │         └── column1:8 = a:13
       │    └── aggregations
-      │         ├── first-agg [as=column2:12]
-      │         │    └── column2:12
-      │         ├── first-agg [as=column3:13]
-      │         │    └── column3:13
-      │         ├── first-agg [as=d_comp:14]
-      │         │    └── d_comp:14
-      │         └── first-agg [as=e_comp:15]
-      │              └── e_comp:15
+      │         ├── first-agg [as=column2:9]
+      │         │    └── column2:9
+      │         ├── first-agg [as=column3:10]
+      │         │    └── column3:10
+      │         ├── first-agg [as=d_comp:11]
+      │         │    └── d_comp:11
+      │         └── first-agg [as=e_comp:12]
+      │              └── e_comp:12
       └── projections
-           ├── d_comp:14 = 'foo' [as=partial_index_put1:23]
-           └── e_comp:15 = 'FOO' [as=partial_index_put2:24]
+           ├── d_comp:11 = 'foo' [as=partial_index_put1:20]
+           └── e_comp:12 = 'FOO' [as=partial_index_put2:21]
 
 build
 INSERT INTO comp VALUES (2, 1, 'Foo') ON CONFLICT (a) DO UPDATE SET b = comp.b + 1, c = 'Bar'
@@ -1064,71 +1024,64 @@ insert uniq
  ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_b_key
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    └── column3:11 => c:3
- ├── partial index put columns: partial_index_put1:23
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── column3:8 => c:3
+ ├── partial index put columns: partial_index_put1:20
  └── project
-      ├── columns: partial_index_put1:23!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:20!null column1:6!null column2:7!null column3:8!null
       ├── project
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    └── upsert-distinct-on
-      │         ├── columns: column1:9!null column2:10!null column3:11!null arbiter_uniq_b_key_distinct:22
-      │         ├── grouping columns: column2:10!null arbiter_uniq_b_key_distinct:22
+      │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_key_distinct:19
+      │         ├── grouping columns: column2:7!null arbiter_uniq_b_key_distinct:19
       │         ├── project
-      │         │    ├── columns: arbiter_uniq_b_key_distinct:22 column1:9!null column2:10!null column3:11!null
+      │         │    ├── columns: arbiter_uniq_b_key_distinct:19 column1:6!null column2:7!null column3:8!null
       │         │    ├── upsert-distinct-on
-      │         │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │         │    │    ├── grouping columns: column1:9!null
+      │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │         │    │    ├── grouping columns: column1:6!null
       │         │    │    ├── anti-join (hash)
-      │         │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    │    ├── anti-join (hash)
-      │         │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    │    │    ├── project
-      │         │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │         │    │    │    │    │    ├── values
-      │         │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │    │    │    │    │    └── (1, 1, 'bar')
-      │         │    │    │    │    │    └── projections
-      │         │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │         │    │    │    │    │         │    └── column1:6
-      │         │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
-      │         │    │    │    │    │         │    └── column2:7
-      │         │    │    │    │    │         └── assignment-cast: STRING [as=column3:11]
-      │         │    │    │    │    │              └── column3:8
+      │         │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │         │    │    │    │    │    └── values
+      │         │    │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
+      │         │    │    │    │    │         └── (1, 1, 'bar')
       │         │    │    │    │    ├── scan uniq
-      │         │    │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │         │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │         │    │    │    │    │    └── partial index predicates
       │         │    │    │    │    │         └── uniq_b_key: filters
-      │         │    │    │    │    │              └── c:14 = 'foo'
+      │         │    │    │    │    │              └── c:11 = 'foo'
       │         │    │    │    │    └── filters
-      │         │    │    │    │         └── column1:9 = a:12
+      │         │    │    │    │         └── column1:6 = a:9
       │         │    │    │    ├── select
-      │         │    │    │    │    ├── columns: a:17!null b:18 c:19!null
+      │         │    │    │    │    ├── columns: a:14!null b:15 c:16!null
       │         │    │    │    │    ├── scan uniq
-      │         │    │    │    │    │    ├── columns: a:17!null b:18 c:19
+      │         │    │    │    │    │    ├── columns: a:14!null b:15 c:16
       │         │    │    │    │    │    └── partial index predicates
       │         │    │    │    │    │         └── uniq_b_key: filters
-      │         │    │    │    │    │              └── c:19 = 'foo'
+      │         │    │    │    │    │              └── c:16 = 'foo'
       │         │    │    │    │    └── filters
-      │         │    │    │    │         └── c:19 = 'foo'
+      │         │    │    │    │         └── c:16 = 'foo'
       │         │    │    │    └── filters
-      │         │    │    │         ├── column2:10 = b:18
-      │         │    │    │         └── column3:11 = 'foo'
+      │         │    │    │         ├── column2:7 = b:15
+      │         │    │    │         └── column3:8 = 'foo'
       │         │    │    └── aggregations
-      │         │    │         ├── first-agg [as=column2:10]
-      │         │    │         │    └── column2:10
-      │         │    │         └── first-agg [as=column3:11]
-      │         │    │              └── column3:11
+      │         │    │         ├── first-agg [as=column2:7]
+      │         │    │         │    └── column2:7
+      │         │    │         └── first-agg [as=column3:8]
+      │         │    │              └── column3:8
       │         │    └── projections
-      │         │         └── (column3:11 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:22]
+      │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:19]
       │         └── aggregations
-      │              ├── first-agg [as=column1:9]
-      │              │    └── column1:9
-      │              └── first-agg [as=column3:11]
-      │                   └── column3:11
+      │              ├── first-agg [as=column1:6]
+      │              │    └── column1:6
+      │              └── first-agg [as=column3:8]
+      │                   └── column3:8
       └── projections
-           └── column3:11 = 'foo' [as=partial_index_put1:23]
+           └── column3:8 = 'foo' [as=partial_index_put1:20]
 
 exec-ddl
 CREATE UNIQUE INDEX u2 ON uniq (b) WHERE c = 'bar'
@@ -1142,87 +1095,80 @@ insert uniq
  ├── columns: <none>
  ├── arbiter indexes: uniq_b_key u2
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    └── column3:11 => c:3
- ├── partial index put columns: partial_index_put1:24 partial_index_put2:25
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── column3:8 => c:3
+ ├── partial index put columns: partial_index_put1:21 partial_index_put2:22
  └── project
-      ├── columns: partial_index_put1:24!null partial_index_put2:25!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:21!null partial_index_put2:22!null column1:6!null column2:7!null column3:8!null
       ├── project
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    └── upsert-distinct-on
-      │         ├── columns: column1:9!null column2:10!null column3:11!null arbiter_u2_distinct:23
-      │         ├── grouping columns: column2:10!null arbiter_u2_distinct:23
+      │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_u2_distinct:20
+      │         ├── grouping columns: column2:7!null arbiter_u2_distinct:20
       │         ├── project
-      │         │    ├── columns: arbiter_u2_distinct:23 column1:9!null column2:10!null column3:11!null
+      │         │    ├── columns: arbiter_u2_distinct:20 column1:6!null column2:7!null column3:8!null
       │         │    ├── project
-      │         │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:9!null column2:10!null column3:11!null arbiter_uniq_b_key_distinct:22
-      │         │    │         ├── grouping columns: column2:10!null arbiter_uniq_b_key_distinct:22
+      │         │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_b_key_distinct:19
+      │         │    │         ├── grouping columns: column2:7!null arbiter_uniq_b_key_distinct:19
       │         │    │         ├── project
-      │         │    │         │    ├── columns: arbiter_uniq_b_key_distinct:22 column1:9!null column2:10!null column3:11!null
+      │         │    │         │    ├── columns: arbiter_uniq_b_key_distinct:19 column1:6!null column2:7!null column3:8!null
       │         │    │         │    ├── anti-join (hash)
-      │         │    │         │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    ├── anti-join (hash)
-      │         │    │         │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │         │    │         │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    │    ├── project
-      │         │    │         │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │         │    │         │    │    │    │    ├── values
-      │         │    │         │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    │    │    └── (1, 1, 'bar')
-      │         │    │         │    │    │    │    └── projections
-      │         │    │         │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │         │    │         │    │    │    │         │    └── column1:6
-      │         │    │         │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
-      │         │    │         │    │    │    │         │    └── column2:7
-      │         │    │         │    │    │    │         └── assignment-cast: STRING [as=column3:11]
-      │         │    │         │    │    │    │              └── column3:8
+      │         │    │         │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │         │    │         │    │    │    │    └── values
+      │         │    │         │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
+      │         │    │         │    │    │    │         └── (1, 1, 'bar')
       │         │    │         │    │    │    ├── select
-      │         │    │         │    │    │    │    ├── columns: a:12!null b:13 c:14!null
+      │         │    │         │    │    │    │    ├── columns: a:9!null b:10 c:11!null
       │         │    │         │    │    │    │    ├── scan uniq
-      │         │    │         │    │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │         │    │         │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │         │    │         │    │    │    │    │    └── partial index predicates
       │         │    │         │    │    │    │    │         ├── uniq_b_key: filters
-      │         │    │         │    │    │    │    │         │    └── c:14 = 'foo'
+      │         │    │         │    │    │    │    │         │    └── c:11 = 'foo'
       │         │    │         │    │    │    │    │         └── u2: filters
-      │         │    │         │    │    │    │    │              └── c:14 = 'bar'
+      │         │    │         │    │    │    │    │              └── c:11 = 'bar'
       │         │    │         │    │    │    │    └── filters
-      │         │    │         │    │    │    │         └── c:14 = 'foo'
+      │         │    │         │    │    │    │         └── c:11 = 'foo'
       │         │    │         │    │    │    └── filters
-      │         │    │         │    │    │         ├── column2:10 = b:13
-      │         │    │         │    │    │         └── column3:11 = 'foo'
+      │         │    │         │    │    │         ├── column2:7 = b:10
+      │         │    │         │    │    │         └── column3:8 = 'foo'
       │         │    │         │    │    ├── select
-      │         │    │         │    │    │    ├── columns: a:17!null b:18 c:19!null
+      │         │    │         │    │    │    ├── columns: a:14!null b:15 c:16!null
       │         │    │         │    │    │    ├── scan uniq
-      │         │    │         │    │    │    │    ├── columns: a:17!null b:18 c:19
+      │         │    │         │    │    │    │    ├── columns: a:14!null b:15 c:16
       │         │    │         │    │    │    │    └── partial index predicates
       │         │    │         │    │    │    │         ├── uniq_b_key: filters
-      │         │    │         │    │    │    │         │    └── c:19 = 'foo'
+      │         │    │         │    │    │    │         │    └── c:16 = 'foo'
       │         │    │         │    │    │    │         └── u2: filters
-      │         │    │         │    │    │    │              └── c:19 = 'bar'
+      │         │    │         │    │    │    │              └── c:16 = 'bar'
       │         │    │         │    │    │    └── filters
-      │         │    │         │    │    │         └── c:19 = 'bar'
+      │         │    │         │    │    │         └── c:16 = 'bar'
       │         │    │         │    │    └── filters
-      │         │    │         │    │         ├── column2:10 = b:18
-      │         │    │         │    │         └── column3:11 = 'bar'
+      │         │    │         │    │         ├── column2:7 = b:15
+      │         │    │         │    │         └── column3:8 = 'bar'
       │         │    │         │    └── projections
-      │         │    │         │         └── (column3:11 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:22]
+      │         │    │         │         └── (column3:8 = 'foo') OR NULL::BOOL [as=arbiter_uniq_b_key_distinct:19]
       │         │    │         └── aggregations
-      │         │    │              ├── first-agg [as=column1:9]
-      │         │    │              │    └── column1:9
-      │         │    │              └── first-agg [as=column3:11]
-      │         │    │                   └── column3:11
+      │         │    │              ├── first-agg [as=column1:6]
+      │         │    │              │    └── column1:6
+      │         │    │              └── first-agg [as=column3:8]
+      │         │    │                   └── column3:8
       │         │    └── projections
-      │         │         └── (column3:11 = 'bar') OR NULL::BOOL [as=arbiter_u2_distinct:23]
+      │         │         └── (column3:8 = 'bar') OR NULL::BOOL [as=arbiter_u2_distinct:20]
       │         └── aggregations
-      │              ├── first-agg [as=column1:9]
-      │              │    └── column1:9
-      │              └── first-agg [as=column3:11]
-      │                   └── column3:11
+      │              ├── first-agg [as=column1:6]
+      │              │    └── column1:6
+      │              └── first-agg [as=column3:8]
+      │                   └── column3:8
       └── projections
-           ├── column3:11 = 'foo' [as=partial_index_put1:24]
-           └── column3:11 = 'bar' [as=partial_index_put2:25]
+           ├── column3:8 = 'foo' [as=partial_index_put1:21]
+           └── column3:8 = 'bar' [as=partial_index_put2:22]
 
 # Error when no arbiter is found because the arbiter predicate in the query
 # (non-existent in this case) does not imply any unique partial index predicates
@@ -1246,46 +1192,39 @@ insert uniq
  ├── columns: <none>
  ├── arbiter indexes: u3
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    └── column3:11 => c:3
- ├── partial index put columns: partial_index_put1:17 partial_index_put2:18
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── column3:8 => c:3
+ ├── partial index put columns: partial_index_put1:14 partial_index_put2:15
  └── project
-      ├── columns: partial_index_put1:17!null partial_index_put2:18!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:14!null partial_index_put2:15!null column1:6!null column2:7!null column3:8!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── grouping columns: column2:10!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    ├── project
-      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    └── (1, 1, 'bar')
-      │    │    │    └── projections
-      │    │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │    │    │         │    └── column1:6
-      │    │    │         ├── assignment-cast: INT8 [as=column2:10]
-      │    │    │         │    └── column2:7
-      │    │    │         └── assignment-cast: STRING [as=column3:11]
-      │    │    │              └── column3:8
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    └── values
+      │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │         └── (1, 1, 'bar')
       │    │    ├── scan uniq
-      │    │    │    ├── columns: a:12!null b:13 c:14
+      │    │    │    ├── columns: a:9!null b:10 c:11
       │    │    │    └── partial index predicates
       │    │    │         ├── uniq_b_key: filters
-      │    │    │         │    └── c:14 = 'foo'
+      │    │    │         │    └── c:11 = 'foo'
       │    │    │         └── u2: filters
-      │    │    │              └── c:14 = 'bar'
+      │    │    │              └── c:11 = 'bar'
       │    │    └── filters
-      │    │         └── column2:10 = b:13
+      │    │         └── column2:7 = b:10
       │    └── aggregations
-      │         ├── first-agg [as=column1:9]
-      │         │    └── column1:9
-      │         └── first-agg [as=column3:11]
-      │              └── column3:11
+      │         ├── first-agg [as=column1:6]
+      │         │    └── column1:6
+      │         └── first-agg [as=column3:8]
+      │              └── column3:8
       └── projections
-           ├── column3:11 = 'foo' [as=partial_index_put1:17]
-           └── column3:11 = 'bar' [as=partial_index_put2:18]
+           ├── column3:8 = 'foo' [as=partial_index_put1:14]
+           └── column3:8 = 'bar' [as=partial_index_put2:15]
 
 exec-ddl
 DROP INDEX u3
@@ -1311,28 +1250,28 @@ insert uniq
  ├── columns: <none>
  ├── arbiter indexes: u4
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    └── column3:11 => c:3
- ├── partial index put columns: partial_index_put1:18 partial_index_put2:19 partial_index_put3:20
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    └── column3:8 => c:3
+ ├── partial index put columns: partial_index_put1:15 partial_index_put2:16 partial_index_put3:17
  └── project
-      ├── columns: partial_index_put1:18!null partial_index_put2:19!null partial_index_put3:20!null column1:9!null column2:10!null column3:11!null
+      ├── columns: partial_index_put1:15!null partial_index_put2:16!null partial_index_put3:17!null column1:6!null column2:7!null column3:8!null
       ├── anti-join (cross)
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    ├── values
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    └── (1, 1, 'bar')
       │    ├── select
-      │    │    ├── columns: b:13!null
+      │    │    ├── columns: b:10!null
       │    │    ├── scan uniq@u4,partial
-      │    │    │    └── columns: b:13
+      │    │    │    └── columns: b:10
       │    │    └── filters
-      │    │         └── b:13 = 1
+      │    │         └── b:10 = 1
       │    └── filters (true)
       └── projections
-           ├── column3:11 = 'foo' [as=partial_index_put1:18]
-           ├── column3:11 = 'bar' [as=partial_index_put2:19]
-           └── true [as=partial_index_put3:20]
+           ├── column3:8 = 'foo' [as=partial_index_put1:15]
+           ├── column3:8 = 'bar' [as=partial_index_put2:16]
+           └── true [as=partial_index_put3:17]
 
 exec-ddl
 DROP INDEX u4
@@ -1513,113 +1452,106 @@ insert comp
  ├── columns: <none>
  ├── arbiter indexes: comp_pkey u1
  ├── insert-mapping:
- │    ├── column1:11 => a:1
- │    ├── column2:12 => b:2
- │    ├── column3:13 => c:3
- │    ├── d_comp:14 => d:4
- │    └── e_comp:15 => e:5
- ├── partial index put columns: partial_index_put1:31 partial_index_put2:32 partial_index_put1:31
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    ├── d_comp:11 => d:4
+ │    └── e_comp:12 => e:5
+ ├── partial index put columns: partial_index_put1:28 partial_index_put2:29 partial_index_put1:28
  └── project
-      ├── columns: partial_index_put1:31 partial_index_put2:32 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      ├── columns: partial_index_put1:28 partial_index_put2:29 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       ├── project
-      │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │    └── upsert-distinct-on
-      │         ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15 arbiter_u1_distinct:30
-      │         ├── grouping columns: column2:12!null arbiter_u1_distinct:30
+      │         ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12 arbiter_u1_distinct:27
+      │         ├── grouping columns: column2:9!null arbiter_u1_distinct:27
       │         ├── project
-      │         │    ├── columns: arbiter_u1_distinct:30 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    ├── columns: arbiter_u1_distinct:27 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    ├── upsert-distinct-on
-      │         │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
-      │         │    │    ├── grouping columns: column1:11!null
+      │         │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
+      │         │    │    ├── grouping columns: column1:8!null
       │         │    │    ├── anti-join (hash)
-      │         │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │    │    ├── anti-join (hash)
-      │         │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │    │    │    ├── project
-      │         │    │    │    │    │    ├── columns: d_comp:14 e_comp:15 column1:11!null column2:12!null column3:13!null
+      │         │    │    │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
       │         │    │    │    │    │    ├── project
-      │         │    │    │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
-      │         │    │    │    │    │    │    ├── values
-      │         │    │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │         │    │    │    │    │    │    │    └── (1, 1, 'bar')
-      │         │    │    │    │    │    │    └── projections
-      │         │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:11]
-      │         │    │    │    │    │    │         │    └── column1:8
-      │         │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:12]
-      │         │    │    │    │    │    │         │    └── column2:9
-      │         │    │    │    │    │    │         └── assignment-cast: STRING [as=column3:13]
-      │         │    │    │    │    │    │              └── column3:10
+      │         │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │         │    │    │    │    │    │    └── values
+      │         │    │    │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
+      │         │    │    │    │    │    │         └── (1, 1, 'bar')
       │         │    │    │    │    │    └── projections
-      │         │    │    │    │    │         ├── lower(column3:13) [as=d_comp:14]
-      │         │    │    │    │    │         └── upper(column3:13) [as=e_comp:15]
+      │         │    │    │    │    │         ├── lower(column3:10) [as=d_comp:11]
+      │         │    │    │    │    │         └── upper(column3:10) [as=e_comp:12]
       │         │    │    │    │    ├── project
-      │         │    │    │    │    │    ├── columns: d:19 a:16!null b:17 c:18 e:20
+      │         │    │    │    │    │    ├── columns: d:16 a:13!null b:14 c:15 e:17
       │         │    │    │    │    │    ├── scan comp
-      │         │    │    │    │    │    │    ├── columns: a:16!null b:17 c:18 e:20
+      │         │    │    │    │    │    │    ├── columns: a:13!null b:14 c:15 e:17
       │         │    │    │    │    │    │    ├── computed column expressions
-      │         │    │    │    │    │    │    │    ├── d:19
-      │         │    │    │    │    │    │    │    │    └── lower(c:18)
-      │         │    │    │    │    │    │    │    └── e:20
-      │         │    │    │    │    │    │    │         └── upper(c:18)
+      │         │    │    │    │    │    │    │    ├── d:16
+      │         │    │    │    │    │    │    │    │    └── lower(c:15)
+      │         │    │    │    │    │    │    │    └── e:17
+      │         │    │    │    │    │    │    │         └── upper(c:15)
       │         │    │    │    │    │    │    └── partial index predicates
       │         │    │    │    │    │    │         ├── comp_b_idx: filters
-      │         │    │    │    │    │    │         │    └── lower(c:18) = 'foo'
+      │         │    │    │    │    │    │         │    └── lower(c:15) = 'foo'
       │         │    │    │    │    │    │         ├── comp_b_idx1: filters
-      │         │    │    │    │    │    │         │    └── e:20 = 'FOO'
+      │         │    │    │    │    │    │         │    └── e:17 = 'FOO'
       │         │    │    │    │    │    │         └── u1: filters
-      │         │    │    │    │    │    │              └── lower(c:18) = 'foo'
+      │         │    │    │    │    │    │              └── lower(c:15) = 'foo'
       │         │    │    │    │    │    └── projections
-      │         │    │    │    │    │         └── lower(c:18) [as=d:19]
+      │         │    │    │    │    │         └── lower(c:15) [as=d:16]
       │         │    │    │    │    └── filters
-      │         │    │    │    │         └── column1:11 = a:16
+      │         │    │    │    │         └── column1:8 = a:13
       │         │    │    │    ├── select
-      │         │    │    │    │    ├── columns: a:23!null b:24 c:25 d:26!null e:27
+      │         │    │    │    │    ├── columns: a:20!null b:21 c:22 d:23!null e:24
       │         │    │    │    │    ├── project
-      │         │    │    │    │    │    ├── columns: d:26 a:23!null b:24 c:25 e:27
+      │         │    │    │    │    │    ├── columns: d:23 a:20!null b:21 c:22 e:24
       │         │    │    │    │    │    ├── scan comp
-      │         │    │    │    │    │    │    ├── columns: a:23!null b:24 c:25 e:27
+      │         │    │    │    │    │    │    ├── columns: a:20!null b:21 c:22 e:24
       │         │    │    │    │    │    │    ├── computed column expressions
-      │         │    │    │    │    │    │    │    ├── d:26
-      │         │    │    │    │    │    │    │    │    └── lower(c:25)
-      │         │    │    │    │    │    │    │    └── e:27
-      │         │    │    │    │    │    │    │         └── upper(c:25)
+      │         │    │    │    │    │    │    │    ├── d:23
+      │         │    │    │    │    │    │    │    │    └── lower(c:22)
+      │         │    │    │    │    │    │    │    └── e:24
+      │         │    │    │    │    │    │    │         └── upper(c:22)
       │         │    │    │    │    │    │    └── partial index predicates
       │         │    │    │    │    │    │         ├── comp_b_idx: filters
-      │         │    │    │    │    │    │         │    └── lower(c:25) = 'foo'
+      │         │    │    │    │    │    │         │    └── lower(c:22) = 'foo'
       │         │    │    │    │    │    │         ├── comp_b_idx1: filters
-      │         │    │    │    │    │    │         │    └── e:27 = 'FOO'
+      │         │    │    │    │    │    │         │    └── e:24 = 'FOO'
       │         │    │    │    │    │    │         └── u1: filters
-      │         │    │    │    │    │    │              └── lower(c:25) = 'foo'
+      │         │    │    │    │    │    │              └── lower(c:22) = 'foo'
       │         │    │    │    │    │    └── projections
-      │         │    │    │    │    │         └── lower(c:25) [as=d:26]
+      │         │    │    │    │    │         └── lower(c:22) [as=d:23]
       │         │    │    │    │    └── filters
-      │         │    │    │    │         └── d:26 = 'foo'
+      │         │    │    │    │         └── d:23 = 'foo'
       │         │    │    │    └── filters
-      │         │    │    │         ├── column2:12 = b:24
-      │         │    │    │         └── d_comp:14 = 'foo'
+      │         │    │    │         ├── column2:9 = b:21
+      │         │    │    │         └── d_comp:11 = 'foo'
       │         │    │    └── aggregations
-      │         │    │         ├── first-agg [as=column2:12]
-      │         │    │         │    └── column2:12
-      │         │    │         ├── first-agg [as=column3:13]
-      │         │    │         │    └── column3:13
-      │         │    │         ├── first-agg [as=d_comp:14]
-      │         │    │         │    └── d_comp:14
-      │         │    │         └── first-agg [as=e_comp:15]
-      │         │    │              └── e_comp:15
+      │         │    │         ├── first-agg [as=column2:9]
+      │         │    │         │    └── column2:9
+      │         │    │         ├── first-agg [as=column3:10]
+      │         │    │         │    └── column3:10
+      │         │    │         ├── first-agg [as=d_comp:11]
+      │         │    │         │    └── d_comp:11
+      │         │    │         └── first-agg [as=e_comp:12]
+      │         │    │              └── e_comp:12
       │         │    └── projections
-      │         │         └── (d_comp:14 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:30]
+      │         │         └── (d_comp:11 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:27]
       │         └── aggregations
-      │              ├── first-agg [as=column1:11]
-      │              │    └── column1:11
-      │              ├── first-agg [as=column3:13]
-      │              │    └── column3:13
-      │              ├── first-agg [as=d_comp:14]
-      │              │    └── d_comp:14
-      │              └── first-agg [as=e_comp:15]
-      │                   └── e_comp:15
+      │              ├── first-agg [as=column1:8]
+      │              │    └── column1:8
+      │              ├── first-agg [as=column3:10]
+      │              │    └── column3:10
+      │              ├── first-agg [as=d_comp:11]
+      │              │    └── d_comp:11
+      │              └── first-agg [as=e_comp:12]
+      │                   └── e_comp:12
       └── projections
-           ├── d_comp:14 = 'foo' [as=partial_index_put1:31]
-           └── e_comp:15 = 'FOO' [as=partial_index_put2:32]
+           ├── d_comp:11 = 'foo' [as=partial_index_put1:28]
+           └── e_comp:12 = 'FOO' [as=partial_index_put2:29]
 
 exec-ddl
 CREATE UNIQUE INDEX u2 ON comp (b) WHERE e = 'bar'
@@ -1634,129 +1566,122 @@ insert comp
  ├── columns: <none>
  ├── arbiter indexes: u1 u2
  ├── insert-mapping:
- │    ├── column1:11 => a:1
- │    ├── column2:12 => b:2
- │    ├── column3:13 => c:3
- │    ├── d_comp:14 => d:4
- │    └── e_comp:15 => e:5
- ├── partial index put columns: partial_index_put1:32 partial_index_put2:33 partial_index_put1:32 partial_index_put4:34
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    ├── d_comp:11 => d:4
+ │    └── e_comp:12 => e:5
+ ├── partial index put columns: partial_index_put1:29 partial_index_put2:30 partial_index_put1:29 partial_index_put4:31
  └── project
-      ├── columns: partial_index_put1:32 partial_index_put2:33 partial_index_put4:34 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      ├── columns: partial_index_put1:29 partial_index_put2:30 partial_index_put4:31 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       ├── project
-      │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │    └── upsert-distinct-on
-      │         ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15 arbiter_u2_distinct:31
-      │         ├── grouping columns: column2:12!null arbiter_u2_distinct:31
+      │         ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12 arbiter_u2_distinct:28
+      │         ├── grouping columns: column2:9!null arbiter_u2_distinct:28
       │         ├── project
-      │         │    ├── columns: arbiter_u2_distinct:31 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    ├── columns: arbiter_u2_distinct:28 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    ├── project
-      │         │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15 arbiter_u1_distinct:30
-      │         │    │         ├── grouping columns: column2:12!null arbiter_u1_distinct:30
+      │         │    │         ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12 arbiter_u1_distinct:27
+      │         │    │         ├── grouping columns: column2:9!null arbiter_u1_distinct:27
       │         │    │         ├── project
-      │         │    │         │    ├── columns: arbiter_u1_distinct:30 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    │         │    ├── columns: arbiter_u1_distinct:27 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │         │    ├── anti-join (hash)
-      │         │    │         │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    │         │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │         │    │    ├── anti-join (hash)
-      │         │    │         │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │         │    │         │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │         │    │    │    ├── project
-      │         │    │         │    │    │    │    ├── columns: d_comp:14 e_comp:15 column1:11!null column2:12!null column3:13!null
+      │         │    │         │    │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
       │         │    │         │    │    │    │    ├── project
-      │         │    │         │    │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
-      │         │    │         │    │    │    │    │    ├── values
-      │         │    │         │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │         │    │         │    │    │    │    │    │    └── (1, 1, 'bar')
-      │         │    │         │    │    │    │    │    └── projections
-      │         │    │         │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:11]
-      │         │    │         │    │    │    │    │         │    └── column1:8
-      │         │    │         │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:12]
-      │         │    │         │    │    │    │    │         │    └── column2:9
-      │         │    │         │    │    │    │    │         └── assignment-cast: STRING [as=column3:13]
-      │         │    │         │    │    │    │    │              └── column3:10
+      │         │    │         │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │         │    │         │    │    │    │    │    └── values
+      │         │    │         │    │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
+      │         │    │         │    │    │    │    │         └── (1, 1, 'bar')
       │         │    │         │    │    │    │    └── projections
-      │         │    │         │    │    │    │         ├── lower(column3:13) [as=d_comp:14]
-      │         │    │         │    │    │    │         └── upper(column3:13) [as=e_comp:15]
+      │         │    │         │    │    │    │         ├── lower(column3:10) [as=d_comp:11]
+      │         │    │         │    │    │    │         └── upper(column3:10) [as=e_comp:12]
       │         │    │         │    │    │    ├── select
-      │         │    │         │    │    │    │    ├── columns: a:16!null b:17 c:18 d:19!null e:20
+      │         │    │         │    │    │    │    ├── columns: a:13!null b:14 c:15 d:16!null e:17
       │         │    │         │    │    │    │    ├── project
-      │         │    │         │    │    │    │    │    ├── columns: d:19 a:16!null b:17 c:18 e:20
+      │         │    │         │    │    │    │    │    ├── columns: d:16 a:13!null b:14 c:15 e:17
       │         │    │         │    │    │    │    │    ├── scan comp
-      │         │    │         │    │    │    │    │    │    ├── columns: a:16!null b:17 c:18 e:20
+      │         │    │         │    │    │    │    │    │    ├── columns: a:13!null b:14 c:15 e:17
       │         │    │         │    │    │    │    │    │    ├── computed column expressions
-      │         │    │         │    │    │    │    │    │    │    ├── d:19
-      │         │    │         │    │    │    │    │    │    │    │    └── lower(c:18)
-      │         │    │         │    │    │    │    │    │    │    └── e:20
-      │         │    │         │    │    │    │    │    │    │         └── upper(c:18)
+      │         │    │         │    │    │    │    │    │    │    ├── d:16
+      │         │    │         │    │    │    │    │    │    │    │    └── lower(c:15)
+      │         │    │         │    │    │    │    │    │    │    └── e:17
+      │         │    │         │    │    │    │    │    │    │         └── upper(c:15)
       │         │    │         │    │    │    │    │    │    └── partial index predicates
       │         │    │         │    │    │    │    │    │         ├── comp_b_idx: filters
-      │         │    │         │    │    │    │    │    │         │    └── lower(c:18) = 'foo'
+      │         │    │         │    │    │    │    │    │         │    └── lower(c:15) = 'foo'
       │         │    │         │    │    │    │    │    │         ├── comp_b_idx1: filters
-      │         │    │         │    │    │    │    │    │         │    └── e:20 = 'FOO'
+      │         │    │         │    │    │    │    │    │         │    └── e:17 = 'FOO'
       │         │    │         │    │    │    │    │    │         ├── u1: filters
-      │         │    │         │    │    │    │    │    │         │    └── lower(c:18) = 'foo'
+      │         │    │         │    │    │    │    │    │         │    └── lower(c:15) = 'foo'
       │         │    │         │    │    │    │    │    │         └── u2: filters
-      │         │    │         │    │    │    │    │    │              └── e:20 = 'bar'
+      │         │    │         │    │    │    │    │    │              └── e:17 = 'bar'
       │         │    │         │    │    │    │    │    └── projections
-      │         │    │         │    │    │    │    │         └── lower(c:18) [as=d:19]
+      │         │    │         │    │    │    │    │         └── lower(c:15) [as=d:16]
       │         │    │         │    │    │    │    └── filters
-      │         │    │         │    │    │    │         └── d:19 = 'foo'
+      │         │    │         │    │    │    │         └── d:16 = 'foo'
       │         │    │         │    │    │    └── filters
-      │         │    │         │    │    │         ├── column2:12 = b:17
-      │         │    │         │    │    │         └── d_comp:14 = 'foo'
+      │         │    │         │    │    │         ├── column2:9 = b:14
+      │         │    │         │    │    │         └── d_comp:11 = 'foo'
       │         │    │         │    │    ├── select
-      │         │    │         │    │    │    ├── columns: a:23!null b:24 c:25 d:26 e:27!null
+      │         │    │         │    │    │    ├── columns: a:20!null b:21 c:22 d:23 e:24!null
       │         │    │         │    │    │    ├── project
-      │         │    │         │    │    │    │    ├── columns: d:26 a:23!null b:24 c:25 e:27
+      │         │    │         │    │    │    │    ├── columns: d:23 a:20!null b:21 c:22 e:24
       │         │    │         │    │    │    │    ├── scan comp
-      │         │    │         │    │    │    │    │    ├── columns: a:23!null b:24 c:25 e:27
+      │         │    │         │    │    │    │    │    ├── columns: a:20!null b:21 c:22 e:24
       │         │    │         │    │    │    │    │    ├── computed column expressions
-      │         │    │         │    │    │    │    │    │    ├── d:26
-      │         │    │         │    │    │    │    │    │    │    └── lower(c:25)
-      │         │    │         │    │    │    │    │    │    └── e:27
-      │         │    │         │    │    │    │    │    │         └── upper(c:25)
+      │         │    │         │    │    │    │    │    │    ├── d:23
+      │         │    │         │    │    │    │    │    │    │    └── lower(c:22)
+      │         │    │         │    │    │    │    │    │    └── e:24
+      │         │    │         │    │    │    │    │    │         └── upper(c:22)
       │         │    │         │    │    │    │    │    └── partial index predicates
       │         │    │         │    │    │    │    │         ├── comp_b_idx: filters
-      │         │    │         │    │    │    │    │         │    └── lower(c:25) = 'foo'
+      │         │    │         │    │    │    │    │         │    └── lower(c:22) = 'foo'
       │         │    │         │    │    │    │    │         ├── comp_b_idx1: filters
-      │         │    │         │    │    │    │    │         │    └── e:27 = 'FOO'
+      │         │    │         │    │    │    │    │         │    └── e:24 = 'FOO'
       │         │    │         │    │    │    │    │         ├── u1: filters
-      │         │    │         │    │    │    │    │         │    └── lower(c:25) = 'foo'
+      │         │    │         │    │    │    │    │         │    └── lower(c:22) = 'foo'
       │         │    │         │    │    │    │    │         └── u2: filters
-      │         │    │         │    │    │    │    │              └── e:27 = 'bar'
+      │         │    │         │    │    │    │    │              └── e:24 = 'bar'
       │         │    │         │    │    │    │    └── projections
-      │         │    │         │    │    │    │         └── lower(c:25) [as=d:26]
+      │         │    │         │    │    │    │         └── lower(c:22) [as=d:23]
       │         │    │         │    │    │    └── filters
-      │         │    │         │    │    │         └── e:27 = 'bar'
+      │         │    │         │    │    │         └── e:24 = 'bar'
       │         │    │         │    │    └── filters
-      │         │    │         │    │         ├── column2:12 = b:24
-      │         │    │         │    │         └── e_comp:15 = 'bar'
+      │         │    │         │    │         ├── column2:9 = b:21
+      │         │    │         │    │         └── e_comp:12 = 'bar'
       │         │    │         │    └── projections
-      │         │    │         │         └── (d_comp:14 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:30]
+      │         │    │         │         └── (d_comp:11 = 'foo') OR NULL::BOOL [as=arbiter_u1_distinct:27]
       │         │    │         └── aggregations
-      │         │    │              ├── first-agg [as=column1:11]
-      │         │    │              │    └── column1:11
-      │         │    │              ├── first-agg [as=column3:13]
-      │         │    │              │    └── column3:13
-      │         │    │              ├── first-agg [as=d_comp:14]
-      │         │    │              │    └── d_comp:14
-      │         │    │              └── first-agg [as=e_comp:15]
-      │         │    │                   └── e_comp:15
+      │         │    │              ├── first-agg [as=column1:8]
+      │         │    │              │    └── column1:8
+      │         │    │              ├── first-agg [as=column3:10]
+      │         │    │              │    └── column3:10
+      │         │    │              ├── first-agg [as=d_comp:11]
+      │         │    │              │    └── d_comp:11
+      │         │    │              └── first-agg [as=e_comp:12]
+      │         │    │                   └── e_comp:12
       │         │    └── projections
-      │         │         └── (e_comp:15 = 'bar') OR NULL::BOOL [as=arbiter_u2_distinct:31]
+      │         │         └── (e_comp:12 = 'bar') OR NULL::BOOL [as=arbiter_u2_distinct:28]
       │         └── aggregations
-      │              ├── first-agg [as=column1:11]
-      │              │    └── column1:11
-      │              ├── first-agg [as=column3:13]
-      │              │    └── column3:13
-      │              ├── first-agg [as=d_comp:14]
-      │              │    └── d_comp:14
-      │              └── first-agg [as=e_comp:15]
-      │                   └── e_comp:15
+      │              ├── first-agg [as=column1:8]
+      │              │    └── column1:8
+      │              ├── first-agg [as=column3:10]
+      │              │    └── column3:10
+      │              ├── first-agg [as=d_comp:11]
+      │              │    └── d_comp:11
+      │              └── first-agg [as=e_comp:12]
+      │                   └── e_comp:12
       └── projections
-           ├── d_comp:14 = 'foo' [as=partial_index_put1:32]
-           ├── e_comp:15 = 'FOO' [as=partial_index_put2:33]
-           └── e_comp:15 = 'bar' [as=partial_index_put4:34]
+           ├── d_comp:11 = 'foo' [as=partial_index_put1:29]
+           ├── e_comp:12 = 'FOO' [as=partial_index_put2:30]
+           └── e_comp:12 = 'bar' [as=partial_index_put4:31]
 
 # Error when no arbiter is found because the arbiter predicate in the query
 # (non-existent in this case) does not imply any unique partial index predicates
@@ -1780,71 +1705,64 @@ insert comp
  ├── columns: <none>
  ├── arbiter indexes: u3
  ├── insert-mapping:
- │    ├── column1:11 => a:1
- │    ├── column2:12 => b:2
- │    ├── column3:13 => c:3
- │    ├── d_comp:14 => d:4
- │    └── e_comp:15 => e:5
- ├── partial index put columns: partial_index_put1:23 partial_index_put2:24 partial_index_put1:23 partial_index_put4:25
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    ├── d_comp:11 => d:4
+ │    └── e_comp:12 => e:5
+ ├── partial index put columns: partial_index_put1:20 partial_index_put2:21 partial_index_put1:20 partial_index_put4:22
  └── project
-      ├── columns: partial_index_put1:23 partial_index_put2:24 partial_index_put4:25 column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      ├── columns: partial_index_put1:20 partial_index_put2:21 partial_index_put4:22 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       ├── upsert-distinct-on
-      │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
-      │    ├── grouping columns: column2:12!null
+      │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
+      │    ├── grouping columns: column2:9!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:11!null column2:12!null column3:13!null d_comp:14 e_comp:15
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │    │    ├── project
-      │    │    │    ├── columns: d_comp:14 e_comp:15 column1:11!null column2:12!null column3:13!null
+      │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    │    └── (1, 1, 'bar')
-      │    │    │    │    └── projections
-      │    │    │    │         ├── assignment-cast: INT8 [as=column1:11]
-      │    │    │    │         │    └── column1:8
-      │    │    │    │         ├── assignment-cast: INT8 [as=column2:12]
-      │    │    │    │         │    └── column2:9
-      │    │    │    │         └── assignment-cast: STRING [as=column3:13]
-      │    │    │    │              └── column3:10
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    └── values
+      │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │         └── (1, 1, 'bar')
       │    │    │    └── projections
-      │    │    │         ├── lower(column3:13) [as=d_comp:14]
-      │    │    │         └── upper(column3:13) [as=e_comp:15]
+      │    │    │         ├── lower(column3:10) [as=d_comp:11]
+      │    │    │         └── upper(column3:10) [as=e_comp:12]
       │    │    ├── project
-      │    │    │    ├── columns: d:19 a:16!null b:17 c:18 e:20
+      │    │    │    ├── columns: d:16 a:13!null b:14 c:15 e:17
       │    │    │    ├── scan comp
-      │    │    │    │    ├── columns: a:16!null b:17 c:18 e:20
+      │    │    │    │    ├── columns: a:13!null b:14 c:15 e:17
       │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    ├── d:19
-      │    │    │    │    │    │    └── lower(c:18)
-      │    │    │    │    │    └── e:20
-      │    │    │    │    │         └── upper(c:18)
+      │    │    │    │    │    ├── d:16
+      │    │    │    │    │    │    └── lower(c:15)
+      │    │    │    │    │    └── e:17
+      │    │    │    │    │         └── upper(c:15)
       │    │    │    │    └── partial index predicates
       │    │    │    │         ├── comp_b_idx: filters
-      │    │    │    │         │    └── lower(c:18) = 'foo'
+      │    │    │    │         │    └── lower(c:15) = 'foo'
       │    │    │    │         ├── comp_b_idx1: filters
-      │    │    │    │         │    └── e:20 = 'FOO'
+      │    │    │    │         │    └── e:17 = 'FOO'
       │    │    │    │         ├── u1: filters
-      │    │    │    │         │    └── lower(c:18) = 'foo'
+      │    │    │    │         │    └── lower(c:15) = 'foo'
       │    │    │    │         └── u2: filters
-      │    │    │    │              └── e:20 = 'bar'
+      │    │    │    │              └── e:17 = 'bar'
       │    │    │    └── projections
-      │    │    │         └── lower(c:18) [as=d:19]
+      │    │    │         └── lower(c:15) [as=d:16]
       │    │    └── filters
-      │    │         └── column2:12 = b:17
+      │    │         └── column2:9 = b:14
       │    └── aggregations
-      │         ├── first-agg [as=column1:11]
-      │         │    └── column1:11
-      │         ├── first-agg [as=column3:13]
-      │         │    └── column3:13
-      │         ├── first-agg [as=d_comp:14]
-      │         │    └── d_comp:14
-      │         └── first-agg [as=e_comp:15]
-      │              └── e_comp:15
+      │         ├── first-agg [as=column1:8]
+      │         │    └── column1:8
+      │         ├── first-agg [as=column3:10]
+      │         │    └── column3:10
+      │         ├── first-agg [as=d_comp:11]
+      │         │    └── d_comp:11
+      │         └── first-agg [as=e_comp:12]
+      │              └── e_comp:12
       └── projections
-           ├── d_comp:14 = 'foo' [as=partial_index_put1:23]
-           ├── e_comp:15 = 'FOO' [as=partial_index_put2:24]
-           └── e_comp:15 = 'bar' [as=partial_index_put4:25]
+           ├── d_comp:11 = 'foo' [as=partial_index_put1:20]
+           ├── e_comp:12 = 'FOO' [as=partial_index_put2:21]
+           └── e_comp:12 = 'bar' [as=partial_index_put4:22]
 
 exec-ddl
 DROP INDEX u3
