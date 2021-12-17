@@ -92,14 +92,13 @@ func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *
 func newTestContextWithKnobs(
 	clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
-	return NewContext(ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: testutils.MakeAmbientCtx(),
-		Config:     testutils.NewNodeTestBaseContext(),
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-		Knobs:      knobs,
+	return NewContext(context.Background(), ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   testutils.NewNodeTestBaseContext(),
+		Clock:    clock,
+		Stopper:  stopper,
+		Settings: cluster.MakeTestingClusterSettings(),
+		Knobs:    knobs,
 	})
 }
 
@@ -175,12 +174,11 @@ func TestPingInterceptors(t *testing.T) {
 	recvMsg := "boom due to onHandlePing"
 	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
 	opts := ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: testutils.MakeAmbientCtx(),
-		Config:     testutils.NewNodeTestBaseContext(),
-		Clock:      hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
-		Stopper:    stop.NewStopper(),
-		Settings:   cluster.MakeTestingClusterSettings(),
+		TenantID: roachpb.SystemTenantID,
+		Config:   testutils.NewNodeTestBaseContext(),
+		Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
+		Stopper:  stop.NewStopper(),
+		Settings: cluster.MakeTestingClusterSettings(),
 		OnOutgoingPing: func(req *PingRequest) error {
 			if req.TargetNodeID == blockedTargetNodeID {
 				return errBoomSend
@@ -196,7 +194,7 @@ func TestPingInterceptors(t *testing.T) {
 	}
 	defer opts.Stopper.Stop(ctx)
 
-	rpcCtx := NewContext(opts)
+	rpcCtx := NewContext(ctx, opts)
 	{
 		_, err := rpcCtx.GRPCDialNode("unused:1234", 5, SystemClass).Connect(ctx)
 		require.Equal(t, errBoomSend, errors.Cause(err))

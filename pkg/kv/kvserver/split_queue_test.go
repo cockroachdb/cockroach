@@ -31,10 +31,11 @@ import (
 func TestSplitQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Set zone configs.
 	config.TestingSetZoneConfig(2000, zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
@@ -73,7 +74,6 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("config not set")
 	}
-	ctx := context.Background()
 	for i, test := range testCases {
 		// Create a replica for testing that is not hooked up to the store. This
 		// ensures that the store won't be mucking with our replica concurrently

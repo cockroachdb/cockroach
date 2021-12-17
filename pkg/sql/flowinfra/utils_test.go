@@ -37,20 +37,21 @@ func createDummyStream() (
 	err error,
 ) {
 	stopper := stop.NewStopper()
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticNodeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 	conn, err := rpcContext.GRPCDialNode(addr.String(), execinfra.StaticNodeID,
-		rpc.DefaultClass).Connect(context.Background())
+		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	client := execinfrapb.NewDistSQLClient(conn)
-	clientStream, err = client.FlowStream(context.Background())
+	clientStream, err = client.FlowStream(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -58,7 +59,7 @@ func createDummyStream() (
 	serverStream = streamNotification.Stream
 	cleanup = func() {
 		close(streamNotification.Donec)
-		stopper.Stop(context.Background())
+		stopper.Stop(ctx)
 	}
 	return serverStream, clientStream, cleanup, nil
 }

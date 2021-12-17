@@ -70,7 +70,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 
 	// We're going to serve multiple node IDs with that one context. Disable node ID checks.
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true

@@ -85,6 +85,7 @@ type LocalTestCluster struct {
 // sender factory (we don't do it directly from this package to avoid
 // a dependency on kv).
 type InitFactoryFn func(
+	ctx context.Context,
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer *tracing.Tracer,
@@ -118,6 +119,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 	ltc.AmbientCtx = ambient
+	ctx := ambient.AnnotateCtx(context.Background())
 
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{
@@ -126,22 +128,21 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	ltc.tester = t
-	cfg.RPCContext = rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: ambient,
-		Config:     baseCtx,
-		Clock:      ltc.Clock,
-		Stopper:    ltc.stopper,
-		Settings:   cfg.Settings,
-		NodeID:     nc,
+	cfg.RPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   baseCtx,
+		Clock:    ltc.Clock,
+		Stopper:  ltc.stopper,
+		Settings: cfg.Settings,
+		NodeID:   nc,
 	})
-	cfg.RPCContext.NodeID.Set(ltc.AmbientCtx.AnnotateCtx(context.Background()), nodeID)
+	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
 	var err error
 	ltc.Eng, err = storage.Open(
-		ambient.AnnotateCtx(context.Background()),
+		ctx,
 		storage.InMemory(),
 		storage.CacheSize(0),
 		storage.MaxSize(50<<20 /* 50 MiB */),
@@ -153,7 +154,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
 
-	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
+	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
 
 	var nodeIDContainer base.NodeIDContainer
 	nodeIDContainer.Set(context.Background(), nodeID)
@@ -187,7 +188,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Settings:                cfg.Settings,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
 	})
-	ctx := cfg.AmbientCtx.AnnotateCtx(context.TODO())
 	kvserver.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
 	cfg.StorePool = kvserver.NewStorePool(
 		cfg.AmbientCtx,

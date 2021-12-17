@@ -25,10 +25,11 @@ import (
 func TestRangeStatsInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
@@ -43,10 +44,10 @@ func TestRangeStatsInit(t *testing.T) {
 		LastUpdateNanos: 11,
 	}
 	rsl := stateloader.Make(tc.repl.RangeID)
-	if err := rsl.SetMVCCStats(context.Background(), tc.engine, &ms); err != nil {
+	if err := rsl.SetMVCCStats(ctx, tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := rsl.LoadMVCCStats(context.Background(), tc.engine)
+	loadMS, err := rsl.LoadMVCCStats(ctx, tc.engine)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,9 +52,10 @@ func startGossipAtAddr(
 	t *testing.T,
 	registry *metric.Registry,
 ) *Gossip {
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	rpcContext.NodeID.Set(context.Background(), nodeID)
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
+	rpcContext.NodeID.Set(ctx, nodeID)
 
 	server := rpc.NewServer(rpcContext)
 	g := NewTest(nodeID, rpcContext, server, stopper, registry, zonepb.DefaultZoneConfigRef())
@@ -114,8 +115,9 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 func startFakeServerGossips(
 	t *testing.T, clusterID uuid.UUID, localNodeID roachpb.NodeID, stopper *stop.Stopper,
 ) (*Gossip, *fakeGossipServer) {
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
 	lserver := rpc.NewServer(lRPCContext)
 	local := NewTest(localNodeID, lRPCContext, lserver, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
@@ -125,7 +127,7 @@ func startFakeServerGossips(
 	}
 	local.start(lln.Addr())
 
-	rRPCContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	rRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 	rserver := rpc.NewServer(rRPCContext)
 	remote := newFakeGossipServer(rserver, stopper)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
@@ -146,9 +148,10 @@ func gossipSucceedsSoon(
 	gossip map[*client]*Gossip,
 	f func() error,
 ) {
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	// Use an insecure context since we don't need a valid cert.
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
 	for c := range gossip {
 		disconnected <- c
@@ -178,13 +181,15 @@ func TestClientGossip(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
+	ctx := context.Background()
+
 	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
 	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
 	c := newClient(testutils.MakeAmbientCtx(), remote.GetNodeAddr(), makeMetrics())
 
 	defer func() {
-		stopper.Stop(context.Background())
+		stopper.Stop(ctx)
 		if c != <-disconnected {
 			t.Errorf("expected client disconnect after remote close")
 		}
@@ -276,6 +281,7 @@ func TestClientGossipMetrics(t *testing.T) {
 func TestClientNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
 	disconnected := make(chan *client, 1)
 
@@ -288,13 +294,13 @@ func TestClientNodeID(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
 	c := newClient(testutils.MakeAmbientCtx(), &remote.nodeAddr, makeMetrics())
 	disconnected <- c
 
 	defer func() {
-		stopper.Stop(context.Background())
+		stopper.Stop(ctx)
 		if c != <-disconnected {
 			t.Errorf("expected client disconnect after remote close")
 		}
@@ -331,8 +337,9 @@ func verifyServerMaps(g *Gossip, expCount int) bool {
 // inbound client connection of another node.
 func TestClientDisconnectLoopback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	local := startGossip(uuid.Nil, 1, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	lAddr := local.mu.is.NodeAddr
@@ -454,8 +461,9 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 // TestClientRegisterInitNodeID verifies two client's gossip request with NodeID 0.
 func TestClientRegisterWithInitNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
@@ -468,7 +476,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		nodeID := roachpb.NodeID(i + 1)
 
-		rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 		server := rpc.NewServer(rpcContext)
 		// node ID must be non-zero
 		gnode := NewTest(

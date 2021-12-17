@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -347,18 +348,16 @@ func startServer(t *testing.T) *TestServer {
 	return ts
 }
 
-func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
-	ac := log.MakeClientAmbientContext(ts.Tracer())
+func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *rpc.Context {
 	var c base.NodeIDContainer
-	ac.AddLogTag("n", &c)
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: ac,
-		NodeID:     &c,
-		Config:     cfg,
-		Clock:      ts.Clock(),
-		Stopper:    ts.Stopper(),
-		Settings:   ts.ClusterSettings(),
+	ctx = logtags.AddTag(ctx, "n", &c)
+	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		NodeID:   &c,
+		Config:   cfg,
+		Clock:    ts.Clock(),
+		Stopper:  ts.Stopper(),
+		Settings: ts.ClusterSettings(),
 	})
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
@@ -386,7 +385,7 @@ func TestStatusGetFiles(t *testing.T) {
 	defer ts.Stopper().Stop(context.Background())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rpcContext := newRPCTestContext(context.Background(), ts, rootConfig)
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
@@ -1280,7 +1279,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
-	rpcContext := newRPCTestContext(ts, ts.RPCContext().Config)
+	rpcContext := newRPCTestContext(ctx, ts, ts.RPCContext().Config)
 	request := serverpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
@@ -1315,7 +1314,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 	defer ts.Stopper().Stop(context.Background())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rpcContext := newRPCTestContext(context.Background(), ts, rootConfig)
 	var request serverpb.NodesRequest
 
 	url := ts.ServingRPCAddr()
@@ -2067,7 +2066,7 @@ func TestListSessionsSecurity(t *testing.T) {
 
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rpcContext := newRPCTestContext(ctx, ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
@@ -2169,7 +2168,7 @@ func TestListActivitySecurity(t *testing.T) {
 
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rpcContext := newRPCTestContext(ctx, ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
@@ -2497,7 +2496,7 @@ func TestJobStatusResponse(t *testing.T) {
 	defer ts.Stopper().Stop(context.Background())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rpcContext := newRPCTestContext(context.Background(), ts, rootConfig)
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
