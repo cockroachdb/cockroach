@@ -169,7 +169,7 @@ func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTr
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.MakeDummyAmbientContext(tracer), st,
+	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st,
 		nodedialer.New(nil, resolver), nil, nil)
 }
 
