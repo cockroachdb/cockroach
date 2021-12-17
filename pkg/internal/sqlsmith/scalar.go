@@ -277,7 +277,7 @@ var compareOps = [...]tree.ComparisonOperatorSymbol{
 }
 
 func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if f := typ.Family(); f != types.BoolFamily && f != types.AnyFamily {
+	if f := typ.Family(); f != types.BoolFamily && f != types.AnyFamily && f != types.VoidFamily {
 		return nil, false
 	}
 	typ = s.randScalarType()

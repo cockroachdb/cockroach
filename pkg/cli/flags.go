@@ -970,6 +970,8 @@ func init() {
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 
+		varFlag(f, &serverCfg.Locality, cliflags.Locality)
+		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 		varFlag(f, &storeSpecs, cliflags.Store)
 		stringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)

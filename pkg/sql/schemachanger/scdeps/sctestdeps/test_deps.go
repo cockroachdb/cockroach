@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
@@ -354,7 +353,6 @@ var _ catalog.TypeDescriptorResolver = (*TestState)(nil)
 func (s *TestState) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-
 	desc, err := s.mustReadImmutableDescriptor(id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
@@ -459,59 +457,6 @@ func (s *TestState) AddSyntheticDescriptor(desc catalog.Descriptor) {
 // RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (s *TestState) RemoveSyntheticDescriptor(id descpb.ID) {
 	s.syntheticDescriptors.Remove(id)
-}
-
-// AddPartitioning implements the scmutationexec.CatalogReader interface.
-func (s *TestState) AddPartitioning(
-	tableDesc *tabledesc.Mutable,
-	_ *descpb.IndexDescriptor,
-	partitionFields []string,
-	listPartition []*scpb.ListPartition,
-	rangePartition []*scpb.RangePartitions,
-	_ []tree.Name,
-	_ bool,
-) error {
-	// Deserialize back into tree based types.
-	partitionBy := &tree.PartitionBy{}
-	partitionBy.List = make([]tree.ListPartition, 0, len(listPartition))
-	partitionBy.Range = make([]tree.RangePartition, 0, len(rangePartition))
-	for _, partition := range listPartition {
-		exprs, err := parser.ParseExprs(partition.Expr)
-		if err != nil {
-			return err
-		}
-		partitionBy.List = append(partitionBy.List,
-			tree.ListPartition{
-				Name:  tree.UnrestrictedName(partition.Name),
-				Exprs: exprs,
-			})
-	}
-	for _, partition := range rangePartition {
-		toExpr, err := parser.ParseExprs(partition.To)
-		if err != nil {
-			return err
-		}
-		fromExpr, err := parser.ParseExprs(partition.From)
-		if err != nil {
-			return err
-		}
-		partitionBy.Range = append(partitionBy.Range,
-			tree.RangePartition{
-				Name: tree.UnrestrictedName(partition.Name),
-				To:   toExpr,
-				From: fromExpr,
-			})
-	}
-	partitionBy.Fields = make(tree.NameList, 0, len(partitionFields))
-	for _, field := range partitionFields {
-		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
-	}
-	// For the purpose of testing we will only track
-	// these values.
-	s.partitioningInfo[tableDesc.GetID()] = &testPartitionInfo{
-		PartitionBy: *partitionBy,
-	}
-	return nil
 }
 
 var _ scexec.Catalog = (*TestState)(nil)
@@ -654,7 +599,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		b.s.descriptors.Upsert(desc)
 	}
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
-		b.s.LogSideEffectf("deleted descriptor #%d", deletedID)
+		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
 		b.s.descriptors.Remove(deletedID)
 	}
 	return catalog.Validate(ctx, b.s, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...).CombinedError()
@@ -684,6 +629,28 @@ func (s *TestState) GetNamespaceEntry(
 	return s.namespace[nameInfo], nil
 }
 
+// Partitioner implements the scexec.Dependencies interface.
+func (s *TestState) Partitioner() scmutationexec.Partitioner {
+	return s
+}
+
+// AddPartitioning implements the scmutationexec.Partitioner interface.
+func (s *TestState) AddPartitioning(
+	_ context.Context,
+	tbl *tabledesc.Mutable,
+	index catalog.Index,
+	_ []string,
+	_ []*scpb.ListPartition,
+	_ []*scpb.RangePartitions,
+	_ []tree.Name,
+	_ bool,
+) error {
+	s.LogSideEffectf("skip partitioning index #%d in table #%d", index.GetID(), tbl.GetID())
+	return nil
+}
+
+var _ scmutationexec.Partitioner = (*TestState)(nil)
+
 // IndexBackfiller implements the scexec.Dependencies interface.
 func (s *TestState) IndexBackfiller() scexec.IndexBackfiller {
 	return s
@@ -695,10 +662,11 @@ var _ scexec.IndexBackfiller = (*TestState)(nil)
 func (s *TestState) BackfillIndex(
 	_ context.Context,
 	_ scexec.JobProgressTracker,
-	_ catalog.TableDescriptor,
-	_ descpb.IndexID,
-	_ ...descpb.IndexID,
+	tbl catalog.TableDescriptor,
+	source descpb.IndexID,
+	destinations ...descpb.IndexID,
 ) error {
+	s.LogSideEffectf("backfill indexes %v from index #%d in table #%d", destinations, source, tbl.GetID())
 	return nil
 }
 
@@ -847,23 +815,33 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 // ValidateForwardIndexes implements the index validator interface.
 func (s *TestState) ValidateForwardIndexes(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
+	ids := make([]descpb.IndexID, len(indexes))
+	for i, idx := range indexes {
+		ids[i] = idx.GetID()
+	}
+	s.LogSideEffectf("validate forward indexes %v in table #%d", ids, tbl.GetID())
 	return nil
 }
 
 // ValidateInvertedIndexes implements the index validator interface.
 func (s *TestState) ValidateInvertedIndexes(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
+	ids := make([]descpb.IndexID, len(indexes))
+	for i, idx := range indexes {
+		ids[i] = idx.GetID()
+	}
+	s.LogSideEffectf("validate inverted indexes %v in table #%d", ids, tbl.GetID())
 	return nil
 }
 
@@ -872,15 +850,12 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 	return s
 }
 
-// EnqueueEvent implements scexec.EventLogger
-func (s *TestState) EnqueueEvent(
-	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
+// LogEvent implements scexec.EventLogger
+func (s *TestState) LogEvent(
+	_ context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
-	return nil
-}
-
-// ProcessAndSubmitEvents implements scexec.EventLogger
-func (s *TestState) ProcessAndSubmitEvents(ctx context.Context) error {
+	s.LogSideEffectf("write %T to event log for descriptor #%d: %s",
+		event, descID, metadata.Statement)
 	return nil
 }
 

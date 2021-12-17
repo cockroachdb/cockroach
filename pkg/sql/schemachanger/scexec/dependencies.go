@@ -19,16 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 // Dependencies contains all the dependencies required by the executor.
 type Dependencies interface {
 	Catalog() Catalog
+	Partitioner() scmutationexec.Partitioner
 	TransactionalJobCreator() TransactionalJobCreator
 	IndexBackfiller() IndexBackfiller
 	IndexValidator() IndexValidator
@@ -57,11 +57,10 @@ type Catalog interface {
 	NewCatalogChangeBatcher() CatalogChangeBatcher
 }
 
-// EventLogger encapsulates the operations for collecting
-// and emitting event log entries.
+// EventLogger encapsulates the operations for emitting event log entries.
 type EventLogger interface {
-	scmutationexec.EventLogWriter
-	ProcessAndSubmitEvents(ctx context.Context) error
+	// LogEvent writes to the eventlog.
+	LogEvent(ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
@@ -113,26 +112,11 @@ type IndexBackfiller interface {
 	) error
 }
 
-// Partitioner provides an interface that implements CCL exclusive
-// callbacks.
-type Partitioner interface {
-	AddPartitioning(
-		ctx context.Context,
-		tableDesc *tabledesc.Mutable,
-		indexDesc *descpb.IndexDescriptor,
-		partitionFields []string,
-		listPartition []*scpb.ListPartition,
-		rangePartition []*scpb.RangePartitions,
-		allowedNewColumnNames []tree.Name,
-		allowImplicitPartitioning bool,
-	) (err error)
-}
-
 // IndexValidator provides interfaces that allow indexes to be validated.
 type IndexValidator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
-		tableDesc catalog.TableDescriptor,
+		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
 		withFirstMutationPublic bool,
 		gatherAllInvalid bool,
@@ -141,7 +125,7 @@ type IndexValidator interface {
 
 	ValidateInvertedIndexes(
 		ctx context.Context,
-		tableDesc catalog.TableDescriptor,
+		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
 		gatherAllInvalid bool,
 		override sessiondata.InternalExecutorOverride,

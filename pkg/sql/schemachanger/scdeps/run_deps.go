@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
@@ -30,44 +31,44 @@ func NewJobRunDependencies(
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
 	indexBackfiller scexec.IndexBackfiller,
-	logEventFn LogEventCallback,
+	eventLoggerBuilder func(txn *kv.Txn) scexec.EventLogger,
+	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
-	cclCallbacks scexec.Partitioner,
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory: collectionFactory,
-		db:                db,
-		internalExecutor:  internalExecutor,
-		indexBackfiller:   indexBackfiller,
-		logEventFn:        logEventFn,
-		jobRegistry:       jobRegistry,
-		job:               job,
-		codec:             codec,
-		settings:          settings,
-		testingKnobs:      testingKnobs,
-		statements:        statements,
-		indexValidator:    indexValidator,
-		partitioner:       cclCallbacks,
+		collectionFactory:  collectionFactory,
+		db:                 db,
+		internalExecutor:   internalExecutor,
+		indexBackfiller:    indexBackfiller,
+		eventLoggerBuilder: eventLoggerBuilder,
+		partitioner:        partitioner,
+		jobRegistry:        jobRegistry,
+		job:                job,
+		codec:              codec,
+		settings:           settings,
+		testingKnobs:       testingKnobs,
+		statements:         statements,
+		indexValidator:     indexValidator,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory *descs.CollectionFactory
-	db                *kv.DB
-	internalExecutor  sqlutil.InternalExecutor
-	indexBackfiller   scexec.IndexBackfiller
-	logEventFn        LogEventCallback
-	jobRegistry       *jobs.Registry
-	job               *jobs.Job
+	collectionFactory  *descs.CollectionFactory
+	db                 *kv.DB
+	internalExecutor   sqlutil.InternalExecutor
+	indexBackfiller    scexec.IndexBackfiller
+	eventLoggerBuilder func(txn *kv.Txn) scexec.EventLogger
+	partitioner        scmutationexec.Partitioner
+	jobRegistry        *jobs.Registry
+	job                *jobs.Job
 
 	indexValidator scexec.IndexValidator
-	partitioner    scexec.Partitioner
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
@@ -94,11 +95,11 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				descsCollection: descriptors,
 				jobRegistry:     d.jobRegistry,
 				indexValidator:  d.indexValidator,
-				partitioner:     d.partitioner,
-				eventLogWriter:  newEventLogWriter(txn, d.logEventFn),
+				eventLogger:     d.eventLoggerBuilder(txn),
 			},
 			indexBackfiller: d.indexBackfiller,
 			statements:      d.statements,
+			partitioner:     d.partitioner,
 			user:            d.job.Payload().UsernameProto.Decode(),
 		})
 	})

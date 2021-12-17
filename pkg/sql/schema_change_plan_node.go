@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -164,10 +163,8 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
 		execCfg.IndexValidator,
-		scsqldeps.NewCCLCallbacks(execCfg.Settings, evalContext),
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return LogEventForSchemaChanger(ctx, execCfg, txn, depth+1, descID, metadata, event)
-		},
+		scsqldeps.NewPartitioner(execCfg.Settings, evalContext),
+		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		stmts,
 	)
 }

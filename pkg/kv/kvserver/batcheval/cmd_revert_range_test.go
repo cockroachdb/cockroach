@@ -187,7 +187,7 @@ func TestCmdRevertRange(t *testing.T) {
 				})
 			}
 
-			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1)
+			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1, 1)
 			if err := storage.MVCCPut(
 				ctx, eng, &stats, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), &txn,
 			); err != nil {

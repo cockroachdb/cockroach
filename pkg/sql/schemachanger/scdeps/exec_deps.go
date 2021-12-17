@@ -13,7 +13,6 @@ package scdeps
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -26,11 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,8 +51,8 @@ func NewExecutorDependencies(
 	jobRegistry JobRegistry,
 	indexBackfiller scexec.IndexBackfiller,
 	indexValidator scexec.IndexValidator,
-	cclCallbacks scexec.Partitioner,
-	logEventFn LogEventCallback,
+	partitioner scmutationexec.Partitioner,
+	eventLogger scexec.EventLogger,
 	statements []string,
 ) scexec.Dependencies {
 	return &execDeps{
@@ -65,11 +62,11 @@ func NewExecutorDependencies(
 			descsCollection: descsCollection,
 			jobRegistry:     jobRegistry,
 			indexValidator:  indexValidator,
-			partitioner:     cclCallbacks,
-			eventLogWriter:  newEventLogWriter(txn, logEventFn),
+			eventLogger:     eventLogger,
 		},
 		indexBackfiller: indexBackfiller,
 		statements:      statements,
+		partitioner:     partitioner,
 		user:            user,
 	}
 }
@@ -80,8 +77,7 @@ type txnDeps struct {
 	descsCollection    *descs.Collection
 	jobRegistry        JobRegistry
 	indexValidator     scexec.IndexValidator
-	partitioner        scexec.Partitioner
-	eventLogWriter     *eventLogWriter
+	eventLogger        scexec.EventLogger
 	deletedDescriptors catalog.DescriptorIDSet
 }
 
@@ -175,28 +171,6 @@ func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
 // RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (d *txnDeps) RemoveSyntheticDescriptor(id descpb.ID) {
 	d.descsCollection.RemoveSyntheticDescriptor(id)
-}
-
-// AddPartitioning implements the  scmutationexec.CatalogReader interface.
-func (d *txnDeps) AddPartitioning(
-	tableDesc *tabledesc.Mutable,
-	indexDesc *descpb.IndexDescriptor,
-	partitionFields []string,
-	listPartition []*scpb.ListPartition,
-	rangePartition []*scpb.RangePartitions,
-	allowedNewColumnNames []tree.Name,
-	allowImplicitPartitioning bool,
-) error {
-	ctx := context.Background()
-
-	return d.partitioner.AddPartitioning(ctx,
-		tableDesc,
-		indexDesc,
-		partitionFields,
-		listPartition,
-		rangePartition,
-		allowedNewColumnNames,
-		allowImplicitPartitioning)
 }
 
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
@@ -311,6 +285,7 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	indexBackfiller scexec.IndexBackfiller
+	partitioner     scmutationexec.Partitioner
 	statements      []string
 	user            security.SQLUsername
 }
@@ -320,6 +295,11 @@ var _ scexec.Dependencies = (*execDeps)(nil)
 // Catalog implements the scexec.Dependencies interface.
 func (d *execDeps) Catalog() scexec.Catalog {
 	return d
+}
+
+// Partitioner implements the scexec.Dependencies interface.
+func (d *execDeps) Partitioner() scmutationexec.Partitioner {
+	return d.partitioner
 }
 
 // IndexBackfiller implements the scexec.Dependencies interface.
@@ -356,134 +336,7 @@ func (d *execDeps) User() security.SQLUsername {
 	return d.user
 }
 
-// LogEventCallback call back to allow the new schema changer
-// to generate event log entries.
-type LogEventCallback func(ctx context.Context,
-	txn *kv.Txn,
-	depth int,
-	descID descpb.ID,
-	metadata scpb.ElementMetadata,
-	event eventpb.EventPayload,
-) error
-
-type eventPayload struct {
-	descID   descpb.ID
-	metadata *scpb.ElementMetadata
-	event    eventpb.EventPayload
-}
-
-type eventLogWriter struct {
-	txn               *kv.Txn
-	logEvent          LogEventCallback
-	eventStatementMap map[uint32][]eventPayload
-}
-
-// newEventLogWriter makes a new event log writer which will accumulate,
-// and emit events.
-func newEventLogWriter(txn *kv.Txn, logEvent LogEventCallback) *eventLogWriter {
-	return &eventLogWriter{
-		txn:               txn,
-		logEvent:          logEvent,
-		eventStatementMap: make(map[uint32][]eventPayload),
-	}
-}
-
-// EnqueueEvent implements scexec.EventLogger
-func (m *eventLogWriter) EnqueueEvent(
-	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
-) error {
-	eventList := m.eventStatementMap[metadata.StatementID]
-	m.eventStatementMap[metadata.StatementID] = append(eventList,
-		eventPayload{descID: descID,
-			event:    event,
-			metadata: metadata},
-	)
-	return nil
-}
-
-// ProcessAndSubmitEvents implements scexec.EventLogger
-func (m *eventLogWriter) ProcessAndSubmitEvents(ctx context.Context) error {
-	for _, events := range m.eventStatementMap {
-		// A dependent event is one which is generated because of a
-		// dependency getting modified from the source object. An example
-		// of this is a DROP TABLE will be the source event, which will track
-		// any dependent views dropped.
-		var dependentEvents = make(map[uint32][]eventPayload)
-		var sourceEvents = make(map[uint32]eventPayload)
-		// First separate out events, where the first event generated will always
-		// be the source and everything else before will be dependencies if they have
-		// the same subtask ID.
-		for _, event := range events {
-			dependentEvents[event.metadata.SubWorkID] = append(dependentEvents[event.metadata.SubWorkID], event)
-		}
-		// Split of the source events.
-		orderedSubWorkID := make([]uint32, 0, len(dependentEvents))
-		for subWorkID := range dependentEvents {
-			elems := dependentEvents[subWorkID]
-			sort.SliceStable(elems, func(i, j int) bool {
-				return elems[i].metadata.SourceElementID < elems[j].metadata.SourceElementID
-			})
-			sourceEvents[subWorkID] = elems[0]
-			dependentEvents[subWorkID] = elems[1:]
-			orderedSubWorkID = append(orderedSubWorkID, subWorkID)
-		}
-		// Store an ordered list of sub-work IDs for deterministic
-		// event order.
-		sort.SliceStable(orderedSubWorkID, func(i, j int) bool {
-			return orderedSubWorkID[i] < orderedSubWorkID[j]
-		})
-		// Collect the dependent objects for each
-		// source event, and generate an event log entry.
-		for _, subWorkID := range orderedSubWorkID {
-			// Determine which objects we should collect.
-			collectDependentViewNames := false
-			collectDependentSchemaNames := false
-			sourceEvent := sourceEvents[subWorkID]
-			switch sourceEvent.event.(type) {
-			case *eventpb.DropDatabase:
-				// Drop database only reports dependent schemas.
-				collectDependentSchemaNames = true
-			case *eventpb.DropView, *eventpb.DropTable:
-				// Drop view and drop tables only cares about
-				// dependent views
-				collectDependentViewNames = true
-			}
-			var dependentObjects []string
-			for _, dependentEvent := range dependentEvents[subWorkID] {
-				switch ev := dependentEvent.event.(type) {
-				case *eventpb.DropView:
-					if collectDependentViewNames {
-						dependentObjects = append(dependentObjects, ev.ViewName)
-					}
-				case *eventpb.DropSchema:
-					if collectDependentSchemaNames {
-						dependentObjects = append(dependentObjects, ev.SchemaName)
-					}
-				}
-			}
-			// Add anything that we determined based
-			// on the dependencies.
-			switch ev := sourceEvent.event.(type) {
-			case *eventpb.DropTable:
-				ev.CascadeDroppedViews = dependentObjects
-			case *eventpb.DropView:
-				ev.CascadeDroppedViews = dependentObjects
-			case *eventpb.DropDatabase:
-				ev.DroppedSchemaObjects = dependentObjects
-			}
-			// Generate event log entries for the source event only. The dependent
-			// events will be ignored.
-			if m.logEvent != nil {
-				err := m.logEvent(ctx, m.txn, 0, sourceEvent.descID, *sourceEvent.metadata, sourceEvent.event)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
+// EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
-	return d.eventLogWriter
+	return d.eventLogger
 }

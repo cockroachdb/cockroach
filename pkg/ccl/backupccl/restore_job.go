@@ -1566,6 +1566,8 @@ func remapPublicSchemas(
 		// In CockroachDB, root is our substitute for the postgres user.
 		publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		// By default, everyone has USAGE and CREATE on the public schema.
+		// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
+		// the public role will no longer have CREATE privilege.
 		publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
 		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 			ParentID:   db.GetID(),

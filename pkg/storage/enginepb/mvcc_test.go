@@ -29,11 +29,12 @@ func TestFormatMVCCMetadata(t *testing.T) {
 	ts := hlc.Timestamp{Logical: 1}
 	txnDidNotUpdateMeta := true
 	tmeta := &enginepb.TxnMeta{
-		Key:            roachpb.Key("a"),
-		ID:             txnID,
-		Epoch:          1,
-		WriteTimestamp: ts,
-		MinTimestamp:   ts,
+		Key:               roachpb.Key("a"),
+		ID:                txnID,
+		Epoch:             1,
+		WriteTimestamp:    ts,
+		MinTimestamp:      ts,
+		CoordinatorNodeID: 6,
 	}
 	val1 := roachpb.Value{}
 	val1.SetString("foo")

@@ -62,7 +62,8 @@ func TestClusterTimestampConversion(t *testing.T) {
 			nil, // baseKey
 			roachpb.NormalUserPriority,
 			ts.ToTimestamp(),
-			0, /* maxOffsetNs */
+			0, // maxOffsetNs
+			1, // coordinatorNodeID
 		)
 
 		ctx := tree.EvalContext{

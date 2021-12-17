@@ -20,6 +20,8 @@ import {
 } from "src/storybook/fixtures";
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 import moment from "moment";
+import * as H from "history";
+const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
@@ -43,6 +45,14 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     loaded: false,
     stats: [],
     lastReset: moment("2021-09-04T13:55:00Z"),
+  },
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
   },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
@@ -113,6 +123,14 @@ const withData: DatabaseTablePageProps = {
       },
     ],
     lastReset: moment("2021-09-04T13:55:00Z"),
+  },
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
   },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},

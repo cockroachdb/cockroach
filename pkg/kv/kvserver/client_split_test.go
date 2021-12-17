@@ -131,7 +131,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	left, middle, right := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction("test", key, 0, ts, 0)
+		txn := roachpb.MakeTransaction("test", key, 0, ts, 0, int32(s.SQLInstanceID()))
 		return &txn
 	}
 
@@ -556,7 +556,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Increments are a good way of testing idempotency. Up here, we
 	// address them to the original range, then later to the one that
 	// contains the key.
-	txn := roachpb.MakeTransaction("test", []byte("c"), 10, store.Clock().Now(), 0)
+	txn := roachpb.MakeTransaction("test", []byte("c"), 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()))
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := txn
 	lTxn.Sequence++
@@ -3168,7 +3168,8 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	txn := roachpb.MakeTransaction("test", key2, 1,
-		store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds())
+		store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds(),
+		int32(s.SQLInstanceID()))
 	// Officially begin the transaction. If not for this, the intent resolution
 	// machinery would simply remove the intent we write below, see #3020.
 	// We send directly to Replica throughout this test, so there's no danger
