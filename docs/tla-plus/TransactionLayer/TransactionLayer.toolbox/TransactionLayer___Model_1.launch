@@ -23,7 +23,7 @@
         <listEntry value="Nil;;Nil;1;0"/>
         <listEntry value="Read;;Read;1;0"/>
         <listEntry value="Write;;Write;1;0"/>
-        <listEntry value="MaxAttempt;;3;0;0"/>
+        <listEntry value="MaxAttempt;;2;0;0"/>
     </listAttribute>
     <intAttribute key="modelVersion" value="20191005"/>
     <intAttribute key="numberOfWorkers" value="10"/>

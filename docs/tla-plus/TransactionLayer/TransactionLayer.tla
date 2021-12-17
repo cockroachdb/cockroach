@@ -11,12 +11,15 @@ CONSTANTS Nil
 \* Maximum number of attempt, beyond this, this txn will be aborted.
 CONSTANTS MaxAttempt
 
+
+
 \* Multi-version value of key.
 VARIABLES MVCCData
 \* Intent write of key.
 VARIABLES Intent_write
-\* Every txn's timestamp(ts), status, attempt count and command.
+\* Every txn's timestamp(ts), status, attempt count and command.(transaction record)
 VARIABLES Record
+\* System time used to timestamp the transaction.
 VARIABLES System_ts
 \* Every txn's result of Read.
 VARIABLES Read_result
@@ -48,24 +51,24 @@ KEYS == {"A","B"}
 \* op              key        value(useless if Read)
 \* Write           A          1
 \* Read            A          2(useless)
-\* Write or Read   B          3
+\* Write or Read   B          3(useless if Read)
 \* Txn1 have 2 cases.
-InitT1 == /\ op1 \in {Write} /\ op2 \in {Read} /\ op3 \in {Write,Read}
+InitT1 == /\ op1 \in {Write} /\ op2 \in {Read} /\ op3 \in {Write, Read}
           /\ key1 \in {"A"}  /\ key2 \in {"A"} /\ key3 \in {"B"}
           /\ T1 = <<[op    |-> op1, key   |-> key1, value |-> 1],
                     [op    |-> op2, key   |-> key2, value |-> 2],
                     [op    |-> op3, key   |-> key3, value |-> 3]>>
                     
 \* Initiate txn2.
-\* in this case.
+\* in this case:
 \* op              key        value(useless if Read)
-\* Write or Read   A or B     4(useless if Read)
-\* Write           A or B     5
-\* Write           A          6
-\* Read            A          7(useless)
-\* Txn2 have 8 cases.                    
-InitT2 == /\ op4 \in {Write,Read} /\ op5 \in {Write}   /\ op6 \in {Write}/\ op7 \in {Read}
-          /\ key4 \in {"A","B"}  /\ key5 \in {"A","B"} /\ key6 \in {"A"} /\ key7 \in {"A"}
+\* Write           B          4(useless)
+\* Write or Read   A or B     5(useless if Read)
+\* Write or Read   B          6(useless if Read)
+\* Read            A          7(useless)      
+\* Txn2 have 2*2*2 = 8 cases.                
+InitT2 == /\ op4 \in {Write} /\ op5 \in {Write, Read} /\ op6 \in {Write, Read} /\ op7 \in {Read}
+          /\ key4 \in {"B"}  /\ key5 \in {"A","B"}    /\ key6 \in {"B"}        /\ key7 \in {"A"}
           /\ T2 = <<[op    |-> op4, key   |-> key4, value |-> 4],
                     [op    |-> op5, key   |-> key5, value |-> 5],
                     [op    |-> op6, key   |-> key6, value |-> 6],
@@ -73,8 +76,8 @@ InitT2 == /\ op4 \in {Write,Read} /\ op5 \in {Write}   /\ op6 \in {Write}/\ op7 
 \* Initiate txn3.
 \* in this case:
 \* txn3 have 1 case.  
-InitT3 == /\ op8 \in {Read} /\ op9 \in {Write} /\ opt \in {Write} /\ opj \in {Read} /\ opq \in {Read}
-          /\ key8 \in {"A"} /\ key9 \in {"A"}  /\ keyt \in {"B"}  /\ keyj \in {"A"}  /\ keyq \in {"B"}
+InitT3 == /\ op8 \in {Read} /\ op9 \in {Write} /\ opt \in  {Read} /\ opj \in {Write} /\ opq \in {Read}
+          /\ key8 \in {"A"} /\ key9 \in {"B"}  /\ keyt \in {"B"}  /\ keyj \in {"A"}  /\ keyq \in {"A"}
           /\ T3 = <<[op    |-> op8, key   |-> key8, value |-> 8],
                     [op    |-> op9, key   |-> key9, value |-> 9],
                     [op    |-> opt, key   |-> keyt, value |-> 10],
@@ -87,8 +90,9 @@ InitTransactions ==
         /\ InitT2
         /\ InitT3
         /\ Transactions = <<T1,T2,T3>>
-                  
-InitData == /\ MVCCData = [c \in KEYS |-> <<[TS  |-> 0, Value  |-> 0]>>]  
+
+\* For convenience, I separated Intent_write from MVCCData.                 
+InitData == /\ MVCCData = [c \in KEYS |-> <<[ts  |-> 0, value  |-> 0]>>]  
             /\ Intent_write = [i \in KEYS |-> Nil] 
     
 InitRecoed == Record = <<>>
@@ -106,16 +110,26 @@ Init == /\ InitTransactions
         /\ InitSign
         /\ InitResult
 
+\* Return the minimum value from a set, or undefined if the set is empty.
+Min(s) == CHOOSE x \in s : \A y \in s : x <= y
+\* Return the maximum value from a set, or undefined if the set is empty.
+Max(s) == CHOOSE x \in s : \A y \in s : x >= y
+
 \* Get the value of key in MVCCData according to ts. 
-GetLastNum(k,ts) == LET Indexs == {i \in 1..Len(MVCCData[k]):  MVCCData[k][i].TS <= ts}
-                        maxIndex    == CHOOSE x \in Indexs : \A y \in Indexs : x >= y
-                    IN MVCCData[k][maxIndex].Value
+GetLastNum(k,ts) == LET Indexs     == {i \in 1..Len(MVCCData[k]):  MVCCData[k][i].ts <= ts}
+                        maxTsIndex == CHOOSE x \in Indexs : \A y \in Indexs : MVCCData[k][x].ts >= MVCCData[k][y].ts
+                    IN MVCCData[k][maxTsIndex].value
                     
 \* Add something(a) to a tuple(s) on index(i).
 SthIndexAdd(s,i,a) == [t \in DOMAIN s \union {i} |-> IF t \in DOMAIN s THEN s[t] ELSE a]
 
-
-\* Beagin a txn.
+\* Exist newer committed value.
+ExistNCV(key,ts) == \/ /\ Intent_write[key] /= Nil
+                       /\ Intent_write[key].ts > ts
+                       /\ Record[Intent_write[key].tid].status = "committed"
+                    \/ /\ Intent_write[key] = Nil
+                       /\ MVCCData[key][Len(MVCCData[key])].ts > ts
+\* Begin a txn.
 BeginTransaction(tid) == 
                LET newT == [status |-> "pending", attempt |-> 0, ts |-> System_ts ,command |-> Transactions[tid]]
                IN 
@@ -123,144 +137,214 @@ BeginTransaction(tid) ==
                   /\ Record' = SthIndexAdd(Record,tid,newT)
                   /\ System_ts' = System_ts + 1
                   /\ UNCHANGED <<Unchangedvars,MVCCData,Read_result,Txn_exeid,Intent_write,Tscache,Tocheck>>
-
 \* Execute next command of a txn.
 PipeLineWrite(tid) == 
-            /\ Record[tid].status = "pending"
-            /\ Txn_exeid[tid] <= Cardinality(DOMAIN Record[tid].command) 
-            /\ LET cmd == Record[tid].command[Txn_exeid[tid]]
-                  \* Judge whether retry or not accroding to ts cache.
-               IN /\ \/ /\ Tscache[cmd.key] > Record[tid].ts
-                        \* Failed ts cache check.
-                        \* Retry this txn.
-                        /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
-                                                              \* Set status according to attempt.
-                                                              status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
-                                                              attempt |-> @.attempt + 1,
-                                                              command |-> @.command]]
-                        /\ System_ts' = System_ts + 1
-                        /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
-                        /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
-                        /\ UNCHANGED <<Tscache,MVCCData,Intent_write>>
-                        
-                     \/ /\ Tscache[cmd.key] <= Record[tid].ts
-                        \* Pass ts cache check.
-                        /\ Tscache' = [Tscache EXCEPT ![cmd.key] = Record[tid].ts]
-                        
-                        \* Judge whether exists intent write in key. 
-                        /\ \/ /\ Intent_write[cmd.key] = Nil
-                              \* Don't exist intent write.
-                              \* Judge operation of this command.
-                              /\ \/ /\ cmd.op = Read
-                                    \* Operation is Read.
-                                    \* Read the value of key in MVCCData according to ts.
-                                    /\ Read_result' = [Read_result EXCEPT ![tid] = SthIndexAdd
-                                                   (@,Len(@) + 1,GetLastNum(cmd.key,Record[tid].ts))]
-                                    /\ UNCHANGED <<Intent_write>>
+           /\ Record[tid].status = "pending"
+           /\ Txn_exeid[tid] <= Cardinality(DOMAIN Record[tid].command) 
+           /\ LET \* This command.
+                  cmd   == Record[tid].command[Txn_exeid[tid]]
+                  \* Operation of this command.
+                  op    == cmd.op
+                  \* Key of this command.
+                  key   == cmd.key
+                  \* Value of this command.
+                  value == cmd.value
+                  \* Timestamp of this txn.
+                  ts    == Record[tid].ts
+                  \* Intent_write on this key 
+                  iw    == Intent_write[key]
+              IN /\ Assert(op \in {Read, Write}, "wrong op")
+                 /\ \/ /\ op = Read
+                       \* op is Read
+                       /\ \/ /\ iw = Nil
+                             \* Without intent_write on key
+                             \* Read MVCCData according to ts.
+                             /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts))]
+                             /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                             \* Update ts cache.
+                             /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                             /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write,Tocheck>>
+                          \/ /\ iw /= Nil
+                             \* With intent_write on key
+                             
+                             /\ LET \* ID of the conflicting txn in Intent_write.
+                                    otid    == iw.tid
+                                    \* Timestamp of the conflicting txn in Record.
+                                    ots     == Record[otid].ts
+                                    \* Timestamp of the conflicting txn in Intent_write.
+                                    iwts    == iw.ts
+                                    \* Status of the conflicting txn in Record.
+                                    ostatus == Record[otid].status
+                                    \* Value of the conflicting txn in Intent_write.
+                                    iwv     == iw.value
                                     
-                                 \/ /\ cmd.op = Write
-                                    \* Operation is Write.
-                                    \* Write the key-value to intent write.
-                                    /\ Intent_write' = [Intent_write EXCEPT ![cmd.key] = [txn_id |-> tid,
-                                                                                          value  |-> cmd.value,
-                                                                                          ts     |-> Record[tid].ts]]
-                                    /\ UNCHANGED <<Read_result>>
-                              /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                              /\ UNCHANGED <<Record,MVCCData,System_ts>>
-                           \/ /\ Intent_write[cmd.key] /= Nil
-                              \* Exist intent write.
-                              \* Conflict handling.
-                              /\ LET \* Content of intent write.
-                                     ciw  == Intent_write[cmd.key]
-                                     \* Conflicted txn's id.
-                                     ctid == Intent_write[cmd.key].txn_id
-                                     \* Conflicted txn's status.
-                                     stat == Record[ctid].status
-                                     \* Conflicted txn's ts.
-                                     cts  == Record[ctid].ts
-                                     
-                                    \* Judge conflicted txn's status.
-                                 IN /\ \/ /\ stat = "committed"
-                                          \* Move the value from intent write to MVCCData.
-                                          /\ MVCCData' = [MVCCData EXCEPT ![cmd.key] = 
-                                                          SthIndexAdd(@,Len(@) + 1,[TS    |-> ciw.ts,
-                                                                                    Value |-> Intent_write[cmd.key].value])]
-                                          /\ Intent_write' = [Intent_write EXCEPT ![cmd.key] = Nil] 
-                                          /\ UNCHANGED <<Read_result,Record,Txn_exeid,System_ts>>                                                  
-                                       \/ /\ stat = "aborted"
-                                          \* Delete this intent write.
-                                          /\ Intent_write' = [Intent_write EXCEPT ![cmd.key] = Nil]
-                                          /\ UNCHANGED <<MVCCData,Read_result,Record,Txn_exeid,System_ts>>
-                                       \/ /\ stat = "staging"
-                                          \* Wait for Conflicted txn.
-                                          /\ FALSE
-                                       \/ /\ stat = "pending"
-                                          \* Conflict handling.
-                                          \* Judge whether the intent write is written by this txn.
-                                          /\ \/ /\ tid = ctid
-                                                \* This intent write is written by this txn.
-                                                /\ \/ /\ cmd.op = Write
-                                                      \* Overwrite intent write.
-                                                      /\ Intent_write' = [Intent_write EXCEPT ![cmd.key] = [txn_id |-> tid,
-                                                                                                            value  |-> cmd.value,
-                                                                                                            ts     |-> Record[tid].ts]]
-                                                      
-                                                      /\ UNCHANGED <<Read_result>>
-                                                   \/ /\ cmd.op = Read
-                                                      \* Judge whether the intent write conflict is caused by txn retry.
-                                                      /\ \/ /\ ciw.ts = Record[tid].ts
-                                                            \* Intent write conflict isn't caused by txn retry.
-                                                            \* Read the value of key in MVCCData according to ts.
-                                                            /\ Read_result' = [Read_result EXCEPT ![tid] = SthIndexAdd(@,Len(@) + 1,Intent_write[cmd.key].value)]
-                                                            /\ UNCHANGED <<Intent_write>> 
-                                                         \/ /\ ciw.ts < Record[tid].ts
-                                                            \* Intent write conflict is caused by txn retry.
-                                                            \* Clean intent write and read the value of key in MVCCData according to ts.
-                                                            /\ Intent_write' = [Intent_write EXCEPT ![cmd.key] = Nil]
-                                                            /\ Read_result' = [Read_result EXCEPT ![tid] = SthIndexAdd(@,Len(@) + 1,GetLastNum(cmd.key,Record[tid].ts))]
-                                                            
-                                                /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                                                /\ UNCHANGED <<Record,System_ts>>
-                                                
-                                             \/ /\ tid /= ctid 
-                                                \* This intent write isn't written by this txn.
-                                                /\ \/ /\ ciw.ts /= cts
-                                                      \* Conflicted txn's ts is not equal to intent write's ts
-                                                      \* This intent write is expired, clean it.
-                                                      /\ Intent_write' = [Intent_write EXCEPT ![cmd.key] = Nil]
-                                                      /\ UNCHANGED <<System_ts,Txn_exeid,Record,Read_result>>
-                                                      
-                                                   \/ /\ ciw.ts = cts
-                                                      /\ \/ /\ cmd.op = Write 
-                                                            /\ Record[tid].ts < cts
-                                                            \* This is w-w conflict, abort this txn. 
-                                                            /\ Record' = [Record EXCEPT ![tid].status = "aborted"]
-                                                            /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
-                                                            /\ UNCHANGED <<System_ts,Txn_exeid>>
-                                                         \/ /\ cmd.op = Read 
-                                                            \* Compare txn's ts with conflict txn's ts.
-                                                            /\ \/ /\ Record[tid].ts < cts
-                                                                  \* Ignore this intent write, and read the value of key in MVCCData according to ts. 
-                                                                  /\ Read_result' = [Read_result EXCEPT ![tid] = SthIndexAdd(@,Len(@) + 1,GetLastNum(cmd.key,Record[tid].ts))]
-                                                                  /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                                                                  /\ UNCHANGED <<Record,System_ts>>
-                                                            
-                                                               \/ /\ Record[tid].ts > cts
-                                                                  \* Push conflict txn's ts, and retry conflict txn.
-                                                                  /\ Record' = [Record EXCEPT ![ctid] = [ts      |-> System_ts,
-                                                                                                         status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
-                                                                                                         attempt |-> @.attempt + 1,
-                                                                                                         command |-> @.command]]
-                                                                  /\ System_ts' = System_ts + 1
-                                                                  /\ Read_result' = [Read_result EXCEPT ![ctid] = <<>>]
-                                                                  /\ Txn_exeid' = [Txn_exeid EXCEPT ![ctid] = 1]
-                                                      /\ UNCHANGED <<Intent_write>>                                           
-                                                            
-                                                
-                                            /\ UNCHANGED <<MVCCData>>
-                         
-                  /\ UNCHANGED <<Unchangedvars,Tocheck>> 
-                  
+                                IN /\ \/ /\ iwts > ts
+                                         \* A txn with a large ts attempted to write.
+                                         \* Ignore it and read MVCCData according to ts.
+                                         /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts))]
+                                         /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                         /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write,Tocheck>>
+                                      \/ /\ iwts = ts
+                                         \* This Intent_write was written by myself.
+                                         \* Read this Intent_write directly.
+                                         /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,iwv)]
+                                         /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                         /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write,Tocheck>>
+                                      \/ /\ iwts < ts
+                                         \* Judge whether the intent write is written by this txn.
+                                         /\ \/ /\ otid = tid
+                                               \* Due to retry of this txn.
+                                               \* Delete this Intent_write and read MVCCData according to ts.
+                                               /\ Intent_write' = [Intent_write EXCEPT ![key] = Nil]
+                                               /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts))]
+                                               /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                               /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                                               /\ UNCHANGED <<MVCCData,Record,System_ts,Tocheck>>
+                                            \/ /\ otid /= tid
+                                               \* This is a txn conflict.
+                                               \* Handle this conflict according to status.
+                                               /\ Assert(ostatus \in {"committed","aborted","staging","pending"},"wrong status")
+                                               /\ \/ /\ ostatus = "committed"
+                                                     \* Persist this Intent_write and read MVCCData according to ts.
+                                                     /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,iwv)]
+                                                     /\ Intent_write' = [Intent_write EXCEPT ![key] = Nil]
+                                                     /\ MVCCData' = [MVCCData EXCEPT ![key] = Append(MVCCData[key],[ts    |-> iwts,
+                                                                                                                    value |-> iwv])]
+                                                     /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                                     /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                                                     /\ UNCHANGED <<Record,System_ts,Tocheck>>
+                                                     
+                                                  \/ /\ ostatus = "aborted"
+                                                     \* Clean this Intent_write and read MVCCData according to ts.
+                                                     /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts))]
+                                                     /\ Intent_write' = [Intent_write EXCEPT ![key] = Nil]
+                                                     /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                                     /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                                                     
+                                                     /\ UNCHANGED <<MVCCData,Record,System_ts,Tocheck>>
+                                                  \/ /\ ostatus = "staging"
+                                                     /\ FALSE
+                                                  \/ /\ ostatus = "pending"
+                                                     \* Compare priority.
+                                                     /\ \/ \* Push ts of conflict txn,and retry it.
+                                                           /\ Record' = [Record EXCEPT ![otid] = [ts      |-> System_ts,
+                                                                                                 \* Set status according to attempt.
+                                                                                                  status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
+                                                                                                  attempt |-> @.attempt + 1,
+                                                                                                  command |-> @.command]]
+                                                           /\ System_ts' = System_ts + 1
+                                                           /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts)), ![otid] = <<>>]
+                                                           /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1,![otid] = 1]
+                                                           /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
+                                                           
+                                                        \/ \* retry myself.
+                                                           /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
+                                                                                                 \* Set status according to attempt.
+                                                                                                 status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
+                                                                                                 attempt |-> @.attempt + 1,
+                                                                                                 command |-> @.command]]
+                                                           /\ System_ts' = System_ts + 1
+                                                           /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
+                                                           /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
+                                                           /\ UNCHANGED <<Tscache>>
+                                                     /\ UNCHANGED <<MVCCData,Intent_write,Tocheck>>
+                    \/ /\ op = Write
+                       \* op is Write
+                       /\ \/ /\ ts < Tscache[key] 
+                             \* Txn with large ts have already read this key.
+                             \* Retry myself.
+                             /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
+                                                                   \* Set status according to attempt.
+                                                                   status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
+                                                                   attempt |-> @.attempt + 1,
+                                                                   command |-> @.command]]
+                             /\ System_ts' = System_ts + 1                                      
+                             /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
+                             
+                             /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
+                             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache,Tocheck>>
+                          \/ /\ ts >= Tscache[key]
+                             /\ \/ /\ ExistNCV(key,ts)
+                                   \* Exist newer committed value.
+                                   \* Retry myself.
+                                   /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
+                                                                         \* Set status according to attempt.
+                                                                         status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
+                                                                         attempt |-> @.attempt + 1,
+                                                                         command |-> @.command]]
+                                                                   
+                                   /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
+                                   /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
+                                   /\ System_ts' = System_ts + 1
+                                   
+                                   /\ UNCHANGED<<MVCCData,Intent_write,Tscache,Tocheck>>
+                                \/ /\ ~ExistNCV(key,ts)
+                                   \* Do not exist newer committed value.
+                                   /\ \/ /\ iw = Nil 
+                                         \* Without Intent_write on this key.
+                                         /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
+                                                                                           value |-> value,
+                                                                                           ts    |-> ts]]
+                                         /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>>
+                                      \/ /\ iw /= Nil
+                                         \* compare priority
+                                         /\ LET otid    == iw.tid
+                                                ots     == Record[otid].ts
+                                                ostatus == Record[otid].status
+                                                iwts    == iw.ts
+                                                iwv     == iw.value
+                                            IN /\ \/ /\ otid = tid
+                                                     \* This Intent_write was written by myself.
+                                                     \* Ignore it and read MVCCData according to ts.
+                                                     /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
+                                                                                                       value |-> value,
+                                                                                                       ts    |-> ts]]
+                                                     /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                                     /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>>
+                                                  \/ /\ otid /= tid 
+                                                     \* This is a txn conflict.
+                                                     \* Handle this conflict according to status.
+                                                     /\ \/ /\ ostatus = "committed"
+                                                           \* Persist this Intent_write and write Intent_write.
+                                                           /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
+                                                                                                             value |-> value,
+                                                                                                             ts    |-> ts]]
+                                                           /\ MVCCData' = [MVCCData EXCEPT ![key] = Append(MVCCData[key],[ts    |-> iwts,
+                                                                                                                          value |-> iwv])]
+                                                                                                                          
+                                                           /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                                           /\ UNCHANGED <<Record,System_ts,Read_result,Tscache,Tocheck>> 
+                                                        \/ /\ ostatus = "aborted"
+                                                           \* Delete this Intent_write and write Intent_write.
+                                                           /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
+                                                                                                             value |-> value,
+                                                                                                             ts    |-> ts]]
+                                                           /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
+                                                           /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>> 
+                                                        \/ /\ ostatus = "staging"
+                                                           /\ FALSE
+                                                        \/ /\ ostatus = "pending"
+                                                           \* Compare priority.
+                                                           /\ \/ \* aborts the conflicting transaction
+                                                                 /\ Record' = [Record EXCEPT ![otid].status = "aborted"]
+                                                                 /\ Read_result' = [Read_result EXCEPT ![otid] = <<>>]
+                                                                 /\ UNCHANGED <<MVCCData,System_ts,Txn_exeid,Intent_write,Tscache,Tocheck>> 
+                                                              \/ \* retry myself
+                                                                 /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
+                                                                                                       \* Set status according to attempt.
+                                                                                                       status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
+                                                                                                       attempt |-> @.attempt + 1,
+                                                                                                       command |-> @.command]]
+                                                                 /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
+                                                                 /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
+                                                                 /\ System_ts' = System_ts + 1
+                                                                 /\ UNCHANGED <<MVCCData,Intent_write,Tscache,Tocheck>>
+                                                 
+                 /\ UNCHANGED <<Unchangedvars>>
+
 \* Commit a txn.               
 StartParallelCommit(tid) == 
             \* All commands have been executed.
@@ -301,26 +385,26 @@ CheckInflight(tid,command) ==
                   /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
                   
             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache>>
-             
+
+
 \* Judge whether the txn meets the commit conditions.
 JudgeCommit(tid) == 
             /\ Record[tid].status = "staging"
             \* All commands have been successfully replicated.
             /\ \A i \in Tocheck[tid] : i.success = TRUE
-            /\ Record' = [Record EXCEPT ![tid].status = "committed"]
+            /\ Record' = [Record EXCEPT ![tid].status = "committed"] 
             /\ Tocheck' = [i \in (DOMAIN Tocheck) \ {tid} |-> Tocheck[i]] 
             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache,Read_result,Txn_exeid,System_ts>>
 
 
 \* Move the value from intent write to MVCCData.
 CleanIntentWrite(k) == 
-         LET tid == Intent_write[k].txn_id
+         LET tid == Intent_write[k].tid
          IN /\ Intent_write[k] /= Nil
             /\ Record[tid].status = "committed"
-            /\ Assert(Intent_write[k].ts = Record[tid].ts,"error in CleanIntentWrite")
             /\ Intent_write' = [Intent_write EXCEPT ![k] = Nil]
-            /\ MVCCData' = [MVCCData EXCEPT ![k] = SthIndexAdd(@,Len(@) + 1,[TS    |-> Intent_write[k].ts,
-                                                                             Value |-> Intent_write[k].value])]
+            /\ MVCCData' = [MVCCData EXCEPT ![k] = Append(@,[ts    |-> Intent_write[k].ts,
+                                                             value |-> Intent_write[k].value])]
             /\ UNCHANGED <<Unchangedvars,Record,System_ts,Read_result,Txn_exeid,Tscache,Tocheck>>                                                                 
 
 
@@ -339,16 +423,17 @@ Next ==
 \* To verify its correctness, we verify:
 \* 1.The read value is the most recently written value.
 \* 2.The last written value determines the current value of MVCCData. 
-CheckInv(SerializeedTxn,SerializedRead,num) == 
-                 /\ \A index \in 1..num : LET Item == SerializeedTxn[index]
+CheckInv(SerializedTxn,SerializedRead,num) == 
+                 /\ \A index \in 1..num : Assert(
+                                          LET Item == SerializedTxn[index]
                                           IN \/ /\ Item.op = Write
-                                                /\ (~ \E i \in (index+1)..num : /\ SerializeedTxn[i].op  = Write
-                                                                                /\ SerializeedTxn[i].key = Item.key)
+                                                /\ (~ \E i \in (index+1)..num : /\ SerializedTxn[i].op  = Write
+                                                                                /\ SerializedTxn[i].key = Item.key)
                                                    => GetLastNum(Item.key,999) = Item.value            
                                              \/ /\ Item.op = Read
-                                                /\ LET samekeyW    == {i \in 1..(index-1) : /\ SerializeedTxn[i].op = Write
-                                                                                            /\ SerializeedTxn[i].key = Item.key}
-                                                       beforeRnum  == Cardinality({i \in 1..(index-1) : SerializeedTxn[i].op = Read})
+                                                /\ LET samekeyW    == {i \in 1..(index-1) : /\ SerializedTxn[i].op = Write
+                                                                                            /\ SerializedTxn[i].key = Item.key}
+                                                       beforeRnum  == Cardinality({i \in 1..(index-1) : SerializedTxn[i].op = Read})
                                                        thisR       == SerializedRead[beforeRnum + 1]
                                                              
                                                    IN \* Without written before, read 0.
@@ -356,8 +441,8 @@ CheckInv(SerializeedTxn,SerializedRead,num) ==
                                                          /\ thisR = 0
                                                       \* With written before, read recently written value.
                                                       \/ /\ samekeyW /= {}
-                                                         /\ thisR = SerializeedTxn[CHOOSE x \in samekeyW : \A y \in samekeyW : x >= y].value
-
+                                                         /\ thisR = SerializedTxn[CHOOSE x \in samekeyW : \A y \in samekeyW : x >= y].value
+                                                  ,<<index,SerializedTxn,SerializedRead>>)
 \* Return txn's command if committed.    
 GetTxn(i) == IF Record[i].status = "committed" THEN Record[i].command 
              ELSE IF Record[i].status = "aborted" THEN <<>>
@@ -394,8 +479,8 @@ invCorrect ==\* When all txns are terminated and all intent write is written to 
                      TL3 == GetTxnLen(txn3,3)
                      sumTxnLen  == TL1 + TL2 + TL3
                      Txns == <<GetTxn(txn1),GetTxn(txn2),GetTxn(txn3)>>
-                     \* SerializeedTxn is committed txns' in ts order.
-                     SerializeedTxn == [i \in 1..sumTxnLen |-> IF i \in 1..TL1 THEN Txns[1][i]
+                     \* SerializedTxn is committed txns' in ts order.
+                     SerializedTxn == [i \in 1..sumTxnLen |-> IF i \in 1..TL1 THEN Txns[1][i]
                                                                ELSE IF i \in TL1 + 1 .. TL1 + TL2 THEN Txns[2][i - TL1]
                                                                ELSE Txns[3][i - TL1 - TL2]]
                                                             
@@ -410,13 +495,17 @@ invCorrect ==\* When all txns are terminated and all intent write is written to 
                 
                 IN  \* You can use the following statement to view an example. 
                     \* /\ Assert(\E i \in 1..3: Record[i].status = "aborted",<<SerializeedTxn,SerializedRead,Len(SerializeedTxn)>>)
-                    /\ CheckInv(SerializeedTxn,SerializedRead,Len(SerializeedTxn))
+                    
+                    /\ CheckInv(SerializedTxn,SerializedRead,Len(SerializedTxn))
     
            
 \* The ts of two txns cannot be equal.    
 invTs == ~ \E i,j \in DOMAIN Record : /\ i /= j
                                       /\ Record[i].ts = Record[j].ts
-                                      
+ 
+ 
+         
+                               
 invOthers == 
           \* Only txns in staging status need to be checked.
           /\ ~ \E i \in DOMAIN Record : /\ Record[i].status /= "staging"
@@ -434,9 +523,9 @@ invType ==  /\ \A i \in DOMAIN Record :  /\ Record[i].status \in {"pending","sta
                                               /\ Intent_write[i] /= Nil 
                                                      \* Ts in intent write is smaller than system_ts.
                                                   => /\ Intent_write[i].ts < System_ts
-                                                     /\ Intent_write[i].txn_id \in 1..3
+                                                     /\ Intent_write[i].tid \in 1..3
                                              
-                        
+                      
 TxnInv == /\ invCorrect 
           /\ invTs
           /\ invOthers
@@ -444,10 +533,6 @@ TxnInv == /\ invCorrect
 
 
 Properties ==
-    \* The ts of intent_write increases monotonically.
-    /\ [][\A k \in KEYS: \/ Intent_write'[k] = Nil
-                         \/ Intent_write[k] = Nil
-                         \/ Intent_write'[k].ts >= Intent_write[k].ts]_Intent_write
     \* The ts of each element of tscache increases monotonically.
     /\ [][\A k \in KEYS: Tscache'[k] >= Tscache[k]]_Tscache
     \* System_ts increases monotonically.
