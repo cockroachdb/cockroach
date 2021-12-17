@@ -1559,7 +1559,19 @@ func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
 		// Should never be in this case.
 		panic(err)
 	}
-	return col.IsHidden()
+	if !col.IsHidden() {
+		return false
+	}
+	if !strings.HasPrefix(col.GetName(), "rowid") {
+		return false
+	}
+	if !col.GetType().Equal(types.Int) {
+		return false
+	}
+	if !col.HasDefault() {
+		return false
+	}
+	return col.GetDefaultExpr() == "unique_rowid()"
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
