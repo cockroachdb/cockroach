@@ -1925,22 +1925,6 @@ func NewTableDesc(
 		}
 	}
 
-	// Assign any implicitly added shard columns to the column family of the first column
-	// in their corresponding set of index columns.
-	for _, index := range desc.NonDropIndexes() {
-		if index.IsSharded() && !columnsInExplicitFamilies[index.GetShardColumnName()] {
-			// Ensure that the shard column wasn't explicitly assigned a column family
-			// during table creation (this will happen when a create statement is
-			// "roundtripped", for example).
-			family := tabledesc.GetColumnFamilyForShard(&desc, index.GetSharded().ColumnNames)
-			if family != "" {
-				if err := desc.AddColumnToFamilyMaybeCreate(index.GetShardColumnName(), family, false, false); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
 	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
 	}
@@ -2498,6 +2482,7 @@ func makeShardColumnDesc(
 		Hidden:   true,
 		Nullable: false,
 		Type:     types.Int4,
+		Virtual:  true,
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
 	if useDatumsToBytes {
