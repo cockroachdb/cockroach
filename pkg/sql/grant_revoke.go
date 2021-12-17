@@ -52,10 +52,11 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	}
 
 	return &changePrivilegesNode{
-		isGrant:      true,
-		targets:      n.Targets,
-		grantees:     grantees,
-		desiredprivs: n.Privileges,
+		isGrant:         true,
+		withGrantOption: n.WithGrantOption,
+		targets:         n.Targets,
+		grantees:        grantees,
+		desiredprivs:    n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
@@ -82,10 +83,11 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 	return &changePrivilegesNode{
-		isGrant:      false,
-		targets:      n.Targets,
-		grantees:     grantees,
-		desiredprivs: n.Privileges,
+		isGrant:         false,
+		withGrantOption: n.GrantOptionFor,
+		targets:         n.Targets,
+		grantees:        grantees,
+		desiredprivs:    n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
@@ -96,6 +98,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 
 type changePrivilegesNode struct {
 	isGrant         bool
+	withGrantOption bool
 	targets         tree.TargetList
 	grantees        []security.SQLUsername
 	desiredprivs    privilege.List
@@ -119,6 +122,18 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
+	}
+	// The public role is not allowed to have grant options.
+	if n.isGrant && n.withGrantOption {
+		for _, grantee := range n.grantees {
+			if grantee.IsPublicRole() {
+				return pgerror.Newf(
+					pgcode.InvalidGrantOperation,
+					"grant options cannot be granted to %q role",
+					security.PublicRoleName(),
+				)
+			}
+		}
 	}
 
 	var err error
