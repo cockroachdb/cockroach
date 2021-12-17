@@ -1,4 +1,81 @@
 index-constraints vars=(a string) index=a
+a LIKE 'ABC'
+----
+[/'ABC' - /'ABC']
+
+# A backslash that isn't escaping anything is just removed from pattern.
+index-constraints vars=(a string) index=a
+a LIKE '\aABC%'
+----
+[/'aABC' - /'aABD')
+
+# A backslash that isn't escaping anything is just removed from pattern.
+index-constraints vars=(a string) index=a
+a LIKE 'A\BC%'
+----
+[/'ABC' - /'ABD')
+
+# Currently we punt on custom ESCAPE clauses.
+index-constraints vars=(a string) index=a
+a LIKE '\aABC%' ESCAPE '|'
+----
+[ - ]
+Remaining filter: like_escape(a, e'\\aABC%', '|')
+
+# Single char wildcard requires remaining filter.
+index-constraints vars=(a string) index=a
+a LIKE '\aABC_'
+----
+[/'aABC' - /'aABD')
+Remaining filter: a LIKE e'\\aABC_'
+
+# Ending with wildcard with other wildcards present isn't tight.
+index-constraints vars=(a string) index=a
+a LIKE 'AB_C%'
+----
+[/'AB' - /'AC')
+Remaining filter: a LIKE 'AB_C%'
+
+# Ignore zero prefix (wildcard at beginning).
+index-constraints vars=(a string) index=a
+a LIKE '%ABC'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%ABC'
+
+# Ignore zero prefix (wildcard at beginning).
+index-constraints vars=(a string) index=a
+a LIKE '_ABC'
+----
+(/NULL - ]
+Remaining filter: a LIKE '_ABC'
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\%'
+----
+[/'ABC%' - /'ABC%']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\_'
+----
+[/'ABC_' - /'ABC_']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\_Z'
+----
+[/'ABC_Z' - /'ABC_Z']
+
+# Escape terminator is okay for index constraint purposes.
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\'
+----
+(/NULL - ]
+Remaining filter: a LIKE e'ABC\\'
+
+index-constraints vars=(a string) index=a
 a LIKE 'ABC%'
 ----
 [/'ABC' - /'ABD')
@@ -59,6 +136,18 @@ a SIMILAR TO 'ABC.*Z'
 ----
 [/'ABC' - /'ABD')
 Remaining filter: a SIMILAR TO 'ABC.*Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC%Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC%Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC_Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC_Z'
 
 index-constraints vars=(a string) index=(a)
 a SIMILAR TO 'ABC'

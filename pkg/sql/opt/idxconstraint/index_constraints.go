@@ -12,7 +12,6 @@ package idxconstraint
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -280,21 +279,25 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
-				if i == 0 {
-					// Mask starts with _ or %.
-					c.unconstrained(offset, out)
-					return false
+			// Normalize the like pattern to a regexp.
+			pattern, err := tree.LikeEscape(string(s))
+			if err == nil {
+				if re, err := regexp.Compile(pattern); err == nil {
+					prefix, complete := re.LiteralPrefix()
+					if complete {
+						c.eqSpan(offset, tree.NewDString(prefix), out)
+						return true
+					}
+					if prefix == "" {
+						// Mask starts with _ or %.
+						c.unconstrained(offset, out)
+						return false
+					}
+					c.makeStringPrefixSpan(offset, prefix, out)
+					// If pattern is prefix + .* its tight.
+					return prefix+".*" == pattern
 				}
-				c.makeStringPrefixSpan(offset, string(s[:i]), out)
-				// A mask like ABC% is equivalent to restricting the prefix to ABC.
-				// A mask like ABC%Z requires restricting the prefix, but is a stronger
-				// condition.
-				return (i == len(s)-1) && s[i] == '%'
 			}
-			// No wildcard characters, this is an equality.
-			c.eqSpan(offset, &s, out)
-			return true
 		}
 
 	case opt.SimilarToOp:
