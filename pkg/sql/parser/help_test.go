@@ -218,6 +218,16 @@ func TestContextualHelp(t *testing.T) {
 		{`DEALLOCATE ALL ??`, `DEALLOCATE`},
 		{`DEALLOCATE PREPARE ??`, `DEALLOCATE`},
 
+		{`DECLARE ??`, `DECLARE`},
+		{`DECLARE foo ??`, `DECLARE`},
+		{`DECLARE foo BINARY ??`, `DECLARE`},
+		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
+
+		{`CLOSE ??`, `CLOSE`},
+
+		{`FETCH ??`, `FETCH`},
+		{`FETCH 1 ??`, `FETCH`},
+
 		{`INSERT INTO ??`, `INSERT`},
 		{`INSERT INTO blah (??`, `<SELECTCLAUSE>`},
 		{`INSERT INTO blah VALUES (1) RETURNING ??`, `INSERT`},
