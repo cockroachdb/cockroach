@@ -42,6 +42,7 @@ const (
 	USAGE      Kind = 9
 	ZONECONFIG Kind = 10
 	CONNECT    Kind = 11
+	RULE       Kind = 12
 )
 
 // ObjectType represents objects that can have privileges.
@@ -97,7 +98,7 @@ func (k Kind) IsSetIn(bits uint32) bool {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
 }
 
 // ByName is a map of string -> kind value.
@@ -113,6 +114,7 @@ var ByName = map[string]Kind{
 	"UPDATE":     UPDATE,
 	"ZONECONFIG": ZONECONFIG,
 	"USAGE":      USAGE,
+	"RULE":       RULE,
 }
 
 // List is a list of privileges.
