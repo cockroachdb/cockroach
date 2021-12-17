@@ -222,7 +222,7 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		})
 	}
 
-	if tracer := rpcCtx.AmbientCtx.Tracer; tracer != nil {
+	if tracer := rpcCtx.AmbientCtx.Tracer(); tracer != nil {
 		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer))
 		streamInterceptor = append(streamInterceptor, tracing.StreamServerInterceptor(tracer))
 	}
@@ -827,7 +827,7 @@ func (rpcCtx *Context) grpcDialOptions(
 	var unaryInterceptors []grpc.UnaryClientInterceptor
 	var streamInterceptors []grpc.StreamClientInterceptor
 
-	if tracer := rpcCtx.AmbientCtx.Tracer; tracer != nil {
+	if tracer := rpcCtx.AmbientCtx.Tracer(); tracer != nil {
 		// TODO(tbg): re-write all of this for our tracer.
 
 		// We use a decorator to set the "node" tag. All other spans get the

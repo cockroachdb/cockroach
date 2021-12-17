@@ -42,7 +42,7 @@ func TestAnnotateCtxTags(t *testing.T) {
 func TestAnnotateCtxSpan(t *testing.T) {
 	tracer := tracing.NewTracer()
 
-	ac := AmbientContext{Tracer: tracer}
+	ac := MakeDummyAmbientContext(tracer)
 	ac.AddLogTag("ambient", nil)
 
 	// Annotate a context that has an open span.
@@ -73,7 +73,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	// span. We just check here that AnnotateCtxWithSpan properly returns it to the
 	// caller.
 
-	ac.Tracer = tracer
+	ac = MakeDummyAmbientContext(tracer)
 	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
 	require.Equal(t, sp, tracing.SpanFromContext(ctx))
 	require.NotNil(t, sp)
@@ -96,8 +96,8 @@ func TestAnnotateCtxNodeStoreReplica(t *testing.T) {
 	if exp, val := "[n1,s2,r3] test", FormatWithContextTags(ctx, "test"); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
-	if tags := logtags.FromContext(ctx); tags != r.tags {
-		t.Errorf("expected %p, got %p", r.tags, tags)
+	if tags := logtags.FromContext(ctx); tags != r.p.tags {
+		t.Errorf("expected %p, got %p", r.p.tags, tags)
 	}
 }
 

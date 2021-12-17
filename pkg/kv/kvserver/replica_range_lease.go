@@ -319,7 +319,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
 	const opName = "request range lease"
-	tr := p.repl.AmbientContext.Tracer
+	tr := p.repl.AmbientContext.Tracer()
 	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
 	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {

@@ -109,7 +109,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	manualClock := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manualClock.UnixNano, 50*time.Millisecond)
 	cfg := kvserver.TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(clock)
-	tr := cfg.AmbientCtx.Tracer
+	tr := cfg.AmbientCtx.Tracer()
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
 	ltc.AmbientContext = &cfg.AmbientCtx
 	ltc.Manual = manualClock
@@ -153,7 +153,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
 
-	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
+	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
 
 	var nodeIDContainer base.NodeIDContainer
 	nodeIDContainer.Set(context.Background(), nodeID)
@@ -164,7 +164,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		NodeID:       base.NewSQLIDContainerForNode(&nodeIDContainer),
 	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
-	transport := kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	transport := kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer())
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {

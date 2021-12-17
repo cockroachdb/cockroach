@@ -28,7 +28,7 @@ import (
 //     ...
 //   }
 //
-//   ac := AmbientContext{Tracer: tracing.NewTracer()}
+//   ac := log.MakeAmbientContext(tracing.NewTracer())
 //   ac.AddLogTag("n", 1)
 //
 //   s := &SomeServer{
@@ -51,12 +51,18 @@ import (
 //   defer span.Finish()
 //   ...
 type AmbientContext struct {
-	// Tracer is used to open spans (see AnnotateCtxWithSpan).
-	Tracer *tracing.Tracer
+	// The AmbientContext should not be constructed manually; instead,
+	// use the constructor functions in this package.
+	p privateAmbientContext
+}
 
-	// ServerIDs will be embedded into contexts that don't already have
+type privateAmbientContext struct {
+	// tracer is used to open spans (see AnnotateCtxWithSpan).
+	tracer *tracing.Tracer
+
+	// serverIDs will be embedded into contexts that don't already have
 	// one.
-	ServerIDs ServerIdentificationPayload
+	serverIDs ServerIdentificationPayload
 
 	// eventLog will be embedded into contexts that don't already have an event
 	// log or an open span (if not nil).
@@ -74,26 +80,31 @@ type AmbientContext struct {
 	backgroundCtx context.Context
 }
 
+// Tracer retrieves the tracer associated with the ambient context.
+func (ac *AmbientContext) Tracer() *tracing.Tracer {
+	return ac.p.tracer
+}
+
 // AddLogTag adds a tag to the ambient context.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
-	ac.tags = ac.tags.Add(name, value)
-	ac.refreshCache()
+	ac.p.tags = ac.p.tags.Add(name, value)
+	ac.p.refreshCache()
 }
 
 // SetEventLog sets up an event log. Annotated contexts log into this event log
 // (unless there's an open Span).
 func (ac *AmbientContext) SetEventLog(family, title string) {
-	ac.eventLog = &ctxEventLog{eventLog: trace.NewEventLog(family, title)}
-	ac.refreshCache()
+	ac.p.eventLog = &ctxEventLog{eventLog: trace.NewEventLog(family, title)}
+	ac.p.refreshCache()
 }
 
 // FinishEventLog closes the event log. Concurrent and subsequent calls to
 // record events from contexts that use this event log embedded are allowed.
 func (ac *AmbientContext) FinishEventLog() {
-	ac.eventLog.finish()
+	ac.p.eventLog.finish()
 }
 
-func (ac *AmbientContext) refreshCache() {
+func (ac *privateAmbientContext) refreshCache() {
 	ac.backgroundCtx = ac.annotateCtxInternal(context.Background())
 }
 
@@ -112,12 +123,12 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
-		if ac.backgroundCtx != nil {
-			return ac.backgroundCtx
+		if ac.p.backgroundCtx != nil {
+			return ac.p.backgroundCtx
 		}
 		return ctx
 	default:
-		return ac.annotateCtxInternal(ctx)
+		return ac.p.annotateCtxInternal(ctx)
 	}
 }
 
@@ -129,33 +140,33 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
-		if ac.backgroundCtx != nil {
-			return ac.backgroundCtx
+		if ac.p.backgroundCtx != nil {
+			return ac.p.backgroundCtx
 		}
 		return ctx
 	default:
-		if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
-			ctx = embedCtxEventLog(ctx, ac.eventLog)
+		if ac.p.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
+			ctx = embedCtxEventLog(ctx, ac.p.eventLog)
 		}
-		if ac.tags != nil {
-			ctx = logtags.WithTags(ctx, ac.tags)
+		if ac.p.tags != nil {
+			ctx = logtags.WithTags(ctx, ac.p.tags)
 		}
-		if ac.ServerIDs != nil {
-			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+		if ac.p.serverIDs != nil {
+			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.p.serverIDs)
 		}
 		return ctx
 	}
 }
 
-func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
+func (ac *privateAmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
 	if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
 	if ac.tags != nil {
 		ctx = logtags.AddTags(ctx, ac.tags)
 	}
-	if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
-		ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+	if ac.serverIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+		ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.serverIDs)
 	}
 	return ctx
 }
@@ -174,30 +185,30 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
-		if ac.backgroundCtx != nil {
-			ctx = ac.backgroundCtx
+		if ac.p.backgroundCtx != nil {
+			ctx = ac.p.backgroundCtx
 		}
 	default:
-		if ac.tags != nil {
-			ctx = logtags.AddTags(ctx, ac.tags)
+		if ac.p.tags != nil {
+			ctx = logtags.AddTags(ctx, ac.p.tags)
 		}
-		if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
-			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+		if ac.p.serverIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.p.serverIDs)
 		}
 	}
 
-	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+	return tracing.EnsureChildSpan(ctx, ac.p.tracer, opName)
 }
 
 // MakeClientAmbientContext creates an AmbientContext for use by
 // client commands.
 func MakeClientAmbientContext(tracer *tracing.Tracer) AmbientContext {
-	return AmbientContext{Tracer: tracer}
+	return AmbientContext{p: privateAmbientContext{tracer: tracer}}
 }
 
 // MakeDummyAmbientContext creates an AmbientContext for use in tests.
 func MakeDummyAmbientContext(tracer *tracing.Tracer) AmbientContext {
-	return AmbientContext{Tracer: tracer}
+	return AmbientContext{p: privateAmbientContext{tracer: tracer}}
 }
 
 // MakeServerAmbientContext creates an AmbientContext for use by
@@ -207,5 +218,5 @@ func MakeServerAmbientContext(
 ) AmbientContext {
 	// TODO(knz): add the server identifier containers here as mandatory
 	// arguments.
-	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
+	return AmbientContext{p: privateAmbientContext{tracer: tracer, serverIDs: idProvider}}
 }

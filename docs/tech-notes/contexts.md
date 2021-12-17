@@ -247,7 +247,7 @@ Here’s how the code looks like:
 The Executor creates a root span:
 
     // Create a root span for this SQL txn.
-    tracer := e.cfg.AmbientCtx.Tracer
+    tracer := e.cfg.AmbientCtx.Tracer()
     sp = tracer.StartSpan("sql txn")
     // Put the new span in the context.
     ctx = opentracing.ContextWithSpan(ctx, sp)

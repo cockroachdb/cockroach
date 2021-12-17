@@ -1045,7 +1045,7 @@ func (n *Node) Batch(
 func (n *Node) setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
 ) (context.Context, func(context.Context, *roachpb.BatchResponse)) {
-	tr := n.storeCfg.AmbientCtx.Tracer
+	tr := n.storeCfg.AmbientCtx.Tracer()
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
 	localRequest := grpcutil.IsLocalRequestContext(ctx)

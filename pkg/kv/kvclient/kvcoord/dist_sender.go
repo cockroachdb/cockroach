@@ -374,7 +374,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	}
 
 	ds.AmbientContext = cfg.AmbientCtx
-	if ds.AmbientContext.Tracer == nil {
+	if ds.AmbientContext.Tracer() == nil {
 		panic("no tracer set in AmbientCtx")
 	}
 
@@ -396,7 +396,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
 	}
 	ds.rangeCache = rangecache.NewRangeCache(ds.st, rdb, getRangeDescCacheSize,
-		cfg.RPCContext.Stopper, cfg.AmbientCtx.Tracer)
+		cfg.RPCContext.Stopper, cfg.AmbientCtx.Tracer())
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {
@@ -730,7 +730,7 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
+	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer(), "dist sender send")
 	defer sp.Finish()
 
 	var reqInfo tenantcostmodel.RequestInfo

@@ -255,7 +255,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	st := cfg.Settings
 
-	if cfg.AmbientCtx.Tracer == nil {
+	if cfg.AmbientCtx.Tracer() == nil {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
@@ -276,8 +276,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
-	stopper.SetTracer(cfg.AmbientCtx.Tracer)
-	stopper.AddCloser(cfg.AmbientCtx.Tracer)
+	stopper.SetTracer(cfg.AmbientCtx.Tracer())
+	stopper.AddCloser(cfg.AmbientCtx.Tracer())
 
 	// Add a dynamic log tag value for the node ID.
 	//
@@ -753,7 +753,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	kvProber := kvprober.NewProber(kvprober.Opts{
-		Tracer:                  cfg.AmbientCtx.Tracer,
+		Tracer:                  cfg.AmbientCtx.Tracer(),
 		DB:                      db,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),

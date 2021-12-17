@@ -163,7 +163,7 @@ func createTestStoreWithoutStart(
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
 	})
-	stopper.SetTracer(cfg.AmbientCtx.Tracer)
+	stopper.SetTracer(cfg.AmbientCtx.Tracer())
 	server := rpc.NewServer(rpcContext) // never started
 
 	// Some tests inject their own Gossip and StorePool, via
@@ -190,7 +190,7 @@ func createTestStoreWithoutStart(
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	require.Nil(t, cfg.Transport)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer())
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
@@ -206,7 +206,7 @@ func createTestStoreWithoutStart(
 		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip)), // TODO
 		FirstRangeProvider: rangeProv,
 		TestingKnobs: kvcoord.ClientTestingKnobs{
-			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),
+			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer(), &storeSender),
 		},
 	})
 
@@ -460,7 +460,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer())
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.

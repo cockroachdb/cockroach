@@ -860,7 +860,7 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness livenesspb.Liven
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, oldLiveness livenesspb.Liveness, incrementEpoch bool,
 ) (err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
+	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer(), "liveness heartbeat")
 	defer sp.Finish()
 	defer func(start time.Time) {
 		dur := timeutil.Since(start)

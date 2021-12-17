@@ -70,7 +70,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3/tracker"
 	"golang.org/x/net/trace"
@@ -8357,7 +8356,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	}
 	r.mu.Unlock()
 
-	tr := tc.store.cfg.AmbientCtx.Tracer
+	tr := tc.store.cfg.AmbientCtx.Tracer()
 	opCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()
 
@@ -12484,7 +12483,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// Set up tracing.
 	tracer := tracing.NewTracer()
 	tracer.Configure(ctx, &cfg.Settings.SV)
-	cfg.AmbientCtx.Tracer = tracer
+	cfg.AmbientCtx = log.MakeTestingAmbientContext(tracer)
 
 	// Below we set txnID to the value of the transaction we're going to force to
 	// be proposed multiple times.
@@ -12555,7 +12554,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
 	_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	sp := cfg.AmbientCtx.Tracer.StartSpan("replica send", tracing.WithForceRealSpan())
+	sp := cfg.AmbientCtx.Tracer().StartSpan("replica send", tracing.WithForceRealSpan())
 	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), st, uncertainty.Interval{}, tok)
 	if pErr != nil {

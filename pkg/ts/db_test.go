@@ -751,7 +751,7 @@ func TestStoreTimeSeries(t *testing.T) {
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
-		tr := tm.Cfg.AmbientCtx.Tracer
+		tr := tm.Cfg.AmbientCtx.Tracer()
 		testSource := modelDataSource{
 			model:   tm,
 			r:       Resolution10s,

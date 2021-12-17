@@ -1065,7 +1065,7 @@ func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
-		sc.AmbientCtx.Tracer != nil
+		sc.AmbientCtx.Tracer() != nil
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -3181,7 +3181,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 // carrying out any changes, returning all trace messages collected along the way.
 // Intended to help power a debug endpoint.
 func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
-	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
+	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer(), "allocator dry run")
 	defer collectAndFinish()
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
 	_, err := s.replicateQueue.processOneChange(
@@ -3240,7 +3240,7 @@ func (s *Store) ManuallyEnqueue(
 	}
 
 	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
-		ctx, s.cfg.AmbientCtx.Tracer, fmt.Sprintf("manual %s queue run", queueName))
+		ctx, s.cfg.AmbientCtx.Tracer(), fmt.Sprintf("manual %s queue run", queueName))
 	defer collectAndFinish()
 
 	if !skipShouldQueue {

@@ -296,7 +296,7 @@ func NewDB(
 func NewDBWithContext(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext,
 ) *DB {
-	if actx.Tracer == nil {
+	if actx.Tracer() == nil {
 		panic("no tracer set in AmbientCtx")
 	}
 	db := &DB{

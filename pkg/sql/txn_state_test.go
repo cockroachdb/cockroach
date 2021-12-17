@@ -72,7 +72,7 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 			1000, /* noteworthy */
 			settings,
 		),
-		tracer:   ambient.Tracer,
+		tracer:   ambient.Tracer(),
 		ctx:      context.Background(),
 		settings: settings,
 	}

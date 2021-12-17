@@ -297,7 +297,7 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	timer := time.AfterFunc(h.loopInterval, func() {
 		const taskName = "kv.TxnCoordSender: heartbeat loop"
 		var span *tracing.Span
-		hbCtx, span = h.AmbientContext.Tracer.StartSpanCtx(hbCtx, taskName)
+		hbCtx, span = h.AmbientContext.Tracer().StartSpanCtx(hbCtx, taskName)
 		defer span.Finish()
 
 		// Only errors on quiesce, which is safe to ignore.

@@ -179,7 +179,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		},
 		NewDistSenderForLocalTestCluster(
 			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
-			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
+			ambient.Tracer(), s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
 		),
 	)
 	quickHeartbeatDB := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())

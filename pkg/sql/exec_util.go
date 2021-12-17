@@ -2037,7 +2037,7 @@ func (st *SessionTracing) StartTracing(
 		opName := "session recording"
 		newConnCtx, st.connSpan = tracing.EnsureChildSpan(
 			connCtx,
-			st.ex.server.cfg.AmbientCtx.Tracer,
+			st.ex.server.cfg.AmbientCtx.Tracer(),
 			opName,
 			tracing.WithForceRealSpan(),
 		)
@@ -2058,7 +2058,7 @@ func (st *SessionTracing) StartTracing(
 		sp.Finish()
 
 		st.ex.state.Ctx, _ = tracing.EnsureChildSpan(
-			newConnCtx, st.ex.server.cfg.AmbientCtx.Tracer, "session tracing")
+			newConnCtx, st.ex.server.cfg.AmbientCtx.Tracer(), "session tracing")
 	}
 
 	st.enabled = true

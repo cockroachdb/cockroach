@@ -92,7 +92,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer stopper.Stop(ctx)
-	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
+	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer())
 
 	st := serverCfg.BaseConfig.Settings
 

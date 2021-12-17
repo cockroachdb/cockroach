@@ -1300,7 +1300,7 @@ func (ts *TestServer) TracerI() interface{} {
 
 // Tracer is like TracerI(), but returns the actual type.
 func (ts *TestServer) Tracer() *tracing.Tracer {
-	return ts.node.storeCfg.AmbientCtx.Tracer
+	return ts.node.storeCfg.AmbientCtx.Tracer()
 }
 
 // GCSystemLog deletes entries in the given system log table between
