@@ -737,6 +737,15 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 func (u *sqlSymUnion) setVar() *tree.SetVar {
     return u.val.(*tree.SetVar)
 }
+func (u *sqlSymUnion) cursorSensitivity() tree.CursorSensitivity {
+    return u.val.(tree.CursorSensitivity)
+}
+func (u *sqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
+    return u.val.(tree.CursorScrollOption)
+}
+func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
+    return u.val.(*tree.FetchCursor)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -756,11 +765,11 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
+%token <str> ASENSITIVE ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
-%token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
@@ -786,20 +795,21 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG
+%token <str> FOREIGN FORWARD FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
 %token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_STORAGE
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
-%token <str> INNER INSERT INT INTEGER
+%token <str> INNER INSENSITIVE INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -826,18 +836,18 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
-%token <str> RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
+%token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -1108,6 +1118,14 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.Statement> close_cursor_stmt
 %type <tree.Statement> declare_cursor_stmt
+%type <tree.Statement> fetch_cursor_stmt
+%type <*tree.FetchCursor> fetch_specifier
+%type <bool> opt_hold opt_binary
+%type <tree.CursorSensitivity> opt_sensitivity
+%type <tree.CursorScrollOption> opt_scroll
+%type <int64> opt_forward_backward forward_backward
+%type <int64> next_prior
+
 %type <tree.Statement> reindex_stmt
 
 %type <[]string> opt_incremental
@@ -1503,8 +1521,9 @@ stmt:
 | refresh_stmt              // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt    // help texts in sub-rule
 | transaction_stmt          // help texts in sub-rule
-| close_cursor_stmt
-| declare_cursor_stmt
+| close_cursor_stmt         // EXTEND WITH HELP: CLOSE
+| declare_cursor_stmt       // EXTEND WITH HELP: DECLARE
+| fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
 | reindex_stmt
 | /* EMPTY */
   {
@@ -5046,14 +5065,206 @@ show_stmt:
 | show_full_scans_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
 
-// Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
-// since there will be no open cursors.
+// %Help: CLOSE - close SQL cursor
+// %Category: Misc
+// %Text: CLOSE [ ALL | <name> ]
+// %SeeAlso: DECLARE, FETCH
 close_cursor_stmt:
-	CLOSE ALL { }
-| CLOSE cursor_name { return unimplementedWithIssue(sqllex, 41412) }
+	CLOSE ALL
+	{
+	  $$.val = &tree.CloseCursor{
+	    All: true,
+	  }
+	}
+| CLOSE cursor_name
+  {
+	  $$.val = &tree.CloseCursor{
+	    Name: tree.Name($2),
+	  }
+	}
+| CLOSE error // SHOW HELP: CLOSE
 
+// %Help: DECLARE - declare SQL cursor
+// %Category: Misc
+// %Text: DECLARE <name> [ options ] CURSOR p [ WITH | WITHOUT HOLD ] FOR <query>
+// %SeeAlso: CLOSE, FETCH
 declare_cursor_stmt:
-	DECLARE { return unimplementedWithIssue(sqllex, 41412) }
+  // TODO(jordan): the options here should be supported in any order, not just
+  // the fixed one here.
+	DECLARE cursor_name opt_binary opt_sensitivity opt_scroll CURSOR opt_hold FOR select_stmt
+	{
+	  $$.val = &tree.DeclareCursor{
+	    Binary: $3.bool(),
+	    Name: tree.Name($2),
+	    Sensitivity: $4.cursorSensitivity(),
+	    Scroll: $5.cursorScrollOption(),
+	    Hold: $7.bool(),
+	    Select: $9.slct(),
+	  }
+  }
+| DECLARE error // SHOW HELP: DECLARE
+
+opt_binary:
+  BINARY
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_sensitivity:
+  INSENSITIVE
+  {
+    $$.val = tree.Insensitive
+  }
+| ASENSITIVE
+  {
+    $$.val = tree.Asensitive
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.UnspecifiedSensitivity
+  }
+
+opt_scroll:
+  SCROLL
+  {
+    $$.val = tree.Scroll
+  }
+| NO SCROLL
+  {
+    $$.val = tree.NoScroll
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.UnspecifiedScroll
+  }
+
+opt_hold:
+  WITH HOLD
+  {
+    $$.val = true
+  }
+| WITHOUT HOLD
+  {
+    $$.val = false
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+// %Help: FETCH - fetch rows from a SQL cursor
+// %Category: Misc
+// %Text: FETCH [ direction [ FROM | IN ] ] <name>
+// %SeeAlso: CLOSE, DECLARE
+fetch_cursor_stmt:
+  FETCH fetch_specifier
+  {
+    $$.val = $2.fetchCursor()
+  }
+| FETCH error // SHOW HELP: FETCH
+
+fetch_specifier:
+  cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($1),
+      Count: 1,
+    }
+  }
+| from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($2),
+      Count: 1,
+    }
+  }
+| next_prior opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      Count: $1.int64(),
+    }
+  }
+| forward_backward opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      Count: $1.int64(),
+    }
+  }
+| opt_forward_backward signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      Count: $2.int64() * $1.int64(),
+    }
+  }
+| opt_forward_backward ALL opt_from_or_in cursor_name
+  {
+    fetchType := tree.FetchAll
+    count := $1.int64()
+    if count < 0 {
+      fetchType = tree.FetchBackwardAll
+    }
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: fetchType,
+    }
+  }
+| ABSOLUTE signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: tree.FetchAbsolute,
+      Count: $2.int64(),
+    }
+  }
+| RELATIVE signed_iconst64 opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($4),
+      FetchType: tree.FetchRelative,
+      Count: $2.int64(),
+    }
+  }
+| FIRST opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      FetchType: tree.FetchFirst,
+    }
+  }
+| LAST opt_from_or_in cursor_name
+  {
+    $$.val = &tree.FetchCursor{
+      Name: tree.Name($3),
+      FetchType: tree.FetchLast,
+    }
+  }
+
+next_prior:
+  NEXT  { $$.val = int64(1) }
+| PRIOR { $$.val = int64(-1) }
+
+opt_forward_backward:
+  forward_backward { $$.val = $1.int64() }
+| /* EMPTY */ { $$.val = int64(1) }
+
+forward_backward:
+  FORWARD  { $$.val = int64(1) }
+| BACKWARD { $$.val = int64(-1) }
+
+opt_from_or_in:
+  from_or_in { }
+| /* EMPTY */ { }
+
+from_or_in:
+  FROM { }
+| IN { }
 
 reindex_stmt:
   REINDEX TABLE error
@@ -13239,6 +13450,7 @@ unrestricted_name:
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
   ABORT
+| ABSOLUTE
 | ACTION
 | ACCESS
 | ADD
@@ -13247,12 +13459,14 @@ unreserved_keyword:
 | AGGREGATE
 | ALTER
 | ALWAYS
+| ASENSITIVE
 | AT
 | ATTRIBUTE
 | AUTOMATIC
 | AVAILABILITY
 | BACKUP
 | BACKUPS
+| BACKWARD
 | BEFORE
 | BEGIN
 | BINARY
@@ -13337,6 +13551,7 @@ unreserved_keyword:
 | FORCE
 | FORCE_INDEX
 | FORCE_ZIGZAG
+| FORWARD
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -13354,6 +13569,7 @@ unreserved_keyword:
 | HASH
 | HIGH
 | HISTOGRAM
+| HOLD
 | HOUR
 | IDENTITY
 | IMMEDIATE
@@ -13440,6 +13656,7 @@ unreserved_keyword:
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
+| INSENSITIVE
 | OF
 | OFF
 | OIDS
@@ -13472,6 +13689,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRESERVE
+| PRIOR
 | PRIORITY
 | PRIVILEGES
 | PUBLIC
@@ -13491,6 +13709,7 @@ unreserved_keyword:
 | REGIONAL
 | REGIONS
 | REINDEX
+| RELATIVE
 | RELEASE
 | RELOCATE
 | RENAME
@@ -13515,6 +13734,7 @@ unreserved_keyword:
 | RUNNING
 | SCHEDULE
 | SCHEDULES
+| SCROLL
 | SETTING
 | SETTINGS
 | STATUS

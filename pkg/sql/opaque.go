@@ -110,6 +110,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterRoleSet(ctx, n)
 	case *tree.AlterSequence:
 		return p.AlterSequence(ctx, n)
+	case *tree.CloseCursor:
+		return p.CloseCursor(ctx, n)
 	case *tree.CommentOnColumn:
 		return p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnConstraint:
@@ -138,6 +140,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateExtension(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
+	case *tree.DeclareCursor:
+		return p.DeclareCursor(ctx, n)
 	case *tree.Discard:
 		return p.Discard(ctx, n)
 	case *tree.DropDatabase:
@@ -158,6 +162,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropType(ctx, n)
 	case *tree.DropView:
 		return p.DropView(ctx, n)
+	case *tree.FetchCursor:
+		return p.FetchCursor(ctx, n)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
@@ -245,6 +251,7 @@ func init() {
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
 		&tree.AlterRoleSet{},
+		&tree.CloseCursor{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnSchema{},
@@ -259,6 +266,7 @@ func init() {
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},
+		&tree.DeclareCursor{},
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropIndex{},
@@ -269,6 +277,7 @@ func init() {
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},
+		&tree.FetchCursor{},
 		&tree.Grant{},
 		&tree.GrantRole{},
 		&tree.ReassignOwnedBy{},
