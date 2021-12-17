@@ -187,11 +187,10 @@ func (p *planner) AlterPrimaryKey(
 		}
 		alterPKNode.Columns = newColumns
 		if newColumn {
-			if err := p.setupFamilyAndConstraintForShard(
+			if err := p.setupConstraintForShard(
 				ctx,
 				tableDesc,
 				shardCol,
-				newPrimaryIndexDesc.Sharded.ColumnNames,
 				newPrimaryIndexDesc.Sharded.ShardBuckets,
 			); err != nil {
 				return err
