@@ -683,6 +683,8 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		return nil, err
 	}
 
+	outbox.OutboxNodeID = stream.OriginNodeID
+	outbox.InboxNodeID = stream.TargetNodeID
 	atomic.AddInt32(&s.numOutboxes, 1)
 	run := func(ctx context.Context, flowCtxCancel context.CancelFunc) {
 		outbox.Run(
@@ -862,6 +864,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err != nil {
 				return colexecargs.OpWithMetaInfo{}, err
 			}
+			inbox.InboxNodeID = inputStream.TargetNodeID
+			inbox.OutboxNodeID = inputStream.OriginNodeID
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecop.Operator(inbox)
 			ms := colexecop.MetadataSource(inbox)

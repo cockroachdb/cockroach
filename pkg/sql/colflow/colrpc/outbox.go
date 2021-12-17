@@ -13,6 +13,7 @@ package colrpc
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -52,6 +53,10 @@ type Outbox struct {
 	// instead, getStats is used for those.
 	inputMetaInfo    colexecargs.OpWithMetaInfo
 	inputInitialized bool
+
+	OutboxNodeID roachpb.NodeID
+	InboxNodeID  roachpb.NodeID
+	streamID     execinfrapb.StreamID
 
 	typs []*types.T
 
@@ -153,6 +158,7 @@ func (o *Outbox) Run(
 	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	o.streamID = streamID
 	ctx, o.span = execinfra.ProcessorSpan(ctx, "outbox")
 	if o.span != nil {
 		defer o.span.Finish()
@@ -209,15 +215,24 @@ func (o *Outbox) Run(
 	log.VEvent(ctx, 2, "Outbox exiting")
 }
 
+func (o *Outbox) String(ctx context.Context) string {
+	return fmt.Sprintf("%s: outbox: %d, inbox: %d, stream: %d", ctx.Value("stmt"), o.OutboxNodeID, o.InboxNodeID, o.streamID)
+}
+
 // handleStreamErr is a utility method used to handle an error when calling
 // a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
 // called, for all other errors flowCtxCancel is. The given error is logged with
 // the associated opName.
 func handleStreamErr(
-	ctx context.Context, opName redact.SafeString, err error, flowCtxCancel context.CancelFunc,
+	ctx context.Context,
+	opName redact.SafeString,
+	err error,
+	flowCtxCancel context.CancelFunc,
+	o *Outbox,
 ) {
 	if err != io.EOF {
 		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		fmt.Printf("%s: Outbox calling flowCtxCancel after %s connection error: %+v\n", o.String(ctx), opName, err)
 		flowCtxCancel()
 	}
 }
@@ -299,7 +314,7 @@ func (o *Outbox) sendBatches(
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
 			if err := stream.Send(o.scratch.msg); err != nil {
-				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel)
+				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, o)
 				return
 			}
 		}
@@ -374,7 +389,7 @@ func (o *Outbox) runWithStream(
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel)
+				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, o)
 				break
 			}
 			switch {
@@ -398,14 +413,14 @@ func (o *Outbox) runWithStream(
 		}
 		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel)
+			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, o)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel)
+				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, o)
 			}
 		}
 	}

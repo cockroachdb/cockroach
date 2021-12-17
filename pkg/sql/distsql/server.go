@@ -614,6 +614,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
+	ctx = context.WithValue(ctx, "stmt", req.StatementSQL)
 	ctx, f, _, err := ds.setupFlow(
 		ctx, rpcSpan, ds.memMonitor, req, nil, /* rowSyncFlowConsumer */
 		nil /* batchSyncFlowConsumer */, LocalState{},

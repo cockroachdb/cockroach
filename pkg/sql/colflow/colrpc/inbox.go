@@ -12,6 +12,7 @@ package colrpc
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"sync/atomic"
@@ -20,6 +21,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -65,6 +67,9 @@ type Inbox struct {
 	// streamID is used to overwrite a caller's streamID
 	// in the ctx argument of Next and DrainMeta.
 	streamID execinfrapb.StreamID
+
+	InboxNodeID  roachpb.NodeID
+	OutboxNodeID roachpb.NodeID
 
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
@@ -215,6 +220,10 @@ func (i *Inbox) checkFlowCtxCancellation() error {
 	}
 }
 
+func (i *Inbox) String() string {
+	return fmt.Sprintf("%s: inbox: %d, outbox: %d, stream: %d", i.Ctx.Value("stmt"), i.InboxNodeID, i.OutboxNodeID, i.streamID)
+}
+
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
 // canceled, the Inbox's host cancels the flow context, or any error is
 // encountered on the stream by the Next goroutine (which includes io.EOF that
@@ -247,11 +256,15 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
+		if err != nil {
+			fmt.Printf("%s: ungraceful termination of FlowStream RPC by inbox: %v\n", i, err)
+		}
 		return err
 	case <-i.flowCtxDone:
 		// The flow context of the inbox host has been canceled. This can occur
 		// e.g. when the query is canceled, or when another stream encountered
 		// an unrecoverable error forcing it to shutdown the flow.
+		fmt.Printf("%s: ungraceful termination of FlowStream RPC because flow ctx on the inbox host is canceled\n", i)
 		return cancelchecker.QueryCanceledError
 	case <-streamCtx.Done():
 		// The client canceled the stream.
@@ -354,6 +367,7 @@ func (i *Inbox) Next() coldata.Batch {
 			// expected one in all cases so that the caller could decide on how
 			// to handle it.
 			err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "inbox communication error")
+			fmt.Printf("%s: inbox received %v\n", i, err)
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}

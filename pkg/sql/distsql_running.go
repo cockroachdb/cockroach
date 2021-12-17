@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -514,6 +516,7 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.planner != nil {
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
+	ctx = context.WithValue(ctx, "stmt", statementSQL)
 	ctx, flow, opChains, err := dsp.setupFlows(
 		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats, statementSQL,
 	)
@@ -928,6 +931,9 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	if meta.Err != nil {
 		// Check if the error we just received should take precedence over a
 		// previous error (if any).
+		if strings.Contains(meta.Err.Error(), "canceled") {
+			debug.PrintStack()
+		}
 		if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
 			if r.txn != nil {
 				if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &retryErr) {
