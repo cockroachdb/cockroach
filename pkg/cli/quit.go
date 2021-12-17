@@ -71,7 +71,7 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 // drainAndShutdown attempts to drain the server and then shut it
 // down.
 func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
-	hardError, remainingWork, err := doDrain(ctx, c)
+	hardError, remainingWork, err := doDrain(ctx, c, "local" /* targetNode */)
 	if hardError {
 		return err
 	}
@@ -99,16 +99,16 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
 // proceed with an alternate strategy (it's likely the server has gone
 // away).
 func doDrain(
-	ctx context.Context, c serverpb.AdminClient,
+	ctx context.Context, c serverpb.AdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
 	if quitCtx.drainWait == 0 {
-		return doDrainNoTimeout(ctx, c)
+		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
 	err = contextutil.RunWithTimeout(ctx, "drain", quitCtx.drainWait, func(ctx context.Context) (err error) {
-		hardError, remainingWork, err = doDrainNoTimeout(ctx, c)
+		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
 	})
 	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
@@ -120,7 +120,7 @@ func doDrain(
 }
 
 func doDrainNoTimeout(
-	ctx context.Context, c serverpb.AdminClient,
+	ctx context.Context, c serverpb.AdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	defer func() {
 		if server.IsWaitingForInit(err) {
@@ -141,6 +141,7 @@ func doDrainNoTimeout(
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
 			DoDrain:  true,
 			Shutdown: false,
+			NodeId:   targetNode,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
