@@ -121,7 +121,11 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
+	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -m pem -N ''"`)
+	// Convert OpenSSH private key to old format that jsch used by jepsen understands.
+	// This is needed if key already existed or inherited so that we can continue.
+	c.Run(ctx, controller, "sh", "-c", `"ssh-keygen -p -f .ssh/id_rsa -m pem -P '' -N ''"`)
+
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
 	if err := c.Get(ctx, t.L(), ".ssh/id_rsa.pub", pubSSHKey, controller); err != nil {
 		t.Fatal(err)
@@ -264,7 +268,6 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			`grep -E "(Oh jeez, I'm sorry, Jepsen broke. Here's why|Caused by)" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 | grep `+
 				`-e BrokenBarrierException `+
 				`-e InterruptedException `+
-				`-e com.jcraft.jsch.JSchException `+
 				`-e ArrayIndexOutOfBoundsException `+
 				`-e NullPointerException `+
 				// And one more ssh failure we've seen, apparently encountered when
