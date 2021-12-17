@@ -2008,6 +2008,24 @@ upsert on_update_bare
       ├── columns: column1:5!null column2:6!null
       └── (1, 2)
 
+# If there are no explicit target columns, UPSERT sets all columns to their
+# DEFAULT value. Therefore, the ON UPDATE value is not used. See #73984.
+build
+UPSERT INTO on_update_bare VALUES (1)
+----
+upsert on_update_bare
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── v_default:6 => v:2
+ └── project
+      ├── columns: v_default:6 column1:5!null
+      ├── values
+      │    ├── columns: column1:5!null
+      │    └── (1,)
+      └── projections
+           └── NULL::INT8 [as=v_default:6]
+
 build
 UPSERT INTO on_update_bare (a) VALUES (1)
 ----
