@@ -168,6 +168,7 @@ func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
 	return pretty.NestUnder(a, b)
 }
 
+// rlTable produces a Table using Right alignment of the first column.
 func (p *PrettyCfg) rlTable(rows ...pretty.TableRow) pretty.Doc {
 	alignment := pretty.TableNoAlign
 	if p.Align != PrettyNoAlign {
@@ -176,6 +177,7 @@ func (p *PrettyCfg) rlTable(rows ...pretty.TableRow) pretty.Doc {
 	return pretty.Table(alignment, pretty.Keyword, rows...)
 }
 
+// llTable produces a Table using Left alignment of the first column.
 func (p *PrettyCfg) llTable(docFn func(string) pretty.Doc, rows ...pretty.TableRow) pretty.Doc {
 	alignment := pretty.TableNoAlign
 	if p.Align != PrettyNoAlign {
@@ -2269,6 +2271,56 @@ func (node *AnnotateTypeExpr) doc(p *PrettyCfg) pretty.Doc {
 		}
 	}
 	return p.docAsString(node)
+}
+
+func (node *DeclareCursor) docTable(p *PrettyCfg) []pretty.TableRow {
+	optionsRow := pretty.Nil
+	if node.Binary {
+		optionsRow = pretty.ConcatSpace(optionsRow, pretty.Keyword("BINARY"))
+	}
+	if node.Sensitivity != UnspecifiedSensitivity {
+		optionsRow = pretty.ConcatSpace(optionsRow, pretty.Keyword(node.Sensitivity.String()))
+	}
+	if node.Scroll != UnspecifiedScroll {
+		optionsRow = pretty.ConcatSpace(optionsRow, pretty.Keyword(node.Scroll.String()))
+	}
+	cursorRow := pretty.Nil
+	if node.Hold {
+		cursorRow = pretty.ConcatSpace(cursorRow, pretty.Keyword("WITH HOLD"))
+	}
+	return []pretty.TableRow{
+		p.row("DECLARE", pretty.ConcatLine(p.Doc(&node.Name), optionsRow)),
+		p.row("CURSOR", cursorRow),
+		p.row("FOR", node.Select.doc(p)),
+	}
+}
+
+func (node *DeclareCursor) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *FetchCursor) doc(p *PrettyCfg) pretty.Doc {
+	ret := pretty.Keyword("FETCH")
+	fetchType := node.FetchType.String()
+	if fetchType != "" {
+		ret = pretty.ConcatSpace(ret, pretty.Keyword(fetchType))
+	}
+	if node.FetchType.HasCount() {
+		ret = pretty.ConcatSpace(ret, pretty.Text(strconv.Itoa(int(node.Count))))
+	}
+	return pretty.Fold(pretty.ConcatSpace,
+		ret,
+		pretty.Keyword("FROM"),
+		p.Doc(&node.Name),
+	)
+}
+
+func (node *CloseCursor) doc(p *PrettyCfg) pretty.Doc {
+	close := pretty.Keyword("CLOSE")
+	if node.All {
+		return pretty.ConcatSpace(close, pretty.Keyword("ALL"))
+	}
+	return pretty.ConcatSpace(close, p.Doc(&node.Name))
 }
 
 // jsonCast attempts to pretty print a string that is cast or asserted as JSON.

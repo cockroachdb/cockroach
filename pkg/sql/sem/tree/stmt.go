@@ -476,6 +476,15 @@ func (*CannedOptPlan) StatementType() StatementType { return TypeDML }
 func (*CannedOptPlan) StatementTag() string { return "PREPARE AS OPT PLAN" }
 
 // StatementReturnType implements the Statement interface.
+func (*CloseCursor) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CloseCursor) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CloseCursor) StatementTag() string { return "CLOSE" }
+
+// StatementReturnType implements the Statement interface.
 func (*CommentOnColumn) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -695,6 +704,15 @@ func (*Discard) StatementType() StatementType { return TypeTCL }
 func (*Discard) StatementTag() string { return "DISCARD" }
 
 // StatementReturnType implements the Statement interface.
+func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*DeclareCursor) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DeclareCursor) StatementTag() string { return "DECLARE" }
+
+// StatementReturnType implements the Statement interface.
 func (n *Delete) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
 
 // StatementType implements the Statement interface.
@@ -819,6 +837,15 @@ func (*Export) StatementTag() string { return "EXPORT" }
 
 // StatementReturnType implements the Statement interface.
 func (*Grant) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementReturnType implements the Statement interface.
+func (n *FetchCursor) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*FetchCursor) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*FetchCursor) StatementTag() string { return "FETCH" }
 
 // StatementType implements the Statement interface.
 func (*Grant) StatementType() StatementType { return TypeDCL }
@@ -1686,6 +1713,7 @@ func (n *ControlJobsOfType) String() string              { return AsString(n) }
 func (n *CancelQueries) String() string                  { return AsString(n) }
 func (n *CancelSessions) String() string                 { return AsString(n) }
 func (n *CannedOptPlan) String() string                  { return AsString(n) }
+func (n *CloseCursor) String() string                    { return AsString(n) }
 func (n *CommentOnColumn) String() string                { return AsString(n) }
 func (n *CommentOnConstraint) String() string            { return AsString(n) }
 func (n *CommentOnDatabase) String() string              { return AsString(n) }
@@ -1706,6 +1734,7 @@ func (n *CreateStats) String() string                    { return AsString(n) }
 func (n *CreateView) String() string                     { return AsString(n) }
 func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
+func (n *DeclareCursor) String() string                  { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
 func (n *DropOwnedBy) String() string                    { return AsString(n) }
@@ -1719,6 +1748,7 @@ func (n *Execute) String() string                        { return AsString(n) }
 func (n *Explain) String() string                        { return AsString(n) }
 func (n *ExplainAnalyze) String() string                 { return AsString(n) }
 func (n *Export) String() string                         { return AsString(n) }
+func (n *FetchCursor) String() string                    { return AsString(n) }
 func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
 func (n *Insert) String() string                         { return AsString(n) }

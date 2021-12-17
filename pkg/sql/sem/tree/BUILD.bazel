@@ -39,6 +39,7 @@ go_library(
         "constants.go",
         "copy.go",
         "create.go",
+        "cursor.go",
         "data_placement.go",
         "datum.go",
         "decimal.go",
