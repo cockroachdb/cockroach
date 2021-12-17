@@ -174,9 +174,9 @@ func NewBaseDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDe
 	return p
 }
 
-// ValidateGrantPrivileges returns an error if the current user tries to grant a privilege that
+// CheckGrantOptions returns an error if the current user tries to grant a privilege that
 // it does not possess grant options for
-func (p *PrivilegeDescriptor) ValidateGrantPrivileges(
+func (p *PrivilegeDescriptor) CheckGrantOptions(
 	user security.SQLUsername, privList privilege.List, isGrant bool,
 ) error {
 	code := pgcode.WarningPrivilegeNotGranted

@@ -185,7 +185,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			privileges := descriptor.GetPrivileges()
 
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOption(ctx, descriptor, n.desiredprivs, n.isGrant)
+				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, n.isGrant)
 				if err != nil {
 					return err
 				}

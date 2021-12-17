@@ -158,12 +158,14 @@ func (p *planner) CheckPrivilege(
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
 
-// CheckGrantOption calls ValidateGrantPrivileges(), which will return an error if a user
-// tries to grant a privilege it does not have grant options for.
-func (p *planner) CheckGrantOption(
+// CheckGrantOptionsForUser calls PrivilegeDescriptor.CheckGrantOptions, which
+// will return an error if a user tries to grant a privilege it does not have
+// grant options for.
+func (p *planner) CheckGrantOptionsForUser(
 	ctx context.Context, descriptor catalog.Descriptor, privList privilege.List, isGrant bool,
 ) error {
-	// Always allow the command to go through if performed by a superuser or the owner of the object
+	// Always allow the command to go through if performed by a superuser or the
+	// owner of the object
 	if isAdmin, err := p.UserHasAdminRole(ctx, p.User()); err != nil {
 		return err
 	} else if isAdmin {
@@ -175,8 +177,7 @@ func (p *planner) CheckGrantOption(
 	}
 
 	privs := descriptor.GetPrivileges()
-	err := privs.ValidateGrantPrivileges(p.User(), privList, isGrant)
-	return err
+	return privs.CheckGrantOptions(p.User(), privList, isGrant)
 }
 
 func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
