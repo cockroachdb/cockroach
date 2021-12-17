@@ -218,6 +218,16 @@ func getNMeta2KVsImpl(
 		if err := contextutil.RunWithTimeout(ctx, "db.Scan", timeout, func(ctx context.Context) error {
 			// NB: keys.Meta2KeyMax stores a descriptor, so we want to include it.
 			var err error
+			// Queries from the planner bypass admission control, regardless of
+			// what kv.prober.bypass_admission_control.enabled is set to.
+			// Operators would like to get paged due to probes failing in an
+			// overload situation, not the planner failing. The planner is an
+			// implementation detail of kvprober, and tho it being broken is not
+			// desired as (i) it hurts alerting coverage & (i) it prob does
+			// indicate an issue with the cluster, the signal of cluster health
+			// that is most useful to operators is failing probes, as this
+			// signal reflects the "size" of the outage, by taking measurements
+			// across the keyspace.
 			newkvs, err = db.Scan(ctx, cursor, keys.Meta2KeyMax.Next(), n /*maxRows*/)
 			return err
 		}); err != nil {
