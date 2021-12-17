@@ -50,6 +50,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 
 	db := tc.Server(0).DB()
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
+	tc.Server(0)
 
 	t.Run("works on system ranges", func(t *testing.T) {
 		startTS := db.Clock().Now()
@@ -68,7 +69,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 
 		// Note: 42 is a system descriptor.
 		const junkDescriptorID = 42
-		require.GreaterOrEqual(t, keys.MaxReservedDescID, junkDescriptorID)
+		require.True(t, keys.TestingSystemIDChecker().IsSystemID(junkDescriptorID))
 		junkDescriptorKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
 		junkDescriptor := dbdesc.NewInitial(
 			junkDescriptorID, "junk", security.AdminRoleName())

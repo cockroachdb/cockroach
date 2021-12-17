@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -244,22 +245,51 @@ func requiredError(expectedObjectType catalog.DescriptorType, id descpb.ID) erro
 	return errors.CombineErrors(wrapper(id, catalog.ErrDescriptorNotFound), err)
 }
 
-// CountUserDescriptors returns the number of descriptors present that were
-// created by the user (i.e. not present when the cluster started).
-func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
+// GetAllUserCreatedDescriptors is like GetAllDescriptors but with system
+// descriptors and default user descriptors removed. in other words, on a
+// freshly-created cluster, this slice is empty.
+func GetAllUserCreatedDescriptors(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) ([]catalog.Descriptor, error) {
 	allDescs, err := GetAllDescriptors(ctx, txn, codec, true /* shouldRunPostDeserializationChanges */)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	count := 0
-	for _, desc := range allDescs {
-		if !catalogkeys.IsDefaultCreatedDescriptor(desc.GetID()) {
-			count++
+	defaultDBs := make(map[descpb.ID]catalog.DatabaseDescriptor, len(catalogkeys.DefaultUserDBs))
+	{
+		names := make(map[string]struct{}, len(catalogkeys.DefaultUserDBs))
+		for _, name := range catalogkeys.DefaultUserDBs {
+			names[name] = struct{}{}
+		}
+		for _, desc := range allDescs {
+			if db, ok := desc.(catalog.DatabaseDescriptor); ok {
+				if _, found := names[desc.GetName()]; found {
+					defaultDBs[db.GetID()] = db
+				}
+			}
 		}
 	}
 
-	return count, nil
+	userDescs := make([]catalog.Descriptor, 0, len(allDescs))
+	for _, desc := range allDescs {
+		if catalog.IsSystemDescriptor(desc) {
+			// Exclude system descriptors.
+			continue
+		}
+		if _, found := defaultDBs[desc.GetID()]; found {
+			// Exclude default databases.
+			continue
+		}
+		if sc, ok := desc.(catalog.SchemaDescriptor); ok && sc.GetName() == catconstants.PublicSchemaName {
+			if _, found := defaultDBs[sc.GetParentID()]; found {
+				// Exclude public schemas of default databases.
+				continue
+			}
+		}
+		userDescs = append(userDescs, desc)
+	}
+	return userDescs, nil
 }
 
 func getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(

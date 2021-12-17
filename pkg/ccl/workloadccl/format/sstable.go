@@ -46,7 +46,10 @@ func ToTableDescriptor(
 	if !ok {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
-	const parentID descpb.ID = keys.MaxReservedDescID
+	// We need to assign a valid parent database ID to the table descriptor, but
+	// the value itself doesn't matter, so we arbitrarily pick the system database
+	// ID because we know it's valid.
+	parentID := descpb.ID(keys.SystemDatabaseID)
 	testSettings := cluster.MakeTestingClusterSettings()
 	tableDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, testSettings, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, ts.UnixNano())

@@ -18,11 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -263,7 +265,7 @@ func createPostgresSchemas(
 
 		// We didn't allocate an ID above, so we must assign it a mock ID until it
 		// is assigned an actual ID later in the import.
-		desc.ID = getNextPlaceholderDescID()
+		desc.ID = getNextPlaceholderDescID(execCfg.SystemIDChecker)
 		desc.SetOffline("importing")
 		return desc, nil
 	}
@@ -318,7 +320,7 @@ func createPostgresSequences(
 			seq.Options,
 			parentID,
 			schema.GetID(),
-			getNextPlaceholderDescID(),
+			getNextPlaceholderDescID(execCfg.SystemIDChecker),
 			hlc.Timestamp{WallTime: walltime},
 			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
@@ -379,7 +381,7 @@ func createPostgresTables(
 		// type resolver to protect against unexpected behavior on UDT resolution.
 		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
 		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
-			create, parentDB, schema, getNextPlaceholderDescID(), fks, walltime)
+			create, parentDB, schema, getNextPlaceholderDescID(p.ExecCfg().SystemIDChecker), fks, walltime)
 		if err != nil {
 			return nil, err
 		}
@@ -436,8 +438,6 @@ func resolvePostgresFKs(
 	return nil
 }
 
-var placeholderDescID = defaultCSVTableID
-
 // getNextPlaceholderDescID returns a monotonically increasing placeholder ID
 // that is used when creating table, sequence and schema descriptors during the
 // schema parsing phase of a PGDUMP import.
@@ -447,11 +447,16 @@ var placeholderDescID = defaultCSVTableID
 // data. Thus, we pessimistically wait till all the verification steps in the
 // IMPORT have been completed after which we rewrite the descriptor IDs with
 // "real" unique IDs.
-func getNextPlaceholderDescID() descpb.ID {
-	ret := placeholderDescID
-	placeholderDescID++
+func getNextPlaceholderDescID(idChecker keys.SystemIDChecker) descpb.ID {
+	if placeholderID == 0 {
+		placeholderID = descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker) + 2)
+	}
+	ret := placeholderID
+	placeholderID++
 	return ret
 }
+
+var placeholderID descpb.ID
 
 // readPostgresCreateTable returns table descriptors for all tables or the
 // matching table from SQL statements.

@@ -10,7 +10,6 @@ package changefeedbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +26,7 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 	// saved in it), but there are subtle differences in the way many of them
 	// work and this will be under-tested, so disallow them all until demand
 	// dictates.
-	if tableDesc.GetID() < keys.MinUserDescID {
+	if catalog.IsSystemDescriptor(tableDesc) {
 		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
 	}
 	if tableDesc.IsView() {

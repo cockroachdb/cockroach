@@ -341,7 +341,7 @@ func canSplitSpans(numNeededFamilies int, table catalog.TableDescriptor, index c
 	// * The table is not a special system table. (System tables claim to have
 	//   column families, but actually do not, since they're written to with
 	//   raw KV puts in a "legacy" way.)
-	if table.GetID() > 0 && table.GetID() < keys.MaxReservedDescID {
+	if catalog.IsSystemDescriptor(table) {
 		return false
 	}
 

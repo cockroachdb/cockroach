@@ -65,8 +65,8 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
-	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
+	parentID := descpb.ID(keys.TestingUserDescID(0))
+	tableID := descpb.ID(keys.TestingUserDescID(1))
 	semaCtx := makeTestSemaCtx()
 	mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())

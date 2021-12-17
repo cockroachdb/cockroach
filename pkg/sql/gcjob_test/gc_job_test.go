@@ -90,9 +90,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
-			myDBID := descpb.ID(keys.MinUserDescID + 2)
-			myTableID := descpb.ID(keys.MinUserDescID + 3)
-			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
+			myDBID := descpb.ID(keys.TestingUserDescID(2))
+			myTableID := descpb.ID(keys.TestingUserDescID(3))
+			myOtherTableID := descpb.ID(keys.TestingUserDescID(4))
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable

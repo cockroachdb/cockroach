@@ -36,16 +36,12 @@ var DefaultUserDBs = []string{
 	DefaultDatabaseName, PgDatabaseName,
 }
 
-// MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
-// new cluster.
-// For each DefaultUserDB, we also create a public schema in it, hence we
-// multiply the number of default user dbs by 2 to get the number of descriptors.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))*2
-
-// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
-// present at the time of starting a cluster.
-func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
-	return descID <= MaxDefaultDescriptorID
+// MinNonDefaultUserDescriptorID returns the smallest possible user-created
+// descriptor ID after a cluster is bootstrapped.
+func MinNonDefaultUserDescriptorID(idChecker keys.SystemIDChecker) uint32 {
+	// Each default DB comes with a public schema descriptor.
+	numDefaultDescs := len(DefaultUserDBs) * 2
+	return keys.MinUserDescriptorID(idChecker) + uint32(numDefaultDescs)
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the

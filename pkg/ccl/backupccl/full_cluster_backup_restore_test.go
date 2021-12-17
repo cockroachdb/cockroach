@@ -192,7 +192,7 @@ CREATE TABLE data2.foo (a int);
 
 		// Check there is no data in the span that we expect user data to be imported.
 		store := tcRestore.GetFirstStoreFromServer(t, 0)
-		startKey := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
+		startKey := keys.SystemSQLCodec.TablePrefix(keys.TestingUserDescID(0))
 		endKey := keys.SystemSQLCodec.TablePrefix(uint32(maxBackupTableID)).PrefixEnd()
 		it := store.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: endKey,
@@ -429,7 +429,7 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 	sqlDBRestore.Exec(t, `CREATE DATABASE foo`)
 	sqlDBRestore.ExpectErr(t,
-		"pq: full cluster restore can only be run on a cluster with no tables or databases but found 2 descriptors: \\[foo public\\]",
+		"pq: full cluster restore can only be run on a cluster with no tables or databases but found 2 descriptors: foo, public",
 		`RESTORE FROM $1`, LocalFoo,
 	)
 }

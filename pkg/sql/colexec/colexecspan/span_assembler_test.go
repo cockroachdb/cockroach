@@ -181,7 +181,7 @@ func spanGeneratorOracle(
 }
 
 func makeTable(useColFamilies bool) catalog.TableDescriptor {
-	tableID := keys.MinNonPredefinedUserDescID
+	tableID := keys.TestingUserDescID(0)
 	if !useColFamilies {
 		// We can prevent the span builder from splitting spans into separate column
 		// families by using a system table ID, since system tables do not have
