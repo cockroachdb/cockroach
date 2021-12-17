@@ -122,6 +122,14 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		defs = append(defs, columnDef)
 	}
 
+	// Make defs for computed columns.
+	normalColDefs := columnDefs
+	for i := nNormalColumns; i < nColumns; i++ {
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colIdx(i))
+		columnDefs = append(columnDefs, columnDef)
+		defs = append(defs, columnDef)
+	}
+
 	// Make a random primary key with high likelihood.
 	if rng.Intn(8) != 0 {
 		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
@@ -142,14 +150,6 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 				}
 			}
 		}
-	}
-
-	// Make defs for computed columns.
-	normalColDefs := columnDefs
-	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colIdx(i))
-		columnDefs = append(columnDefs, columnDef)
-		defs = append(defs, columnDef)
 	}
 
 	// Make indexes.
