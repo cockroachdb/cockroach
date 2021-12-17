@@ -174,8 +174,8 @@ func TestConnectorGossipSubscription(t *testing.T) {
 
 	// Test setting the cluster ID by setting it to nil then ensuring it's later
 	// set to the original ID value.
-	clusterID := rpcContext.ClusterID.Get()
-	rpcContext.ClusterID.Reset(uuid.Nil)
+	clusterID := rpcContext.StorageClusterID.Get()
+	rpcContext.StorageClusterID.Reset(uuid.Nil)
 
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
@@ -223,7 +223,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, <-startedC)
 
 	// Ensure that ClusterID was updated.
-	require.Equal(t, clusterID, rpcContext.ClusterID.Get())
+	require.Equal(t, clusterID, rpcContext.StorageClusterID.Get())
 
 	// Test kvcoord.NodeDescStore impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
@@ -391,7 +391,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
 	gossipSubEvents := []*roachpb.GossipSubscriptionEvent{
-		gossipEventForClusterID(rpcContext.ClusterID.Get()),
+		gossipEventForClusterID(rpcContext.StorageClusterID.Get()),
 		gossipEventForNodeDesc(node1),
 		gossipEventForNodeDesc(node2),
 	}
@@ -506,7 +506,7 @@ func TestConnectorRetriesError(t *testing.T) {
 		t.Run(fmt.Sprintf("error %v retries %v", spec.code, spec.shouldRetry), func(t *testing.T) {
 
 			gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-				return stream.Send(gossipEventForClusterID(rpcContext.ClusterID.Get()))
+				return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 			}
 
 			rangeLookupFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {

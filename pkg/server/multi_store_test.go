@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,7 +71,7 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 	if err := tc.WaitForFullReplication(); err != nil {
 		log.Fatalf(ctx, "while waiting for full replication: %v", err)
 	}
-	clusterID := tc.Server(0).ClusterID()
+	clusterID := tc.Server(0).StorageClusterID()
 	tc.Stopper().Stop(ctx)
 
 	// Add two additional stores to each node.
@@ -122,7 +122,7 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 	// Sanity check that we're testing what we wanted to test and didn't accidentally
 	// bootstrap three single-node clusters (who knows).
 	for _, srv := range tc.Servers {
-		require.Equal(t, clusterID, srv.ClusterID())
+		require.Equal(t, clusterID, srv.StorageClusterID())
 	}
 
 	// Ensure all nodes have all stores available, and each store has a unique
@@ -190,9 +190,9 @@ func TestMultiStoreIDAlloc(t *testing.T) {
 
 	// Sanity check that we're testing what we wanted to test and didn't accidentally
 	// bootstrap three single-node clusters (who knows).
-	clusterID := tc.Server(0).ClusterID()
+	clusterID := tc.Server(0).StorageClusterID()
 	for _, srv := range tc.Servers {
-		require.Equal(t, clusterID, srv.ClusterID())
+		require.Equal(t, clusterID, srv.StorageClusterID())
 	}
 
 	// Ensure all nodes have all stores available, and each store has a unique
