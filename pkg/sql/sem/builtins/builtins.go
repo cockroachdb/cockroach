@@ -4768,7 +4768,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
-			Info:       "Returns the cluster ID.",
+			Info:       "Returns the logical cluster ID for this tenant.",
 			Volatility: tree.VolatilityStable,
 		},
 	),
@@ -9274,7 +9274,7 @@ var errInsufficientPriv = pgerror.New(
 // to determine the appropriate offset from now which is likely to be safe for
 // follower reads. It is injected by followerreadsccl. An error may be returned
 // if an enterprise license is not installed.
-var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
+var EvalFollowerReadOffset func(logicalClusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
 
 func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {

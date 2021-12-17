@@ -2929,7 +2929,7 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.check_password_hash_format"></a><code>crdb_internal.check_password_hash_format(password: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function checks whether a string is a precomputed password hash. Returns the hash algorithm.</p>
 </span></td></tr>
-<tr><td><a name="crdb_internal.cluster_id"></a><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the cluster ID.</p>
+<tr><td><a name="crdb_internal.cluster_id"></a><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the logical cluster ID for this tenant.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.cluster_name"></a><code>crdb_internal.cluster_name() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the cluster name.</p>
 </span></td></tr>

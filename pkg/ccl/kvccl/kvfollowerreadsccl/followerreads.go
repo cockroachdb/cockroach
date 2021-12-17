@@ -73,27 +73,29 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 // checkEnterpriseEnabled checks whether the enterprise feature for follower
 // reads is enabled, returning a detailed error if not. It is not suitable for
 // use in hot paths since a new error may be instantiated on each call.
-func checkEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) error {
+func checkEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) error {
 	org := sql.ClusterOrganization.Get(&st.SV)
-	return utilccl.CheckEnterpriseEnabled(st, clusterID, org, "follower reads")
+	return utilccl.CheckEnterpriseEnabled(st, logicalClusterID, org, "follower reads")
 }
 
 // isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
 // for hot paths.
-func isEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
+func isEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) bool {
 	org := sql.ClusterOrganization.Get(&st.SV)
-	return utilccl.IsEnterpriseEnabled(st, clusterID, org, "follower reads")
+	return utilccl.IsEnterpriseEnabled(st, logicalClusterID, org, "follower reads")
 }
 
-func checkFollowerReadsEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
+func checkFollowerReadsEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) bool {
 	if !kvserver.FollowerReadsEnabled.Get(&st.SV) {
 		return false
 	}
-	return isEnterpriseEnabled(clusterID, st)
+	return isEnterpriseEnabled(logicalClusterID, st)
 }
 
-func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Duration, error) {
-	if err := checkEnterpriseEnabled(clusterID, st); err != nil {
+func evalFollowerReadOffset(
+	logicalClusterID uuid.UUID, st *cluster.Settings,
+) (time.Duration, error) {
+	if err := checkEnterpriseEnabled(logicalClusterID, st); err != nil {
 		return 0, err
 	}
 	// NOTE: we assume that at least some of the ranges being queried use a
@@ -128,7 +130,7 @@ func closedTimestampLikelySufficient(
 // canSendToFollower implements the logic for checking whether a batch request
 // may be sent to a follower.
 func canSendToFollower(
-	clusterID uuid.UUID,
+	logicalClusterID uuid.UUID,
 	st *cluster.Settings,
 	clock *hlc.Clock,
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
@@ -137,13 +139,13 @@ func canSendToFollower(
 	return kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
 		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.RequiredFrontier()) &&
 		// NOTE: this call can be expensive, so perform it last. See #62447.
-		checkFollowerReadsEnabled(clusterID, st)
+		checkFollowerReadsEnabled(logicalClusterID, st)
 }
 
 type followerReadOracle struct {
-	clusterID *base.ClusterIDContainer
-	st        *cluster.Settings
-	clock     *hlc.Clock
+	logicalClusterID *base.ClusterIDContainer
+	st               *cluster.Settings
+	clock            *hlc.Clock
 
 	closest    replicaoracle.Oracle
 	binPacking replicaoracle.Oracle
@@ -151,11 +153,11 @@ type followerReadOracle struct {
 
 func newFollowerReadOracle(cfg replicaoracle.Config) replicaoracle.Oracle {
 	return &followerReadOracle{
-		clusterID:  cfg.RPCContext.ClusterID,
-		st:         cfg.Settings,
-		clock:      cfg.RPCContext.Clock,
-		closest:    replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),
-		binPacking: replicaoracle.NewOracle(replicaoracle.BinPackingChoice, cfg),
+		logicalClusterID: cfg.RPCContext.LogicalClusterID,
+		st:               cfg.Settings,
+		clock:            cfg.RPCContext.Clock,
+		closest:          replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),
+		binPacking:       replicaoracle.NewOracle(replicaoracle.BinPackingChoice, cfg),
 	}
 }
 
@@ -195,7 +197,7 @@ func (o *followerReadOracle) useClosestOracle(
 	return txn != nil &&
 		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier()) &&
 		// NOTE: this call can be expensive, so perform it last. See #62447.
-		checkFollowerReadsEnabled(o.clusterID.Get(), o.st)
+		checkFollowerReadsEnabled(o.logicalClusterID.Get(), o.st)
 }
 
 // followerReadOraclePolicy is a leaseholder choosing policy that detects

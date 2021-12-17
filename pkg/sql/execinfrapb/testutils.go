@@ -45,6 +45,7 @@ func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Cont
 
 // StartMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
+// The cluster ID value returned is the storage cluster ID.
 func StartMockDistSQLServer(
 	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, sqlInstanceID base.SQLInstanceID,
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
@@ -57,7 +58,7 @@ func StartMockDistSQLServer(
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	return rpcContext.ClusterID.Get(), mock, ln.Addr(), nil
+	return rpcContext.StorageClusterID.Get(), mock, ln.Addr(), nil
 }
 
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows

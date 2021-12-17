@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/robfig/cron/v3"
+	cron "github.com/robfig/cron/v3"
 )
 
 const (
@@ -817,7 +817,7 @@ func makeScheduledBackupEval(
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+		p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(),
 		"BACKUP INTO LATEST")
 	eval.isEnterpriseUser = enterpriseCheckErr == nil
 

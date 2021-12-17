@@ -71,10 +71,11 @@ type TestingKnobs struct {
 
 // ClusterInfo contains cluster information that will become part of URLs.
 type ClusterInfo struct {
-	ClusterID  uuid.UUID
-	TenantID   roachpb.TenantID
-	IsInsecure bool
-	IsInternal bool
+	StorageClusterID uuid.UUID
+	LogicalClusterID uuid.UUID
+	TenantID         roachpb.TenantID
+	IsInsecure       bool
+	IsInternal       bool
 }
 
 // addInfoToURL sets query parameters on the URL used to report diagnostics. If
@@ -104,7 +105,8 @@ func addInfoToURL(
 	q.Set("licensetype", env.LicenseType)
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
-	q.Set("uuid", clusterInfo.ClusterID.String())
+	q.Set("uuid", clusterInfo.StorageClusterID.String())
+	q.Set("logical_uuid", clusterInfo.LogicalClusterID.String())
 	q.Set("tenantid", clusterInfo.TenantID.String())
 	q.Set("insecure", strconv.FormatBool(clusterInfo.IsInsecure))
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))

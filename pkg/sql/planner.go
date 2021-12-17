@@ -115,7 +115,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
-	evalCtx.ClusterID = execCfg.ClusterID()
+	evalCtx.ClusterID = execCfg.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	evalCtx.NodeID = execCfg.NodeID
 	evalCtx.Locality = execCfg.Locality
@@ -396,7 +396,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
-	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.ClusterID = execCfg.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality

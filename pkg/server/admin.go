@@ -1772,8 +1772,8 @@ func (s *adminServer) Settings(
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
-	clusterID := s.server.ClusterID()
-	if clusterID == (uuid.UUID{}) {
+	storageClusterID := s.server.StorageClusterID()
+	if storageClusterID == (uuid.UUID{}) {
 		return nil, status.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 
@@ -1781,10 +1781,15 @@ func (s *adminServer) Cluster(
 	// feature "BACKUP", although enterprise licenses do not yet distinguish
 	// between different features.
 	organization := sql.ClusterOrganization.Get(&s.server.st.SV)
-	enterpriseEnabled := base.CheckEnterpriseEnabled(s.server.st, clusterID, organization, "BACKUP") == nil
+	enterpriseEnabled := base.CheckEnterpriseEnabled(
+		s.server.st,
+		s.server.rpcContext.LogicalClusterID.Get(),
+		organization,
+		"BACKUP") == nil
 
 	return &serverpb.ClusterResponse{
-		ClusterID:         clusterID.String(),
+		// TODO(knz): Respond with the logical cluster ID as well.
+		ClusterID:         storageClusterID.String(),
 		ReportingEnabled:  logcrash.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
 		EnterpriseEnabled: enterpriseEnabled,
 	}, nil

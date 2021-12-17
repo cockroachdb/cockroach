@@ -391,14 +391,14 @@ func makeTenantSQLServerArgs(
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
 	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
-		TenantID:  sqlCfg.TenantID,
-		NodeID:    baseCfg.IDContainer,
-		ClusterID: baseCfg.ClusterIDContainer,
-		Config:    baseCfg.Config,
-		Clock:     clock,
-		Stopper:   stopper,
-		Settings:  st,
-		Knobs:     rpcTestingKnobs,
+		TenantID:         sqlCfg.TenantID,
+		NodeID:           baseCfg.IDContainer,
+		StorageClusterID: baseCfg.ClusterIDContainer,
+		Config:           baseCfg.Config,
+		Clock:            clock,
+		Stopper:          stopper,
+		Settings:         st,
+		Knobs:            rpcTestingKnobs,
 	})
 
 	var dsKnobs kvcoord.ClientTestingKnobs

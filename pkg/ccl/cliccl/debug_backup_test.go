@@ -127,7 +127,7 @@ FROM
 }
 `
 		checkJSONOutputEqual(t, makeExpander(t, [][2]string{
-			{"cluster_id", srv.ClusterID().String()},
+			{"cluster_id", srv.RPCContext().LogicalClusterID.Get().String()},
 			{"end_time", ts1.GoTime().Format(time.RFC3339)},
 			{"build_info", build.GetInfo().Short()},
 		})(expectedOutput), out)
@@ -189,7 +189,7 @@ FROM
 }
 `
 		checkJSONOutputEqual(t, makeExpander(t, [][2]string{
-			{"cluster_id", srv.ClusterID().String()},
+			{"cluster_id", srv.RPCContext().LogicalClusterID.Get().String()},
 			{"end_time", ts2.GoTime().Format(time.RFC3339)},
 			{"build_info", build.GetInfo().Short()},
 			{"sst_file", sstFile},
