@@ -195,10 +195,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Update the parent database with this schema information.
-	if db.Schemas == nil {
-		db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
-	db.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID}
+	db.AddSchemaToDatabase(desc.Name, descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID})
 
 	if err := p.writeNonDropDatabaseChange(
 		params.ctx, db,

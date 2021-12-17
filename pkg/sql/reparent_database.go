@@ -130,10 +130,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		Version:    1,
 	}).BuildCreatedMutable()
 	// Add the new schema to the parent database's name map.
-	if n.newParent.Schemas == nil {
-		n.newParent.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
-	n.newParent.Schemas[n.db.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: schema.GetID()}
+	n.newParent.AddSchemaToDatabase(n.db.Name, descpb.DatabaseDescriptor_SchemaInfo{ID: schema.GetID()})
 
 	if err := p.createDescriptorWithID(
 		ctx,

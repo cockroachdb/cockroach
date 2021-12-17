@@ -211,13 +211,10 @@ func (p *planner) dropSchemaImpl(
 	} else {
 		// TODO (rohany): This can be removed once RESTORE installs schemas into
 		//  the parent database.
-		if parentDB.Schemas == nil {
-			parentDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-		}
-		parentDB.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{
+		parentDB.AddSchemaToDatabase(sc.GetName(), descpb.DatabaseDescriptor_SchemaInfo{
 			ID:      sc.GetID(),
 			Dropped: true,
-		}
+		})
 	}
 
 	// Update the schema descriptor as dropped.

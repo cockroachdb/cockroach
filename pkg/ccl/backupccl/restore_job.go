@@ -374,6 +374,12 @@ func WriteDescriptors(
 				return err
 			}
 			b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+
+			// We also have to put a system.namespace entry for the public schema
+			// if the database does not have a public schema backed by a descriptor.
+			if !desc.HasPublicSchemaWithDescriptor() {
+				b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
+			}
 		}
 
 		// Write namespace and descriptor entries for each schema.
@@ -1321,11 +1327,8 @@ func createImportingDescriptors(
 					return err
 				}
 				db := desc.(*dbdesc.Mutable)
-				if db.Schemas == nil {
-					db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-				}
 				for _, sc := range schemas {
-					db.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()}
+					db.AddSchemaToDatabase(sc.GetName(), descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()})
 				}
 				if err := descsCol.WriteDescToBatch(
 					ctx, false /* kvTrace */, db, b,
@@ -1550,15 +1553,7 @@ func remapPublicSchemas(
 			return err
 		}
 
-		if db.Schemas == nil {
-			db.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {
-					ID: id,
-				},
-			}
-		} else {
-			db.Schemas[tree.PublicSchema] = descpb.DatabaseDescriptor_SchemaInfo{ID: id}
-		}
+		db.AddSchemaToDatabase(tree.PublicSchema, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
 		// Every database must be initialized with the public schema.
 		// Create the SchemaDescriptor.
 		// In postgres, the user "postgres" is the owner of the public schema in a
