@@ -132,10 +132,21 @@ CREATE DATABASE d
 user root
 
 statement ok
-REVOKE admin FROM testuser
+REVOKE admin FROM testuser;
+GRANT ALL ON DATABASE d to testuser2
+
+user testuser2
+
+# testuser2 has ALL privileges, no grant options, and is not a member of a role,
+# so it can't GRANT.
+statement error user testuser2 missing WITH GRANT OPTION privilege on ALL
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
+
+user root
 
 statement ok
-GRANT testuser TO testuser2
+GRANT testuser TO testuser2;
+REVOKE ALL ON DATABASE d FROM testuser2
 
 user testuser2
 
@@ -146,12 +157,6 @@ user testuser2
 
 statement ok
 CREATE TABLE d.t()
-
-statement ok
-ALTER TABLE d.t RENAME TO d.t2
-
-statement ok
-ALTER TABLE d.t2 RENAME TO d.t
 
 statement ok
 GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
