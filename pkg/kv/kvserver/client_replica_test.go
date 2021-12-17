@@ -544,7 +544,7 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 		now := s.Clock().Now()
 		maxOffset := s.Clock().MaxOffset().Nanoseconds()
 		require.NotZero(t, maxOffset)
-		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset)
+		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
 		require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 		require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -641,7 +641,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	now := clocks[1].Now()
 	maxOffset := clocks[1].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", keyB, 1, now, maxOffset)
+	txn := roachpb.MakeTransaction("test", keyB, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()))
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -1374,7 +1374,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */)
+	txn := roachpb.MakeTransaction("test", keyA, 1 /* userPriority */, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[1].SQLInstanceID()))
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, tc.Servers[1].Clock().NowAsClockTimestamp())
 
@@ -3822,7 +3822,7 @@ func TestTenantID(t *testing.T) {
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.TestingUserTableDataMin())
 			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}

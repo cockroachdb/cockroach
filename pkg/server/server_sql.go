@@ -697,7 +697,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
 
-		SystemIDChecker: catalog.SystemIDChecker{
+		SystemIDChecker: &catalog.SystemIDChecker{
 			SystemIDChecker: keys.DeprecatedSystemIDChecker(),
 		},
 	}
@@ -796,13 +796,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
 	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg, ieFactory)
-	execCfg.IndexValidator = scsqldeps.NewIndexValidator(execCfg.DB,
+	execCfg.IndexValidator = scsqldeps.NewIndexValidator(
+		execCfg.DB,
 		execCfg.Codec,
 		execCfg.Settings,
 		ieFactory,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
-		sql.NewFakeSessionData)
+		sql.NewFakeSessionData,
+	)
 	execCfg.InternalExecutorFactory = ieFactory
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider

@@ -11,11 +11,9 @@ go_library(
         "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scdeps",
-        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/schemachanger/scsqldeps",
-        "//pkg/util/log/eventpb",
     ],
 )

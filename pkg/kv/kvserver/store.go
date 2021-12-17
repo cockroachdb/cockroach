@@ -719,6 +719,11 @@ type Store struct {
 	protectedtsCache   protectedts.Cache
 	ctSender           *sidetransport.Sender
 
+	// systemRangeStartUpperBound is a precomputed value used by a replica to
+	// determine if its key range overlaps the system range.
+	// TODO(postamar): stop special-casing the system range
+	systemRangeStartUpperBound roachpb.Key
+
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
 	// descriptor will be re-gossiped earlier than the normal periodic
@@ -1127,6 +1132,9 @@ func NewStore(
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender: cfg.ClosedTimestampSender,
+		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(
+			keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker()),
+		),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(

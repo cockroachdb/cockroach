@@ -26,7 +26,7 @@ type FloatSetting struct {
 	validateFn   func(float64) error
 }
 
-var _ extendedSetting = &FloatSetting{}
+var _ internalSetting = &FloatSetting{}
 
 // Get retrieves the float value in the setting.
 func (f *FloatSetting) Get(sv *Values) float64 {

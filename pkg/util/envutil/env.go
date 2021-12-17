@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -363,9 +362,18 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 	return value
 }
 
+// TB is a slimmed down version of testing.T for use below.
+// We would like to use testutils.TB but this is not possible
+// due to a dependency cycle.
+type TB interface {
+	Fatal(args ...interface{})
+	Helper()
+}
+
 // TestSetEnv sets an environment variable and the cleanup function
 // resets it to the original value.
-func TestSetEnv(t *testing.T, name string, value string) func() {
+func TestSetEnv(t TB, name string, value string) func() {
+	t.Helper()
 	ClearEnvCache()
 	before, exists := os.LookupEnv(name)
 

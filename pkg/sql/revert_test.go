@@ -99,7 +99,7 @@ func TestRevertGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.RevertRangeRequest{
-		RequestHeader:                       roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+		RequestHeader:                       roachpb.RequestHeader{Key: keys.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 		TargetTime:                          hlc.Timestamp{WallTime: -1},
 		EnableTimeBoundIteratorOptimization: true,
 	}

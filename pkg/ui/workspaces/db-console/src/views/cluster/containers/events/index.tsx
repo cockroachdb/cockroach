@@ -23,7 +23,7 @@ import {
 } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { TimestampToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { getEventDescription } from "src/util/events";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -55,12 +55,13 @@ export interface EventRowProps {
 
 export function getEventInfo(e: Event$Properties): SimplifiedEvent {
   return {
-    fromNowString: TimestampToMoment(e.timestamp)
+    fromNowString: util
+      .TimestampToMoment(e.timestamp)
       .format(DATE_FORMAT_24_UTC)
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{getEventDescription(e)}</span>,
-    sortableTimestamp: TimestampToMoment(e.timestamp),
+    sortableTimestamp: util.TimestampToMoment(e.timestamp),
   };
 }
 

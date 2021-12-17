@@ -1450,6 +1450,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: abcd@abcd_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (a DESC, b DESC) STORING (c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a

@@ -101,6 +101,8 @@ vectorized: true
 • split
 │ columns: (key, pretty, split_enforced_until)
 │ estimated row count: 10 (missing stats)
+│ index: s@s_pkey
+│ expiry: CAST(NULL AS STRING)
 │
 └── • scan
       columns: (k1, k2)

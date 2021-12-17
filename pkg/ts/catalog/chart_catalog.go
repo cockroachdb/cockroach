@@ -2437,6 +2437,7 @@ var charts = []sectionDescription{
 					"addsstable.copies",
 					"addsstable.applications",
 					"addsstable.proposals",
+					"addsstable.aswrites",
 				},
 			},
 			{
