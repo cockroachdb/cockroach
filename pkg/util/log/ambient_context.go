@@ -189,8 +189,10 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
 }
 
-// MakeDummyAmbientContext creates an AmbientContext for use in tests.
-func MakeDummyAmbientContext(tracer *tracing.Tracer) AmbientContext {
+// MakeTestingAmbientContext creates an AmbientContext for use in tests,
+// when a test does not have sufficient details to instantiate a fully
+// fledged server AmbientContext.
+func MakeTestingAmbientContext(tracer *tracing.Tracer) AmbientContext {
 	return AmbientContext{Tracer: tracer}
 }
 

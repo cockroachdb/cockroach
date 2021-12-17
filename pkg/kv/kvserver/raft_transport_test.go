@@ -115,7 +115,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	}
 	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.MakeDummyAmbientContext(tr),
+		AmbientCtx: log.MakeTestingAmbientContext(tr),
 		Config:     testutils.NewNodeTestBaseContext(),
 		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Stopper:    rttc.stopper,

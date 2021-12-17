@@ -7319,7 +7319,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	// randomly added occasionally.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.MakeDummyAmbientContext(tr),
+		AmbientCtx: log.MakeTestingAmbientContext(tr),
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
 		Stopper:    stopper,
@@ -7337,7 +7337,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	mockNodeLiveness := newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE)
 	sp := NewStorePool(
-		log.MakeDummyAmbientContext(tr),
+		log.MakeTestingAmbientContext(tr),
 		st,
 		g,
 		clock,
@@ -7461,7 +7461,7 @@ func Example_rebalancing() {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	ambientCtx := log.MakeDummyAmbientContext(stopper.Tracer())
+	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,

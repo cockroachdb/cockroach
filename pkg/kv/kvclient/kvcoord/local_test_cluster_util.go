@@ -58,7 +58,7 @@ func InitFactoryForLocalTestCluster(
 ) kv.TxnSenderFactory {
 	return NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: log.MakeDummyAmbientContext(tracer),
+			AmbientCtx: log.MakeTestingAmbientContext(tracer),
 			Settings:   st,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -83,7 +83,7 @@ func NewDistSenderForLocalTestCluster(
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	return NewDistSender(DistSenderConfig{
-		AmbientCtx:         log.MakeDummyAmbientContext(tracer),
+		AmbientCtx:         log.MakeTestingAmbientContext(tracer),
 		Settings:           st,
 		Clock:              clock,
 		NodeDescs:          g,

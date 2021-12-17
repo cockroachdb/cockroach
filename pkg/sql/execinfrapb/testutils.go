@@ -30,7 +30,7 @@ import (
 )
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	ac := log.MakeDummyAmbientContext(stopper.Tracer())
+	ac := log.MakeTestingAmbientContext(stopper.Tracer())
 	nc := &base.NodeIDContainer{}
 	ac.AddLogTag("n", nc)
 	return rpc.NewContext(rpc.ContextOptions{
