@@ -7461,7 +7461,7 @@ func Example_rebalancing() {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	ambientCtx := log.MakeDummyAmbientContext(stopper.Tracer())
+	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,
