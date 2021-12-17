@@ -201,6 +201,7 @@ go_library(
         "sort.go",
         "split.go",
         "spool.go",
+        "sql_cursor.go",
         "statement.go",
         "subquery.go",
         "table.go",

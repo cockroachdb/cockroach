@@ -21,6 +21,8 @@ stmt ::=
 	| nonpreparable_set_stmt
 	| transaction_stmt
 	| close_cursor_stmt
+	| declare_cursor_stmt
+	| fetch_cursor_stmt
 	| 
 
 preparable_stmt ::=
@@ -122,6 +124,13 @@ transaction_stmt ::=
 
 close_cursor_stmt ::=
 	'CLOSE' 'ALL'
+	| 'CLOSE' cursor_name
+
+declare_cursor_stmt ::=
+	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' opt_hold 'FOR' select_stmt
+
+fetch_cursor_stmt ::=
+	'FETCH' fetch_specifier
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -387,6 +396,40 @@ rollback_stmt ::=
 
 abort_stmt ::=
 	'ABORT' opt_abort_mod
+
+cursor_name ::=
+	name
+
+opt_binary ::=
+	'BINARY'
+	| 
+
+opt_sensitivity ::=
+	'INSENSITIVE'
+	| 'ASENSITIVE'
+	| 
+
+opt_scroll ::=
+	'SCROLL'
+	| 'NO' 'SCROLL'
+	| 
+
+opt_hold ::=
+	'WITH' 'HOLD'
+	| 'WITHOUT' 'HOLD'
+	| 
+
+fetch_specifier ::=
+	cursor_name
+	| from_or_in cursor_name
+	| next_prior opt_from_or_in cursor_name
+	| forward_backward opt_from_or_in cursor_name
+	| opt_forward_backward signed_iconst64 opt_from_or_in cursor_name
+	| opt_forward_backward 'ALL' opt_from_or_in cursor_name
+	| 'ABSOLUTE' signed_iconst64 opt_from_or_in cursor_name
+	| 'RELATIVE' signed_iconst64 opt_from_or_in cursor_name
+	| 'FIRST' opt_from_or_in cursor_name
+	| 'LAST' opt_from_or_in cursor_name
 
 alter_ddl_stmt ::=
 	alter_table_stmt
@@ -842,6 +885,7 @@ expr_list ::=
 
 unreserved_keyword ::=
 	'ABORT'
+	| 'ABSOLUTE'
 	| 'ACTION'
 	| 'ACCESS'
 	| 'ADD'
@@ -850,12 +894,14 @@ unreserved_keyword ::=
 	| 'AGGREGATE'
 	| 'ALTER'
 	| 'ALWAYS'
+	| 'ASENSITIVE'
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
 	| 'AVAILABILITY'
 	| 'BACKUP'
 	| 'BACKUPS'
+	| 'BACKWARD'
 	| 'BEFORE'
 	| 'BEGIN'
 	| 'BINARY'
@@ -940,6 +986,7 @@ unreserved_keyword ::=
 	| 'FORCE'
 	| 'FORCE_INDEX'
 	| 'FORCE_ZIGZAG'
+	| 'FORWARD'
 	| 'FUNCTION'
 	| 'FUNCTIONS'
 	| 'GENERATED'
@@ -957,6 +1004,7 @@ unreserved_keyword ::=
 	| 'HASH'
 	| 'HIGH'
 	| 'HISTOGRAM'
+	| 'HOLD'
 	| 'HOUR'
 	| 'IDENTITY'
 	| 'IMMEDIATE'
@@ -1044,6 +1092,7 @@ unreserved_keyword ::=
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
+	| 'INSENSITIVE'
 	| 'OF'
 	| 'OFF'
 	| 'OIDS'
@@ -1076,6 +1125,7 @@ unreserved_keyword ::=
 	| 'PRECEDING'
 	| 'PREPARE'
 	| 'PRESERVE'
+	| 'PRIOR'
 	| 'PRIORITY'
 	| 'PRIVILEGES'
 	| 'PUBLIC'
@@ -1095,6 +1145,7 @@ unreserved_keyword ::=
 	| 'REGIONAL'
 	| 'REGIONS'
 	| 'REINDEX'
+	| 'RELATIVE'
 	| 'RELEASE'
 	| 'RELOCATE'
 	| 'RENAME'
@@ -1119,6 +1170,7 @@ unreserved_keyword ::=
 	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
+	| 'SCROLL'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -1313,6 +1365,29 @@ opt_abort_mod ::=
 	'TRANSACTION'
 	| 'WORK'
 	| 
+
+from_or_in ::=
+	'FROM'
+	| 'IN'
+
+next_prior ::=
+	'NEXT'
+	| 'PRIOR'
+
+opt_from_or_in ::=
+	from_or_in
+	| 
+
+forward_backward ::=
+	'FORWARD'
+	| 'BACKWARD'
+
+opt_forward_backward ::=
+	forward_backward
+	| 
+
+signed_iconst64 ::=
+	signed_iconst
 
 alter_table_stmt ::=
 	alter_onetable_stmt
@@ -1724,6 +1799,10 @@ transaction_mode ::=
 opt_comma ::=
 	','
 	| 
+
+signed_iconst ::=
+	'ICONST'
+	| only_signed_iconst
 
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' relation_expr alter_table_cmds
@@ -2299,6 +2378,10 @@ transaction_deferrable_mode ::=
 	'DEFERRABLE'
 	| 'NOT' 'DEFERRABLE'
 
+only_signed_iconst ::=
+	'+' 'ICONST'
+	| '-' 'ICONST'
+
 alter_table_cmds ::=
 	( alter_table_cmd ) ( ( ',' alter_table_cmd ) )*
 
@@ -2452,10 +2535,6 @@ opt_equal ::=
 	'='
 	| 
 
-signed_iconst ::=
-	'ICONST'
-	| only_signed_iconst
-
 region_or_regions ::=
 	'REGIONS'
 
@@ -2510,10 +2589,6 @@ sortby ::=
 	a_expr opt_asc_desc opt_nulls_order
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
-
-only_signed_iconst ::=
-	'+' 'ICONST'
-	| '-' 'ICONST'
 
 only_signed_fconst ::=
 	'+' 'FCONST'
@@ -2973,9 +3048,6 @@ audit_mode ::=
 
 partition_by_index ::=
 	partition_by
-
-signed_iconst64 ::=
-	signed_iconst
 
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra
