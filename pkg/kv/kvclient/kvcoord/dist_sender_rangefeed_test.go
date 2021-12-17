@@ -58,7 +58,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			defer cancel()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 			g := makeGossip(t, stopper, rpcContext)
 
 			desc := roachpb.RangeDescriptor{

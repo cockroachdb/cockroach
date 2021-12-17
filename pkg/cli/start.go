@@ -1222,14 +1222,14 @@ func getClientGRPCConn(
 	// as that of nodes in the cluster.
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: cfg.Tracer},
-		Config:     cfg.Config,
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cfg.Settings,
-	})
+	rpcContext := rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   cfg.Config,
+			Clock:    clock,
+			Stopper:  stopper,
+			Settings: cfg.Settings,
+		})
 	if cfg.TestingKnobs.Server != nil {
 		rpcContext.Knobs = cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs
 	}

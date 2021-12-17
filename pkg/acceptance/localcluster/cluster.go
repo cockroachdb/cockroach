@@ -271,13 +271,12 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		User:     security.NodeUserName(),
 		Insecure: true,
 	}
-	rpcCtx := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: testutils.MakeAmbientCtx(),
-		Config:     baseCtx,
-		Clock:      hlc.NewClock(hlc.UnixNano, 0),
-		Stopper:    c.stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
+	rpcCtx := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   baseCtx,
+		Clock:    hlc.NewClock(hlc.UnixNano, 0),
+		Stopper:  c.stopper,
+		Settings: cluster.MakeTestingClusterSettings(),
 	})
 
 	n := &Node{

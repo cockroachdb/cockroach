@@ -43,13 +43,14 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	rpcC := rpc.NewContext(rpc.ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   &base.Config{Insecure: true},
-		Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
-		Stopper:  stopper,
-		Settings: st,
-	})
+	rpcC := rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   &base.Config{Insecure: true},
+			Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
+			Stopper:  stopper,
+			Settings: st,
+		})
 	rpcC.ClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}
