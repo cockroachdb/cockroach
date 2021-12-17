@@ -12,6 +12,8 @@ package server
 
 import (
 	"context"
+	"encoding/binary"
+	"hash/fnv"
 	"math"
 	"net"
 	"os"
@@ -103,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
@@ -517,12 +520,58 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		hydratedTablesCache,
 	)
 
+	// clusterIDForSQL is the cluster ID that SQL processes use.
+	//
+	// Note that this is separate from, but sometimes pointed at, the ClusterID in
+	// the cfg and rpcContext, which contains the host cluster ID and is used when
+	// communicating with the host KV layer.
+	//
+	// For the system tenant, this is just pointed to that host cluster ID, as the
+	// SQL processes of the system tenant are considered part of the host cluster.
+	//
+	// For non-system tenants however it must assigned a value that is unique to
+	// each tenant, such that two differnet tenants on the same host cluster, or
+	// the same tenant restored on to two different host clusters, all have unique
+	// IDs. This property is vital, as this ID is what is used by processes to
+	// determine if they are talking to, reading state written by, or otherwise
+	// interacting with processes on the same cluster or not. For example, when a
+	// BACKUP job resumes writing to some external files, it is vital that be able
+	// to verify that the data in those files what written by the same cluster,
+	// so e.g. data for "table 53" in those files is for the same table 53 this
+	// cluster would be reading when it resumes.
+	//
+	// Thus for the non-system tenant, this ClusterID is derived from the unique
+	// host cluster's ID, but with the TenantID hased into its lower bits to make
+	// an ID that is unique to this tenant on this host cluster.
+	//
+	// Note: we are careful to not override the ClusterID in cfg.rpcContext, which
+	// is also referenced in other fields of `cfg` and elsewhere, as it still
+	// holds the *host's* ClusterID and it important that that be maintained for
+	// use in RPCs to the host cluster as well as logging and telemetry, where it
+	// is important that events originating from different tenants can be tied to
+	// the their host cluster(s).
+	clusterIDForSQL := cfg.rpcContext.ClusterID
+	if !codec.ForSystemTenant() {
+		clusterIDForSQL = &base.ClusterIDContainer{}
+		hasher := fnv.New64a()
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], cfg.TenantID.ToUint64())
+		hasher.Write(b[:])
+		hashedTenantID := hasher.Sum64()
+
+		cfg.rpcContext.ClusterID.OnSet = func(id uuid.UUID) {
+			hiLo := id.ToUint128()
+			hiLo.Lo += hashedTenantID
+			clusterIDForSQL.Set(ctx, uuid.FromUint128(hiLo))
+		}
+	}
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext: cfg.AmbientCtx,
 		Settings:       cfg.Settings,
 		RuntimeStats:   cfg.runtime,
-		ClusterID:      cfg.rpcContext.ClusterID,
+		ClusterID:      clusterIDForSQL,
 		ClusterName:    cfg.ClusterName,
 		NodeID:         cfg.nodeIDContainer,
 		Locality:       cfg.Locality,
@@ -597,7 +646,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	nodeInfo := sql.NodeInfo{
 		AdminURL:  cfg.AdminURL,
 		PGURL:     cfg.rpcContext.PGURL,
-		ClusterID: cfg.rpcContext.ClusterID.Get,
+		ClusterID: clusterIDForSQL.Get,
 		NodeID:    cfg.nodeIDContainer,
 	}
 
@@ -920,7 +969,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AmbientCtx:    &cfg.AmbientCtx,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
-		ClusterID:     cfg.rpcContext.ClusterID.Get,
+		ClusterID:     clusterIDForSQL.Get,
 		TenantID:      cfg.rpcContext.TenantID,
 		SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
 		SQLServer:     pgServer.SQLServer,
@@ -1207,4 +1256,8 @@ func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 // AnnotateCtx annotates the given context with the server tracer and tags.
 func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
 	return s.ambientCtx.AnnotateCtx(ctx)
+}
+
+func (s *SQLServer) SQLClusterID() uuid.UUID {
+	return s.execCfg.ClusterID()
 }

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -684,7 +685,8 @@ If problems persist, please see %s.`
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
-			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(), true /* isHostNode */, initialStart)
+			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
+				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
 		}(); err != nil {
 			errChan <- err
 		}
@@ -886,6 +888,7 @@ func reportServerInfo(
 	serverCfg *server.Config,
 	st *cluster.Settings,
 	isHostNode, initialStart bool,
+	tenantClusterID uuid.UUID,
 ) error {
 	srvS := redact.SafeString("SQL server")
 	if isHostNode {
@@ -949,9 +952,13 @@ func reportServerInfo(
 	if baseCfg.ClusterName != "" {
 		buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
 	}
-	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get().String()
-	buf.Printf("clusterID:\t%s\n", clusterID)
-
+	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get()
+	if clusterID.Equal(tenantClusterID) {
+		buf.Printf("clusterID:\t%s\n", clusterID)
+	} else {
+		buf.Printf("host clusterID:\t%s\n", clusterID)
+		buf.Printf("tenant clusterID:\t%s\n", tenantClusterID)
+	}
 	nodeID := serverCfg.BaseConfig.IDContainer.Get()
 	if isHostNode {
 		if initialStart {
