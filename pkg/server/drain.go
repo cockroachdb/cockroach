@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -50,11 +48,6 @@ var (
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-
-	if len(req.Pre201Marker) > 0 {
-		return status.Errorf(codes.InvalidArgument,
-			"Drain request coming from unsupported client version older than 20.1.")
-	}
 
 	doDrain := req.DoDrain
 
