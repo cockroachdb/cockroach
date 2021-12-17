@@ -335,7 +335,7 @@ user testuser2
 
 # Make sure that non-admin roles do not have CONNECT grant option inherited
 # from the public role.
-statement error user testuser2 missing WITH GRANT OPTION privilege on CONNECT
+statement error user testuser2 missing WITH GRANT OPTION privilege on CONNEC
 GRANT CONNECT ON DATABASE d TO target WITH GRANT OPTION
 
 # test types
@@ -446,7 +446,7 @@ user testuser2
 statement ok
 REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser2
 
-statement error pq: user testuser2 does not have GRANT privilege on relation t1
+statement error pq: user testuser2 does not have INSERT privilege on relation t1
 GRANT INSERT ON TABLE t1 TO target
 
 user testuser

@@ -80,10 +80,10 @@ SELECT r FROM t
 statement error pq: user testuser does not have SELECT privilege on relation t
 SELECT * from [$t_id as num_ref]
 
-statement error user testuser does not have GRANT privilege on relation t
+statement error user testuser does not have ALL privilege on relation t
 GRANT ALL ON t TO bar
 
-statement error user testuser does not have GRANT privilege on relation t
+statement error user testuser does not have ALL privilege on relation t
 REVOKE ALL ON t FROM bar
 
 statement error user testuser does not have INSERT privilege on relation t
@@ -127,10 +127,10 @@ SHOW COLUMNS FROM t
 k  INT8  false  NULL  ·  {t_pkey}  false
 v  INT8  true   NULL  ·  {t_pkey}  false
 
-statement error user testuser does not have GRANT privilege on relation t
+statement error user testuser does not have ALL privilege on relation t
 GRANT ALL ON t TO bar
 
-statement error user testuser does not have GRANT privilege on relation t
+statement error user testuser does not have ALL privilege on relation t
 REVOKE ALL ON t FROM bar
 
 statement error user testuser does not have INSERT privilege on relation t
