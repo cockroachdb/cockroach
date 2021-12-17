@@ -103,11 +103,9 @@ insert abcde
       ├── columns: d_comp:13!null column1:9!null column2:10!null column3:11!null rowid_default:12
       ├── project
       │    ├── columns: rowid_default:12 column1:9!null column2:10!null column3:11!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    └── values
-      │    │         ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │         └── (1, 2, 3)
+      │    │    └── (1, 2, 3)
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:12]
       └── projections
@@ -130,11 +128,9 @@ insert abcde
       ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
       ├── project
       │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null
-      │    │    └── values
-      │    │         ├── columns: column1:9!null
-      │    │         └── (1,)
+      │    │    └── (1,)
       │    └── projections
       │         ├── NULL::INT8 [as=b_default:10]
       │         ├── 10 [as=c_default:11]
@@ -159,20 +155,18 @@ insert abcde
       ├── columns: d_comp:17 y:10 b_default:14 c_default:15!null rowid_default:16
       ├── project
       │    ├── columns: b_default:14 c_default:15!null rowid_default:16 y:10
-      │    ├── project
-      │    │    ├── columns: y:10
-      │    │    └── limit
-      │    │         ├── columns: y:10 z:11
-      │    │         ├── internal-ordering: +10,+11
-      │    │         ├── sort
-      │    │         │    ├── columns: y:10 z:11
-      │    │         │    ├── ordering: +10,+11
-      │    │         │    ├── limit hint: 10.00
-      │    │         │    └── project
-      │    │         │         ├── columns: y:10 z:11
-      │    │         │         └── scan xyz
-      │    │         │              └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
-      │    │         └── 10
+      │    ├── limit
+      │    │    ├── columns: y:10 z:11
+      │    │    ├── internal-ordering: +10,+11
+      │    │    ├── sort
+      │    │    │    ├── columns: y:10 z:11
+      │    │    │    ├── ordering: +10,+11
+      │    │    │    ├── limit hint: 10.00
+      │    │    │    └── project
+      │    │    │         ├── columns: y:10 z:11
+      │    │    │         └── scan xyz
+      │    │    │              └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    │    └── 10
       │    └── projections
       │         ├── NULL::INT8 [as=b_default:14]
       │         ├── 10 [as=c_default:15]
@@ -198,11 +192,9 @@ insert abcde
       ├── project
       │    ├── columns: b_default:14 c_default:15!null rowid_default:16 y:10
       │    ├── project
-      │    │    ├── columns: y:10
-      │    │    └── project
-      │    │         ├── columns: y:10 z:11
-      │    │         └── scan xyz
-      │    │              └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+      │    │    ├── columns: y:10 z:11
+      │    │    └── scan xyz
+      │    │         └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
       │    └── projections
       │         ├── NULL::INT8 [as=b_default:14]
       │         ├── 10 [as=c_default:15]
@@ -220,11 +212,9 @@ insert xyz
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
  │    └── column3:8 => z:3
- └── project
+ └── values
       ├── columns: column1:6 column2:7 column3:8
-      └── values
-           ├── columns: column1:6 column2:7 column3:8
-           └── ($1, $2, $3)
+      └── ($1, $2, $3)
 
 # Null expressions.
 build
@@ -243,11 +233,9 @@ insert abcde
       ├── columns: d_comp:13 column1:9!null column2:10 column3:11 rowid_default:12
       ├── project
       │    ├── columns: rowid_default:12 column1:9!null column2:10 column3:11
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null column2:10 column3:11
-      │    │    └── values
-      │    │         ├── columns: column1:9!null column2:10 column3:11
-      │    │         └── (2, NULL::INT8, NULL::INT8)
+      │    │    └── (2, NULL::INT8, NULL::INT8)
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:12]
       └── projections
@@ -272,13 +260,11 @@ insert abcde
       │    ├── columns: rowid_default:11 "?column?":9!null "?column?":10
       │    ├── project
       │    │    ├── columns: "?column?":9!null "?column?":10
-      │    │    └── project
-      │    │         ├── columns: "?column?":9!null "?column?":10
-      │    │         ├── values
-      │    │         │    └── ()
-      │    │         └── projections
-      │    │              ├── 2 [as="?column?":9]
-      │    │              └── $1 + 1 [as="?column?":10]
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── 2 [as="?column?":9]
+      │    │         └── $1 + 1 [as="?column?":10]
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:11]
       └── projections
@@ -320,14 +306,12 @@ insert abcde
       ├── columns: d_comp:13 column1:9!null column2:10 column3:11!null rowid_default:12
       ├── project
       │    ├── columns: rowid_default:12 column1:9!null column2:10 column3:11!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null column2:10 column3:11!null
-      │    │    └── values
-      │    │         ├── columns: column1:9!null column2:10 column3:11!null
-      │    │         ├── (1, NULL::INT8, 2)
-      │    │         ├── (2, 3, 4)
-      │    │         ├── (3, 2, 10)
-      │    │         └── (4, NULL::INT8, 10)
+      │    │    ├── (1, NULL::INT8, 2)
+      │    │    ├── (2, 3, 4)
+      │    │    ├── (3, 2, 10)
+      │    │    └── (4, NULL::INT8, 10)
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:12]
       └── projections
@@ -366,12 +350,10 @@ project
            │    ├── columns: b_default:10 c_default:11!null rowid_default:12 "?column?":9!null
            │    ├── project
            │    │    ├── columns: "?column?":9!null
-           │    │    └── project
-           │    │         ├── columns: "?column?":9!null
-           │    │         ├── values
-           │    │         │    └── ()
-           │    │         └── projections
-           │    │              └── 1 [as="?column?":9]
+           │    │    ├── values
+           │    │    │    └── ()
+           │    │    └── projections
+           │    │         └── 1 [as="?column?":9]
            │    └── projections
            │         ├── NULL::INT8 [as=b_default:10]
            │         ├── 10 [as=c_default:11]
@@ -400,12 +382,10 @@ project
  │         │    ├── columns: b_default:10 c_default:11!null rowid_default:12 "?column?":9!null
  │         │    ├── project
  │         │    │    ├── columns: "?column?":9!null
- │         │    │    └── project
- │         │    │         ├── columns: "?column?":9!null
- │         │    │         ├── values
- │         │    │         │    └── ()
- │         │    │         └── projections
- │         │    │              └── 1 [as="?column?":9]
+ │         │    │    ├── values
+ │         │    │    │    └── ()
+ │         │    │    └── projections
+ │         │    │         └── 1 [as="?column?":9]
  │         │    └── projections
  │         │         ├── NULL::INT8 [as=b_default:10]
  │         │         ├── 10 [as=c_default:11]
@@ -437,11 +417,9 @@ with &1
  │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
  │              ├── project
  │              │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
- │              │    ├── project
+ │              │    ├── values
  │              │    │    ├── columns: column1:9!null
- │              │    │    └── values
- │              │    │         ├── columns: column1:9!null
- │              │    │         └── (1,)
+ │              │    │    └── (1,)
  │              │    └── projections
  │              │         ├── NULL::INT8 [as=b_default:10]
  │              │         ├── 10 [as=c_default:11]
@@ -499,13 +477,11 @@ with &1 (a)
            ├── columns: d_comp:19 y:15 "?column?":16 c_default:17!null rowid_default:18
            ├── project
            │    ├── columns: c_default:17!null rowid_default:18 y:15 "?column?":16
-           │    ├── project
+           │    ├── with-scan &1 (a)
            │    │    ├── columns: y:15 "?column?":16
-           │    │    └── with-scan &1 (a)
-           │    │         ├── columns: y:15 "?column?":16
-           │    │         └── mapping:
-           │    │              ├──  xyz.y:2 => y:15
-           │    │              └──  "?column?":6 => "?column?":16
+           │    │    └── mapping:
+           │    │         ├──  xyz.y:2 => y:15
+           │    │         └──  "?column?":6 => "?column?":16
            │    └── projections
            │         ├── 10 [as=c_default:17]
            │         └── unique_rowid() [as=rowid_default:18]
@@ -544,22 +520,20 @@ with &1 (a)
                 ├── columns: d_comp:29 y:25 "?column?":26 c_default:27!null rowid_default:28
                 ├── project
                 │    ├── columns: c_default:27!null rowid_default:28 y:25 "?column?":26
-                │    ├── project
+                │    ├── union
                 │    │    ├── columns: y:25 "?column?":26
-                │    │    └── union
-                │    │         ├── columns: y:25 "?column?":26
-                │    │         ├── left columns: y:21 "?column?":22
-                │    │         ├── right columns: "?column?":23 y:24
-                │    │         ├── with-scan &1 (a)
-                │    │         │    ├── columns: y:21 "?column?":22
-                │    │         │    └── mapping:
-                │    │         │         ├──  xyz.y:2 => y:21
-                │    │         │         └──  "?column?":6 => "?column?":22
-                │    │         └── with-scan &2 (b)
-                │    │              ├── columns: "?column?":23 y:24
-                │    │              └── mapping:
-                │    │                   ├──  "?column?":12 => "?column?":23
-                │    │                   └──  xyz.y:8 => y:24
+                │    │    ├── left columns: y:21 "?column?":22
+                │    │    ├── right columns: "?column?":23 y:24
+                │    │    ├── with-scan &1 (a)
+                │    │    │    ├── columns: y:21 "?column?":22
+                │    │    │    └── mapping:
+                │    │    │         ├──  xyz.y:2 => y:21
+                │    │    │         └──  "?column?":6 => "?column?":22
+                │    │    └── with-scan &2 (b)
+                │    │         ├── columns: "?column?":23 y:24
+                │    │         └── mapping:
+                │    │              ├──  "?column?":12 => "?column?":23
+                │    │              └──  xyz.y:8 => y:24
                 │    └── projections
                 │         ├── 10 [as=c_default:27]
                 │         └── unique_rowid() [as=rowid_default:28]
@@ -586,11 +560,9 @@ with &1
  │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
  │              ├── project
  │              │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
- │              │    ├── project
+ │              │    ├── values
  │              │    │    ├── columns: column1:9!null
- │              │    │    └── values
- │              │    │         ├── columns: column1:9!null
- │              │    │         └── (1,)
+ │              │    │    └── (1,)
  │              │    └── projections
  │              │         ├── NULL::INT8 [as=b_default:10]
  │              │         ├── 10 [as=c_default:11]
@@ -621,11 +593,9 @@ with &1
                 ├── columns: d_comp:31 column1:27!null b_default:28 c_default:29!null rowid_default:30
                 ├── project
                 │    ├── columns: b_default:28 c_default:29!null rowid_default:30 column1:27!null
-                │    ├── project
+                │    ├── values
                 │    │    ├── columns: column1:27!null
-                │    │    └── values
-                │    │         ├── columns: column1:27!null
-                │    │         └── (1,)
+                │    │    └── (1,)
                 │    └── projections
                 │         ├── NULL::INT8 [as=b_default:28]
                 │         ├── 10 [as=c_default:29]
@@ -666,11 +636,9 @@ insert abcde
       ├── columns: d_comp:13!null column1:9!null column2:10!null column3:11!null rowid_default:12
       ├── project
       │    ├── columns: rowid_default:12 column1:9!null column2:10!null column3:11!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    └── values
-      │    │         ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │         └── (1, 2, 3)
+      │    │    └── (1, 2, 3)
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:12]
       └── projections
@@ -693,11 +661,9 @@ insert abcde
       ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
       ├── project
       │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null
-      │    │    └── values
-      │    │         ├── columns: column1:9!null
-      │    │         └── (1,)
+      │    │    └── (1,)
       │    └── projections
       │         ├── NULL::INT8 [as=b_default:10]
       │         ├── 10 [as=c_default:11]
@@ -724,11 +690,9 @@ project
            ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
            ├── project
            │    ├── columns: b_default:11 c_default:12!null column1:9!null column2:10!null
-           │    ├── project
+           │    ├── values
            │    │    ├── columns: column1:9!null column2:10!null
-           │    │    └── values
-           │    │         ├── columns: column1:9!null column2:10!null
-           │    │         └── (1, 2)
+           │    │    └── (1, 2)
            │    └── projections
            │         ├── NULL::INT8 [as=b_default:11]
            │         └── 10 [as=c_default:12]
@@ -752,13 +716,11 @@ insert abcde
  │    └── column4:12 => rowid:6
  └── project
       ├── columns: d_comp:13 column1:9!null column2:10 column3:11!null column4:12
-      ├── project
+      ├── values
       │    ├── columns: column1:9!null column2:10 column3:11!null column4:12
-      │    └── values
-      │         ├── columns: column1:9!null column2:10 column3:11!null column4:12
-      │         ├── (10, NULL::INT8, 1, unique_rowid())
-      │         ├── (3, 2, 1, unique_rowid())
-      │         └── (10, NULL::INT8, 2, 100)
+      │    ├── (10, NULL::INT8, 1, unique_rowid())
+      │    ├── (3, 2, 1, unique_rowid())
+      │    └── (10, NULL::INT8, 2, 100)
       └── projections
            └── (column2:10 + column1:9) + 1 [as=d_comp:13]
 
@@ -780,11 +742,9 @@ insert abcde
       ├── columns: d_comp:13 column1:9 b_default:10 c_default:11!null rowid_default:12
       ├── project
       │    ├── columns: b_default:10 c_default:11!null rowid_default:12 column1:9
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9
-      │    │    └── values
-      │    │         ├── columns: column1:9
-      │    │         └── (NULL::INT8,)
+      │    │    └── (NULL::INT8,)
       │    └── projections
       │         ├── NULL::INT8 [as=b_default:10]
       │         ├── 10 [as=c_default:11]
@@ -872,13 +832,11 @@ project
            ├── project
            │    ├── columns: c_default:15!null rowid_default:16 y:10 x:14!null
            │    ├── project
-           │    │    ├── columns: y:10 x:14!null
-           │    │    └── project
-           │    │         ├── columns: x:14!null y:10
-           │    │         ├── scan xyz
-           │    │         │    └── columns: xyz.x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
-           │    │         └── projections
-           │    │              └── xyz.x:9::INT8 [as=x:14]
+           │    │    ├── columns: x:14!null y:10
+           │    │    ├── scan xyz
+           │    │    │    └── columns: xyz.x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+           │    │    └── projections
+           │    │         └── xyz.x:9::INT8 [as=x:14]
            │    └── projections
            │         ├── 10 [as=c_default:15]
            │         └── unique_rowid() [as=rowid_default:16]
@@ -902,11 +860,9 @@ insert abcde
       ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
       ├── project
       │    ├── columns: b_default:11 c_default:12!null column1:9!null column2:10!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9!null column2:10!null
-      │    │    └── values
-      │    │         ├── columns: column1:9!null column2:10!null
-      │    │         └── (1, 2)
+      │    │    └── (1, 2)
       │    └── projections
       │         ├── NULL::INT8 [as=b_default:11]
       │         └── 10 [as=c_default:12]
@@ -935,13 +891,11 @@ with &1
  │              ├── project
  │              │    ├── columns: c_default:15!null rowid_default:16 y:10 "?column?":14
  │              │    ├── project
- │              │    │    ├── columns: y:10 "?column?":14
- │              │    │    └── project
- │              │    │         ├── columns: "?column?":14 y:10
- │              │    │         ├── scan xyz
- │              │    │         │    └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
- │              │    │         └── projections
- │              │    │              └── y:10 + 1 [as="?column?":14]
+ │              │    │    ├── columns: "?column?":14 y:10
+ │              │    │    ├── scan xyz
+ │              │    │    │    └── columns: x:9!null y:10 z:11 xyz.crdb_internal_mvcc_timestamp:12 xyz.tableoid:13
+ │              │    │    └── projections
+ │              │    │         └── y:10 + 1 [as="?column?":14]
  │              │    └── projections
  │              │         ├── 10 [as=c_default:15]
  │              │         └── unique_rowid() [as=rowid_default:16]
@@ -970,11 +924,9 @@ insert xyz
  │    ├── column1:6 => x:1
  │    ├── column2:7 => y:2
  │    └── column3:8 => z:3
- └── project
+ └── values
       ├── columns: column1:6 column2:7 column3:8
-      └── values
-           ├── columns: column1:6 column2:7 column3:8
-           └── ($1, $2 + 1, $3 + 1.0)
+      └── ($1, $2 + 1, $3 + 1.0)
 
 # Propagate types to VALUES (named columns).
 build
@@ -986,11 +938,9 @@ insert xyz
  │    ├── column3:8 => x:1
  │    ├── column2:7 => y:2
  │    └── column1:6 => z:3
- └── project
+ └── values
       ├── columns: column1:6 column2:7 column3:8
-      └── values
-           ├── columns: column1:6 column2:7 column3:8
-           └── ($1 + 1.0, $2 + 1, $3)
+      └── ($1 + 1.0, $2 + 1, $3)
 
 # Propagate types to projection list.
 build
@@ -1004,14 +954,12 @@ insert xyz
  │    └── "?column?":8 => z:3
  └── project
       ├── columns: "?column?":6 "?column?":7 "?column?":8
-      └── project
-           ├── columns: "?column?":6 "?column?":7 "?column?":8
-           ├── values
-           │    └── ()
-           └── projections
-                ├── $1 [as="?column?":6]
-                ├── $2 + 1 [as="?column?":7]
-                └── $3 + 1.0 [as="?column?":8]
+      ├── values
+      │    └── ()
+      └── projections
+           ├── $1 [as="?column?":6]
+           ├── $2 + 1 [as="?column?":7]
+           └── $3 + 1.0 [as="?column?":8]
 
 # Propagate types to projection list (named columns).
 build
@@ -1025,14 +973,12 @@ insert xyz
  │    └── "?column?":8 => z:3
  └── project
       ├── columns: "?column?":6 "?column?":7 "?column?":8
-      └── project
-           ├── columns: "?column?":6 "?column?":7 "?column?":8
-           ├── values
-           │    └── ()
-           └── projections
-                ├── $1 [as="?column?":6]
-                ├── $2 + 1 [as="?column?":7]
-                └── $3 + 1.0 [as="?column?":8]
+      ├── values
+      │    └── ()
+      └── projections
+           ├── $1 [as="?column?":6]
+           ├── $2 + 1 [as="?column?":7]
+           └── $3 + 1.0 [as="?column?":8]
 
 # Propagate types to UNION.
 build
@@ -1044,28 +990,26 @@ insert xyz
  │    ├── "?column?":12 => x:1
  │    ├── "?column?":13 => y:2
  │    └── "?column?":14 => z:3
- └── project
+ └── union-all
       ├── columns: "?column?":12 "?column?":13 "?column?":14
-      └── union-all
-           ├── columns: "?column?":12 "?column?":13 "?column?":14
-           ├── left columns: "?column?":6 "?column?":7 "?column?":8
-           ├── right columns: "?column?":9 "?column?":10 "?column?":11
-           ├── project
-           │    ├── columns: "?column?":6 "?column?":7 "?column?":8
-           │    ├── values
-           │    │    └── ()
-           │    └── projections
-           │         ├── $1 [as="?column?":6]
-           │         ├── $2 + 1 [as="?column?":7]
-           │         └── $3 + 1.0 [as="?column?":8]
-           └── project
-                ├── columns: "?column?":9 "?column?":10 "?column?":11
-                ├── values
-                │    └── ()
-                └── projections
-                     ├── $1 [as="?column?":9]
-                     ├── $2 + 1 [as="?column?":10]
-                     └── $3 + 1.0 [as="?column?":11]
+      ├── left columns: "?column?":6 "?column?":7 "?column?":8
+      ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      ├── project
+      │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         ├── $1 [as="?column?":6]
+      │         ├── $2 + 1 [as="?column?":7]
+      │         └── $3 + 1.0 [as="?column?":8]
+      └── project
+           ├── columns: "?column?":9 "?column?":10 "?column?":11
+           ├── values
+           │    └── ()
+           └── projections
+                ├── $1 [as="?column?":9]
+                ├── $2 + 1 [as="?column?":10]
+                └── $3 + 1.0 [as="?column?":11]
 
 # Propagate types to UNION (named columns).
 build
@@ -1077,28 +1021,26 @@ insert xyz
  │    ├── "?column?":12 => x:1
  │    ├── "?column?":14 => y:2
  │    └── "?column?":13 => z:3
- └── project
+ └── union-all
       ├── columns: "?column?":12 "?column?":13 "?column?":14
-      └── union-all
-           ├── columns: "?column?":12 "?column?":13 "?column?":14
-           ├── left columns: "?column?":6 "?column?":7 "?column?":8
-           ├── right columns: "?column?":9 "?column?":10 "?column?":11
-           ├── project
-           │    ├── columns: "?column?":6 "?column?":7 "?column?":8
-           │    ├── values
-           │    │    └── ()
-           │    └── projections
-           │         ├── $1 [as="?column?":6]
-           │         ├── $2 + 1.0 [as="?column?":7]
-           │         └── $3 + 1 [as="?column?":8]
-           └── project
-                ├── columns: "?column?":9 "?column?":10 "?column?":11
-                ├── values
-                │    └── ()
-                └── projections
-                     ├── $1 [as="?column?":9]
-                     ├── $2 + 1.0 [as="?column?":10]
-                     └── $3 + 1 [as="?column?":11]
+      ├── left columns: "?column?":6 "?column?":7 "?column?":8
+      ├── right columns: "?column?":9 "?column?":10 "?column?":11
+      ├── project
+      │    ├── columns: "?column?":6 "?column?":7 "?column?":8
+      │    ├── values
+      │    │    └── ()
+      │    └── projections
+      │         ├── $1 [as="?column?":6]
+      │         ├── $2 + 1.0 [as="?column?":7]
+      │         └── $3 + 1 [as="?column?":8]
+      └── project
+           ├── columns: "?column?":9 "?column?":10 "?column?":11
+           ├── values
+           │    └── ()
+           └── projections
+                ├── $1 [as="?column?":9]
+                ├── $2 + 1.0 [as="?column?":10]
+                └── $3 + 1 [as="?column?":11]
 
 # ------------------------------------------------------------------------------
 # Tests with mutation columns.
@@ -1122,11 +1064,9 @@ insert mutation
       │    ├── columns: p_comp:11!null column1:8!null column2:9!null o_default:10!null
       │    ├── project
       │    │    ├── columns: o_default:10!null column1:8!null column2:9!null
-      │    │    ├── project
+      │    │    ├── values
       │    │    │    ├── columns: column1:8!null column2:9!null
-      │    │    │    └── values
-      │    │    │         ├── columns: column1:8!null column2:9!null
-      │    │    │         └── (1, 2)
+      │    │    │    └── (1, 2)
       │    │    └── projections
       │    │         └── 10 [as=o_default:10]
       │    └── projections
@@ -1152,11 +1092,9 @@ insert mutation
       │    ├── columns: p_comp:11!null column1:8!null column2:9!null o_default:10!null
       │    ├── project
       │    │    ├── columns: o_default:10!null column1:8!null column2:9!null
-      │    │    ├── project
+      │    │    ├── values
       │    │    │    ├── columns: column1:8!null column2:9!null
-      │    │    │    └── values
-      │    │    │         ├── columns: column1:8!null column2:9!null
-      │    │    │         └── (1, 2)
+      │    │    │    └── (1, 2)
       │    │    └── projections
       │    │         └── 10 [as=o_default:10]
       │    └── projections
@@ -1202,11 +1140,9 @@ insert checks
       ├── columns: check1:11!null check2:12!null column1:7!null column2:8!null column3:9!null d_comp:10!null
       ├── project
       │    ├── columns: d_comp:10!null column1:7!null column2:8!null column3:9!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:7!null column2:8!null column3:9!null
-      │    │    └── values
-      │    │         ├── columns: column1:7!null column2:8!null column3:9!null
-      │    │         └── (1, 2, 3)
+      │    │    └── (1, 2, 3)
       │    └── projections
       │         └── column3:9 + 1 [as=d_comp:10]
       └── projections
@@ -1231,15 +1167,13 @@ insert checks
       │    ├── columns: d_comp:15 abcde.a:7!null abcde.b:8 abcde.c:9
       │    ├── project
       │    │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9
-      │    │    └── project
-      │    │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9
-      │    │         └── scan abcde
-      │    │              ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 e:11 rowid:12!null abcde.crdb_internal_mvcc_timestamp:13 abcde.tableoid:14
-      │    │              └── computed column expressions
-      │    │                   ├── abcde.d:10
-      │    │                   │    └── (abcde.b:8 + abcde.c:9) + 1
-      │    │                   └── e:11
-      │    │                        └── abcde.a:7
+      │    │    └── scan abcde
+      │    │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 e:11 rowid:12!null abcde.crdb_internal_mvcc_timestamp:13 abcde.tableoid:14
+      │    │         └── computed column expressions
+      │    │              ├── abcde.d:10
+      │    │              │    └── (abcde.b:8 + abcde.c:9) + 1
+      │    │              └── e:11
+      │    │                   └── abcde.a:7
       │    └── projections
       │         └── abcde.c:9 + 1 [as=d_comp:15]
       └── projections
@@ -1395,11 +1329,9 @@ insert defvals
  │    └── arr2_default:8 => arr2:3
  └── project
       ├── columns: arr1_default:7!null arr2_default:8!null column1:6!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null
-      │    └── values
-      │         ├── columns: column1:6!null
-      │         └── (1,)
+      │    └── (1,)
       └── projections
            ├── ARRAY[] [as=arr1_default:7]
            └── ARRAY[] [as=arr2_default:8]
@@ -1423,11 +1355,9 @@ insert defvals2
  │    └── arr2_default:8 => arr2:3
  └── project
       ├── columns: arr1_default:7 arr2_default:8 column1:6!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null
-      │    └── values
-      │         ├── columns: column1:6!null
-      │         └── (1,)
+      │    └── (1,)
       └── projections
            ├── ARRAY[NULL] [as=arr1_default:7]
            └── ARRAY[NULL] [as=arr2_default:8]
@@ -1457,11 +1387,9 @@ insert t67100
       ├── columns: check1:7!null check2:8!null check3:9!null column1:5!null rowid_default:6
       ├── project
       │    ├── columns: rowid_default:6 column1:5!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:5!null
-      │    │    └── values
-      │    │         ├── columns: column1:5!null
-      │    │         └── (1,)
+      │    │    └── (1,)
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:6]
       └── projections
@@ -1484,11 +1412,9 @@ insert on_update_bare
  │    └── rowid_default:8 => rowid:3
  └── project
       ├── columns: rowid_default:8 column1:6!null column2:7!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null column2:7!null
-      │    └── values
-      │         ├── columns: column1:6!null column2:7!null
-      │         └── (1, 2)
+      │    └── (1, 2)
       └── projections
            └── unique_rowid() [as=rowid_default:8]
 
@@ -1503,11 +1429,9 @@ insert on_update_bare
  │    └── rowid_default:8 => rowid:3
  └── project
       ├── columns: v_default:7 rowid_default:8 column1:6!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null
-      │    └── values
-      │         ├── columns: column1:6!null
-      │         └── (1,)
+      │    └── (1,)
       └── projections
            ├── NULL::INT8 [as=v_default:7]
            └── unique_rowid() [as=rowid_default:8]
@@ -1524,11 +1448,9 @@ insert on_update_with_default
  │    └── rowid_default:8 => rowid:3
  └── project
       ├── columns: rowid_default:8 column1:6!null column2:7!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null column2:7!null
-      │    └── values
-      │         ├── columns: column1:6!null column2:7!null
-      │         └── (1, 2)
+      │    └── (1, 2)
       └── projections
            └── unique_rowid() [as=rowid_default:8]
 
@@ -1544,11 +1466,9 @@ insert on_update_with_default
  │    └── rowid_default:8 => rowid:3
  └── project
       ├── columns: v_default:7!null rowid_default:8 column1:6!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null
-      │    └── values
-      │         ├── columns: column1:6!null
-      │         └── (1,)
+      │    └── (1,)
       └── projections
            ├── 3 [as=v_default:7]
            └── unique_rowid() [as=rowid_default:8]
@@ -1590,11 +1510,9 @@ insert generated_as_identity
  │    └── rowid_default:10 => rowid:4
  └── project
       ├── columns: b_default:9 rowid_default:10 column1:7!null column2:8!null
-      ├── project
+      ├── values
       │    ├── columns: column1:7!null column2:8!null
-      │    └── values
-      │         ├── columns: column1:7!null column2:8!null
-      │         └── (1, 10)
+      │    └── (1, 10)
       └── projections
            ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:9]
            └── unique_rowid() [as=rowid_default:10]
@@ -1611,11 +1529,9 @@ insert generated_as_identity
  │    └── rowid_default:10 => rowid:4
  └── project
       ├── columns: b_default:8 c_default:9 rowid_default:10 column1:7!null
-      ├── project
+      ├── values
       │    ├── columns: column1:7!null
-      │    └── values
-      │         ├── columns: column1:7!null
-      │         └── (2,)
+      │    └── (2,)
       └── projections
            ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:8]
            ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:9]
@@ -1640,11 +1556,9 @@ insert serial_t
  │    └── rowid_default:8 => rowid:3
  └── project
       ├── columns: a_default:7 rowid_default:8 column1:6!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null
-      │    └── values
-      │         ├── columns: column1:6!null
-      │         └── (2,)
+      │    └── (2,)
       └── projections
            ├── unique_rowid() [as=a_default:7]
            └── unique_rowid() [as=rowid_default:8]

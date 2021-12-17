@@ -1402,15 +1402,32 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 // If there is no valid assignment cast from a column type in srcCols to its
 // corresponding target column type, then this function throws an error.
 func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
-	projectionScope := mb.outScope.push()
+	// If all source columns have types identical to their target column types,
+	// there are no assignment casts necessary. Do not create an empty
+	// projection.
+	castRequired := false
+	for ord, colID := range srcCols {
+		if colID == 0 {
+			continue
+		}
+		srcType := mb.md.ColumnMeta(colID).Type
+		targetType := mb.tab.Column(ord).DatumType()
+		if !srcType.Identical(targetType) {
+			castRequired = true
+			break
+		}
+	}
+	if !castRequired {
+		return
+	}
+
+	projectionScope := mb.outScope.replace()
 	projectionScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
 
 	for i := range mb.outScope.cols {
 		colID := mb.outScope.cols[i].id
 		srcType := mb.md.ColumnMeta(colID).Type
 
-		// Create a new column which casts the input column to the correct
-		// type.
 		ord, ok := srcCols.Find(colID)
 		if !ok {
 			panic(errors.AssertionFailedf("could not find column %d in srcCols", colID))
@@ -1432,6 +1449,8 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, colName))
 		}
 
+		// Create a new column which casts the input column to the correct
+		// type.
 		variable := mb.b.factory.ConstructVariable(colID)
 		cast := mb.b.factory.ConstructAssignmentCast(variable, targetType)
 		scopeCol := mb.b.synthesizeColumn(

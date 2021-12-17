@@ -56,25 +56,21 @@ with &1
  │         ├── columns: a:6(int!null) b:7(string!null) c:8(float)
  │         ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
  │         ├── fd: ()-->(7), (6)-->(8)
- │         └── project
- │              ├── columns: a:6(int!null) b:7(string!null) c:8(float)
+ │         └── select
+ │              ├── columns: a:6(int!null) b:7(string!null) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
  │              ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
- │              ├── fd: ()-->(7), (6)-->(8)
- │              └── select
- │                   ├── columns: a:6(int!null) b:7(string!null) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
- │                   ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
- │                   ├── key: (9)
- │                   ├── fd: ()-->(7), (9)-->(6,8,10,11), (6)-->(8)
- │                   ├── scan abc
- │                   │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
- │                   │    ├── computed column expressions
- │                   │    │    └── c:8
- │                   │    │         └── a:6::FLOAT8 [type=float]
- │                   │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
- │                   │    ├── key: (9)
- │                   │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
- │                   └── filters
- │                        └── b:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+ │              ├── key: (9)
+ │              ├── fd: ()-->(7), (9)-->(6,8,10,11), (6)-->(8)
+ │              ├── scan abc
+ │              │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+ │              │    ├── computed column expressions
+ │              │    │    └── c:8
+ │              │    │         └── a:6::FLOAT8 [type=float]
+ │              │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
+ │              │    ├── key: (9)
+ │              │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
+ │              └── filters
+ │                   └── b:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
       ├── stats: [rows=66.5105818, distinct(14)=43.4214373, null(14)=0]
@@ -109,24 +105,19 @@ insert xyz
       ├── cardinality: [0 - 0]
       ├── stats: [rows=0]
       ├── fd: (6)-->(8)
-      └── project
-           ├── columns: a:6(int!null) b:7(string) c:8(float)
+      └── select
+           ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
            ├── cardinality: [0 - 0]
            ├── stats: [rows=0]
-           ├── fd: (6)-->(8)
-           └── select
-                ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
-                ├── cardinality: [0 - 0]
-                ├── stats: [rows=0]
-                ├── key: (9)
-                ├── fd: (9)-->(6-8,10,11), (6)-->(8)
-                ├── scan abc
-                │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
-                │    ├── computed column expressions
-                │    │    └── c:8
-                │    │         └── a:6::FLOAT8 [type=float]
-                │    ├── stats: [rows=2000]
-                │    ├── key: (9)
-                │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
-                └── filters
-                     └── false [type=bool, constraints=(contradiction; tight)]
+           ├── key: (9)
+           ├── fd: (9)-->(6-8,10,11), (6)-->(8)
+           ├── scan abc
+           │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+           │    ├── computed column expressions
+           │    │    └── c:8
+           │    │         └── a:6::FLOAT8 [type=float]
+           │    ├── stats: [rows=2000]
+           │    ├── key: (9)
+           │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
+           └── filters
+                └── false [type=bool, constraints=(contradiction; tight)]

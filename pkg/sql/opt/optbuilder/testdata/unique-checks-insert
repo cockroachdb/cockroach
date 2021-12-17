@@ -22,12 +22,10 @@ insert uniq
  │    ├── column4:11 => uniq.x:4
  │    └── column5:12 => uniq.y:5
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │    └── values
- │         ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │         ├── (1, 1, 1, 1, 1)
- │         └── (2, 2, 2, 2, 2)
+ │    ├── (1, 1, 1, 1, 1)
+ │    └── (2, 2, 2, 2, 2)
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -80,13 +78,11 @@ insert uniq
  │    ├── column4:11 => uniq.x:4
  │    └── column5:12 => uniq.y:5
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:8!null column2:9 column3:10 column4:11 column5:12!null
- │    └── values
- │         ├── columns: column1:8!null column2:9 column3:10 column4:11 column5:12!null
- │         ├── (1, 1, 1, 1, 1)
- │         ├── (2, 2, 2, 2, 2)
- │         └── (3, NULL::INT8, NULL::INT8, NULL::INT8, 3)
+ │    ├── (1, 1, 1, 1, 1)
+ │    ├── (2, 2, 2, 2, 2)
+ │    └── (3, NULL::INT8, NULL::INT8, NULL::INT8, 3)
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -290,11 +286,9 @@ insert uniq
       │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
       │    │    │    │    │    │    ├── anti-join (hash)
       │    │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
-      │    │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
-      │    │    │    │    │    │    │    │    └── values
-      │    │    │    │    │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
-      │    │    │    │    │    │    │    │         └── (1, 2, 3, 4, 5)
+      │    │    │    │    │    │    │    │    └── (1, 2, 3, 4, 5)
       │    │    │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    │    │    └── columns: k:13!null v:14 w:15 x:16 y:17
       │    │    │    │    │    │    │    └── filters
@@ -366,11 +360,9 @@ insert uniq
  │    ├── grouping columns: column3:10!null
  │    ├── anti-join (hash)
  │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │    │    ├── project
+ │    │    ├── values
  │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │    │    │    └── values
- │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │    │    │         └── (1, 2, 3, 4, 5)
+ │    │    │    └── (1, 2, 3, 4, 5)
  │    │    ├── scan uniq
  │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  │    │    └── filters
@@ -424,10 +416,8 @@ insert uniq
  ├── input binding: &1
  ├── project
  │    ├── columns: other.k:8 other.v:9 other.w:10!null other.x:11 other.y:12
- │    └── project
- │         ├── columns: other.k:8 other.v:9 other.w:10!null other.x:11 other.y:12
- │         └── scan other
- │              └── columns: other.k:8 other.v:9 other.w:10!null other.x:11 other.y:12 rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
+ │    └── scan other
+ │         └── columns: other.k:8 other.v:9 other.w:10!null other.x:11 other.y:12 rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -495,12 +485,10 @@ insert uniq_overlaps_pk
  │    ├── column3:9 => uniq_overlaps_pk.c:3
  │    └── column4:10 => uniq_overlaps_pk.d:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │    └── values
- │         ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │         ├── (1, 1, 1, 1)
- │         └── (2, 2, 2, 2)
+ │    ├── (1, 1, 1, 1)
+ │    └── (2, 2, 2, 2)
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── project
@@ -572,10 +560,8 @@ insert uniq_overlaps_pk
  ├── input binding: &1
  ├── project
  │    ├── columns: k:7 v:8 x:10 y:11
- │    └── project
- │         ├── columns: k:7 v:8 x:10 y:11
- │         └── scan other
- │              └── columns: k:7 v:8 w:9!null x:10 y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+ │    └── scan other
+ │         └── columns: k:7 v:8 w:9!null x:10 y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── project
@@ -659,12 +645,10 @@ insert uniq_hidden_pk
  ├── input binding: &1
  ├── project
  │    ├── columns: rowid_default:12 column1:8!null column2:9!null column3:10!null column4:11!null
- │    ├── project
+ │    ├── values
  │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
- │    │    └── values
- │    │         ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
- │    │         ├── (1, 1, 1, 1)
- │    │         └── (2, 2, 2, 2)
+ │    │    ├── (1, 1, 1, 1)
+ │    │    └── (2, 2, 2, 2)
  │    └── projections
  │         └── unique_rowid() [as=rowid_default:12]
  └── unique-checks
@@ -744,10 +728,8 @@ insert uniq_hidden_pk
  │    ├── columns: rowid_default:16 k:8 v:9 x:11 y:12
  │    ├── project
  │    │    ├── columns: k:8 v:9 x:11 y:12
- │    │    └── project
- │    │         ├── columns: k:8 v:9 x:11 y:12
- │    │         └── scan other
- │    │              └── columns: k:8 v:9 w:10!null x:11 y:12 other.rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
+ │    │    └── scan other
+ │    │         └── columns: k:8 v:9 w:10!null x:11 y:12 other.rowid:13!null other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
  │    └── projections
  │         └── unique_rowid() [as=rowid_default:16]
  └── unique-checks
@@ -829,12 +811,10 @@ insert uniq_partial
  │    ├── column2:7 => uniq_partial.a:2
  │    └── column3:8 => uniq_partial.b:3
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:6!null column2:7!null column3:8!null
- │    └── values
- │         ├── columns: column1:6!null column2:7!null column3:8!null
- │         ├── (1, 1, 1)
- │         └── (2, 2, 2)
+ │    ├── (1, 1, 1)
+ │    └── (2, 2, 2)
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
            └── project
@@ -866,13 +846,11 @@ insert uniq_partial
  │    ├── column2:7 => uniq_partial.a:2
  │    └── column3:8 => uniq_partial.b:3
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:6!null column2:7 column3:8!null
- │    └── values
- │         ├── columns: column1:6!null column2:7 column3:8!null
- │         ├── (1, 1, 1)
- │         ├── (2, 2, 2)
- │         └── (3, NULL::INT8, 3)
+ │    ├── (1, 1, 1)
+ │    ├── (2, 2, 2)
+ │    └── (3, NULL::INT8, 3)
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
            └── project
@@ -937,12 +915,10 @@ insert uniq_partial
            │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
            │    │    │    ├── anti-join (hash)
            │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-           │    │    │    │    ├── project
+           │    │    │    │    ├── values
            │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-           │    │    │    │    │    └── values
-           │    │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-           │    │    │    │    │         ├── (1, 2, 3)
-           │    │    │    │    │         └── (2, 2, 3)
+           │    │    │    │    │    ├── (1, 2, 3)
+           │    │    │    │    │    └── (2, 2, 3)
            │    │    │    │    ├── scan uniq_partial
            │    │    │    │    │    └── columns: k:9!null a:10 b:11
            │    │    │    │    └── filters
@@ -996,11 +972,9 @@ insert uniq_partial
            │    ├── columns: arbiter_unique_a_distinct:14 column1:6!null column2:7!null column3:8!null
            │    ├── anti-join (hash)
            │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-           │    │    ├── project
+           │    │    ├── values
            │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-           │    │    │    └── values
-           │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-           │    │    │         └── (1, 2, 3)
+           │    │    │    └── (1, 2, 3)
            │    │    ├── select
            │    │    │    ├── columns: k:9!null a:10 b:11!null
            │    │    │    ├── scan uniq_partial
@@ -1031,10 +1005,8 @@ insert uniq_partial
  ├── input binding: &1
  ├── project
  │    ├── columns: other.k:6 v:7 w:8!null
- │    └── project
- │         ├── columns: other.k:6 v:7 w:8!null
- │         └── scan other
- │              └── columns: other.k:6 v:7 w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12 other.tableoid:13
+ │    └── scan other
+ │         └── columns: other.k:6 v:7 w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12 other.tableoid:13
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
            └── project
@@ -1084,12 +1056,10 @@ insert uniq_partial_overlaps_pk
  │    ├── column3:9 => uniq_partial_overlaps_pk.c:3
  │    └── column4:10 => uniq_partial_overlaps_pk.d:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │    └── values
- │         ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │         ├── (1, 1, 1, 1)
- │         └── (2, 2, 2, 2)
+ │    ├── (1, 1, 1, 1)
+ │    └── (2, 2, 2, 2)
  └── unique-checks
       ├── unique-checks-item: uniq_partial_overlaps_pk(c)
       │    └── project
@@ -1166,10 +1136,8 @@ insert uniq_partial_overlaps_pk
  ├── input binding: &1
  ├── project
  │    ├── columns: k:7 v:8 x:10 y:11
- │    └── project
- │         ├── columns: k:7 v:8 x:10 y:11
- │         └── scan other
- │              └── columns: k:7 v:8 w:9!null x:10 y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+ │    └── scan other
+ │         └── columns: k:7 v:8 w:9!null x:10 y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  └── unique-checks
       ├── unique-checks-item: uniq_partial_overlaps_pk(c)
       │    └── project
@@ -1254,12 +1222,10 @@ insert uniq_partial_hidden_pk
  ├── input binding: &1
  ├── project
  │    ├── columns: c_default:9 rowid_default:10 column1:7!null column2:8!null
- │    ├── project
+ │    ├── values
  │    │    ├── columns: column1:7!null column2:8!null
- │    │    └── values
- │    │         ├── columns: column1:7!null column2:8!null
- │    │         ├── (1, 1)
- │    │         └── (2, 2)
+ │    │    ├── (1, 1)
+ │    │    └── (2, 2)
  │    └── projections
  │         ├── NULL::INT8 [as=c_default:9]
  │         └── unique_rowid() [as=rowid_default:10]
@@ -1300,10 +1266,8 @@ insert uniq_partial_hidden_pk
  │    ├── columns: c_default:15 rowid_default:16 k:7 v:8
  │    ├── project
  │    │    ├── columns: k:7 v:8
- │    │    └── project
- │    │         ├── columns: k:7 v:8
- │    │         └── scan other
- │    │              └── columns: k:7 v:8 w:9!null x:10 y:11 other.rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+ │    │    └── scan other
+ │    │         └── columns: k:7 v:8 w:9!null x:10 y:11 other.rowid:12!null other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  │    └── projections
  │         ├── NULL::INT8 [as=c_default:15]
  │         └── unique_rowid() [as=rowid_default:16]
@@ -1490,11 +1454,9 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    ├── anti-join (hash)
       │         │    │         │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    ├── project
+      │         │    │         │    │    │    ├── values
       │         │    │         │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    │    └── values
-      │         │    │         │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    │         └── (1, 1, 1)
+      │         │    │         │    │    │    │    └── (1, 1, 1)
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: k:9!null a:10 b:11!null
       │         │    │         │    │    │    │    ├── scan uniq_partial_constraint_and_partial_index
@@ -1573,12 +1535,10 @@ insert uniq_computed_pk
  ├── input binding: &1
  ├── project
  │    ├── columns: c_i_expr_comp:13!null c_d_expr_comp:14!null column1:10!null column2:11!null column3:12!null
- │    ├── project
+ │    ├── values
  │    │    ├── columns: column1:10!null column2:11!null column3:12!null
- │    │    └── values
- │    │         ├── columns: column1:10!null column2:11!null column3:12!null
- │    │         ├── (1, 'a', 1.0)
- │    │         └── (2, 'b', 2.0)
+ │    │    ├── (1, 'a', 1.0)
+ │    │    └── (2, 'b', 2.0)
  │    └── projections
  │         ├── CASE WHEN column1:10 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr_comp:13]
  │         └── column3:12::STRING [as=c_d_expr_comp:14]
