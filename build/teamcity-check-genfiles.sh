@@ -27,7 +27,11 @@ if ! (run run_bazel build/bazelutil/check.sh &> artifacts/buildshort.log || (cat
     exit 1
 fi
 rm artifacts/buildshort.log
-run run_bazel build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
+
+run run_bazel build/bazelutil/bazel-generate.sh \
+  BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e COCKROACH_BAZEL_FORCE_GENERATE=1" \
+  &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
+
 rm artifacts/buildshort.log
 if grep TODO DEPS.bzl; then
     echo "Missing TODO comment in DEPS.bzl. Did you run \`./dev generate bazel --mirror\`?"
