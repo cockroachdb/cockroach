@@ -396,6 +396,35 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		c.Stop(ctx, c.Node(nodeID),
 			option.RoachprodArgOption{"--sig", "9", "--wait"})
 	})
+
+	// Same as "drain" above, but issuing the drain command from
+	// another node. Exercises the redirect of the drain RPC.
+	registerTest("drain-other-node", "v22.1.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
+		// We need to pick "another" node from the target node.
+		// We use the "next node for this, computed as follows.
+		// - nodeID is between 1 and NodeCount, inclusive.
+		// - the modulo brings it back between 0 and NodeCount, exclusive,
+		//   with a wraparound.
+		// - we add one to bring the value back between 1 and NodeCount
+		//   inclusive.
+		otherNodeID := (nodeID % c.Spec().NodeCount) + 1
+		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(otherNodeID),
+			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
+			fmt.Sprintf("--port={pgport:%d}", otherNodeID),
+			fmt.Sprintf("%d", nodeID),
+		)
+		t.L().Printf("cockroach node drain:\n%s\n", buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// See the explanation for the "drain" test above
+		// to understand what the following signals are for.
+		c.Stop(ctx, c.Node(nodeID),
+			option.RoachprodArgOption{"--sig", "1"},
+		)
+		c.Stop(ctx, c.Node(nodeID),
+			option.RoachprodArgOption{"--sig", "9", "--wait"})
+	})
 }
 
 func runQuit(

@@ -595,7 +595,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 }
 
 var drainNodeCmd = &cobra.Command{
-	Use:   "drain",
+	Use:   "drain { --self | <node id> }",
 	Short: "drain a node without shutting it down",
 	Long: `
 Prepare a server so it becomes ready to be shut down safely.
@@ -606,8 +606,13 @@ cluster settings.
 
 After a successful drain, the server process is still running;
 use a service manager or orchestrator to terminate the process
-gracefully using e.g. a unix signal.`,
-	Args: cobra.NoArgs,
+gracefully using e.g. a unix signal.
+
+If an argument is specified, the command affects the node
+whose ID is given. If --self is specified, the command
+affects the node that the command is connected to (via --host).
+`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: clierrorplus.MaybeDecorateError(runDrain),
 }
 
@@ -616,6 +621,19 @@ gracefully using e.g. a unix signal.`,
 func runDrain(cmd *cobra.Command, args []string) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if !quitCtx.nodeDrainSelf && len(args) == 0 {
+		fmt.Fprintf(stderr, "warning: draining a node without node ID or passing --self explicitly is deprecated.\n")
+		quitCtx.nodeDrainSelf = true
+	}
+	if quitCtx.nodeDrainSelf && len(args) > 0 {
+		return errors.Newf("cannot use --%s with an explicit node ID", cliflags.NodeDrainSelf.Name)
+	}
+
+	targetNode := "local"
+	if len(args) > 0 {
+		targetNode = args[0]
+	}
 
 	// At the end, we'll report "ok" if there was no error.
 	defer func() {
@@ -631,7 +649,7 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	}
 	defer finish()
 
-	_, _, err = doDrain(ctx, c)
+	_, _, err = doDrain(ctx, c, targetNode)
 	return err
 }
 
