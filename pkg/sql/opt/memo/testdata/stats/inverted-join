@@ -146,9 +146,8 @@ project
       └── filters
            └── t1.j:2 @> t2.j:9 [type=bool, outer=(2,9), immutable]
 
-# TODO(rytaft): The following two inverted joins have the same estimated row
-# count even though the first one has an extra conjunct in the inverted
-# expression. The first one should have a lower estimated row count.
+# Of the following two join expressions, the first one has an extra conjunct in
+# the inverted expression, so it should have a lower estimated row count.
 opt
 SELECT *
 FROM json_arr1 AS t1
