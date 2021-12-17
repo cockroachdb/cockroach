@@ -322,7 +322,7 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset)
+	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset, 0)
 	return &txn
 }
 
@@ -4549,8 +4549,8 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	// Start a transaction early to get a low timestamp.
-	txn := roachpb.MakeTransaction(
-		"test", keyA, roachpb.NormalUserPriority, tc.Clock().Now(), 0 /* offset */)
+	txn := roachpb.MakeTransaction("test", keyA, roachpb.NormalUserPriority,
+		tc.Clock().Now(), 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */)
 
 	// Write a value outside of the txn to cause a WriteTooOldError later.
 	put := putArgs(keyA, []byte("val1"))
@@ -10021,7 +10021,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 
 	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
 		txn := roachpb.MakeTransaction(
-			"test", roachpb.Key(key), roachpb.NormalUserPriority, ts, 0,
+			"test", roachpb.Key(key), roachpb.NormalUserPriority, ts, 0, 0,
 		)
 		return &txn
 	}
@@ -10551,7 +10551,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 
 	// Start a transaction and assign its ReadTimestamp.
 	ts1 := tc.Clock().Now()
-	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0)
+	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0, 0)
 
 	// Write a value outside the transaction.
 	tc.manualClock.Increment(10)

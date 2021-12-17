@@ -34,7 +34,8 @@ func withTimestamp(op Operation, ts int) Operation {
 		nil, // baseKey
 		roachpb.NormalUserPriority,
 		hlc.Timestamp{WallTime: int64(ts)},
-		0,
+		0, // maxOffsetNs
+		0, // coordinatorNodeID
 	)
 	switch o := op.GetValue().(type) {
 	case *ClosureTxnOperation:
