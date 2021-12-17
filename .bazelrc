@@ -1,6 +1,6 @@
 try-import %workspace%/.bazelrc.user
 
-build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,gss --experimental_proto_descriptor_sets_include_source_info --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
+build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,gss --experimental_proto_descriptor_sets_include_source_info --incompatible_strict_action_env
 test --config=test
 build:with_ui --define cockroach_with_ui=y
 build:test --define crdb_test=y
