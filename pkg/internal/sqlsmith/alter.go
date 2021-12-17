@@ -423,6 +423,9 @@ func makeAlterLocality(s *Smither) (tree.Statement, bool) {
 		},
 	}
 	if localityLevel == tree.LocalityLevelTable {
+		if len(regions) <= 0 {
+			return &tree.AlterDatabaseAddRegion{}, false
+		}
 		ast.Locality.TableRegion = tree.Name(regions[rand.Intn(len(regions))])
 	}
 	return ast, ok
@@ -430,6 +433,10 @@ func makeAlterLocality(s *Smither) (tree.Statement, bool) {
 
 func makeAlterDatabaseAddRegion(s *Smither) (tree.Statement, bool) {
 	regions := getClusterRegions(s)
+
+	if len(regions) <= 0 {
+		return &tree.AlterDatabaseAddRegion{}, false
+	}
 
 	ast := &tree.AlterDatabaseAddRegion{
 		Region: tree.Name(regions[rand.Intn(len(regions))]),
@@ -441,6 +448,10 @@ func makeAlterDatabaseAddRegion(s *Smither) (tree.Statement, bool) {
 
 func makeAlterDatabaseDropRegion(s *Smither) (tree.Statement, bool) {
 	regions := getDatabaseRegions(s)
+
+	if len(regions) <= 0 {
+		return &tree.AlterDatabaseDropRegion{}, false
+	}
 
 	ast := &tree.AlterDatabaseDropRegion{
 		Region: tree.Name(regions[rand.Intn(len(regions))]),
