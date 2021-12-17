@@ -150,12 +150,14 @@ vectorized: true
 │
 └── • index join
     │ columns: (k, v, w)
+    │ ordering: +v
     │ estimated row count: 1,000 (missing stats)
     │ table: t@t_pkey
     │ key columns: k
     │
     └── • scan
           columns: (k, v)
+          ordering: +v
           estimated row count: 1,000 (missing stats)
           table: t@v
           spans: FULL SCAN

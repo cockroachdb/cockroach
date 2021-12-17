@@ -570,9 +570,14 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 func (c *coster) computeTopKCost(topk *memo.TopKExpr, required *physical.Required) memo.Cost {
 	rel := topk.Relational()
-	inputRowCount := topk.Input.Relational().Stats.RowCount
 	outputRowCount := rel.Stats.RowCount
 
+	inputRowCount := topk.Input.Relational().Stats.RowCount
+	if !required.Ordering.Any() {
+		// When there is a partial ordering of the input rows' sort columns, we may
+		// be able to reduce the number of input rows needed to find the top K rows.
+		inputRowCount = topKInputLimitHint(c.mem, topk, inputRowCount, outputRowCount, float64(topk.K))
+	}
 	// Add the cost of sorting.
 	// Start with a cost of storing each row; TopK sort only stores K rows in a
 	// max heap.
@@ -1256,17 +1261,21 @@ func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cos
 	return cost
 }
 
-// countSegments calculates the number of segments that will be used to execute
-// the sort. If no input ordering is provided, there's only one segment.
-func (c *coster) countSegments(sort *memo.SortExpr) float64 {
-	if sort.InputOrdering.Any() {
-		return 1
+// getOrderingColStats returns the column statistic for the columns in the
+// OrderingChoice oc. The OrderingChoice should be a member of expr. We include
+// the Memo as an argument so that functions that call this function can be used
+// both inside and outside the coster.
+func getOrderingColStats(
+	mem *memo.Memo, expr memo.RelExpr, oc props.OrderingChoice,
+) *props.ColumnStatistic {
+	if oc.Any() {
+		return nil
 	}
-	stats := sort.Relational().Stats
-	orderedCols := sort.InputOrdering.ColSet()
+	stats := expr.Relational().Stats
+	orderedCols := oc.ColSet()
 	orderedStats, ok := stats.ColStats.Lookup(orderedCols)
 	if !ok {
-		orderedStats, ok = c.mem.RequestColStat(sort, orderedCols)
+		orderedStats, ok = mem.RequestColStat(expr, orderedCols)
 		if !ok {
 			// I don't think we can ever get here. Since we don't allow the memo
 			// to be optimized twice, the coster should never be used after
@@ -1274,7 +1283,16 @@ func (c *coster) countSegments(sort *memo.SortExpr) float64 {
 			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", orderedCols))
 		}
 	}
+	return orderedStats
+}
 
+// countSegments calculates the number of segments that will be used to execute
+// the sort. If no input ordering is provided, there's only one segment.
+func (c *coster) countSegments(sort *memo.SortExpr) float64 {
+	orderedStats := getOrderingColStats(c.mem, sort, sort.InputOrdering)
+	if orderedStats == nil {
+		return 1
+	}
 	return orderedStats.DistinctCount
 }
 
@@ -1570,6 +1588,36 @@ func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint flo
 	// Round up to the nearest multiple of a batch.
 	expectedLookupCount = math.Ceil(expectedLookupCount/joinReaderBatchSize) * joinReaderBatchSize
 	return math.Min(inputRowCount, expectedLookupCount)
+}
+
+// topKInputLimitHint calculates an appropriate limit hint for the input
+// to a Top K expression when the input is partially sorted.
+func topKInputLimitHint(
+	mem *memo.Memo, topk *memo.TopKExpr, inputRowCount, outputRowCount, K float64,
+) float64 {
+	if outputRowCount == 0 {
+		return 0
+	}
+	orderedStats := getOrderingColStats(mem, topk, topk.PartialOrdering)
+	if orderedStats == nil {
+		return inputRowCount
+	}
+
+	// In order to find the top K rows of a partially sorted input, we estimate
+	// the number of rows we'll need to ingest by rounding up the nearest multiple
+	// of the number of rows per distinct values to K. For example, let's say we
+	// have 2000 input rows, 100 distinct values, and a K of 10. If we assume that
+	// each distinct value is found in the same number of input rows, each
+	// distinct value has 2000/100 = 20 rowsPerDistinctVal. Processing the rows
+	// for one distinct value is sufficient to find the top K 10 rows. If K were
+	// 50 instead, we would need to process more distinct values to find the top
+	// K, so we need to multiply the rowsPerDistinctVal by the minimum number of
+	// distinct values to process, which we can find by dividing K by the rows per
+	// distinct values and rounding up, or ceil(50/20) = 3. So if K is 50, we need
+	// to process approximately 3 * 20 = 60 rows to find the top 50 rows.
+	rowsPerDistinctVal := inputRowCount / orderedStats.DistinctCount
+	expectedRows := math.Ceil(K/rowsPerDistinctVal) * rowsPerDistinctVal
+	return math.Min(inputRowCount, expectedRows)
 }
 
 // lookupExprCost accounts for the extra CPU cost of the lookupExpr.
