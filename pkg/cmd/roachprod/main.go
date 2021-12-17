@@ -146,7 +146,9 @@ if the user would like to update the keys on the remote hosts.
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		zonesMap := make(map[string][]string)
 		// Only adding aws zones because only aws.ConfigSSH uses it.
-		zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
+		if vm.Providers[aws.ProviderName].Active() {
+			zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
+		}
 		return roachprod.SetupSSH(args[0], zonesMap)
 	}),
 }

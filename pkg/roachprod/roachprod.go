@@ -1135,7 +1135,9 @@ func Create(
 	}
 	zonesMap := make(map[string][]string)
 	// Only adding aws zones because only aws.ConfigSSH uses it.
-	zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
+	if vm.Providers[aws.ProviderName].Active() {
+		zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
+	}
 	return SetupSSH(clusterName, zonesMap)
 }
 
