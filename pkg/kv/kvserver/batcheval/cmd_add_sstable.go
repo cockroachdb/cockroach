@@ -242,7 +242,13 @@ func EvalAddSSTable(
 			}
 			sstIter.Next()
 		}
-		return result.Result{}, nil
+		return result.Result{
+			Local: result.LocalResult{
+				Metrics: &result.Metrics{
+					AddSSTableAsWrites: 1,
+				},
+			},
+		}, nil
 	}
 
 	return result.Result{
