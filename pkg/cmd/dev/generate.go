@@ -22,6 +22,7 @@ import (
 )
 
 const mirrorFlag = "mirror"
+const forceFlag = "force"
 
 // makeGenerateCmd constructs the subcommand used to generate the specified
 // artifacts.
@@ -44,6 +45,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 		RunE: runE,
 	}
 	lintCmd.Flags().Bool(mirrorFlag, false, "mirror new dependencies to cloud storage")
+	lintCmd.Flags().Bool(forceFlag, false, "force regeneration even if relevant files are unchanged from upstream")
 	return lintCmd
 }
 
@@ -83,17 +85,20 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 func (d *dev) generateBazel(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 	mirror := mustGetFlagBool(cmd, mirrorFlag)
+	force := mustGetFlagBool(cmd, forceFlag)
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
 	}
 	executable := filepath.Join(workspace, "build", "bazelutil", "bazel-generate.sh")
+	env := os.Environ()
 	if mirror {
-		env := os.Environ()
 		env = append(env, "COCKROACH_BAZEL_CAN_MIRROR=1")
-		return d.exec.CommandContextWithEnv(ctx, env, executable)
 	}
-	return d.exec.CommandContextInheritingStdStreams(ctx, executable)
+	if force {
+		env = append(env, "COCKROACH_BAZEL_FORCE_GENERATE=1")
+	}
+	return d.exec.CommandContextWithEnv(ctx, env, executable)
 }
 
 func (d *dev) generateDocs(cmd *cobra.Command) error {

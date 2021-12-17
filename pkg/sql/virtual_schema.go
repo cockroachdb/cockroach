@@ -529,7 +529,7 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
 			if !constrainedScan {
-				generator, cleanup, setupError := setupGenerator(ctx, func(pusher rowPusher) error {
+				generator, cleanup, setupError := setupGenerator(ctx, func(ctx context.Context, pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
 						if err := e.validateRow(row, columns); err != nil {
 							return err
@@ -555,7 +555,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			indexKeyDatums := make([]tree.Datum, index.NumKeyColumns())
 
 			generator, cleanup, setupError := setupGenerator(ctx, e.makeConstrainedRowsGenerator(
-				ctx, p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
+				p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
 			if setupError != nil {
 				return nil, setupError
 			}
@@ -573,7 +573,6 @@ func (e *virtualDefEntry) getPlanInfo(
 // to push all rows from this virtual table that satisfy the input index
 // constraint to a row pusher that's supplied to the generator function.
 func (e *virtualDefEntry) makeConstrainedRowsGenerator(
-	ctx context.Context,
 	p *planner,
 	dbDesc catalog.DatabaseDescriptor,
 	index catalog.Index,
@@ -581,9 +580,9 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	columnIdxMap catalog.TableColMap,
 	idxConstraint *constraint.Constraint,
 	columns colinfo.ResultColumns,
-) func(pusher rowPusher) error {
+) func(ctx context.Context, pusher rowPusher) error {
 	def := e.virtualDef.(virtualSchemaTable)
-	return func(pusher rowPusher) error {
+	return func(ctx context.Context, pusher rowPusher) error {
 		var span constraint.Span
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
