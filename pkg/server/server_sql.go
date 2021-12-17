@@ -12,6 +12,8 @@ package server
 
 import (
 	"context"
+	"encoding/binary"
+	"hash/fnv"
 	"math"
 	"net"
 	"os"
@@ -103,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
@@ -517,12 +520,32 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		hydratedTablesCache,
 	)
 
+	clusterIDForSQL := cfg.rpcContext.ClusterID
+	// Make sure that tenants have a different ClusterID in SQL structs than the
+	// host so that they're distinct from eachother. Setting it to host plus a
+	// hash of tenant ID achieves this.
+	if !codec.ForSystemTenant() {
+		clusterIDForSQL = &base.ClusterIDContainer{}
+
+		hasher := fnv.New64a()
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], cfg.TenantID.ToUint64())
+		hasher.Write(b[:])
+		hashedTenantID := hasher.Sum64()
+
+		cfg.rpcContext.ClusterID.OnSet = func(id uuid.UUID) {
+			hiLo := id.ToUint128()
+			hiLo.Lo += hashedTenantID
+			clusterIDForSQL.Set(ctx, uuid.FromUint128(hiLo))
+		}
+	}
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext: cfg.AmbientCtx,
 		Settings:       cfg.Settings,
 		RuntimeStats:   cfg.runtime,
-		ClusterID:      cfg.rpcContext.ClusterID,
+		ClusterID:      clusterIDForSQL,
 		ClusterName:    cfg.ClusterName,
 		NodeID:         cfg.nodeIDContainer,
 		Locality:       cfg.Locality,
@@ -597,7 +620,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	nodeInfo := sql.NodeInfo{
 		AdminURL:  cfg.AdminURL,
 		PGURL:     cfg.rpcContext.PGURL,
-		ClusterID: cfg.rpcContext.ClusterID.Get,
+		ClusterID: clusterIDForSQL.Get,
 		NodeID:    cfg.nodeIDContainer,
 	}
 
@@ -920,7 +943,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AmbientCtx:    &cfg.AmbientCtx,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
-		ClusterID:     cfg.rpcContext.ClusterID.Get,
+		ClusterID:     clusterIDForSQL.Get,
 		TenantID:      cfg.rpcContext.TenantID,
 		SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
 		SQLServer:     pgServer.SQLServer,
