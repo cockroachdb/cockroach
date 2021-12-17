@@ -618,4 +618,3 @@ GRANT ALL PRIVILEGES ON TABLE t21 TO target
 statement error pq: missing WITH GRANT OPTION privilege type SELECT
 GRANT SELECT, INSERT ON TABLE t21 TO target
 
-
