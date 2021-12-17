@@ -175,6 +175,61 @@ func (b *indexScanBuilder) AddIndexJoin(cols opt.ColSet) {
 	}
 }
 
+// BuildNewExpr constructs the final expression by composing together the various
+// expressions that were specified by previous calls to various add methods.
+// It is similar to Build, but does not add the expression to the memo group.
+// The output expression must be used as input to another memo expression, as
+// the output expression is already interned.
+// TODO(harding): Refactor with Build to avoid code duplication.
+func (b *indexScanBuilder) BuildNewExpr() (output memo.RelExpr) {
+	// 1. Only scan.
+	output = b.f.ConstructScan(&b.scanPrivate)
+	if !b.hasConstProjections() && !b.hasInnerFilters() && !b.hasInvertedFilter() && !b.hasIndexJoin() {
+		return
+	}
+
+	// 2. Wrap input in a Project if constant projections were added.
+	if b.hasConstProjections() {
+		output = b.f.ConstructProject(output, b.constProjections, b.scanPrivate.Cols)
+		if !b.hasInnerFilters() && !b.hasInvertedFilter() && !b.hasIndexJoin() {
+			return
+		}
+	}
+
+	// 3. Wrap input in inner filter if it was added.
+	if b.hasInnerFilters() {
+		output = b.f.ConstructSelect(output, b.innerFilters)
+		if !b.hasInvertedFilter() && !b.hasIndexJoin() {
+			return
+		}
+	}
+
+	// 4. Wrap input in inverted filter if it was added.
+	if b.hasInvertedFilter() {
+		output = b.f.ConstructInvertedFilter(output, &b.invertedFilterPrivate)
+		if !b.hasIndexJoin() {
+			return
+		}
+	}
+
+	// 5. Wrap input in index join if it was added.
+	if b.hasIndexJoin() {
+		output = b.f.ConstructIndexJoin(output, &b.indexJoinPrivate)
+		if !b.hasOuterFilters() {
+			return
+		}
+	}
+
+	// 6. Wrap input in outer filter (which must exist at this point).
+	if !b.hasOuterFilters() {
+		// indexJoinDef == 0: outerFilters == 0 handled by #1-4 above.
+		// indexJoinDef != 0: outerFilters == 0 handled by #5 above.
+		panic(errors.AssertionFailedf("outer filter cannot be 0 at this point"))
+	}
+	output = b.f.ConstructSelect(output, b.outerFilters)
+	return
+}
+
 // Build constructs the final memo expression by composing together the various
 // expressions that were specified by previous calls to various add methods.
 func (b *indexScanBuilder) Build(grp memo.RelExpr) {
