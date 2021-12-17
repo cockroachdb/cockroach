@@ -39,10 +39,10 @@ pkg/sql/catalog/descpb/structured.go | `MutationID`
 pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/sql/sem/tree/table_ref.go | `ID`
 pkg/sql/sqlliveness/sqlliveness.go | `SessionID`
-pkg/storage/enginepb/mvcc.go | `TxnEpoch`
-pkg/storage/enginepb/mvcc.go | `TxnSeq`
 pkg/storage/enginepb/mvcc3.go | `*MVCCStats`
 pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
+pkg/storage/enginepb/mvcc.go | `TxnEpoch`
+pkg/storage/enginepb/mvcc.go | `TxnSeq`
 pkg/util/hlc/timestamp.go | `ClockTimestamp`
 pkg/util/hlc/timestamp.go | `LegacyTimestamp`
 pkg/util/hlc/timestamp.go | `Timestamp`
