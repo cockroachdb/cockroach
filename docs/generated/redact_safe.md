@@ -43,6 +43,7 @@ pkg/storage/enginepb/mvcc.go | `TxnEpoch`
 pkg/storage/enginepb/mvcc.go | `TxnSeq`
 pkg/storage/enginepb/mvcc3.go | `*MVCCStats`
 pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
+pkg/streaming/utils.go | `StreamID`
 pkg/util/hlc/timestamp.go | `ClockTimestamp`
 pkg/util/hlc/timestamp.go | `LegacyTimestamp`
 pkg/util/hlc/timestamp.go | `Timestamp`
