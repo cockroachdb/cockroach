@@ -8,9 +8,9 @@ echo "File | Type"; echo "--|--"
 git grep --recurse-submodules -n '^func \(.*\) SafeValue\(\)' | \
     grep -v '^vendor/github.com/cockroachdb/redact' | \
     sed -E -e 's/^([^:]*):[0-9]+:func \(([^ ]* )?(.*)\) SafeValue.*$$/\1 | \`\3\`/g' | \
-    sort
+    LC_ALL=C sort
 git grep --recurse-submodules -n 'redact\.RegisterSafeType' | \
     grep -vE '^([^:]*):[0-9]+:[ 	]*//' | \
     grep -v '^vendor/github.com/cockroachdb/redact' | \
     sed -E -e 's/^([^:]*):[0-9]+:.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' | \
-    sort
+    LC_ALL=C sort
