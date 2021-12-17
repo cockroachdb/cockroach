@@ -1706,6 +1706,9 @@ SELECT description
 				"TRIGGER": func(withGrantOpt bool) (tree.Datum, error) {
 					return hasPrivilege(ctx, specifier, user, privilege.CREATE, withGrantOpt)
 				},
+				"RULE": func(withGrantOpt bool) (tree.Datum, error) {
+					return hasPrivilege(ctx, specifier, user, privilege.RULE, withGrantOpt)
+				},
 			})
 		},
 	),
