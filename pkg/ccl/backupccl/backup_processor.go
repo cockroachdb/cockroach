@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/kr/pretty"
 )
 
 var backupOutputTypes = []*types.T{}
@@ -534,7 +535,7 @@ func runBackupProcessor(
 			err := sink.Close()
 			err = errors.CombineErrors(storage.Close(), err)
 			if err != nil {
-				log.Warningf(ctx, "failed to close backup sink(s): %+v", err)
+				log.Warningf(ctx, "failed to close backup sink(s): % #v", pretty.Formatter(err))
 			}
 		}()
 
@@ -650,6 +651,7 @@ func (s *sstSink) flushFile(ctx context.Context) error {
 		return err
 	}
 	if err := s.out.Close(); err != nil {
+		log.Warningf(ctx, "failed to close write in sstSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
 	s.outName = ""

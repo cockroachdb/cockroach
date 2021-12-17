@@ -122,6 +122,7 @@ go_library(
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//types",
         "@com_github_gorhill_cronexpr//:cronexpr",
+        "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],
