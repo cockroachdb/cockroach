@@ -179,9 +179,16 @@ func NewBaseDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDe
 func (p *PrivilegeDescriptor) ValidateGrantPrivileges(
 	user security.SQLUsername, privList privilege.List, isGrant bool,
 ) error {
+	code := pgcode.WarningPrivilegeNotGranted
+	if !isGrant {
+		code = pgcode.WarningPrivilegeNotRevoked
+	}
+
 	userPriv, exists := p.FindUser(user)
 	if !exists {
-		return nil
+		return pgerror.Newf(code,
+			"missing WITH GRANT OPTION privilege on %s", privList.String(),
+		)
 	}
 
 	// User has ALL WITH GRANT OPTION so they can grant anything.
@@ -191,10 +198,6 @@ func (p *PrivilegeDescriptor) ValidateGrantPrivileges(
 
 	for _, priv := range privList {
 		if userPriv.WithGrantOption&priv.Mask() == 0 {
-			code := pgcode.WarningPrivilegeNotGranted
-			if !isGrant {
-				code = pgcode.WarningPrivilegeNotRevoked
-			}
 			return pgerror.Newf(code,
 				"missing WITH GRANT OPTION privilege type %s", priv.String())
 		}
