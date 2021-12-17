@@ -1888,6 +1888,8 @@ SELECT description
 				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
 				"TRIGGER":                      {privilege.CREATE, false},
 				"TRIGGER WITH GRANT OPTION":    {privilege.CREATE, true},
+				"RULE":                         {privilege.RULE, false},
+				"RULE WITH GRANT OPTION":       {privilege.RULE, true},
 			})
 			if err != nil {
 				return nil, err
