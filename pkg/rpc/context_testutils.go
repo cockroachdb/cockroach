@@ -45,9 +45,9 @@ type ContextTestingKnobs struct {
 	// the given amount of milliseconds on every network write.
 	ArtificialLatencyMap map[string]int
 
-	// ClusterID initializes the Context's ClusterID container to this value if
-	// non-nil at construction time.
-	ClusterID *uuid.UUID
+	// StorageClusterID initializes the Context's StorageClusterID container to
+	// this value if non-nil at construction time.
+	StorageClusterID *uuid.UUID
 }
 
 // NewInsecureTestingContext creates an insecure rpc Context suitable for tests.
@@ -59,13 +59,14 @@ func NewInsecureTestingContext(
 }
 
 // NewInsecureTestingContextWithClusterID creates an insecure rpc Context
-// suitable for tests. The context is given the provided cluster ID.
+// suitable for tests. The context is given the provided storage cluster ID and
+// will derive a logical cluster ID from it automatically.
 func NewInsecureTestingContextWithClusterID(
-	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, clusterID uuid.UUID,
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, storageClusterID uuid.UUID,
 ) *Context {
 	return NewInsecureTestingContextWithKnobs(ctx,
 		clock, stopper, ContextTestingKnobs{
-			ClusterID: &clusterID,
+			StorageClusterID: &storageClusterID,
 		})
 }
 

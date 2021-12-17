@@ -290,8 +290,8 @@ func startConnExecutor(
 		),
 		SessionRegistry: NewSessionRegistry(),
 		NodeInfo: NodeInfo{
-			NodeID:    nodeID,
-			ClusterID: func() uuid.UUID { return uuid.UUID{} },
+			NodeID:           nodeID,
+			LogicalClusterID: func() uuid.UUID { return uuid.UUID{} },
 		},
 		Codec: keys.SystemSQLCodec,
 		DistSQLPlanner: NewDistSQLPlanner(
