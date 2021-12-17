@@ -604,8 +604,7 @@ func makeExists(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	switch typ.Family() {
-	case types.BoolFamily, types.AnyFamily:
-	default:
+	case types.AnyFamily, types.VoidFamily:
 		return nil, false
 	}
 
