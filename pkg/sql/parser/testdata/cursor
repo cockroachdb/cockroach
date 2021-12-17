@@ -1,0 +1,183 @@
+parse
+DECLARE foo cursor FOR SELECT * FROM t
+----
+DECLARE foo CURSOR FOR SELECT * FROM t -- normalized!
+DECLARE foo CURSOR FOR SELECT (*) FROM t -- fully parenthesized
+DECLARE foo CURSOR FOR SELECT * FROM t -- literals removed
+DECLARE _ CURSOR FOR SELECT * FROM _ -- identifiers removed
+
+parse
+DECLARE foo BINARY INSENSITIVE NO SCROLL cursor FOR SELECT * FROM t
+----
+DECLARE foo BINARY INSENSITIVE NO SCROLL CURSOR FOR SELECT * FROM t -- normalized!
+DECLARE foo BINARY INSENSITIVE NO SCROLL CURSOR FOR SELECT (*) FROM t -- fully parenthesized
+DECLARE foo BINARY INSENSITIVE NO SCROLL CURSOR FOR SELECT * FROM t -- literals removed
+DECLARE _ BINARY INSENSITIVE NO SCROLL CURSOR FOR SELECT * FROM _ -- identifiers removed
+
+parse
+DECLARE foo BINARY ASENSITIVE SCROLL cursor FOR SELECT * FROM t
+----
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR FOR SELECT * FROM t -- normalized!
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR FOR SELECT (*) FROM t -- fully parenthesized
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR FOR SELECT * FROM t -- literals removed
+DECLARE _ BINARY ASENSITIVE SCROLL CURSOR FOR SELECT * FROM _ -- identifiers removed
+
+parse
+DECLARE foo BINARY ASENSITIVE SCROLL cursor WITH HOLD FOR SELECT * FROM t
+----
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR WITH HOLD FOR SELECT * FROM t -- normalized!
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR WITH HOLD FOR SELECT (*) FROM t -- fully parenthesized
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR WITH HOLD FOR SELECT * FROM t -- literals removed
+DECLARE _ BINARY ASENSITIVE SCROLL CURSOR WITH HOLD FOR SELECT * FROM _ -- identifiers removed
+
+parse
+DECLARE foo BINARY ASENSITIVE SCROLL cursor WITHOUT HOLD FOR SELECT * FROM t
+----
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR FOR SELECT * FROM t -- normalized!
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR FOR SELECT (*) FROM t -- fully parenthesized
+DECLARE foo BINARY ASENSITIVE SCROLL CURSOR FOR SELECT * FROM t -- literals removed
+DECLARE _ BINARY ASENSITIVE SCROLL CURSOR FOR SELECT * FROM _ -- identifiers removed
+
+parse
+FETCH 10 foo
+----
+FETCH 10 foo
+FETCH 10 foo -- fully parenthesized
+FETCH 10 foo -- literals removed
+FETCH 10 _ -- identifiers removed
+
+parse
+FETCH 10 FROM foo
+----
+FETCH 10 foo -- normalized!
+FETCH 10 foo -- fully parenthesized
+FETCH 10 foo -- literals removed
+FETCH 10 _ -- identifiers removed
+
+parse
+FETCH 10 IN foo
+----
+FETCH 10 foo -- normalized!
+FETCH 10 foo -- fully parenthesized
+FETCH 10 foo -- literals removed
+FETCH 10 _ -- identifiers removed
+
+parse
+FETCH NEXT foo
+----
+FETCH 1 foo -- normalized!
+FETCH 1 foo -- fully parenthesized
+FETCH 1 foo -- literals removed
+FETCH 1 _ -- identifiers removed
+
+parse
+FETCH PRIOR foo
+----
+FETCH -1 foo -- normalized!
+FETCH -1 foo -- fully parenthesized
+FETCH -1 foo -- literals removed
+FETCH -1 _ -- identifiers removed
+
+parse
+FETCH FIRST foo
+----
+FETCH FIRST foo
+FETCH FIRST foo -- fully parenthesized
+FETCH FIRST foo -- literals removed
+FETCH FIRST _ -- identifiers removed
+
+parse
+FETCH LAST foo
+----
+FETCH LAST foo
+FETCH LAST foo -- fully parenthesized
+FETCH LAST foo -- literals removed
+FETCH LAST _ -- identifiers removed
+
+parse
+FETCH RELATIVE -3 foo
+----
+FETCH RELATIVE -3 foo
+FETCH RELATIVE -3 foo -- fully parenthesized
+FETCH RELATIVE -3 foo -- literals removed
+FETCH RELATIVE -3 _ -- identifiers removed
+
+parse
+FETCH ABSOLUTE 3 foo
+----
+FETCH ABSOLUTE 3 foo
+FETCH ABSOLUTE 3 foo -- fully parenthesized
+FETCH ABSOLUTE 3 foo -- literals removed
+FETCH ABSOLUTE 3 _ -- identifiers removed
+
+parse
+FETCH ALL foo
+----
+FETCH ALL foo
+FETCH ALL foo -- fully parenthesized
+FETCH ALL foo -- literals removed
+FETCH ALL _ -- identifiers removed
+
+parse
+FETCH FORWARD foo
+----
+FETCH 1 foo -- normalized!
+FETCH 1 foo -- fully parenthesized
+FETCH 1 foo -- literals removed
+FETCH 1 _ -- identifiers removed
+
+parse
+FETCH BACKWARD foo
+----
+FETCH -1 foo -- normalized!
+FETCH -1 foo -- fully parenthesized
+FETCH -1 foo -- literals removed
+FETCH -1 _ -- identifiers removed
+
+parse
+FETCH FORWARD ALL foo
+----
+FETCH ALL foo -- normalized!
+FETCH ALL foo -- fully parenthesized
+FETCH ALL foo -- literals removed
+FETCH ALL _ -- identifiers removed
+
+parse
+FETCH BACKWARD ALL foo
+----
+FETCH BACKWARD ALL foo
+FETCH BACKWARD ALL foo -- fully parenthesized
+FETCH BACKWARD ALL foo -- literals removed
+FETCH BACKWARD ALL _ -- identifiers removed
+
+parse
+FETCH FORWARD 10 foo
+----
+FETCH 10 foo -- normalized!
+FETCH 10 foo -- fully parenthesized
+FETCH 10 foo -- literals removed
+FETCH 10 _ -- identifiers removed
+
+parse
+FETCH BACKWARD 10 foo
+----
+FETCH -10 foo -- normalized!
+FETCH -10 foo -- fully parenthesized
+FETCH -10 foo -- literals removed
+FETCH -10 _ -- identifiers removed
+
+parse
+CLOSE ALL
+----
+CLOSE ALL
+CLOSE ALL -- fully parenthesized
+CLOSE ALL -- literals removed
+CLOSE ALL -- identifiers removed
+
+parse
+CLOSE foo
+----
+CLOSE foo
+CLOSE foo -- fully parenthesized
+CLOSE foo -- literals removed
+CLOSE _ -- identifiers removed
