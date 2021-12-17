@@ -753,7 +753,8 @@ func registerSystemTable(
 		if privs == nil {
 			log.Fatalf(ctx, "No superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
-		tbl.Privileges = descpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+		//tbl.Privileges = descpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+		tbl.Privileges = descpb.NewBasePrivilegeDescriptor(security.NodeUserName())
 	}
 	for _, fn := range fns {
 		fn(&tbl)

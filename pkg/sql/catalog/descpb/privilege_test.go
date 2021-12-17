@@ -346,9 +346,9 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		return descriptor.Validate(keys.SystemDatabaseID, privilege.Table, "whatever", privilege.ReadData)
 	}
 
-	rootWrongPrivilegesErr := "user root must have exactly GRANT, SELECT " +
+	rootWrongPrivilegesErr := "user root must have at most GRANT, SELECT " +
 		`privileges on (system )?table "whatever"`
-	adminWrongPrivilegesErr := "user admin must have exactly GRANT, SELECT " +
+	adminWrongPrivilegesErr := "user admin must have at most GRANT, SELECT " +
 		`privileges on (system )?table "whatever"`
 
 	{
@@ -401,6 +401,8 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	{
 		// Invalid: root has a non-allowable privilege set.
 		descriptor := NewBasePrivilegeDescriptor(security.AdminRoleName())
+		descriptor.Grant(security.RootUserName(), privilege.List{privilege.UPDATE}, false)
+		descriptor.Grant(security.AdminRoleName(), privilege.List{privilege.UPDATE}, false)
 		if err := validate(descriptor); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}

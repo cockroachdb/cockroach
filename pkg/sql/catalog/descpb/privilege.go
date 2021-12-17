@@ -309,17 +309,18 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 	} {
 		superPriv, ok := p.FindUser(user)
 		if !ok {
-			return fmt.Errorf(
-				"user %s does not have privileges over %s",
-				user,
-				privilegeObject(parentID, objectType, objectName),
-			)
+			return nil
+			//return fmt.Errorf(
+			//	"user %s does not have privileges over %s",
+			//	user,
+			//	privilegeObject(parentID, objectType, objectName),
+			//)
 		}
 
-		// The super users must match the allowed privilege set exactly.
-		if superPriv.Privileges != allowedSuperuserPrivileges.ToBitField() {
+		// The super users must have at most the allowed privilege set.
+		if (superPriv.Privileges | allowedSuperuserPrivileges.ToBitField()) != allowedSuperuserPrivileges.ToBitField() {
 			return fmt.Errorf(
-				"user %s must have exactly %s privileges on %s",
+				"user %s must have at most %s privileges on %s",
 				user,
 				allowedSuperuserPrivileges,
 				privilegeObject(parentID, objectType, objectName),
