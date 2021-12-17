@@ -140,6 +140,7 @@ func (s *Tenant) LookupTableByName(
 					CommonLookupFlags: tree.CommonLookupFlags{
 						Required:       true,
 						IncludeOffline: true,
+						AvoidLeased:    true,
 					},
 				},
 			)
@@ -164,6 +165,7 @@ func (s *Tenant) LookupDatabaseByName(
 				tree.DatabaseLookupFlags{
 					Required:       true,
 					IncludeOffline: true,
+					AvoidLeased:    true,
 				},
 			)
 			if err != nil {
