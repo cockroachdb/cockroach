@@ -62,6 +62,17 @@ SELECT p, j, k FROM test_upsert ORDER BY p
 pk1  val2  regress
 pk2  val3  def
 
+# If there are no explicit target columns, UPSERT sets all columns to their
+# DEFAULT value. Therefore, the ON UPDATE value is not used. See #73984.
+statement ok
+UPSERT INTO test_upsert VALUES ('pk1', 'val20'), ('pk2', 'val30')
+
+query TTT
+SELECT p, j, k FROM test_upsert ORDER BY p
+----
+pk1  val20  def
+pk2  val30  def
+
 # ON UPDATE usage by running ALTER TABLE
 subtest OnUpdateAlterTable
 
