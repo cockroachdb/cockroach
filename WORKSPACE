@@ -370,6 +370,7 @@ register_toolchains(
     "//build/toolchains:cross_linux_arm_toolchain",
     "//build/toolchains:cross_macos_toolchain",
     "//build/toolchains:cross_windows_toolchain",
+    "//build/toolchains:dev_darwin_x86_64_toolchain",
 )
 
 http_archive(

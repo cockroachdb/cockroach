@@ -37,7 +37,7 @@ build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch
 build:crosslinuxarm --config=cross
 
 # developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
-build:devdarwinx86_64 --crosstool_top=@toolchain_dev_darwin_x86-64//:suite
+build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
 # NOTE(ricky): This is consumed in `BUILD` files (see
 # `build/toolchains/BUILD.bazel`).
 build:devdarwinx86_64 --config=dev
