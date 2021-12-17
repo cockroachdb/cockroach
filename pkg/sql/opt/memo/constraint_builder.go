@@ -176,20 +176,21 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
-				if i == 0 {
+			// Normalize the like pattern to a RE
+			pattern := tree.LikeEscape(string(s))
+			if re, err := regexp.Compile(pattern); err == nil {
+				prefix, complete := re.LiteralPrefix()
+				if complete {
+					return cb.eqSpan(col, tree.NewDString(prefix)), true
+				}
+				if prefix == "" {
 					// Mask starts with _ or %.
 					return unconstrained, false
 				}
-				c := cb.makeStringPrefixSpan(col, string(s[:i]))
-				// A mask like ABC% is equivalent to restricting the prefix to ABC.
-				// A mask like ABC%Z requires restricting the prefix, but is a stronger
-				// condition.
-				tight := (i == len(s)-1) && s[i] == '%'
-				return c, tight
+				c := cb.makeStringPrefixSpan(col, prefix)
+				// If it ends in .* its tight.
+				return c, strings.HasSuffix(pattern, ".*")
 			}
-			// No wildcard characters, this is an equality.
-			return cb.eqSpan(col, &s), true
 		}
 
 	case opt.SimilarToOp:

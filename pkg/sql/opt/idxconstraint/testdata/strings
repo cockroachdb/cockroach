@@ -1,4 +1,66 @@
 index-constraints vars=(a string) index=a
+a LIKE 'ABC'
+----
+[/'ABC' - /'ABC']
+
+# a backslash that isn't escaping anything is just removed from pattern
+index-constraints vars=(a string) index=a
+a LIKE '\aABC%'
+----
+[/'aABC' - /'aABD')
+
+# a backslash that isn't escaping anything is just removed from pattern
+index-constraints vars=(a string) index=a
+a LIKE 'A\BC%'
+----
+[/'ABC' - /'ABD')
+
+# punt on ESCAPE clauses
+index-constraints vars=(a string) index=a
+a LIKE '\aABC%' ESCAPE '|'
+----
+[ - ]
+Remaining filter: like_escape(a, e'\\aABC%', '|')
+
+# punt on wildcard at beginning
+index-constraints vars=(a string) index=a
+a LIKE '%ABC'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%ABC'
+
+# punt on wildcard at beginning
+index-constraints vars=(a string) index=a
+a LIKE '_ABC'
+----
+(/NULL - ]
+Remaining filter: a LIKE '_ABC'
+
+# a backslash that is escaping a wildcard becomes equality
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\%'
+----
+[/'ABC%' - /'ABC%']
+
+# a backslash that is escaping a wildcard becomes equality
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\_'
+----
+[/'ABC_' - /'ABC_']
+
+# a backslash that is escaping a wildcard becomes equality
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\_Z'
+----
+[/'ABC_Z' - /'ABC_Z']
+
+# backslash terminator is okay
+index-constraints vars=(a string) index=a
+a LIKE 'ABC\'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(a string) index=a
 a LIKE 'ABC%'
 ----
 [/'ABC' - /'ABD')
@@ -59,6 +121,18 @@ a SIMILAR TO 'ABC.*Z'
 ----
 [/'ABC' - /'ABD')
 Remaining filter: a SIMILAR TO 'ABC.*Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC%Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC%Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC_Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC_Z'
 
 index-constraints vars=(a string) index=(a)
 a SIMILAR TO 'ABC'

@@ -280,21 +280,23 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
-				if i == 0 {
+			// Normalize the like pattern to a RE
+			pattern := tree.LikeEscape(string(s))
+			if re, err := regexp.Compile(pattern); err == nil {
+				prefix, complete := re.LiteralPrefix()
+				if complete {
+					c.eqSpan(offset, tree.NewDString(prefix), out)
+					return true
+				}
+				if prefix == "" {
 					// Mask starts with _ or %.
 					c.unconstrained(offset, out)
 					return false
 				}
-				c.makeStringPrefixSpan(offset, string(s[:i]), out)
-				// A mask like ABC% is equivalent to restricting the prefix to ABC.
-				// A mask like ABC%Z requires restricting the prefix, but is a stronger
-				// condition.
-				return (i == len(s)-1) && s[i] == '%'
+				c.makeStringPrefixSpan(offset, prefix, out)
+				// If it ends in .* its tight but if there's stuff after the .* we still need a filter.
+				return strings.HasSuffix(pattern, ".*")
 			}
-			// No wildcard characters, this is an equality.
-			c.eqSpan(offset, &s, out)
-			return true
 		}
 
 	case opt.SimilarToOp:
