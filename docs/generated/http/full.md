@@ -5338,7 +5338,6 @@ DrainRequest instructs the receiving node to drain.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| pre201_marker | [int32](#cockroach.server.serverpb.DrainRequest-int32) | repeated | pre_201_marker represents a field that clients stopped using in 20.1. It's maintained to reject requests from such clients, since they're not setting other required fields. | [reserved](#support-status) |
 | shutdown | [bool](#cockroach.server.serverpb.DrainRequest-bool) |  | When true, terminates the process after the server has started draining. Setting both shutdown and do_drain to false causes the request to only operate as a probe. Setting do_drain to false and shutdown to true causes the server to shut down immediately without first draining. | [reserved](#support-status) |
 | do_drain | [bool](#cockroach.server.serverpb.DrainRequest-bool) |  | When true, perform the drain phase. See the comment above on shutdown for an explanation of the interaction between the two. do_drain is also implied by a non-nil deprecated_probe_indicator. | [reserved](#support-status) |
 
