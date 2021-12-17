@@ -18,6 +18,7 @@ go_library(
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/gce",
         "//pkg/util/flagutil",
         "@com_github_cockroachdb_errors//:errors",

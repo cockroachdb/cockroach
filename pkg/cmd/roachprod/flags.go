@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	// Do not populate providerOptsContainer here as we need to call initProviders() first.
+	// Do not populate providerOptsContainer here as we need to call InitProivders() first.
 	providerOptsContainer vm.ProviderOptionsContainer
 	pprofOpts             roachprod.PprofOpts
 	numNodes              int

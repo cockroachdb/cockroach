@@ -53,11 +53,12 @@ func VMDir(clusterName string, nodeIdx int) string {
 }
 
 // Init initializes the Local provider and registers it into vm.Providers.
-func Init(storage VMStorage) {
+func Init(storage VMStorage) error {
 	vm.Providers[ProviderName] = &Provider{
 		clusters: make(cloud.Clusters),
 		storage:  storage,
 	}
+	return nil
 }
 
 // AddCluster adds the metadata of a local cluster; used when loading the saved
@@ -132,7 +133,7 @@ func (p *Provider) CleanSSH() error {
 }
 
 // ConfigSSH is part of the vm.Provider interface.  This implementation is a no-op.
-func (p *Provider) ConfigSSH() error {
+func (p *Provider) ConfigSSH(zones []string) error {
 	return nil
 }
 

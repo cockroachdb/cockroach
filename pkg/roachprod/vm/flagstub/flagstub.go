@@ -37,7 +37,7 @@ func (p *provider) CleanSSH() error {
 }
 
 // ConfigSSH implements vm.Provider and is a no-op.
-func (p *provider) ConfigSSH() error {
+func (p *provider) ConfigSSH(zones []string) error {
 	return nil
 }
 

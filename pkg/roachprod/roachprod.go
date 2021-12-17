@@ -294,12 +294,6 @@ func Sync() (*cloud.Cloud, error) {
 		return nil, err
 	}
 
-	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
-		return p.ConfigSSH()
-	}); err != nil {
-		return nil, err
-	}
-
 	return cld, nil
 }
 
@@ -472,7 +466,7 @@ func Reset(clusterName string) error {
 }
 
 // SetupSSH sets up the keys and host keys for the vms in the cluster.
-func SetupSSH(clusterName string) error {
+func SetupSSH(clusterName string, zones map[string][]string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -480,6 +474,14 @@ func SetupSSH(clusterName string) error {
 	if err != nil {
 		return err
 	}
+
+	// Congigure SSH for machines in the zones we operate on.
+	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
+		return p.ConfigSSH(zones[p.Name()])
+	}); err != nil {
+		return err
+	}
+
 	cloudCluster, ok := cld.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("could not find %s in list of cluster", clusterName)
@@ -1131,7 +1133,10 @@ func Create(
 		// No need for ssh for local clusters.
 		return LoadClusters()
 	}
-	return SetupSSH(clusterName)
+	zonesMap := make(map[string][]string)
+	// Only adding aws zones because only aws.ConfigSSH uses it.
+	zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
+	return SetupSSH(clusterName, zonesMap)
 }
 
 // GC garbage-collects expired clusters and unused SSH keypairs in AWS.
@@ -1184,11 +1189,34 @@ func StageURL(applicationName, version, stageOS string) ([]*url.URL, error) {
 	return urls, nil
 }
 
-// InitProviders initializes the vm.Providers.
-func InitProviders() {
-	// Initialize providers.
-	aws.Init()
-	gce.Init()
-	azure.Init()
-	local.Init(localVMStorage{})
+// InitProviders initializes providers and returns a map that indicates
+// if a provider is active or inactive.
+func InitProviders() map[string]string {
+	providersState := make(map[string]string)
+
+	if err := aws.Init(); err != nil {
+		providersState[aws.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[aws.ProviderName] = "Active"
+	}
+
+	if err := gce.Init(); err != nil {
+		providersState[gce.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[gce.ProviderName] = "Active"
+	}
+
+	if err := azure.Init(); err != nil {
+		providersState[azure.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[azure.ProviderName] = "Active"
+	}
+
+	if err := local.Init(localVMStorage{}); err != nil {
+		providersState[local.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[local.ProviderName] = "Active"
+	}
+
+	return providersState
 }
