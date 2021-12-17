@@ -5574,14 +5574,20 @@ func TestElectionAfterRestart(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForFullReplication())
 
-		for _, row := range sqlutils.MakeSQLRunner(tc.Conns[0]).QueryStr(
-			t, `SELECT range_id FROM crdb_internal.ranges_no_leases WHERE table_name = 't';`,
-		) {
-			n, err := strconv.Atoi(row[0])
-			require.NoError(t, err)
-			rangeIDs[roachpb.RangeID(n)] = 0
-		}
-		require.Len(t, rangeIDs, numRanges)
+		testutils.SucceedsSoon(t, func() error {
+			for _, row := range sqlutils.MakeSQLRunner(tc.Conns[0]).QueryStr(
+				t, `SELECT range_id FROM crdb_internal.ranges_no_leases WHERE table_name = 't';`,
+			) {
+				n, err := strconv.Atoi(row[0])
+				require.NoError(t, err)
+				rangeIDs[roachpb.RangeID(n)] = 0
+			}
+			if len(rangeIDs) != numRanges {
+				return errors.Newf("expected %d ranges, found %d", numRanges, len(rangeIDs))
+			}
+			return nil
+		})
+
 		t.Logf("created %d ranges", numRanges)
 
 		// Make sure that the ranges have all followers fully caught up. Otherwise,
