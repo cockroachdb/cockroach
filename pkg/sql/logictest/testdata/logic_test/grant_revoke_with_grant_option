@@ -333,7 +333,9 @@ d               testuser   ALL
 # switch to testuser2
 user testuser2
 
-statement error pq: user testuser2 does not have GRANT privilege on database d
+# Make sure that non-admin roles do not have CONNECT grant option inherited
+# from the public role.
+statement error user testuser2 missing WITH GRANT OPTION privilege on CONNECT
 GRANT CONNECT ON DATABASE d TO target WITH GRANT OPTION
 
 # test types
