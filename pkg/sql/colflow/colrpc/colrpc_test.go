@@ -117,9 +117,24 @@ func makeMockFlowStreamRPCLayer() mockFlowStreamRPCLayer {
 func handleStream(
 	ctx context.Context, inbox *Inbox, stream flowStreamServer, doneFn func(),
 ) chan error {
+	return handleStreamWithFlowCtxDone(ctx, inbox, stream, nil /* flowCtxDone */, doneFn)
+}
+
+// handleStreamWithFlowCtxDone is the same as handleStream but also takes in
+// an optional Done channel for the flow context of the inbox host.
+func handleStreamWithFlowCtxDone(
+	ctx context.Context,
+	inbox *Inbox,
+	stream flowStreamServer,
+	flowCtxDone <-chan struct{},
+	doneFn func(),
+) chan error {
 	handleStreamErrCh := make(chan error, 1)
+	if flowCtxDone == nil {
+		flowCtxDone = make(<-chan struct{})
+	}
 	go func() {
-		handleStreamErrCh <- inbox.RunWithStream(ctx, stream)
+		handleStreamErrCh <- inbox.RunWithStream(ctx, stream, flowCtxDone)
 		if doneFn != nil {
 			doneFn()
 		}
@@ -148,12 +163,9 @@ func TestOutboxInbox(t *testing.T) {
 		// streamCtxCancel models a scenario in which the Outbox host cancels
 		// the flow.
 		streamCtxCancel
-		// flowCtxCancel models a scenario in which the flow context of the
-		// Inbox host is canceled which is an ungraceful shutdown.
-		flowCtxCancel
-		// readerCtxCancel models a scenario in which the consumer of the Inbox
-		// cancels the context while the host's flow context is not canceled.
-		// This is considered a graceful termination.
+		// readerCtxCancel models a scenario in which the Inbox host cancels the
+		// flow. This is considered a graceful termination, and the flow context
+		// isn't canceled.
 		readerCtxCancel
 		// transportBreaks models a scenario in which the transport breaks.
 		transportBreaks
@@ -163,19 +175,16 @@ func TestOutboxInbox(t *testing.T) {
 		cancellationScenarioName string
 	)
 	switch randVal := rng.Float64(); {
-	case randVal <= 0.2:
+	case randVal <= 0.25:
 		cancellationScenario = noCancel
 		cancellationScenarioName = "noCancel"
-	case randVal <= 0.4:
+	case randVal <= 0.50:
 		cancellationScenario = streamCtxCancel
 		cancellationScenarioName = "streamCtxCancel"
-	case randVal <= 0.6:
-		cancellationScenario = flowCtxCancel
-		cancellationScenarioName = "flowCtxCancel"
-	case randVal <= 0.8:
+	case randVal <= 0.75:
 		cancellationScenario = readerCtxCancel
 		cancellationScenarioName = "readerCtxCancel"
-	default:
+	case randVal <= 1:
 		cancellationScenario = transportBreaks
 		cancellationScenarioName = "transportBreaks"
 	}
@@ -204,10 +213,10 @@ func TestOutboxInbox(t *testing.T) {
 			inputBuffer = colexecop.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races).
-			// These sleep variables enable a sleep for up to five milliseconds
-			// with a .5 probability before cancellation.
-			sleepBeforeCancellation = rng.Float64() <= 0.5
-			sleepTime               = time.Microsecond * time.Duration(rng.Intn(5000))
+			// These sleep variables enable a sleep for up to half a millisecond
+			// with a .25 probability before cancellation.
+			sleepBeforeCancellation = rng.Float64() <= 0.25
+			sleepTime               = time.Microsecond * time.Duration(rng.Intn(500))
 			// stopwatch is used to measure how long it takes for the outbox to
 			// exit once the transport broke.
 			stopwatch                    = timeutil.NewStopWatch()
@@ -290,8 +299,7 @@ func TestOutboxInbox(t *testing.T) {
 			wg.Done()
 		}()
 
-		inboxFlowCtx, inboxFlowCtxCancelFn := context.WithCancel(context.Background())
-		readerCtx, readerCancelFn := context.WithCancel(inboxFlowCtx)
+		readerCtx, readerCancelFn := context.WithCancel(context.Background())
 		wg.Add(1)
 		go func() {
 			if sleepBeforeCancellation {
@@ -301,8 +309,6 @@ func TestOutboxInbox(t *testing.T) {
 			case noCancel:
 			case streamCtxCancel:
 				streamCancelFn()
-			case flowCtxCancel:
-				inboxFlowCtxCancelFn()
 			case readerCtxCancel:
 				readerCancelFn()
 			case transportBreaks:
@@ -315,10 +321,7 @@ func TestOutboxInbox(t *testing.T) {
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(readerCtx)
-		inbox, err := NewInboxWithFlowCtxDone(
-			colmem.NewAllocator(readerCtx, &inboxMemAcc, coldata.StandardColumnFactory),
-			typs, execinfrapb.StreamID(0), inboxFlowCtx.Done(),
-		)
+		inbox, err := NewInbox(colmem.NewAllocator(readerCtx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -417,28 +420,10 @@ func TestOutboxInbox(t *testing.T) {
 			// which prompts the watchdog goroutine of the outbox to cancel the
 			// flow.
 			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 1)
-		case flowCtxCancel:
-			// If the flow context of the Inbox host gets canceled, it is
-			// treated as an ungraceful termination of the stream, so we expect
-			// an error from the stream handler.
-			require.True(t, errors.Is(streamHandlerErr, cancelchecker.QueryCanceledError))
-			// The Inbox propagates this cancellation on its host.
-			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
-
-			// In the production setup, the watchdog goroutine of the outbox
-			// would receive non-io.EOF error indicating an ungraceful
-			// completion of the FlowStream RPC call which would prompt the
-			// outbox to cancel the whole flow.
-			//
-			// However, because we're using a mock server, the propagation
-			// doesn't take place, so the flow context on the outbox side should
-			// not be canceled.
-			require.True(t, atomic.LoadUint32(&flowCtxCanceled) == 0)
-			require.True(t, atomic.LoadUint32(&outboxCtxCanceled) == 1)
 		case readerCtxCancel:
-			// If the reader context gets canceled while the inbox's host flow
-			// context doesn't, it is treated as a graceful termination of the
-			// stream, so we expect no error from the stream handler.
+			// If the reader context gets canceled, it is treated as a graceful
+			// termination of the stream, so we expect no error from the stream
+			// handler.
 			require.Nil(t, streamHandlerErr)
 			// The Inbox should still propagate this error upwards.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
@@ -520,17 +505,17 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	inboxHostCtx, inboxHostCtxCancel := context.WithCancel(context.Background())
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(inboxHostCtx)
-	inbox, err := NewInboxWithFlowCtxDone(
-		colmem.NewAllocator(inboxHostCtx, &inboxMemAcc, coldata.StandardColumnFactory),
-		typs, execinfrapb.StreamID(0), inboxHostCtx.Done(),
-	)
+	inbox, err := NewInbox(colmem.NewAllocator(inboxHostCtx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	// Spawn up the stream handler (a separate goroutine) for the server side
 	// of the FlowStream RPC.
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
-	streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
+	streamHandlerErrCh := handleStreamWithFlowCtxDone(
+		serverStream.Context(), inbox, serverStream,
+		inboxHostCtx.Done(), func() { close(serverStreamNotification.Donec) },
+	)
 
 	// Here is the meat of the test - the inbox is never initialized, and,
 	// instead, the inbox host's flow context is canceled after some delay.
