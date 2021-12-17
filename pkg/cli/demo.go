@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -229,7 +230,9 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 		},
 		getAdminClient,
-		drainAndShutdown,
+		func(ctx context.Context, ac serverpb.AdminClient) error {
+			return drainAndShutdown(ctx, ac, "local" /* targetNode */)
+		},
 	)
 	if err != nil {
 		c.Close(ctx)
