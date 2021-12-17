@@ -393,6 +393,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
 
+	registry.AddMetric(base.LicenseTTL)
+	err = base.UpdateMetricOnLicenseChange(ctx, cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{}, stopper)
+	if err != nil {
+		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
+	}
+
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
 	// graceful server shutdown
