@@ -778,6 +778,7 @@ func (r *Replica) applySnapshot(
 			// here would be simpler but this works well enough.
 			d := inSnap.placeholder.Desc()
 			from, to = d.StartKey, d.EndKey
+			defer r.store.assertNoHole(ctx, from, to)()
 		} else {
 			// For snapshots to existing replicas, from and to usually match (i.e.
 			// nothing is asserted) but if the snapshot spans a merge then we're
@@ -785,9 +786,8 @@ func (r *Replica) applySnapshot(
 			// replicas to this replica seamlessly.
 			d := r.Desc()
 			from, to = d.EndKey, inSnap.Desc.EndKey
+			defer r.store.assertNoHole(ctx, from, to)()
 		}
-
-		defer r.store.assertNoHole(ctx, from, to)()
 	}
 	defer func() {
 		if e := recover(); e != nil {

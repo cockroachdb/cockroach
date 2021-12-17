@@ -12,12 +12,52 @@ package kvserver
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+func (s *Store) assertNoHole(ctx context.Context, from, to roachpb.RKey) func() {
+	caller := string(debug.Stack())
+	if from.Equal(roachpb.RKeyMax) {
+		// There will be a hole to the right of RKeyMax but it's just the end of
+		// the addressable keyspace.
+		return func() {}
+	}
+	if from.Equal(to) {
+		// Nothing to do.
+		return func() {}
+	}
+	// Check that there's never a gap to the right of the pre-merge LHS in replicasByKey.
+	ctx, stopAsserting := context.WithCancel(ctx)
+	_ = s.stopper.RunAsyncTask(ctx, "force-assertion", func(ctx context.Context) {
+		for ctx.Err() == nil {
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				var it replicaOrPlaceholder
+				if err := s.mu.replicasByKey.VisitKeyRange(
+					context.Background(), from, to, AscendingKeyOrder,
+					func(ctx context.Context, iit replicaOrPlaceholder) error {
+						it = iit
+						return iterutil.StopIteration()
+					}); err != nil {
+					log.Fatalf(ctx, "%v", err)
+				}
+				if it.item != nil {
+					return
+				}
+				log.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
+			}()
+		}
+	})
+	return stopAsserting
+}
 
 // MergeRange expands the left-hand replica, leftRepl, to absorb the right-hand
 // replica, identified by rightDesc. freezeStart specifies the time at which the
