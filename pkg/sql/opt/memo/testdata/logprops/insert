@@ -45,31 +45,26 @@ insert abcde
       │    ├── fd: ()-->(14,16)
       │    ├── prune: (10,14-16)
       │    ├── interesting orderings: (+10 opt(14,16))
-      │    ├── project
-      │    │    ├── columns: y:10(int!null)
+      │    ├── limit
+      │    │    ├── columns: y:10(int!null) z:11(float)
+      │    │    ├── internal-ordering: +10,+11
       │    │    ├── cardinality: [0 - 10]
-      │    │    ├── prune: (10)
-      │    │    ├── interesting orderings: (+10)
-      │    │    └── limit
-      │    │         ├── columns: y:10(int!null) z:11(float)
-      │    │         ├── internal-ordering: +10,+11
-      │    │         ├── cardinality: [0 - 10]
-      │    │         ├── interesting orderings: (+10,+11)
-      │    │         ├── sort
-      │    │         │    ├── columns: y:10(int!null) z:11(float)
-      │    │         │    ├── ordering: +10,+11
-      │    │         │    ├── limit hint: 10.00
-      │    │         │    ├── prune: (10,11)
-      │    │         │    └── project
-      │    │         │         ├── columns: y:10(int!null) z:11(float)
-      │    │         │         ├── prune: (10,11)
-      │    │         │         └── scan xyz
-      │    │         │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-      │    │         │              ├── key: (9)
-      │    │         │              ├── fd: (9)-->(10-13)
-      │    │         │              ├── prune: (9-13)
-      │    │         │              └── interesting orderings: (+9)
-      │    │         └── const: 10 [type=int]
+      │    │    ├── interesting orderings: (+10,+11)
+      │    │    ├── sort
+      │    │    │    ├── columns: y:10(int!null) z:11(float)
+      │    │    │    ├── ordering: +10,+11
+      │    │    │    ├── limit hint: 10.00
+      │    │    │    ├── prune: (10,11)
+      │    │    │    └── project
+      │    │    │         ├── columns: y:10(int!null) z:11(float)
+      │    │    │         ├── prune: (10,11)
+      │    │    │         └── scan xyz
+      │    │    │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+      │    │    │              ├── key: (9)
+      │    │    │              ├── fd: (9)-->(10-13)
+      │    │    │              ├── prune: (9-13)
+      │    │    │              └── interesting orderings: (+9)
+      │    │    └── const: 10 [type=int]
       │    └── projections
       │         ├── const: 10 [as=c_default:14, type=int]
       │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
@@ -118,31 +113,26 @@ project
            │    ├── fd: ()-->(14,16)
            │    ├── prune: (10,14-16)
            │    ├── interesting orderings: (+10 opt(14,16))
-           │    ├── project
-           │    │    ├── columns: y:10(int!null)
+           │    ├── limit
+           │    │    ├── columns: y:10(int!null) z:11(float)
+           │    │    ├── internal-ordering: +10,+11
            │    │    ├── cardinality: [0 - 10]
-           │    │    ├── prune: (10)
-           │    │    ├── interesting orderings: (+10)
-           │    │    └── limit
-           │    │         ├── columns: y:10(int!null) z:11(float)
-           │    │         ├── internal-ordering: +10,+11
-           │    │         ├── cardinality: [0 - 10]
-           │    │         ├── interesting orderings: (+10,+11)
-           │    │         ├── sort
-           │    │         │    ├── columns: y:10(int!null) z:11(float)
-           │    │         │    ├── ordering: +10,+11
-           │    │         │    ├── limit hint: 10.00
-           │    │         │    ├── prune: (10,11)
-           │    │         │    └── project
-           │    │         │         ├── columns: y:10(int!null) z:11(float)
-           │    │         │         ├── prune: (10,11)
-           │    │         │         └── scan xyz
-           │    │         │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │         │              ├── key: (9)
-           │    │         │              ├── fd: (9)-->(10-13)
-           │    │         │              ├── prune: (9-13)
-           │    │         │              └── interesting orderings: (+9)
-           │    │         └── const: 10 [type=int]
+           │    │    ├── interesting orderings: (+10,+11)
+           │    │    ├── sort
+           │    │    │    ├── columns: y:10(int!null) z:11(float)
+           │    │    │    ├── ordering: +10,+11
+           │    │    │    ├── limit hint: 10.00
+           │    │    │    ├── prune: (10,11)
+           │    │    │    └── project
+           │    │    │         ├── columns: y:10(int!null) z:11(float)
+           │    │    │         ├── prune: (10,11)
+           │    │    │         └── scan xyz
+           │    │    │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │    │              ├── key: (9)
+           │    │    │              ├── fd: (9)-->(10-13)
+           │    │    │              ├── prune: (9-13)
+           │    │    │              └── interesting orderings: (+9)
+           │    │    └── const: 10 [type=int]
            │    └── projections
            │         ├── const: 10 [as=c_default:14, type=int]
            │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
@@ -186,17 +176,14 @@ project
            │    ├── fd: ()-->(14,16)
            │    ├── prune: (10,14-16)
            │    ├── project
-           │    │    ├── columns: y:10(int!null)
-           │    │    ├── prune: (10)
-           │    │    └── project
-           │    │         ├── columns: y:10(int!null) z:11(float)
-           │    │         ├── prune: (10,11)
-           │    │         └── scan xyz
-           │    │              ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │              ├── key: (9)
-           │    │              ├── fd: (9)-->(10-13)
-           │    │              ├── prune: (9-13)
-           │    │              └── interesting orderings: (+9)
+           │    │    ├── columns: y:10(int!null) z:11(float)
+           │    │    ├── prune: (10,11)
+           │    │    └── scan xyz
+           │    │         ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │         ├── key: (9)
+           │    │         ├── fd: (9)-->(10-13)
+           │    │         ├── prune: (9-13)
+           │    │         └── interesting orderings: (+9)
            │    └── projections
            │         ├── const: 10 [as=c_default:14, type=int]
            │         ├── function: unique_rowid [as=rowid_default:15, type=int, volatile]
@@ -240,21 +227,15 @@ insert abcde
       │    ├── key: ()
       │    ├── fd: ()-->(9-13)
       │    ├── prune: (9-13)
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:9(int!null) column2:10(int!null)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(9,10)
       │    │    ├── prune: (9,10)
-      │    │    └── values
-      │    │         ├── columns: column1:9(int!null) column2:10(int!null)
-      │    │         ├── cardinality: [1 - 1]
-      │    │         ├── key: ()
-      │    │         ├── fd: ()-->(9,10)
-      │    │         ├── prune: (9,10)
-      │    │         └── tuple [type=tuple{int, int}]
-      │    │              ├── const: 1 [type=int]
-      │    │              └── const: 2 [type=int]
+      │    │    └── tuple [type=tuple{int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
       │    └── projections
       │         ├── const: 10 [as=c_default:11, type=int]
       │         ├── function: unique_rowid [as=rowid_default:12, type=int, volatile]
@@ -298,36 +279,31 @@ project
            │    ├── fd: ()-->(10,15,17)
            │    ├── prune: (10,14-17)
            │    ├── project
-           │    │    ├── columns: y:10(int!null) int8:14(int)
+           │    │    ├── columns: int8:14(int) y:10(int!null)
            │    │    ├── immutable
            │    │    ├── fd: ()-->(10)
            │    │    ├── prune: (10,14)
-           │    │    └── project
-           │    │         ├── columns: int8:14(int) y:10(int!null)
-           │    │         ├── immutable
-           │    │         ├── fd: ()-->(10)
-           │    │         ├── prune: (10,14)
-           │    │         ├── select
-           │    │         │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │         │    ├── key: (9)
-           │    │         │    ├── fd: ()-->(10), (9)-->(11-13)
-           │    │         │    ├── prune: (9,11-13)
-           │    │         │    ├── interesting orderings: (+9 opt(10))
-           │    │         │    ├── scan xyz
-           │    │         │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
-           │    │         │    │    ├── key: (9)
-           │    │         │    │    ├── fd: (9)-->(10-13)
-           │    │         │    │    ├── prune: (9-13)
-           │    │         │    │    └── interesting orderings: (+9)
-           │    │         │    └── filters
-           │    │         │         └── eq [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
-           │    │         │              ├── variable: y:10 [type=int]
-           │    │         │              └── const: 1 [type=int]
-           │    │         └── projections
-           │    │              └── cast: INT8 [as=int8:14, type=int, outer=(11), immutable]
-           │    │                   └── plus [type=float]
-           │    │                        ├── variable: z:11 [type=float]
-           │    │                        └── const: 1.0 [type=float]
+           │    │    ├── select
+           │    │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │    │    ├── key: (9)
+           │    │    │    ├── fd: ()-->(10), (9)-->(11-13)
+           │    │    │    ├── prune: (9,11-13)
+           │    │    │    ├── interesting orderings: (+9 opt(10))
+           │    │    │    ├── scan xyz
+           │    │    │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float) xyz.crdb_internal_mvcc_timestamp:12(decimal) xyz.tableoid:13(oid)
+           │    │    │    │    ├── key: (9)
+           │    │    │    │    ├── fd: (9)-->(10-13)
+           │    │    │    │    ├── prune: (9-13)
+           │    │    │    │    └── interesting orderings: (+9)
+           │    │    │    └── filters
+           │    │    │         └── eq [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+           │    │    │              ├── variable: y:10 [type=int]
+           │    │    │              └── const: 1 [type=int]
+           │    │    └── projections
+           │    │         └── cast: INT8 [as=int8:14, type=int, outer=(11), immutable]
+           │    │              └── plus [type=float]
+           │    │                   ├── variable: z:11 [type=float]
+           │    │                   └── const: 1.0 [type=float]
            │    └── projections
            │         ├── const: 10 [as=c_default:15, type=int]
            │         ├── function: unique_rowid [as=rowid_default:16, type=int, volatile]

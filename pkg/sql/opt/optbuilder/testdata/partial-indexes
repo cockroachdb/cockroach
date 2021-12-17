@@ -103,11 +103,9 @@ insert partial_indexes
  ├── partial index put columns: partial_index_put1:9 partial_index_put2:10 partial_index_put3:11 partial_index_put4:12
  └── project
       ├── columns: partial_index_put1:9!null partial_index_put2:10!null partial_index_put3:11!null partial_index_put4:12!null column1:6!null column2:7!null column3:8!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    └── values
-      │         ├── columns: column1:6!null column2:7!null column3:8!null
-      │         └── (2, 1, 'bar')
+      │    └── (2, 1, 'bar')
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:9]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:10]
@@ -134,11 +132,9 @@ insert ambig
       │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null rowid_default:10
       │    ├── project
       │    │    ├── columns: rowid_default:10 column1:7!null column2:8!null column3:9!null
-      │    │    ├── project
+      │    │    ├── values
       │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
-      │    │    │    └── values
-      │    │    │         ├── columns: column1:7!null column2:8!null column3:9!null
-      │    │    │         └── (1, 2, 3)
+      │    │    │    └── (1, 2, 3)
       │    │    └── projections
       │    │         └── unique_rowid() [as=rowid_default:10]
       │    └── projections
@@ -164,11 +160,9 @@ insert comp
       ├── columns: partial_index_put1:13 partial_index_put2:14 column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       ├── project
       │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    └── values
-      │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │         └── (2, 1, 'Foo')
+      │    │    └── (2, 1, 'Foo')
       │    └── projections
       │         ├── lower(column3:10) [as=d_comp:11]
       │         └── upper(column3:10) [as=e_comp:12]
@@ -195,11 +189,9 @@ insert t52546
  ├── partial index put columns: column2:7
  └── project
       ├── columns: rowid_default:8 column1:6!null column2:7!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null column2:7!null
-      │    └── values
-      │         ├── columns: column1:6!null column2:7!null
-      │         └── (1, true)
+      │    └── (1, true)
       └── projections
            └── unique_rowid() [as=rowid_default:8]
 
@@ -618,11 +610,9 @@ insert partial_indexes
       │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    ├── anti-join (hash)
       │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    ├── project
+      │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    │    └── values
-      │    │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    │         └── (2, 1, 'bar')
+      │    │    │    │    │    └── (2, 1, 'bar')
       │    │    │    │    ├── scan partial_indexes
       │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │    │    │    │    │    └── partial index predicates
@@ -818,11 +808,9 @@ insert comp
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │    │    ├── project
       │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
-      │    │    │    ├── project
+      │    │    │    ├── values
       │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    └── values
-      │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │         └── (2, 1, 'Foo')
+      │    │    │    │    └── (2, 1, 'Foo')
       │    │    │    └── projections
       │    │    │         ├── lower(column3:10) [as=d_comp:11]
       │    │    │         └── upper(column3:10) [as=e_comp:12]
@@ -1044,11 +1032,9 @@ insert uniq
       │         │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    │    ├── anti-join (hash)
       │         │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │    │    │    ├── project
+      │         │    │    │    │    ├── values
       │         │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │    │    │    │    └── values
-      │         │    │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │    │    │    │         └── (1, 1, 'bar')
+      │         │    │    │    │    │    └── (1, 1, 'bar')
       │         │    │    │    │    ├── scan uniq
       │         │    │    │    │    │    ├── columns: a:9!null b:10 c:11
       │         │    │    │    │    │    └── partial index predicates
@@ -1119,11 +1105,9 @@ insert uniq
       │         │    │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    ├── anti-join (hash)
       │         │    │         │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    ├── project
+      │         │    │         │    │    │    ├── values
       │         │    │         │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    │    └── values
-      │         │    │         │    │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-      │         │    │         │    │    │    │         └── (1, 1, 'bar')
+      │         │    │         │    │    │    │    └── (1, 1, 'bar')
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: a:9!null b:10 c:11!null
       │         │    │         │    │    │    │    ├── scan uniq
@@ -1203,11 +1187,9 @@ insert uniq
       │    ├── grouping columns: column2:7!null
       │    ├── anti-join (hash)
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    ├── project
+      │    │    ├── values
       │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    └── values
-      │    │    │         ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │         └── (1, 1, 'bar')
+      │    │    │    └── (1, 1, 'bar')
       │    │    ├── scan uniq
       │    │    │    ├── columns: a:9!null b:10 c:11
       │    │    │    └── partial index predicates
@@ -1476,11 +1458,9 @@ insert comp
       │         │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │    │    │    ├── project
       │         │    │    │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
-      │         │    │    │    │    │    ├── project
+      │         │    │    │    │    │    ├── values
       │         │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │         │    │    │    │    │    │    └── values
-      │         │    │    │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │         │    │    │    │    │    │         └── (1, 1, 'bar')
+      │         │    │    │    │    │    │    └── (1, 1, 'bar')
       │         │    │    │    │    │    └── projections
       │         │    │    │    │    │         ├── lower(column3:10) [as=d_comp:11]
       │         │    │    │    │    │         └── upper(column3:10) [as=e_comp:12]
@@ -1594,11 +1574,9 @@ insert comp
       │         │    │         │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │         │    │         │    │    │    ├── project
       │         │    │         │    │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
-      │         │    │         │    │    │    │    ├── project
+      │         │    │         │    │    │    │    ├── values
       │         │    │         │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │         │    │         │    │    │    │    │    └── values
-      │         │    │         │    │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │         │    │         │    │    │    │    │         └── (1, 1, 'bar')
+      │         │    │         │    │    │    │    │    └── (1, 1, 'bar')
       │         │    │         │    │    │    │    └── projections
       │         │    │         │    │    │    │         ├── lower(column3:10) [as=d_comp:11]
       │         │    │         │    │    │    │         └── upper(column3:10) [as=e_comp:12]
@@ -1720,11 +1698,9 @@ insert comp
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11 e_comp:12
       │    │    ├── project
       │    │    │    ├── columns: d_comp:11 e_comp:12 column1:8!null column2:9!null column3:10!null
-      │    │    │    ├── project
+      │    │    │    ├── values
       │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    └── values
-      │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │         └── (1, 1, 'bar')
+      │    │    │    │    └── (1, 1, 'bar')
       │    │    │    └── projections
       │    │    │         ├── lower(column3:10) [as=d_comp:11]
       │    │    │         └── upper(column3:10) [as=e_comp:12]

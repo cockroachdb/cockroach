@@ -667,14 +667,12 @@ with &1 (t)
                 ├── columns: b_default:13 rowid_default:14 "?column?":12
                 ├── project
                 │    ├── columns: "?column?":12
-                │    └── project
-                │         ├── columns: "?column?":12
-                │         ├── with-scan &1 (t)
-                │         │    ├── columns: a:11
-                │         │    └── mapping:
-                │         │         └──  x.a:1 => a:11
-                │         └── projections
-                │              └── a:11 + 20 [as="?column?":12]
+                │    ├── with-scan &1 (t)
+                │    │    ├── columns: a:11
+                │    │    └── mapping:
+                │    │         └──  x.a:1 => a:11
+                │    └── projections
+                │         └── a:11 + 20 [as="?column?":12]
                 └── projections
                      ├── NULL::INT8 [as=b_default:13]
                      └── unique_rowid() [as=rowid_default:14]
@@ -1448,12 +1446,10 @@ with &2
  │         │    └── rowid_default:14 => rowid:9
  │         └── project
  │              ├── columns: rowid_default:14 column1:12!null column2:13!null
- │              ├── project
+ │              ├── values
  │              │    ├── columns: column1:12!null column2:13!null
- │              │    └── values
- │              │         ├── columns: column1:12!null column2:13!null
- │              │         ├── (1, 1)
- │              │         └── (2, 2)
+ │              │    ├── (1, 1)
+ │              │    └── (2, 2)
  │              └── projections
  │                   └── unique_rowid() [as=rowid_default:14]
  └── with &3 (cte)
@@ -1675,11 +1671,9 @@ explain
       │         │    └── rowid_default:6 => rowid:2
       │         └── project
       │              ├── columns: rowid_default:6 column1:5!null
-      │              ├── project
+      │              ├── values
       │              │    ├── columns: column1:5!null
-      │              │    └── values
-      │              │         ├── columns: column1:5!null
-      │              │         └── (1,)
+      │              │    └── (1,)
       │              └── projections
       │                   └── unique_rowid() [as=rowid_default:6]
       └── with-scan &1 (foo)
@@ -1710,14 +1704,12 @@ with &1 (b)
            ├── columns: rowid_default:8 w:7!null
            ├── project
            │    ├── columns: w:7!null
-           │    └── project
-           │         ├── columns: w:7!null
-           │         ├── with-scan &1 (b)
-           │         │    ├── columns: z:6!null
-           │         │    └── mapping:
-           │         │         └──  column1:5 => z:6
-           │         └── projections
-           │              └── z:6 + 1 [as=w:7]
+           │    ├── with-scan &1 (b)
+           │    │    ├── columns: z:6!null
+           │    │    └── mapping:
+           │    │         └──  column1:5 => z:6
+           │    └── projections
+           │         └── z:6 + 1 [as=w:7]
            └── projections
                 └── unique_rowid() [as=rowid_default:8]
 
