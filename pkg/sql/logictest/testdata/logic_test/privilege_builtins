@@ -834,43 +834,46 @@ NULL
 
 ## has_table_privilege
 
-query BBBBBBB
+query BBBBBBBB
 SELECT has_table_privilege(12345, 'SELECT'),
        has_table_privilege(12345, 'INSERT'),
        has_table_privilege(12345, 'UPDATE'),
        has_table_privilege(12345, 'DELETE'),
        has_table_privilege(12345, 'TRUNCATE'),
        has_table_privilege(12345, 'REFERENCES'),
-       has_table_privilege(12345, 'TRIGGER')
+       has_table_privilege(12345, 'TRIGGER'),
+       has_table_privilege(12345, 'RULE')
 ----
-NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
 
-query BBBBBBB
+query BBBBBBBB
 SELECT has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'SELECT'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'INSERT'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'UPDATE'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'DELETE'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'TRUNCATE'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'REFERENCES'),
-       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'TRIGGER')
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'TRIGGER'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'RULE')
 ----
-true  false  false  false  false  true  false
+true  false  false  false  false  true  false  false
 
-query BBBBBBB
+query BBBBBBBB
 SELECT has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'SELECT'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'INSERT'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'UPDATE'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'DELETE'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'TRUNCATE'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'REFERENCES'),
-       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'TRIGGER')
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'TRIGGER'),
+       has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'RULE')
 ----
-true  true  true  true  true  true  true
+true  true  true  true  true  true  true  false
 
 query error pgcode 42P01 relation "does_not_exist" does not exist
 SELECT has_table_privilege('does_not_exist', 'SELECT')
 
-query BBBBBBBBBB
+query BBBBBBBBBBB
 SELECT has_table_privilege('pg_type', 'SELECT'),
        has_table_privilege('pg_type', 'INSERT'),
        has_table_privilege('pg_type', 'UPDATE'),
@@ -880,11 +883,12 @@ SELECT has_table_privilege('pg_type', 'SELECT'),
        has_table_privilege('pg_type', 'TRIGGER'),
        has_table_privilege('pg_type', 'SELECT, INSERT, UPDATE'),
        has_table_privilege('pg_type', 'SELECT, TRUNCATE'),
-       has_table_privilege('pg_type', 'INSERT, UPDATE')
+       has_table_privilege('pg_type', 'INSERT, UPDATE'),
+       has_table_privilege('pg_type', 'RULE')
 ----
-true  false  false  false  false  true  false  true  true  false
+true  false  false  false  false  true  false  true  true  false  false
 
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('t', 'SELECT'),
        has_table_privilege('t', 'INSERT'),
        has_table_privilege('t', 'UPDATE'),
@@ -893,11 +897,12 @@ SELECT has_table_privilege('t', 'SELECT'),
        has_table_privilege('t', 'REFERENCES'),
        has_table_privilege('t', 'TRIGGER'),
        has_table_privilege('t', 'SELECT, INSERT, UPDATE'),
-       has_table_privilege('t', 'SELECT, TRUNCATE')
+       has_table_privilege('t', 'SELECT, TRUNCATE'),
+       has_table_privilege('t', 'RULE')
 ----
-true  true  true  true  true  true  true  true  true
+true  true  true  true  true  true  true  true  true  false
 
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('t', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('t', 'INSERT WITH GRANT OPTION'),
        has_table_privilege('t', 'UPDATE WITH GRANT OPTION'),
@@ -906,11 +911,12 @@ SELECT has_table_privilege('t', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('t', 'REFERENCES WITH GRANT OPTION'),
        has_table_privilege('t', 'TRIGGER WITH GRANT OPTION'),
        has_table_privilege('t', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
-       has_table_privilege('t', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION')
+       has_table_privilege('t', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION'),
+       has_table_privilege('t', 'RULE WITH GRANT OPTION')
 ----
-true  true  true  true  true  true  true  true  true
+true  true  true  true  true  true  true  true  true  false
 
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('t'::Name, 'SELECT'),
        has_table_privilege('t'::Name, 'INSERT'),
        has_table_privilege('t'::Name, 'UPDATE'),
@@ -919,12 +925,13 @@ SELECT has_table_privilege('t'::Name, 'SELECT'),
        has_table_privilege('t'::Name, 'REFERENCES'),
        has_table_privilege('t'::Name, 'TRIGGER'),
        has_table_privilege('t'::Name, 'SELECT, INSERT, UPDATE'),
-       has_table_privilege('t'::Name, 'SELECT, TRUNCATE')
+       has_table_privilege('t'::Name, 'SELECT, TRUNCATE'),
+       has_table_privilege('t'::Name, 'RULE')
 ----
-true  true  true  true  true  true  true  true  true
+true  true  true  true  true  true  true  true  true  false
 
 # has_table_privilege works with sequences as well.
-query BBBBBBBBB
+query BBBBBBBBBB
 SELECT has_table_privilege('seq', 'SELECT'),
        has_table_privilege('seq', 'INSERT'),
        has_table_privilege('seq', 'UPDATE'),
@@ -933,9 +940,10 @@ SELECT has_table_privilege('seq', 'SELECT'),
        has_table_privilege('seq', 'REFERENCES'),
        has_table_privilege('seq', 'TRIGGER'),
        has_table_privilege('seq', 'SELECT, INSERT, UPDATE'),
-       has_table_privilege('seq', 'SELECT, TRUNCATE')
+       has_table_privilege('seq', 'SELECT, TRUNCATE'),
+       has_table_privilege('seq', 'RULE')
 ----
-true  true  true  true  true  true  true  true  true
+true  true  true  true  true  true  true  true  true  false
 
 query error pgcode 22023 unrecognized privilege type: "USAGE"
 SELECT has_table_privilege('t', 'USAGE')
@@ -946,7 +954,7 @@ SELECT has_table_privilege('t', 'SELECT, USAGE')
 query error pgcode 42704 role 'no_user' does not exist
 SELECT has_table_privilege('no_user', 't', 'SELECT')
 
-query BBBBBBBBBB
+query BBBBBBBBBBB
 SELECT has_table_privilege('bar', 't', 'SELECT'),
        has_table_privilege('bar', 't', 'INSERT'),
        has_table_privilege('bar', 't', 'UPDATE'),
@@ -956,11 +964,12 @@ SELECT has_table_privilege('bar', 't', 'SELECT'),
        has_table_privilege('bar', 't', 'TRIGGER'),
        has_table_privilege('bar', 't', 'SELECT, INSERT, UPDATE'),
        has_table_privilege('bar', 't', 'SELECT, TRUNCATE'),
-       has_table_privilege('bar', 't', 'INSERT, UPDATE')
+       has_table_privilege('bar', 't', 'INSERT, UPDATE'),
+       has_table_privilege('bar', 't', 'RULE')
 ----
-false  false  false  true  true  false  true  false  true  false
+false  false  false  true  true  false  true  false  true  false  false
 
-query BBBBBBBBBB
+query BBBBBBBBBBB
 SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'UPDATE WITH GRANT OPTION'),
@@ -970,9 +979,10 @@ SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'TRIGGER WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION'),
-       has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION')
+       has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
+       has_table_privilege('bar', 't', 'RULE WITH GRANT OPTION')
 ----
-false  false  false  true  true  false  true  false  true  false
+false  false  false  true  true  false  true  false  true  false  false
 
 
 ## has_tablespace_privilege
