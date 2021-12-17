@@ -18,3 +18,5 @@ stmt ::=
 	| nonpreparable_set_stmt
 	| transaction_stmt
 	| close_cursor_stmt
+	| declare_cursor_stmt
+	| fetch_cursor_stmt
