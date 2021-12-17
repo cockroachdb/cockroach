@@ -327,6 +327,7 @@ func resolveOptionsForBackupJobDescription(
 	}
 
 	var err error
+	// TODO(msbutler): use cloud.RedactKMSURI(uri) here instead?
 	newOpts.EncryptionKMSURI, err = sanitizeURIList(kmsURIs)
 	if err != nil {
 		return tree.BackupOptions{}, err

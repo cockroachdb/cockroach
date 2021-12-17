@@ -35,10 +35,10 @@ func BuildOptAndHypTableMaps(
 	for t, indexes := range indexCandidates {
 		hypIndexes := make([]hypotheticalIndex, 0, len(indexes))
 		var hypTable HypotheticalTable
-		hypTable.init(t, hypIndexes)
+		hypTable.init(t)
 
 		for i, index := range indexes {
-			indexOrd := i + 1
+			indexOrd := hypTable.Table.IndexCount() + i
 			var hypIndex hypotheticalIndex
 			hypIndex.init(
 				&hypTable,
@@ -69,9 +69,8 @@ type HypotheticalTable struct {
 
 var _ cat.Table = &HypotheticalTable{}
 
-func (ht *HypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalIndex) {
+func (ht *HypotheticalTable) init(table cat.Table) {
 	ht.Table = table
-	ht.hypotheticalIndexes = hypIndexes
 
 	// Get PK column ordinals.
 	primaryIndex := ht.Index(cat.PrimaryIndex)
@@ -83,9 +82,9 @@ func (ht *HypotheticalTable) init(table cat.Table, hypIndexes []hypotheticalInde
 
 // IndexCount is part of the cat.Table interface.
 func (ht *HypotheticalTable) IndexCount() int {
-	// A HypotheticalTable stores the embedded table's primary index in addition
-	// to its hypothetical indexes.
-	return len(ht.hypotheticalIndexes) + 1
+	// A HypotheticalTable stores the embedded table's existing indexes in
+	// addition to its hypothetical indexes.
+	return ht.Table.IndexCount() + len(ht.hypotheticalIndexes)
 }
 
 // WritableIndexCount is part of the cat.Table interface.
@@ -100,16 +99,18 @@ func (ht *HypotheticalTable) DeletableIndexCount() int {
 
 // Index is part of the cat.Table interface.
 func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
-	if i == cat.PrimaryIndex {
-		return ht.Table.Index(cat.PrimaryIndex)
+	existingIndexCount := ht.Table.IndexCount()
+	if i < existingIndexCount {
+		return ht.Table.Index(i)
 	}
-	return &ht.hypotheticalIndexes[i-1]
+	return &ht.hypotheticalIndexes[i-existingIndexCount]
 }
 
 // existingRedundantIndex checks whether an index with the same explicit columns
 // as the index argument is present in the HypotheticalTable's embedded table.
-// If so, it returns the first instance of such an existing index. Otherwise, it
-// returns nil.
+// If so, it returns the first instance of such an existing index (that is not a
+// partial index). Existing partial indexes and hypothetical standard indexes
+// are not considered redundant. Otherwise, the function returns nil.
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
 		indexCols := index.cols
@@ -125,7 +126,8 @@ func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) ca
 				break
 			}
 		}
-		if indexExists {
+		_, isPartialIndex := existingIndex.Predicate()
+		if indexExists && !isPartialIndex {
 			return existingIndex
 		}
 	}

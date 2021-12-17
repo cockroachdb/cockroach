@@ -853,10 +853,6 @@ vectorized: true
                             └── • scan buffer
                                   columns: (column1, column2, column3, column4, check1)
                                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_enum (s) STORING (j);
 
 # Test that we use the index when available for the insert checks. This uses
 # the default value for columns r and j.
@@ -1007,10 +1003,6 @@ vectorized: true
                           row 1, expr 1: 'bar'
                           row 1, expr 2: 2
                           row 1, expr 3: 2
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_enum (s, j);
 
 # None of the inserted values have nulls.
 query T
@@ -1521,10 +1513,6 @@ vectorized: true
                           row 1, expr 1: 2
                           row 1, expr 2: 2
                           row 1, expr 3: 'bar'
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_enum (b) STORING (c);
 
 # We can eliminate uniqueness checks for i and s due to functional dependencies.
 # We cannot eliminate checks for d, since functional dependencies could not be
@@ -2392,10 +2380,6 @@ vectorized: true
                               row 0, expr 0: 'us-east'
                               row 1, expr 0: 'us-west'
                               row 2, expr 0: 'eu-west'
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_enum (j, i) STORING (s);
 
 # None of the updated values have nulls.
 query T
@@ -2696,11 +2680,9 @@ vectorized: true
                                       columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
                                       label: buffer 1
 ·
-index recommendations: 2
+index recommendations: 1
 1. type: index creation
    SQL command: CREATE INDEX ON uniq_partial_enum (a) STORING (b, c);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_enum (b) STORING (c);
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
@@ -3166,7 +3148,7 @@ index recommendations: 2
 1. type: index creation
    SQL command: CREATE INDEX ON other (v) STORING (k);
 2. type: index replacement
-   SQL commands: DROP INDEX uniq@uniq_v_key; CREATE INDEX ON uniq (v) STORING (w, x, y);
+   SQL commands: CREATE UNIQUE INDEX ON uniq (v) STORING (w, x, y); DROP INDEX uniq@uniq_v_key;
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
@@ -3692,10 +3674,6 @@ vectorized: true
                             └── • scan buffer
                                   columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
                                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_enum (s) STORING (j);
 
 # Test that we use the index when available for the ON CONFLICT checks.
 query T
@@ -3808,10 +3786,6 @@ vectorized: true
                             └── • scan buffer
                                   columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r)
                                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_enum (s, j);
 
 # None of the upserted values have nulls.
 query T
@@ -4375,10 +4349,6 @@ vectorized: true
                                 └── • scan buffer
                                       columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
                                       label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_enum (b) STORING (c);
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
 # CONFLICT DO UPDATE rows before inserting.
