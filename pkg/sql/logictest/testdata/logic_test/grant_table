@@ -2055,3 +2055,8 @@ GRANT SELECT ON system.lease TO testuser
 
 statement error pq: cannot REVOKE on system object
 REVOKE SELECT ON system.lease FROM testuser
+
+# Postgres does a no-op here, but since the RULE privilege is very legacy,
+# we error explicitly instead of getting 100% compatibility.
+statement error invalid privilege type RULE for table
+GRANT RULE ON t TO testuser
