@@ -79,7 +79,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
+	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")

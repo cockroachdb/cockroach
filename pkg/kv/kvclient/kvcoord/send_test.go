@@ -98,11 +98,12 @@ func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	// This test uses the testing function sendBatch() which does not
 	// support setting the node ID on GRPCDialNode(). Disable Node ID
 	// checks to avoid log.Fatal.
@@ -118,7 +119,7 @@ func TestSendToOneClient(t *testing.T) {
 		return ln.Addr(), nil
 	})
 
-	reply, err := sendBatch(context.Background(), t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
+	reply, err := sendBatch(ctx, t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,11 +176,12 @@ func TestComplexScenarios(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	// We're going to serve multiple node IDs with that one
 	// context. Disable node ID checks.
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
@@ -213,7 +215,7 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		reply, err := sendBatch(
-			context.Background(),
+			ctx,
 			t,
 			func(
 				_ SendOptions,

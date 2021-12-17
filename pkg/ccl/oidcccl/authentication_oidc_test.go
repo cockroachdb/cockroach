@@ -53,17 +53,19 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   cfg,
-			Clock:    hlc.NewClock(hlc.UnixNano, 1),
-			Stopper:  s.Stopper(),
-			Settings: s.ClusterSettings(),
-		})
+		return rpc.NewContext(ctx,
+			rpc.ContextOptions{
+				TenantID: roachpb.SystemTenantID,
+				Config:   cfg,
+				Clock:    hlc.NewClock(hlc.UnixNano, 1),
+				Stopper:  s.Stopper(),
+				Settings: s.ClusterSettings(),
+			})
 	}
 
 	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
@@ -87,11 +89,12 @@ func TestOIDCEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(rpc.ContextOptions{
+		return rpc.NewContext(ctx, rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
 			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, 1),

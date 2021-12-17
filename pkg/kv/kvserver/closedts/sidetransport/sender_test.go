@@ -307,16 +307,18 @@ func (s *sideTransportGRPCServer) addr() net.Addr {
 	return s.lis.Addr()
 }
 
-func newMockSideTransportGRPCServer(stopper *stop.Stopper) (*sideTransportGRPCServer, error) {
+func newMockSideTransportGRPCServer(
+	ctx context.Context, stopper *stop.Stopper,
+) (*sideTransportGRPCServer, error) {
 	receiver := newMockReceiver()
-	if err := stopper.RunAsyncTask(context.Background(), "stopper-watcher", func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "stopper-watcher", func(ctx context.Context) {
 		// We can't use a Closer since the receiver will be blocking inside of a task.
 		<-stopper.ShouldQuiesce()
 		receiver.Close()
 	}); err != nil {
 		return nil, err
 	}
-	server, err := newMockSideTransportGRPCServerWithOpts(stopper, receiver)
+	server, err := newMockSideTransportGRPCServerWithOpts(ctx, stopper, receiver)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +326,7 @@ func newMockSideTransportGRPCServer(stopper *stop.Stopper) (*sideTransportGRPCSe
 }
 
 func newMockSideTransportGRPCServerWithOpts(
-	stopper *stop.Stopper, receiver ctpb.SideTransportServer,
+	ctx context.Context, stopper *stop.Stopper, receiver ctpb.SideTransportServer,
 ) (*sideTransportGRPCServer, error) {
 	lis, err := net.Listen("tcp", "localhost:")
 	if err != nil {
@@ -332,7 +334,7 @@ func newMockSideTransportGRPCServerWithOpts(
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	grpcServer := rpc.NewServer(rpc.NewInsecureTestingContext(clock, stopper))
+	grpcServer := rpc.NewServer(rpc.NewInsecureTestingContext(ctx, clock, stopper))
 	ctpb.RegisterSideTransportServer(grpcServer, receiver)
 	go func() {
 		_ /* err */ = grpcServer.Serve(lis)
@@ -418,7 +420,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	srv, err := newMockSideTransportGRPCServer(stopper)
+	srv, err := newMockSideTransportGRPCServer(ctx, stopper)
 	require.NoError(t, err)
 	dialer := newMockDialer(nodeAddr{
 		nid:  2,
@@ -531,7 +533,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 		}
 		knobs[1] = incomingFromN1Knobs
 		receivers[i] = NewReceiver(nid, receiverStop, stores, knobs)
-		srv, err := newMockSideTransportGRPCServerWithOpts(receiverStop, receivers[i])
+		srv, err := newMockSideTransportGRPCServerWithOpts(ctx, receiverStop, receivers[i])
 		dialer.addOrUpdateNode(nid.Get(), srv.addr().String())
 		require.NoError(t, err)
 	}

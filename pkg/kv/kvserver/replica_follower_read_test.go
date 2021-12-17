@@ -65,7 +65,7 @@ func TestCanServeFollowerRead(t *testing.T) {
 			tc := testContext{manualClock: manual}
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			tc.StartWithStoreConfig(t, stopper, tsc)
+			tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 			key := roachpb.Key("a")
 
@@ -134,7 +134,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 	tc := testContext{manualClock: manual}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	key := roachpb.Key("a")
 

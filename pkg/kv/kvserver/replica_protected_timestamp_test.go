@@ -392,7 +392,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 			// lose the lease. Make the timeout extremely long.
 			tsc.RaftConfig.RangeLeaseRaftElectionTimeoutMultiplier = 100
 			stopper := stop.NewStopper()
-			tc.StartWithStoreConfig(t, stopper, tsc)
+			tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 			stopper.Stop(ctx)
 			testCase.test(t, tc.repl, mc)
 		})
@@ -533,7 +533,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			mc := &manualCache{}
 			tsc.ProtectedTimestampCache = mc
 			stopper := stop.NewStopper()
-			tc.StartWithStoreConfig(t, stopper, tsc)
+			tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 			stopper.Stop(ctx)
 			testCase.test(t, tc.repl, mc)
 		})

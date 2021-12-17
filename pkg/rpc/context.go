@@ -222,7 +222,7 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		})
 	}
 
-	if tracer := rpcCtx.AmbientCtx.Tracer; tracer != nil {
+	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
 		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer))
 		streamInterceptor = append(streamInterceptor, tracing.StreamServerInterceptor(tracer))
 	}
@@ -374,12 +374,11 @@ func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID   roachpb.TenantID
-	AmbientCtx log.AmbientContext
-	Config     *base.Config
-	Clock      *hlc.Clock
-	Stopper    *stop.Stopper
-	Settings   *cluster.Settings
+	TenantID roachpb.TenantID
+	Config   *base.Config
+	Clock    *hlc.Clock
+	Stopper  *stop.Stopper
+	Settings *cluster.Settings
 	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	//
@@ -429,7 +428,7 @@ func (c ContextOptions) validate() error {
 }
 
 // NewContext creates an rpc.Context with the supplied values.
-func NewContext(opts ContextOptions) *Context {
+func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	if err := opts.validate(); err != nil {
 		panic(err)
 	}
@@ -446,9 +445,9 @@ func NewContext(opts ContextOptions) *Context {
 		opts.ClusterID = &c
 	}
 
-	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
+	masterCtx, cancel := context.WithCancel(ctx)
 
-	ctx := &Context{
+	rpcCtx := &Context{
 		ContextOptions:  opts,
 		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
 		breakerClock: breakerClock{
@@ -462,14 +461,14 @@ func NewContext(opts ContextOptions) *Context {
 		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
 	}
 	if id := opts.Knobs.ClusterID; id != nil {
-		ctx.ClusterID.Set(masterCtx, *id)
+		rpcCtx.ClusterID.Set(masterCtx, *id)
 	}
 
 	waitQuiesce := func(context.Context) {
-		<-ctx.Stopper.ShouldQuiesce()
+		<-rpcCtx.Stopper.ShouldQuiesce()
 
 		cancel()
-		ctx.conns.Range(func(k, v interface{}) bool {
+		rpcCtx.conns.Range(func(k, v interface{}) bool {
 			conn := v.(*Connection)
 			conn.initOnce.Do(func() {
 				// Make sure initialization is not in progress when we're removing the
@@ -479,14 +478,14 @@ func NewContext(opts ContextOptions) *Context {
 					conn.dialErr = errDialRejected
 				}
 			})
-			ctx.removeConn(conn, k.(connKey))
+			rpcCtx.removeConn(conn, k.(connKey))
 			return true
 		})
 	}
-	if err := ctx.Stopper.RunAsyncTask(ctx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(ctx.masterCtx)
+	if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(rpcCtx.masterCtx)
 	}
-	return ctx
+	return rpcCtx
 }
 
 // ClusterName retrieves the configured cluster name.
@@ -827,7 +826,7 @@ func (rpcCtx *Context) grpcDialOptions(
 	var unaryInterceptors []grpc.UnaryClientInterceptor
 	var streamInterceptors []grpc.StreamClientInterceptor
 
-	if tracer := rpcCtx.AmbientCtx.Tracer; tracer != nil {
+	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
 		// TODO(tbg): re-write all of this for our tracer.
 
 		// We use a decorator to set the "node" tag. All other spans get the

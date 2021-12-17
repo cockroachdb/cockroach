@@ -408,7 +408,7 @@ func TestOracle(t *testing.T) {
 	closestFollower := replicas[1]
 	leaseholder := replicas[2]
 
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	setLatency := func(addr string, latency time.Duration) {
 		// All test cases have to have at least 11 measurement values in order for
 		// the exponentially-weighted moving average to work properly. See the

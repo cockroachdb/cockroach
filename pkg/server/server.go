@@ -324,14 +324,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	rpcCtxOpts := rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: cfg.AmbientCtx,
-		NodeID:     cfg.IDContainer,
-		ClusterID:  cfg.ClusterIDContainer,
-		Config:     cfg.Config,
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cfg.Settings,
+		TenantID:  roachpb.SystemTenantID,
+		NodeID:    cfg.IDContainer,
+		ClusterID: cfg.ClusterIDContainer,
+		Config:    cfg.Config,
+		Clock:     clock,
+		Stopper:   stopper,
+		Settings:  cfg.Settings,
 		OnOutgoingPing: func(req *rpc.PingRequest) error {
 			// Outgoing ping will block requests with codes.FailedPrecondition to
 			// notify caller that this replica is decommissioned but others could
@@ -349,7 +348,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
 	}
-	rpcContext := rpc.NewContext(rpcCtxOpts)
+	rpcContext := rpc.NewContext(ctx, rpcCtxOpts)
 
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {

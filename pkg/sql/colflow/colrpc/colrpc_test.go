@@ -130,12 +130,13 @@ func handleStream(
 func TestOutboxInbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	// Set up the RPC layer.
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticNodeID)
 	require.NoError(t, err)
 
 	// Generate a random cancellation scenario.
@@ -189,7 +190,7 @@ func TestOutboxInbox(t *testing.T) {
 		}()
 	}
 
-	streamCtx, streamCancelFn := context.WithCancel(context.Background())
+	streamCtx, streamCancelFn := context.WithCancel(ctx)
 	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(streamCtx)
 	require.NoError(t, err)
@@ -255,7 +256,7 @@ func TestOutboxInbox(t *testing.T) {
 		)
 		wg.Add(1)
 		go func() {
-			flowCtx, flowCtxCancelFn := context.WithCancel(context.Background())
+			flowCtx, flowCtxCancelFn := context.WithCancel(ctx)
 			flowCtxCancel := func() {
 				atomic.StoreUint32(&flowCtxCanceled, 1)
 				flowCtxCancelFn()
@@ -290,7 +291,7 @@ func TestOutboxInbox(t *testing.T) {
 			wg.Done()
 		}()
 
-		inboxFlowCtx, inboxFlowCtxCancelFn := context.WithCancel(context.Background())
+		inboxFlowCtx, inboxFlowCtxCancelFn := context.WithCancel(ctx)
 		readerCtx, readerCancelFn := context.WithCancel(inboxFlowCtx)
 		wg.Add(1)
 		go func() {
@@ -479,12 +480,13 @@ func TestOutboxInbox(t *testing.T) {
 func TestInboxHostCtxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	// Set up the RPC layer.
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticNodeID)
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()
@@ -496,7 +498,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	}()
 
 	// Simulate the "remote" node with a separate context.
-	outboxHostCtx, outboxHostCtxCancel := context.WithCancel(context.Background())
+	outboxHostCtx, outboxHostCtxCancel := context.WithCancel(ctx)
 	// Derive a separate context for the outbox itself (this is what is done in
 	// Outbox.Run).
 	outboxCtx, outboxCtxCancel := context.WithCancel(outboxHostCtx)
@@ -527,7 +529,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	}()
 
 	// Create the inbox on the "local" node (simulated by a separate context).
-	inboxHostCtx, inboxHostCtxCancel := context.WithCancel(context.Background())
+	inboxHostCtx, inboxHostCtxCancel := context.WithCancel(ctx)
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(inboxHostCtx)
 	inbox, err := NewInboxWithFlowCtxDone(
@@ -569,7 +571,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
 	require.NoError(t, err)
@@ -751,7 +753,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
 	require.NoError(b, err)
@@ -823,7 +825,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
 	require.NoError(t, err)

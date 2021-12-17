@@ -63,20 +63,21 @@ type Network struct {
 func NewNetwork(
 	stopper *stop.Stopper, nodeCount int, createAddresses bool, defaultZoneConfig *zonepb.ZoneConfig,
 ) *Network {
-	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
+	ctx := context.TODO()
+	log.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.RPCContext = rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.MakeClientAmbientContext(stopper.Tracer()),
-		Config:     &base.Config{Insecure: true},
-		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Stopper:    n.Stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-	})
+	n.RPCContext = rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   &base.Config{Insecure: true},
+			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+			Stopper:  n.Stopper,
+			Settings: cluster.MakeTestingClusterSettings(),
+		})
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
@@ -112,8 +113,7 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
 	node.Gossip = gossip.NewTest(0, n.RPCContext, server, n.Stopper, node.Registry, defaultZoneConfig)
 	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
-	bgCtx := n.RPCContext.AmbientCtx.AnnotateCtx(context.Background())
-	_ = n.Stopper.RunAsyncTask(bgCtx, "node-wait-quiesce", func(context.Context) {
+	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(context.Context) {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		node.Gossip.EnableSimulationCycler(false)

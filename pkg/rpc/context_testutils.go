@@ -11,11 +11,12 @@
 package rpc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"google.golang.org/grpc"
@@ -50,33 +51,36 @@ type ContextTestingKnobs struct {
 }
 
 // NewInsecureTestingContext creates an insecure rpc Context suitable for tests.
-func NewInsecureTestingContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
+func NewInsecureTestingContext(
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper,
+) *Context {
 	clusterID := uuid.MakeV4()
-	return NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	return NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 }
 
 // NewInsecureTestingContextWithClusterID creates an insecure rpc Context
 // suitable for tests. The context is given the provided cluster ID.
 func NewInsecureTestingContextWithClusterID(
-	clock *hlc.Clock, stopper *stop.Stopper, clusterID uuid.UUID,
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, clusterID uuid.UUID,
 ) *Context {
-	return NewInsecureTestingContextWithKnobs(clock, stopper, ContextTestingKnobs{
-		ClusterID: &clusterID,
-	})
+	return NewInsecureTestingContextWithKnobs(ctx,
+		clock, stopper, ContextTestingKnobs{
+			ClusterID: &clusterID,
+		})
 }
 
 // NewInsecureTestingContextWithKnobs creates an insecure rpc Context
 // suitable for tests configured with the provided knobs.
 func NewInsecureTestingContextWithKnobs(
-	clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
-	return NewContext(ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.MakeTestingAmbientContext(stopper.Tracer()),
-		Config:     &base.Config{Insecure: true},
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-		Knobs:      knobs,
-	})
+	return NewContext(ctx,
+		ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   &base.Config{Insecure: true},
+			Clock:    clock,
+			Stopper:  stopper,
+			Settings: cluster.MakeTestingClusterSettings(),
+			Knobs:    knobs,
+		})
 }
