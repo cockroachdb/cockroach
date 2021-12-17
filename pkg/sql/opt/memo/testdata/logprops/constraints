@@ -1055,6 +1055,47 @@ select
            └── const: 'ABC%' [type=string]
 
 opt
+SELECT * FROM kuv WHERE v LIKE '\ABC%'
+----
+select
+ ├── columns: k:1(int!null) u:2(float) v:3(string!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters
+      └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'); tight)]
+           ├── variable: v:3 [type=string]
+           └── const: e'\\ABC%' [type=string]
+
+# Like doesn't support RE syntax.
+opt
+SELECT * FROM kuv WHERE v LIKE 'ABC.*'
+----
+select
+ ├── columns: k:1(int!null) u:2(float) v:3(string!null)
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters
+      └── like [type=bool, outer=(3), constraints=(/3: [/'ABC.*' - /'ABC.*']; tight), fd=()-->(3)]
+           ├── variable: v:3 [type=string]
+           └── const: 'ABC.*' [type=string]
+
+opt
 SELECT * FROM kuv WHERE v LIKE 'ABC_'
 ----
 select
