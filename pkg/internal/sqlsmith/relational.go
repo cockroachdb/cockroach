@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 func (s *Smither) makeStmt() (stmt tree.Statement, ok bool) {
@@ -235,6 +236,10 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	for (cond == nil || s.coin()) && len(available) > 0 {
 		v := available[0]
 		available = available[1:]
+		// You can't compare voids.
+		if v[0].ResolvedType().Oid() == oid.T_void || v[1].ResolvedType().Oid() == oid.T_void {
+			continue
+		}
 		expr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), v[0], v[1])
 		if cond == nil {
 			cond = expr
