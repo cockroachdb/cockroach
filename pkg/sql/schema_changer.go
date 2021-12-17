@@ -2438,7 +2438,7 @@ func createSchemaChangeEvalCtx(
 			Regions:            &faketreeeval.DummyRegionOperator{},
 			Settings:           execCfg.Settings,
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
-			ClusterID:          execCfg.ClusterID(),
+			ClusterID:          execCfg.LogicalClusterID(),
 			ClusterName:        execCfg.RPCContext.ClusterName(),
 			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,

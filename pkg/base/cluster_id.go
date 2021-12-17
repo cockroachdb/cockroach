@@ -28,6 +28,8 @@ import (
 // - Otherwise, it is determined via gossip with other nodes.
 type ClusterIDContainer struct {
 	clusterID atomic.Value // uuid.UUID
+	// OnSet, if non-nil, is called after the ID is set with the new value.
+	OnSet func(uuid.UUID)
 }
 
 // String returns the cluster ID, or "?" if it is unset.
@@ -62,6 +64,9 @@ func (c *ClusterIDContainer) Set(ctx context.Context, val uuid.UUID) {
 		}
 	} else if cur != val {
 		log.Fatalf(ctx, "different ClusterIDs set: %s, then %s", cur, val)
+	}
+	if c.OnSet != nil {
+		c.OnSet(val)
 	}
 }
 

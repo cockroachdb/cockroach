@@ -284,7 +284,7 @@ func (c *Connector) updateClusterID(ctx context.Context, key string, content roa
 		log.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
 		return
 	}
-	c.rpcContext.ClusterID.Set(ctx, clusterID)
+	c.rpcContext.StorageClusterID.Set(ctx, clusterID)
 }
 
 // updateNodeAddress handles updates to "node" gossip keys, performing the

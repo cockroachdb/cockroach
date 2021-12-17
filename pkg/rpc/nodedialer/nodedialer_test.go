@@ -455,7 +455,7 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rctx.ClusterID.Set(ctx, uuid.MakeV4())
+	rctx.StorageClusterID.Set(ctx, uuid.MakeV4())
 
 	return rctx
 }

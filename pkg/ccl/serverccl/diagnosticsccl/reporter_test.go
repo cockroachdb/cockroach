@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,10 @@ func TestTenantReport(t *testing.T) {
 	require.Equal(t, 1, rt.diagServer.NumRequests())
 
 	last := rt.diagServer.LastRequestData()
-	require.Equal(t, rt.server.ClusterID().String(), last.UUID)
+	lastUUID, err := uuid.FromString(last.UUID)
+	require.NoError(t, err)
+	require.Equal(t, rt.server.StorageClusterID().ToUint128().Hi, lastUUID.ToUint128().Hi,
+		"tenant cluster id should start with storage cluster hi bits")
 	require.Equal(t, tenantArgs.TenantID.String(), last.TenantID)
 	require.Equal(t, "", last.NodeID)
 	require.Equal(t, tenant.SQLInstanceID().String(), last.SQLInstanceID)
@@ -181,7 +185,7 @@ func TestServerReport(t *testing.T) {
 	})
 
 	last := rt.diagServer.LastRequestData()
-	require.Equal(t, rt.server.ClusterID().String(), last.UUID)
+	require.Equal(t, rt.server.StorageClusterID().String(), last.UUID)
 	require.Equal(t, "system", last.TenantID)
 	require.Equal(t, rt.server.NodeID().String(), last.NodeID)
 	require.Equal(t, rt.server.NodeID().String(), last.SQLInstanceID)

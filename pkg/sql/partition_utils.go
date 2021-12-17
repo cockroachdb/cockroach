@@ -71,7 +71,7 @@ import (
 // all subzones at once is introduced.
 func GenerateSubzoneSpans(
 	st *cluster.Settings,
-	clusterID uuid.UUID,
+	logicalClusterID uuid.UUID,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	subzones []zonepb.Subzone,
@@ -80,7 +80,7 @@ func GenerateSubzoneSpans(
 	// Removing zone configs does not require a valid license.
 	if hasNewSubzones {
 		org := ClusterOrganization.Get(&st.SV)
-		if err := base.CheckEnterpriseEnabled(st, clusterID, org,
+		if err := base.CheckEnterpriseEnabled(st, logicalClusterID, org,
 			"replication zones on indexes or partitions"); err != nil {
 			return nil, err
 		}

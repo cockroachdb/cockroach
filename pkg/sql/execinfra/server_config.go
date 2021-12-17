@@ -52,10 +52,16 @@ type ServerConfig struct {
 	Settings     *cluster.Settings
 	RuntimeStats RuntimeStats
 
-	ClusterID   *base.ClusterIDContainer
+	// LogicalClusterID is the logical cluster ID for this tenant.
+	LogicalClusterID *base.ClusterIDContainer
+
+	// ClusterName is the security string used to protect the RPC layer
+	// against connections to the wrong cluster.
 	ClusterName string
 
-	// NodeID is the id of the node on which this Server is running.
+	// NodeID is either the KV node ID or the SQL instance ID, depending
+	// on circumstances.
+	// TODO(knz,radu): Split this into different fields.
 	NodeID *base.SQLIDContainer
 
 	// Locality is the locality of the node on which this Server is running.

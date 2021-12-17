@@ -71,10 +71,14 @@ type Reporter struct {
 	Config     *base.Config
 	Settings   *cluster.Settings
 
-	// ClusterID is not yet available at the time the reporter is created, so
-	// instead initialize with a function that gets it dynamically.
-	ClusterID func() uuid.UUID
-	TenantID  roachpb.TenantID
+	// StorageClusterID is the cluster ID of the underlying storage
+	// cluster. It is not yet available at the time the reporter is
+	// created, so instead initialize with a function that gets it
+	// dynamically.
+	StorageClusterID func() uuid.UUID
+	TenantID         roachpb.TenantID
+	// LogicalClusterID is the tenant-specific logical cluster ID.
+	LogicalClusterID func() uuid.UUID
 
 	// SQLInstanceID is not yet available at the time the reporter is created,
 	// so instead initialize with a function that gets it dynamically.
@@ -343,10 +347,11 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 // If an empty updates URL is set (via empty environment variable), returns nil.
 func (r *Reporter) buildReportingURL(report *diagnosticspb.DiagnosticReport) *url.URL {
 	clusterInfo := ClusterInfo{
-		ClusterID:  r.ClusterID(),
-		TenantID:   r.TenantID,
-		IsInsecure: r.Config.Insecure,
-		IsInternal: sql.ClusterIsInternal(&r.Settings.SV),
+		StorageClusterID: r.StorageClusterID(),
+		LogicalClusterID: r.LogicalClusterID(),
+		TenantID:         r.TenantID,
+		IsInsecure:       r.Config.Insecure,
+		IsInternal:       sql.ClusterIsInternal(&r.Settings.SV),
 	}
 
 	url := reportingURL
