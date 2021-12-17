@@ -40,7 +40,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUE9L-0AQvf8-x
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@v; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
@@ -63,7 +63,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFLw0AQhe_-i
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@v; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
@@ -87,7 +87,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1ro0AUfd9fc
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@v; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T
@@ -108,4 +108,4 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGPmkAQx9_7K
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX t@v; CREATE INDEX ON t (v) STORING (w);
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;

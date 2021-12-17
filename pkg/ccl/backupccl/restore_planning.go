@@ -1372,7 +1372,7 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 // them to be suitable for displaying in the jobs' description.
 // This includes redacting secrets from external storage URIs.
 func resolveOptionsForRestoreJobDescription(
-	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string,
+	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string, incFrom []string,
 ) (tree.RestoreOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -1406,6 +1406,14 @@ func resolveOptionsForRestoreJobDescription(
 		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
 	}
 
+	if opts.IncrementalStorage != nil {
+		var err error
+		newOpts.IncrementalStorage, err = sanitizeURIList(incFrom)
+		if err != nil {
+			return tree.RestoreOptions{}, err
+		}
+	}
+
 	return newOpts, nil
 }
 
@@ -1413,6 +1421,7 @@ func restoreJobDescription(
 	p sql.PlanHookState,
 	restore *tree.Restore,
 	from [][]string,
+	incFrom []string,
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
@@ -1428,19 +1437,16 @@ func restoreJobDescription(
 	var options tree.RestoreOptions
 	var err error
 	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, newDBName,
-		kmsURIs); err != nil {
+		kmsURIs, incFrom); err != nil {
 		return "", err
 	}
 	r.Options = options
 
 	for i, backup := range from {
 		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
-		for j, uri := range backup {
-			sf, err := cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
-			if err != nil {
-				return "", err
-			}
-			r.From[i][j] = tree.NewDString(sf)
+		r.From[i], err = sanitizeURIList(backup)
+		if err != nil {
+			return "", err
 		}
 	}
 
@@ -1507,6 +1513,20 @@ func restorePlanHook(
 	subdirFn := func() (string, error) { return "", nil }
 	if restoreStmt.Subdir != nil {
 		subdirFn, err = p.TypeAsString(ctx, restoreStmt.Subdir, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
+	var incStorageFn func() ([]string, error)
+	if restoreStmt.Options.IncrementalStorage != nil {
+		if restoreStmt.Subdir == nil {
+			err = errors.New("incremental_storage can only be used with the following" +
+				" syntax: 'RESTORE [target] FROM [subdirectory] IN [destination]'")
+			return nil, nil, nil, false, err
+		}
+		incStorageFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
+			"RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -1592,6 +1612,19 @@ func restorePlanHook(
 			}
 		}
 
+		// incFrom will contain the directory URIs for incremental backups (i.e.
+		// <prefix>/<subdir>) iff len(From)==1, regardless of the
+		// 'incremental_storage' param. len(From)=1 implies that the user has not
+		// explicitly passed incremental backups, so we'll have to look for any in
+		// <prefix>/<subdir>. len(incFrom)>1 implies the incremental backups are
+		// locality aware.
+		var incFrom []string
+		if incStorageFn != nil {
+			incFrom, err = incStorageFn()
+			if err != nil {
+				return err
+			}
+		}
 		if subdir != "" {
 			if strings.EqualFold(subdir, "LATEST") {
 				// set subdir to content of latest file
@@ -1604,18 +1637,31 @@ func restorePlanHook(
 			if len(from) != 1 {
 				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
 			}
-			for i := range from[0] {
-				parsed, err := url.Parse(from[0][i])
-				if err != nil {
+
+			appendPaths := func(uris []string, tailDir string) error {
+				for i, uri := range uris {
+					parsed, err := url.Parse(uri)
+					if err != nil {
+						return err
+					}
+					parsed.Path = path.Join(parsed.Path, tailDir)
+					uris[i] = parsed.String()
+				}
+				return nil
+			}
+
+			if err = appendPaths(from[0][:], subdir); err != nil {
+				return err
+			}
+			if len(incFrom) != 0 {
+				if err = appendPaths(incFrom[:], subdir); err != nil {
 					return err
 				}
-				parsed.Path = path.Join(parsed.Path, subdir)
-				from[0][i] = parsed.String()
 			}
 		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, newDBName, endTime,
-			resultsCh)
+		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
+			newDBName, endTime, resultsCh)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1734,6 +1780,7 @@ func doRestorePlan(
 	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
 	from [][]string,
+	incFrom []string,
 	passphrase string,
 	kms []string,
 	intoDB string,
@@ -1744,6 +1791,7 @@ func doRestorePlan(
 	if len(from) < 1 || len(from[0]) < 1 {
 		return errors.New("invalid base backup specified")
 	}
+
 	baseStores := make([]cloud.ExternalStorage, len(from[0]))
 	for i := range from[0] {
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i], p.User())
@@ -1783,8 +1831,8 @@ func doRestorePlan(
 	}
 
 	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
-		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from, endTime, encryption,
-		p.User(),
+		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
+		incFrom, endTime, encryption, p.User(),
 	)
 	if err != nil {
 		return err
@@ -1999,7 +2047,8 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB,
+	description, err := restoreJobDescription(p, restoreStmt, from, incFrom, restoreStmt.Options,
+		intoDB,
 		newDBName, kms)
 	if err != nil {
 		return err

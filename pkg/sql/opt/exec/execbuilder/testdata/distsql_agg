@@ -909,10 +909,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUktFq2zAUhu_3FOK_SkAlsd3d6MrZlo0M186SFFqGCYp1ZgyO5UkydAS_-7A9tqZgr73Ukb7zf4ejC-zPEgLrh2202sRs9mmzP-y_RXO2X0frjwd24uwsn2bZnH3eJXfMauNIHZV0MvyhNfuyS-637MMjO4Gj0opieSYL8R0eON4j5aiNzshabbrypX-0UU8QS46iqhvXlVOOTBuCuMAVriQIxPpG14sAHIqcLMr-WcuhG_cPsk7mBHHb8meNvenGB3kqaUdSkVksr9rjxXTg2NeysoLdgCNpnGChhzEJ7y0SX3VR_XHwxh1qU5yl-fU33OdhMJrvvyV_leeGcum0WfjX-WHnkxhFhlQ_L8cqfjzGyeEY30fRLPTm4LhbPcxCfz4qE1zJ_GfVO7K1riy9atfLNuUgldPwnaxuTEZbo7M-ZjgmPdcXFFk33N4Oh001XHWCz2FvEvanYX8SDqbhYBJevoDT9t3vAAAA__-IXTK3
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX sorted_data@foo; CREATE INDEX ON sorted_data (b) STORING (c);
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b

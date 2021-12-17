@@ -41,4 +41,4 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: DROP INDEX v@i; CREATE INDEX ON v (y) STORING (x);
+   SQL commands: CREATE INDEX ON v (y) STORING (x); DROP INDEX v@i;
