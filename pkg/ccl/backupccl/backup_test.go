@@ -6875,7 +6875,6 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	// One ExportRequest for every KV.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
-	require.Equal(t, 5, numExportRequests)
 	var expected []string
 	for _, resume := range []exportResumePoint{
 		{[]byte("/Tenant/10/Table/56/1"), []byte("/Tenant/10/Table/56/2"), withoutTS},
@@ -6886,6 +6885,15 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
+	testutils.SucceedsSoon(t, func() error {
+		if numExportRequests != 5 {
+			return errors.Newf("expected 5 export requests, got %d", numExportRequests)
+		}
+		if len(expected) != len(exportRequestSpans) {
+			return errors.Newf("expected %d export request spans, got %d", len(expected), len(exportRequestSpans))
+		}
+		return nil
+	})
 	require.Equal(t, expected, exportRequestSpans)
 	resetStateVars()
 
@@ -6913,6 +6921,12 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
+	testutils.SucceedsSoon(t, func() error {
+		if len(expected) != len(exportRequestSpans) {
+			return errors.Newf("expected %d export request spans, got %d", len(expected), len(exportRequestSpans))
+		}
+		return nil
+	})
 	require.Equal(t, expected, exportRequestSpans)
 	resetStateVars()
 
