@@ -2045,3 +2045,38 @@ CREATE TABLE t (
 
 statement error constraint with name "t_pkey" already exists
 ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+# Tests other cases where rowid is not implicitly added.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  id INT NOT NULL,
+  explicit_rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pk PRIMARY KEY (explicit_rowid)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT8 NOT VISIBLE NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT4 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
