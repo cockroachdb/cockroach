@@ -600,10 +600,6 @@ func (r *importResumer) prepareSchemasForIngestion(
 			details.ParentID)
 	}
 
-	if dbDesc.Schemas == nil {
-		dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
-
 	schemaMetadata.schemaRewrites = make(backupccl.DescRewriteMap)
 	mutableSchemaDescs := make([]*schemadesc.Mutable, 0)
 	for _, desc := range details.Schemas {
@@ -624,8 +620,8 @@ func (r *importResumer) prepareSchemasForIngestion(
 		schemaMetadata.newSchemaIDToName[id] = newMutableSchemaDescriptor.GetName()
 
 		// Update the parent database with this schema information.
-		dbDesc.Schemas[newMutableSchemaDescriptor.Name] =
-			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID}
+		dbDesc.AddSchemaToDatabase(newMutableSchemaDescriptor.Name,
+			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID})
 
 		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
 			ID: id,
@@ -1563,10 +1559,7 @@ func (r *importResumer) dropSchemas(
 				Name:           schemaDesc.Name,
 			})
 			// Update the parent database with information about the dropped schema.
-			if dbDesc.Schemas == nil {
-				dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-			}
-			dbDesc.Schemas[schema.Desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID, Dropped: true}
+			dbDesc.AddSchemaToDatabase(schema.Desc.Name, descpb.DatabaseDescriptor_SchemaInfo{ID: dbDesc.ID, Dropped: true})
 		}
 
 		if err := descsCol.WriteDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
