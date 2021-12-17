@@ -198,12 +198,15 @@ func (i *Inbox) init(ctx context.Context) error {
 		i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
 		return err
 	case <-ctx.Done():
+		// errToThrow is propagated to the reader of the Inbox.
+		errToThrow := ctx.Err()
 		if err := i.checkFlowCtxCancellation(); err != nil {
 			// This is an ungraceful termination because the flow context has
 			// been canceled.
 			i.errCh <- err
+			errToThrow = err
 		}
-		return ctx.Err()
+		return errToThrow
 	}
 
 	if i.ctxInterceptorFn != nil {
