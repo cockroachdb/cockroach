@@ -200,9 +200,16 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	return tracing.EnsureChildSpan(ctx, ac.p.tracer, opName)
 }
 
-// MakeClientAmbientContext creates an AmbientContext for use by
-// client commands.
+// MakeClientAmbientContext creates an AmbientContext for use to
+// initialize a rpc.Context for use in network clients that do not run
+// a server, e.g. in the CLI code. The existence of this method
+// is an artifact of the mistaken design that shares the same rpc.Context
+// for both clients and servers. Once we split those two purposes,
+// this constructor can disappear.
+// See: https://github.com/cockroachdb/cockroach/issues/73967
 func MakeClientAmbientContext(tracer *tracing.Tracer) AmbientContext {
+	// TODO(knz): add some annotations in the AmbientContext that
+	// indicate this is a client.
 	return AmbientContext{p: privateAmbientContext{tracer: tracer}}
 }
 
