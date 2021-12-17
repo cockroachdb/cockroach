@@ -4928,6 +4928,13 @@ type likeKey struct {
 	escape          rune
 }
 
+// LikeEscape converts a like pattern to a regexp pattern.
+func LikeEscape(pattern string) (string, error) {
+	key := likeKey{s: pattern, caseInsensitive: false, escape: '\\'}
+	re, err := key.patternNoAnchor()
+	return re, err
+}
+
 // unescapePattern unescapes a pattern for a given escape token.
 // It handles escaped escape tokens properly by maintaining them as the escape
 // token in the return string.
@@ -5287,11 +5294,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 	return changed, retLen, nil
 }
 
-// Pattern implements the RegexpCacheKey interface.
-// The strategy for handling custom escape character
-// is to convert all unescaped escape character into '\'.
-// k.escape can either be empty or a single character.
-func (k likeKey) Pattern() (string, error) {
+func (k likeKey) patternNoAnchor() (string, error) {
 	// QuoteMeta escapes all regexp metacharacters (`\.+*?()|[]{}^$`) with a `\`.
 	pattern := regexp.QuoteMeta(k.s)
 	var err error
@@ -5368,6 +5371,18 @@ func (k likeKey) Pattern() (string, error) {
 		}
 	}
 
+	return pattern, nil
+}
+
+// Pattern implements the RegexpCacheKey interface.
+// The strategy for handling custom escape character
+// is to convert all unescaped escape character into '\'.
+// k.escape can either be empty or a single character.
+func (k likeKey) Pattern() (string, error) {
+	pattern, err := k.patternNoAnchor()
+	if err != nil {
+		return "", err
+	}
 	return anchorPattern(pattern, k.caseInsensitive), nil
 }
 
