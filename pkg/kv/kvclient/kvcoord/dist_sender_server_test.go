@@ -83,7 +83,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
-	ambient := s.AmbientCtx()
+	ambient := s.TestingAmbientCtx()
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         ambient,
 		Settings:           cluster.MakeTestingClusterSettings(),
@@ -1116,7 +1116,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
 				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-					AmbientCtx:         s.AmbientCtx(),
+					AmbientCtx:         s.TestingAmbientCtx(),
 					Settings:           cluster.MakeTestingClusterSettings(),
 					Clock:              clock,
 					NodeDescs:          s.Gossip(),
@@ -1545,7 +1545,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx:         s.AmbientCtx(),
+		AmbientCtx:         s.TestingAmbientCtx(),
 		Clock:              s.Clock(),
 		NodeDescs:          s.Gossip(),
 		RPCContext:         s.RPCContext(),

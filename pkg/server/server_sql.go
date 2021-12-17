@@ -1181,8 +1181,10 @@ func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
 }
 
-// AmbientCtx retrieves the ambient context for this server.
-func (s *SQLServer) AmbientCtx() log.AmbientContext {
+// TestingAmbientCtx implements serverutils.TestTenantInterface. This
+// retrieves the ambient context for this server. This is intended for
+// exclusive use by test code.
+func (s *SQLServer) TestingAmbientCtx() log.AmbientContext {
 	return s.ambientCtx
 }
 

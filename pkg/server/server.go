@@ -2928,7 +2928,9 @@ func (s *Server) Insecure() bool {
 	return s.cfg.Insecure
 }
 
-// AmbientCtx retrieves the ambient context for this server.
-func (s *Server) AmbientCtx() log.AmbientContext {
+// TestingAmbientCtx implements serverutils.TestTenantInterface. This
+// retrieves the ambient context for this server. This is intended for
+// exclusive use by test code.
+func (s *Server) TestingAmbientCtx() log.AmbientContext {
 	return s.cfg.AmbientCtx
 }

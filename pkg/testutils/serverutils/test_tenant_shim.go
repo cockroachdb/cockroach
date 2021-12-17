@@ -78,9 +78,6 @@ type TestTenantInterface interface {
 	// Stopper returns the stopper used by the tenant.
 	Stopper() *stop.Stopper
 
-	// AmbientCtx retrieves the AmbientContext for this server.
-	AmbientCtx() log.AmbientContext
-
 	// Clock returns the clock used by the tenant.
 	Clock() *hlc.Clock
 
@@ -98,6 +95,12 @@ type TestTenantInterface interface {
 
 	// TestingKnobs returns the TestingKnobs in use by the test server.
 	TestingKnobs() *base.TestingKnobs
+
+	// TestingAmbientCtx retrieves the AmbientContext for this server,
+	// so that a test can instantiate additional one-off components
+	// using the same context details as the server. This should not
+	// be used in non-test code.
+	TestingAmbientCtx() log.AmbientContext
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing

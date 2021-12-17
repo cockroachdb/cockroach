@@ -85,7 +85,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	}
 
 	// Make a db with a short heartbeat interval.
-	ambient := s.AmbientCtx()
+	ambient := s.TestingAmbientCtx()
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,

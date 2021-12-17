@@ -92,7 +92,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	rf, err := rangefeed.NewFactory(stopper, kvDB, execCfg.Settings, nil /* knobs */)
 	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
-		s.AmbientCtx(),
+		s.TestingAmbientCtx(),
 		execCfg.NodeID,
 		execCfg.DB,
 		execCfg.Clock,
