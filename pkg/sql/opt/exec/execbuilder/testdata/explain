@@ -170,6 +170,25 @@ vectorized: true
 • split
 │ columns: (key, pretty, split_enforced_until)
 │ estimated row count: 10 (missing stats)
+│ index: foo@foo_pkey
+│ expiry: CAST(NULL AS STRING)
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 1 row
+      row 0, expr 0: 42
+
+query T
+EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42) WITH EXPIRATION '2200-01-01 00:00:00.0'
+----
+distribution: local
+vectorized: true
+·
+• split
+│ columns: (key, pretty, split_enforced_until)
+│ estimated row count: 10 (missing stats)
+│ index: foo@foo_pkey
+│ expiry: '2200-01-01 00:00:00.0'
 │
 └── • values
       columns: (column1)
@@ -183,6 +202,7 @@ distribution: local
 vectorized: true
 ·
 • relocate table
+│ index: foo@foo_pkey
 │
 └── • values
       size: 2 columns, 1 row
@@ -196,6 +216,7 @@ vectorized: true
 • relocate table
 │ columns: (key, pretty)
 │ estimated row count: 10 (missing stats)
+│ index: foo@foo_pkey
 │
 └── • values
       columns: (column1, column2)
@@ -210,6 +231,7 @@ distribution: local
 vectorized: true
 ·
 • relocate table
+│ index: foo@a
 │
 └── • values
       size: 2 columns, 1 row
@@ -223,6 +245,7 @@ vectorized: true
 • relocate table
 │ columns: (key, pretty)
 │ estimated row count: 10 (missing stats)
+│ index: foo@a
 │
 └── • values
       columns: (column1, column2)

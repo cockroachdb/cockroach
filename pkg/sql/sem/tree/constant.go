@@ -305,7 +305,7 @@ func (expr *NumVal) ResolveAsType(
 				return nil, err
 			}
 		}
-		return &expr.resInt, nil
+		return AdjustValueToType(typ, &expr.resInt)
 	case types.FloatFamily:
 		if strings.EqualFold(expr.origString, "NaN") {
 			// We need to check NaN separately since expr.value is unknownVal for NaN.

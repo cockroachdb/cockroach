@@ -788,8 +788,8 @@ func ForEachCast(fn func(src, tgt oid.Oid)) {
 // ValidCast returns true if a valid cast exists from src to tgt in the given
 // context.
 func ValidCast(src, tgt *types.T, ctx CastContext) bool {
-	// If src and tgt are identical, a cast is valid in any context.
-	if src.Identical(tgt) {
+	// If src and tgt are the same type, a cast is valid in any context.
+	if src.Oid() == tgt.Oid() {
 		return true
 	}
 

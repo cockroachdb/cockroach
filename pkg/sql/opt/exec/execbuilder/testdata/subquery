@@ -15,6 +15,8 @@ vectorized: true
 • root
 │
 ├── • split
+│   │ index: abc@abc_pkey
+│   │ expiry: CAST(NULL AS STRING)
 │   │
 │   └── • values
 │         size: 1 column, 1 row
