@@ -72,7 +72,7 @@ func NewInsecureTestingContextWithKnobs(
 ) *Context {
 	return NewContext(ContextOptions{
 		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.MakeDummyAmbientContext(stopper.Tracer()),
+		AmbientCtx: log.MakeTestingAmbientContext(stopper.Tracer()),
 		Config:     &base.Config{Insecure: true},
 		Clock:      clock,
 		Stopper:    stopper,
