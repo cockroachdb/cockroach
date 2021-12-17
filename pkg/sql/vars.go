@@ -165,6 +165,25 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
 
+	// CockroachDB extension.
+	`avoid_buffering`: {
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AvoidBuffering), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("avoid_buffering"),
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`avoid_buffering`, s)
+			if err != nil {
+				return err
+			}
+			m.SetAvoidBuffering(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "false"
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	// and https://www.postgresql.org/docs/10/static/datatype-binary.html
 	`bytea_output`: {
