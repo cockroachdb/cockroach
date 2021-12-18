@@ -4621,6 +4621,7 @@ SELECT * FROM information_schema.session_variables where variable not in ('crdb_
 variable                                              value
 allow_prepare_as_opt_plan                             off
 application_name                                      ·
+avoid_buffering                                       off
 backslash_quote                                       safe_encoding
 bytea_output                                          hex
 client_encoding                                       UTF8
