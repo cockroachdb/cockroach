@@ -2638,6 +2638,11 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.bufferParamStatusUpdate("application_name", appName)
 }
 
+// SetAvoidBuffering sets avoid buffering option.
+func (m *sessionDataMutator) SetAvoidBuffering(b bool) {
+	m.data.AvoidBuffering = b
+}
+
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondatapb.BytesEncodeFormat) {
 	m.data.DataConversionConfig.BytesEncodeFormat = val
 }
