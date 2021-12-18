@@ -45,7 +45,7 @@ user testuser
 statement ok
 SELECT * FROM t1
 
-statement error user testuser missing WITH GRANT OPTION privilege on GRANT
+statement error user testuser missing WITH GRANT OPTION privilege on one or more of GRANT, SELECT
 GRANT GRANT, SELECT ON TABLE t1 to target
 
 user root
@@ -79,7 +79,7 @@ test           public       t2          testuser  GRANT
 test           public       t2          testuser  INSERT
 test           public       t2          testuser  SELECT
 
-statement error user testuser missing WITH GRANT OPTION privilege on GRANT
+statement error user testuser missing WITH GRANT OPTION privilege on one or more of GRANT, SELECT
 GRANT GRANT, SELECT ON TABLE t1 to target
 
 statement ok
@@ -124,7 +124,7 @@ test           public       t4          testuser  ALL
 
 user testuser
 
-statement error user missing WITH GRANT OPTION privilege on INSERT
+statement error user missing WITH GRANT OPTION privilege on one or more of INSERT, DELETE
 GRANT INSERT, DELETE ON TABLE t4 TO target
 
 user root
@@ -145,7 +145,7 @@ test           public       t5          testuser  ALL
 
 user testuser
 
-statement error user testuser missing WITH GRANT OPTION privilege on GRANT
+statement error user testuser missing WITH GRANT OPTION privilege on one or more of GRANT, SELECT
 GRANT GRANT, SELECT ON TABLE t5 TO target
 
 user root
@@ -391,7 +391,7 @@ test           public       t17         testuser2 ALL
 
 user testuser2
 
-statement error user testuser2 missing WITH GRANT OPTION privilege on SELECT
+statement error user testuser2 missing WITH GRANT OPTION privilege on one or more of SELECT, INSERT
 GRANT SELECT, INSERT ON TABLE t17 TO target
 
 user testuser
@@ -615,5 +615,5 @@ user testuser2
 statement error user testuser2 missing WITH GRANT OPTION privilege on ALL
 GRANT ALL PRIVILEGES ON TABLE t21 TO target
 
-statement error user testuser2 missing WITH GRANT OPTION privilege on SELECT
+statement error user testuser2 missing WITH GRANT OPTION privilege on one or more of SELECT, INSERT
 GRANT SELECT, INSERT ON TABLE t21 TO target
