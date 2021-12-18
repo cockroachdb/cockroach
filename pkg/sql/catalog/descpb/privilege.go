@@ -187,7 +187,7 @@ func (p *PrivilegeDescriptor) CheckGrantOptions(
 	userPriv, exists := p.FindUser(user)
 	if !exists {
 		return pgerror.Newf(code,
-			"missing WITH GRANT OPTION privilege on %s", privList.String(),
+			"user %s missing WITH GRANT OPTION privilege on %s", user, privList.String(),
 		)
 	}
 
@@ -199,7 +199,7 @@ func (p *PrivilegeDescriptor) CheckGrantOptions(
 	for _, priv := range privList {
 		if userPriv.WithGrantOption&priv.Mask() == 0 {
 			return pgerror.Newf(code,
-				"missing WITH GRANT OPTION privilege type %s", priv.String())
+				"user %s missing WITH GRANT OPTION privilege on %s", user, priv.String())
 		}
 	}
 
