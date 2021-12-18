@@ -1493,7 +1493,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				shardCol, _, err := maybeCreateAndAddShardCol(int(buckets), &desc,
+				shardCol, err := maybeCreateAndAddShardCol(int(buckets), &desc,
 					[]string{string(d.Name)}, true, /* isNewTable */
 					evalCtx.Settings.Version.IsActive(ctx, clusterversion.UseKeyEncodeForHashShardedIndexes),
 				)
@@ -1606,7 +1606,7 @@ func NewTableDesc(
 		if n.PartitionByTable.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
-		shardCol, newColumns, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, err := setupShardedIndex(
 			ctx,
 			evalCtx,
 			semaCtx,
@@ -1619,18 +1619,38 @@ func NewTableDesc(
 		if err != nil {
 			return nil, err
 		}
-		if newColumn {
-			buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
-			if err != nil {
-				return nil, err
-			}
-			checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
-			if err != nil {
-				return nil, err
-			}
-			n.Defs = append(n.Defs, checkConstraint)
-			cdd = append(cdd, nil)
+
+		buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
+		if err != nil {
+			return nil, err
 		}
+		checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
+		if err != nil {
+			return nil, err
+		}
+
+		// if there is an equivalent check constraint from the CREATE TABLE (should be rare since we hide the constraint of shard column)
+		ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, n.Table, &desc, semaCtx)
+		checkConstraintDesc, err := ckBuilder.Build(checkConstraint)
+		if err != nil {
+			return nil, err
+		}
+		for _, def := range n.Defs {
+			if inputCheckConstraint, ok := def.(*tree.CheckConstraintTableDef); ok {
+				inputCheckConstraintDesc, err := ckBuilder.Build(inputCheckConstraint)
+				if err != nil {
+					return nil, err
+				}
+				if checkConstraintDesc.Expr == inputCheckConstraintDesc.Expr {
+					inputCheckConstraint.Hidden = true
+					return newColumns, nil
+				}
+			}
+		}
+
+		n.Defs = append(n.Defs, checkConstraint)
+		cdd = append(cdd, nil)
+
 		return newColumns, nil
 	}
 
