@@ -18,17 +18,6 @@ REVOKE SELECT ON DATABASE a FROM admin
 statement ok
 CREATE USER readwrite
 
-# Make sure that non-admin roles do not have CONNECT grant option.
-user testuser
-
-statement ok
-SET DATABASE = 'a'
-
-statement error missing WITH GRANT OPTION privilege on CONNECT
-GRANT CONNECT ON DATABASE a TO readwrite
-
-user root
-
 statement error pq: user or role "test-user" does not exist
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
 
