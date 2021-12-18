@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
 )
@@ -174,36 +172,28 @@ func NewBaseDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDe
 	return p
 }
 
-// CheckGrantOptions returns an error if the current user tries to grant a privilege that
+// CheckGrantOptions returns false if the user tries to grant a privilege that
 // it does not possess grant options for
 func (p *PrivilegeDescriptor) CheckGrantOptions(
-	user security.SQLUsername, privList privilege.List, isGrant bool,
-) error {
-	code := pgcode.WarningPrivilegeNotGranted
-	if !isGrant {
-		code = pgcode.WarningPrivilegeNotRevoked
-	}
-
+	user security.SQLUsername, privList privilege.List,
+) bool {
 	userPriv, exists := p.FindUser(user)
 	if !exists {
-		return pgerror.Newf(code,
-			"user %s missing WITH GRANT OPTION privilege on %s", user, privList.String(),
-		)
+		return false
 	}
 
 	// User has ALL WITH GRANT OPTION so they can grant anything.
 	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
-		return nil
+		return true
 	}
 
 	for _, priv := range privList {
 		if userPriv.WithGrantOption&priv.Mask() == 0 {
-			return pgerror.Newf(code,
-				"user %s missing WITH GRANT OPTION privilege on %s", user, priv.String())
+			return false
 		}
 	}
 
-	return nil
+	return true
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
