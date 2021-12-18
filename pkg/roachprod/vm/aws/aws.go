@@ -202,6 +202,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
 		CreateRateLimit:  2,
+		CreateZones:      defaultCreateZones,
 	}
 }
 
@@ -387,6 +388,7 @@ func (p *Provider) Create(
 	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
+	fmt.Println(providerOpts.CreateZones)
 	// We need to make sure that the SSH keys have been distributed to all regions
 	if err := p.ConfigSSH(providerOpts.CreateZones); err != nil {
 		return err
