@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1046,7 +1047,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if closeType != panicClose {
-		// Close all statements and prepared portals.
+		// Close all statements, prepared portals, and cursors.
 		ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -1054,6 +1055,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
+		for name, r := range ex.planner.sqlCursors.cursorMap {
+			_ = r.Close()
+			delete(ex.planner.sqlCursors.cursorMap, name)
+		}
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -1230,6 +1235,10 @@ type connExecutor struct {
 		// tracks the memory usage of portals and should be closed upon
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
+
+		sqlCursors struct {
+			cursorMap map[string]sqlutil.InternalRows
+		}
 
 		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
 		// when txn is finished (either committed or aborted). It is true when
@@ -1535,6 +1544,12 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
 		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
+	}
+
+	// Close all cursors.
+	for name, r := range ex.planner.sqlCursors.cursorMap {
+		_ = r.Close()
+		delete(ex.planner.sqlCursors.cursorMap, name)
 	}
 
 	switch ev {
