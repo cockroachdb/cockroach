@@ -13,7 +13,7 @@ GRANT ALL PRIVILEGES ON TABLE t TO testuser
 # switch to testuser
 user testuser
 
-statement error pq: missing WITH GRANT OPTION privilege type ALL
+statement error user testuser missing WITH GRANT OPTION privilege on ALL
 GRANT ALL PRIVILEGES ON table t to testuser2
 
 # switch to root
@@ -59,7 +59,7 @@ test           public       t              testuser2  SELECT
 # switch to testuser2
 user testuser2
 
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
+statement error user testuser2 missing WITH GRANT OPTION privilege on SELECT
 GRANT SELECT ON TABLE t TO target
 
 # switch to root
@@ -77,7 +77,7 @@ test           public       t              testuser   ALL
 # switch to testuser
 user testuser
 
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
+statement error user testuser missing WITH GRANT OPTION privilege on SELECT
 GRANT SELECT, GRANT, INSERT, DELETE ON TABLE t TO testuser2 WITH GRANT OPTION
 
 # switch to root
@@ -135,10 +135,10 @@ user testuser
 statement ok
 GRANT SELECT ON TABLE t TO testuser2 WITH GRANT OPTION
 
-statement error pq: missing WITH GRANT OPTION privilege type UPDATE
+statement error testuser missing WITH GRANT OPTION privilege on UPDATE
 GRANT UPDATE ON TABLE t TO testuser2 WITH GRANT OPTION
 
-statement error pq: missing WITH GRANT OPTION privilege type DELETE
+statement error user testuser missing WITH GRANT OPTION privilege on DELETE
 GRANT DELETE ON TABLE t TO testuser2 WITH GRANT OPTION
 
 query TTTTT colnames
@@ -162,7 +162,7 @@ GRANT ALL PRIVILEGES ON TABLE t TO testuser
 
 user testuser
 
-statement error pq: missing WITH GRANT OPTION privilege type DELETE
+statement error user testuser missing WITH GRANT OPTION privilege on DELETE
 REVOKE DELETE ON TABLE t FROM testuser
 
 user root
@@ -193,7 +193,7 @@ GRANT SELECT ON TABLE t TO target
 statement ok
 REVOKE GRANT OPTION FOR SELECT ON TABLE t FROM testuser
 
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
+statement error user testuser missing WITH GRANT OPTION privilege on SELECT
 GRANT SELECT ON TABLE t TO target
 
 # briefly test databases, schemas, types etc since the code is the same as with tables tested above
@@ -257,7 +257,7 @@ test           s            NULL           testuser   GRANT
 # switch to testuser
 user testuser
 
-statement error pq: missing WITH GRANT OPTION privilege type CREATE
+statement error user testuser missing WITH GRANT OPTION privilege on CREATE
 GRANT CREATE ON SCHEMA s TO target
 
 # switch to root
@@ -296,7 +296,7 @@ GRANT GRANT ON DATABASE d TO target WITH GRANT OPTION
 statement ok
 GRANT CONNECT ON DATABASE d TO target WITH GRANT OPTION
 
-statement error pq: missing WITH GRANT OPTION privilege type CREATE
+statement error user testuser2 missing WITH GRANT OPTION privilege on CREATE
 GRANT CREATE ON DATABASE d TO target WITH GRANT OPTION
 
 # switch to root
@@ -350,7 +350,7 @@ GRANT GRANT ON TYPE type1 TO testuser
 user testuser
 
 # every user is a member of public, which has usage on types but does not have grant options on types by default
-statement error pq: missing WITH GRANT OPTION privilege type USAGE
+statement error user testuser missing WITH GRANT OPTION privilege on USAGE
 GRANT USAGE ON TYPE type1 TO target
 
 user root
@@ -409,7 +409,7 @@ GRANT GRANT ON TABLE t1 TO testuser2
 
 user testuser2
 
-statement error pq: missing WITH GRANT OPTION privilege type SELECT
+statement error user testuser2 missing WITH GRANT OPTION privilege on SELECT
 GRANT SELECT ON TABLE t1 TO target
 
 user testuser
@@ -433,7 +433,7 @@ GRANT SELECT ON TABLE t1 TO TARGET
 statement ok
 REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t1 FROM testuser2
 
-statement error pq: missing WITH GRANT OPTION privilege type INSERT
+statement error user testuser2 missing WITH GRANT OPTION privilege on INSERT
 GRANT INSERT ON TABLE t1 TO target
 
 user testuser
