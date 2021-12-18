@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -203,6 +204,8 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	})
 
 	runWithFrontier := func(ctx context.Context) {
+		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
+		pprof.SetGoroutineLabels(ctx)
 		f.run(ctx, frontier)
 	}
 
