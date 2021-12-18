@@ -389,6 +389,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&explainVecNode{}):                 "explain vectorized",
 	reflect.TypeOf(&explainDDLNode{}):                 "explain ddl",
 	reflect.TypeOf(&exportNode{}):                     "export",
+	reflect.TypeOf(&fetchNode{}):                      "fetch",
 	reflect.TypeOf(&filterNode{}):                     "filter",
 	reflect.TypeOf(&GrantRoleNode{}):                  "grant role",
 	reflect.TypeOf(&groupNode{}):                      "group",
