@@ -48,14 +48,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 
-				jobID := int(*args[0].(*tree.DInt))
+				streamID := streaming.StreamID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, streamID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(jobID)), err
+				return tree.NewDInt(tree.DInt(streamID)), err
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
 				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
