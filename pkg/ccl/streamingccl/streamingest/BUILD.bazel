@@ -74,7 +74,6 @@ go_test(
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/streamclient",
         "//pkg/ccl/streamingccl/streamingtest",
-        "//pkg/ccl/streamingccl/streamingutils",
         "//pkg/ccl/streamingccl/streamproducer",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",

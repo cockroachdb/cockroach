@@ -5,7 +5,9 @@ go_library(
     srcs = [
         "event_stream.go",
         "producer_job.go",
+        "replication_manager.go",
         "replication_stream_planning.go",
+        "stream_lifetime.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
     visibility = ["//visibility:public"],
@@ -31,6 +33,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/streaming",
         "//pkg/testutils",

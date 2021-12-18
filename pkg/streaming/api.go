@@ -33,21 +33,35 @@ var GetReplicationStreamManagerHook func() (ReplicationStreamManager, error)
 // ReplicationStreamManager represents a collection of APIs that streaming replication supports.
 type ReplicationStreamManager interface {
 	// CompleteStreamIngestion signals a running stream ingestion job to complete.
-	CompleteStreamIngestion(evalCtx *tree.EvalContext, txn *kv.Txn, jobID int, cutoverTimestamp hlc.Timestamp) error
+	CompleteStreamIngestion(
+		evalCtx *tree.EvalContext,
+		txn *kv.Txn,
+		streamID StreamID,
+		cutoverTimestamp hlc.Timestamp,
+	) error
 
 	// StartReplicationStream starts a stream replication job for the specified tenant on the producer side.
-	StartReplicationStream(evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64) (StreamID, error)
+	StartReplicationStream(
+		evalCtx *tree.EvalContext,
+		txn *kv.Txn,
+		tenantID uint64,
+	) (StreamID, error)
 
 	// UpdateReplicationStreamProgress updates the progress of a replication stream.
 	UpdateReplicationStreamProgress(
 		evalCtx *tree.EvalContext,
 		streamID StreamID,
 		frontier hlc.Timestamp,
-		txn *kv.Txn) (jobspb.StreamReplicationStatus, error)
+		txn *kv.Txn,
+	) (jobspb.StreamReplicationStatus, error)
 
 	// StreamPartition starts streaming replication for the partition specified by opaqueSpec
 	// which contains serialized streampb.StreamPartitionSpec protocol message.
-	StreamPartition(evalCtx *tree.EvalContext, streamID StreamID, opaqueSpec []byte) (tree.ValueGenerator, error)
+	StreamPartition(
+		evalCtx *tree.EvalContext,
+		streamID StreamID,
+		opaqueSpec []byte,
+	) (tree.ValueGenerator, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.

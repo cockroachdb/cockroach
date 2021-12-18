@@ -17,18 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -115,120 +109,7 @@ func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	})
 }
 
-// doStartReplicationStream initializes a replication stream producer job on the source cluster that
-// 1. Tracks the liveness of the replication stream consumption
-// 2. TODO(casper): Updates the protected timestamp for spans being replicated
-func doStartReplicationStream(
-	evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64,
-) (streaming.StreamID, error) {
-	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
-
-	if err != nil {
-		return streaming.InvalidStreamID, err
-	}
-
-	if !hasAdminRole {
-		return streaming.InvalidStreamID, errors.New("admin role required to start stream replication jobs")
-	}
-
-	registry := execConfig.JobRegistry
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-	ptsID := uuid.MakeV4()
-	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
-	if _, err := registry.CreateAdoptableJobWithTxn(evalCtx.Ctx(), jr, jr.JobID, txn); err != nil {
-		return streaming.InvalidStreamID, err
-	}
-
-	ptp := execConfig.ProtectedTimestampProvider
-	statementTime := hlc.Timestamp{
-		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
-	}
-	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
-		[]roachpb.Span{*makeTenantSpan(tenantID)}, jobsprotectedts.Jobs)
-
-	if err := ptp.Protect(evalCtx.Ctx(), txn, pts); err != nil {
-		return streaming.InvalidStreamID, err
-	}
-	return streaming.StreamID(jr.JobID), nil
-}
-
-// updateReplicationStreamProgress updates the job progress for an active replication
-// stream specified by 'streamID' and returns error if the stream is no longer active.
-func updateReplicationStreamProgress(
-	ctx context.Context,
-	expiration time.Time,
-	ptsProvider protectedts.Provider,
-	registry *jobs.Registry,
-	streamID streaming.StreamID,
-	ts hlc.Timestamp,
-	txn *kv.Txn,
-) (status jobspb.StreamReplicationStatus, err error) {
-	const useReadLock = false
-	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Status == jobs.StatusRunning {
-				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_ACTIVE
-			} else if md.Status == jobs.StatusPaused {
-				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_PAUSED
-			} else if md.Status.Terminal() {
-				status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
-			} else {
-				status.StreamStatus = jobspb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY
-			}
-			// Skip checking PTS record in cases that it might already be released
-			if status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_ACTIVE &&
-				status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_PAUSED {
-				return nil
-			}
-
-			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecord
-			ptsRecord, err := ptsProvider.GetRecord(ctx, txn, ptsID)
-			if err != nil {
-				return err
-			}
-			status.ProtectedTimestamp = &ptsRecord.Timestamp
-			if status.StreamStatus != jobspb.StreamReplicationStatus_STREAM_ACTIVE {
-				return nil
-			}
-
-			if shouldUpdatePTS := ptsRecord.Timestamp.Less(ts); shouldUpdatePTS {
-				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, ts); err != nil {
-					return err
-				}
-				status.ProtectedTimestamp = &ts
-			}
-
-			if p := md.Progress; expiration.After(p.GetStreamReplication().Expiration) {
-				p.GetStreamReplication().Expiration = expiration
-				ju.UpdateProgress(p)
-			}
-			return nil
-		})
-
-	if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
-		status.StreamStatus = jobspb.StreamReplicationStatus_STREAM_INACTIVE
-		err = nil
-	}
-
-	return status, err
-}
-
-func doUpdateReplicationStreamProgress(
-	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
-) (jobspb.StreamReplicationStatus, error) {
-
-	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-	expirationTime := timeutil.Now().Add(timeout)
-
-	return updateReplicationStreamProgress(evalCtx.Ctx(),
-		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, streamID, frontier, txn)
-}
-
 func init() {
-	streamingccl.StartReplicationStreamHook = doStartReplicationStream
-	streamingccl.UpdateReplicationStreamProgressHook = doUpdateReplicationStreamProgress
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
