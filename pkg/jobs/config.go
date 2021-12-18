@@ -31,6 +31,7 @@ const (
 	retryMaxDelaySettingKey        = "jobs.registry.retry.max_delay"
 	executionErrorsMaxEntriesKey   = "jobs.execution_errors.max_entries"
 	executionErrorsMaxEntrySizeKey = "jobs.execution_errors.max_entry_size"
+	debugPausePointsSettingKey     = "jobs.debug.pausepoints"
 )
 
 const (
@@ -147,6 +148,12 @@ var (
 			" for introspection",
 		defaultExecutionErrorsMaxEntrySize,
 		settings.NonNegativeInt,
+	)
+
+	debugPausepoints = settings.RegisterStringSetting(
+		debugPausePointsSettingKey,
+		"the list, comma separated, of named pausepoints currently enabled for debugging",
+		"",
 	)
 )
 
