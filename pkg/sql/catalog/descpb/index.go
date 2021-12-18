@@ -65,13 +65,27 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 	return !desc.IsPartial() && ColumnIDs(desc.KeyColumnIDs).HasPrefix(originColIDs)
 }
 
+// explicitColumnIDsWithoutShardColumn returns explicit column ids of the index
+// excluding the shard column.
+func (desc *IndexDescriptor) explicitColumnIDsWithoutShardColumn() []ColumnID {
+	explicitColIDs := desc.KeyColumnIDs[desc.ExplicitColumnStartIdx():]
+	explicitColNames := desc.KeyColumnNames[desc.ExplicitColumnStartIdx():]
+	colIDs := make([]ColumnID, 0, len(explicitColIDs))
+	for i := range explicitColNames {
+		if !desc.IsSharded() || explicitColNames[i] != desc.Sharded.Name {
+			colIDs = append(colIDs, explicitColIDs[i])
+		}
+	}
+	return colIDs
+}
+
 // IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
 // It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique &&
 		!desc.IsPartial() &&
-		ColumnIDs(desc.KeyColumnIDs[desc.Partitioning.NumImplicitColumns:]).PermutationOf(referencedColIDs)
+		ColumnIDs(desc.explicitColumnIDsWithoutShardColumn()).PermutationOf(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
