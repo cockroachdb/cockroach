@@ -185,6 +185,10 @@ type planner struct {
 
 	preparedStatements preparedStatementsAccessor
 
+	sqlCursors struct {
+		cursorMap map[string]*sqlCursor
+	}
+
 	// avoidLeasedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
 	// within the transaction. This is necessary to read descriptors
