@@ -34,6 +34,7 @@ type config struct {
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
+	extraPProfLabels     []string
 }
 
 type scanConfig struct {
@@ -207,5 +208,13 @@ const (
 func WithScanRetryBehavior(b ScanRetryBehavior) Option {
 	return optionFunc(func(c *config) {
 		c.retryBehavior = b
+	})
+}
+
+// WithPProfLabel configures rangefeed to annotate go routines started by range feed
+// with the specified key=value label.
+func WithPProfLabel(key, value string) Option {
+	return optionFunc(func(c *config) {
+		c.extraPProfLabels = append(c.extraPProfLabels, key, value)
 	})
 }
