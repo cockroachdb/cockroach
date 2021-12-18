@@ -87,11 +87,11 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 
-// setupConstraintForShard adds a check constraint ensuring that the shard
+// maybeSetupConstraintForShard adds a check constraint ensuring that the shard
 // column's value is within [0..ShardBuckets-1]. This method is called when a
 // `CREATE INDEX`/`ALTER PRIMARY KEY` statement is issued for the creation of a
 // sharded index that *does not* re-use a pre-existing shard column.
-func (p *planner) setupConstraintForShard(
+func (p *planner) maybeSetupConstraintForShard(
 	ctx context.Context, tableDesc *tabledesc.Mutable, shardCol catalog.Column, buckets int32,
 ) error {
 	// Assign an ID to the newly-added shard column, which is needed for the creation
@@ -104,31 +104,26 @@ func (p *planner) setupConstraintForShard(
 	if err != nil {
 		return err
 	}
-	info, err := tableDesc.GetConstraintInfo()
+	ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, p.tableName, tableDesc, &p.semaCtx)
+	ckDesc, err := ckBuilder.Build(ckDef)
 	if err != nil {
 		return err
 	}
 
-	inuseNames := make(map[string]struct{}, len(info))
-	for k := range info {
-		inuseNames[k] = struct{}{}
-	}
-
-	ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, p.tableName, tableDesc, &p.semaCtx)
-	ckName, err := ckBuilder.DefaultName(ckDef.Expr)
+	curConstraintInfos, err := tableDesc.GetConstraintInfo()
 	if err != nil {
 		return err
 	}
 
 	// Avoid creating duplicate check constraints.
-	if _, ok := inuseNames[ckName]; !ok {
-		ck, err := ckBuilder.Build(ckDef)
-		if err != nil {
-			return err
+	for _, info := range curConstraintInfos {
+		if info.CheckConstraint != nil && info.CheckConstraint.Expr == ckDesc.Expr {
+			return nil
 		}
-		ck.Validity = descpb.ConstraintValidity_Validating
-		tableDesc.AddCheckMutation(ck, descpb.DescriptorMutation_ADD)
 	}
+
+	ckDesc.Validity = descpb.ConstraintValidity_Validating
+	tableDesc.AddCheckMutation(ckDesc, descpb.DescriptorMutation_ADD)
 	return nil
 }
 
@@ -225,7 +220,7 @@ func makeIndexDescriptor(
 		if tableDesc.IsLocalityRegionalByRow() {
 			return nil, hashShardedIndexesOnRegionalByRowError()
 		}
-		shardCol, newColumns, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, err := setupShardedIndex(
 			params.ctx,
 			params.EvalContext(),
 			&params.p.semaCtx,
@@ -239,10 +234,10 @@ func makeIndexDescriptor(
 			return nil, err
 		}
 		columns = newColumns
-		if newColumn {
-			if err := params.p.setupConstraintForShard(params.ctx, tableDesc, shardCol, indexDesc.Sharded.ShardBuckets); err != nil {
-				return nil, err
-			}
+		if err := params.p.maybeSetupConstraintForShard(
+			params.ctx, tableDesc, shardCol, indexDesc.Sharded.ShardBuckets,
+		); err != nil {
+			return nil, err
 		}
 	}
 
@@ -480,9 +475,10 @@ var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
 // setupShardedIndex creates a shard column for the given index descriptor. It
-// returns the shard column, the new column list for the index, and a boolean
-// which is true if the shard column was newly created. If the shard column is
-// new, it is added to tableDesc.
+// returns the shard column and the new column list for the index. If the shard
+// column is new, either of the following happens:
+// (1) the column is added to tableDesc if it's a new table;
+// (2) a column mutation is added to tableDesc if the table is not new.
 func setupShardedIndex(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
@@ -493,9 +489,9 @@ func setupShardedIndex(
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
-) (shard catalog.Column, newColumns tree.IndexElemList, newColumn bool, err error) {
+) (shard catalog.Column, newColumns tree.IndexElemList, err error) {
 	if !shardedIndexEnabled {
-		return nil, nil, false, hashShardedIndexesDisabledError
+		return nil, nil, hashShardedIndexesDisabledError
 	}
 
 	colNames := make([]string, 0, len(columns))
@@ -504,12 +500,13 @@ func setupShardedIndex(
 	}
 	buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, err
 	}
-	shardCol, newColumn, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
+	shardCol, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
 		colNames, isNewTable)
+
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, err
 	}
 	shardIdxElem := tree.IndexElem{
 		Column:    tree.Name(shardCol.GetName()),
@@ -522,7 +519,7 @@ func setupShardedIndex(
 		ShardBuckets: buckets,
 		ColumnNames:  colNames,
 	}
-	return shardCol, newColumns, newColumn, nil
+	return shardCol, newColumns, nil
 }
 
 // maybeCreateAndAddShardCol adds a new hidden computed shard column (or its mutation) to
@@ -530,10 +527,10 @@ func setupShardedIndex(
 // buckets.
 func maybeCreateAndAddShardCol(
 	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable bool,
-) (col catalog.Column, created bool, err error) {
+) (col catalog.Column, err error) {
 	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	existingShardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
 	if err == nil && !existingShardCol.Dropped() {
@@ -543,14 +540,14 @@ func maybeCreateAndAddShardCol(
 		if !existingShardCol.IsHidden() {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
-			return nil, false, pgerror.Newf(pgcode.DuplicateColumn,
+			return nil, pgerror.Newf(pgcode.DuplicateColumn,
 				"column %s already specified; can't be used for sharding", shardColDesc.Name)
 		}
-		return existingShardCol, false, nil
+		return existingShardCol, nil
 	}
 	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
 	if err != nil && !columnIsUndefined {
-		return nil, false, err
+		return nil, err
 	}
 	if columnIsUndefined || existingShardCol.Dropped() {
 		if isNewTable {
@@ -558,10 +555,9 @@ func maybeCreateAndAddShardCol(
 		} else {
 			desc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_ADD)
 		}
-		created = true
 	}
 	shardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
-	return shardCol, created, err
+	return shardCol, err
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
