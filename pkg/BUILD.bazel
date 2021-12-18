@@ -44,7 +44,6 @@ ALL_TESTS = [
     "//pkg/ccl/storageccl:storageccl_test",
     "//pkg/ccl/streamingccl/streamclient:streamclient_test",
     "//pkg/ccl/streamingccl/streamingest:streamingest_test",
-    "//pkg/ccl/streamingccl/streamingutils:streamingutils_test",
     "//pkg/ccl/streamingccl/streamproducer:streamproducer_test",
     "//pkg/ccl/telemetryccl:telemetryccl_test",
     "//pkg/ccl/testccl/sqlccl:sqlccl_test",
