@@ -171,7 +171,7 @@ func (p *planner) AlterPrimaryKey(
 	// If the new index is requested to be sharded, set up the index descriptor
 	// to be sharded, and add the new shard column if it is missing.
 	if alterPKNode.Sharded != nil {
-		shardCol, newColumns, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, err := setupShardedIndex(
 			ctx,
 			p.EvalContext(),
 			&p.semaCtx,
@@ -186,15 +186,13 @@ func (p *planner) AlterPrimaryKey(
 			return err
 		}
 		alterPKNode.Columns = newColumns
-		if newColumn {
-			if err := p.setupConstraintForShard(
-				ctx,
-				tableDesc,
-				shardCol,
-				newPrimaryIndexDesc.Sharded.ShardBuckets,
-			); err != nil {
-				return err
-			}
+		if err := p.maybeSetupConstraintForShard(
+			ctx,
+			tableDesc,
+			shardCol,
+			newPrimaryIndexDesc.Sharded.ShardBuckets,
+		); err != nil {
+			return err
 		}
 		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 	}
