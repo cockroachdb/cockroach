@@ -278,6 +278,33 @@ d               public     CONNECT
 d               root       ALL
 d               testuser   ALL
 
+# Make testuser2 a member of testuser; it should inherit grant options
+# from testuser.
+
+statement ok
+GRANT testuser TO testuser2
+
+user testuser2
+
+statement ok
+GRANT CONNECT ON DATABASE d TO TARGET
+
+query TTT colnames
+SHOW GRANTS ON DATABASE d
+----
+database_name  grantee   privilege_type
+d              admin     ALL
+d              public    CONNECT
+d              root      ALL
+d              target    CONNECT
+d              testuser  ALL
+
+user root
+
+statement ok
+REVOKE testuser FROM testuser2;
+REVOKE CONNECT ON DATABASE d FROM target
+
 # switch to testuser
 user testuser
 
