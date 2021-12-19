@@ -558,8 +558,10 @@ message LogFileRequest {
 }
 
 enum StacksType {
+  // GOROUTINE_STACKS corresponds to GOROUTINE_STACKS_DEBUG_2.
   GOROUTINE_STACKS = 0;
   reserved 1;
+  GOROUTINE_STACKS_DEBUG_1 = 2;
 }
 
 message StacksRequest {
