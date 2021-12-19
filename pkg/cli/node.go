@@ -325,6 +325,17 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	skipDrainSelf := false
+	localNodeID := serverCfg.IDContainer.Get()
+	for _, targetNodeID := range nodeIDs {
+		if targetNodeID == localNodeID {
+			skipDrainSelf = true
+			fmt.Fprintf(stderr, ""+
+				"warning: node specified with --host cannot be a target node; skipping the drain step for this node.",
+			)
+		}
+	}
+
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
@@ -343,7 +354,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs); err != nil {
+	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs, skipDrainSelf); err != nil {
 		cause := errors.UnwrapAll(err)
 		if s, ok := status.FromError(cause); ok && s.Code() == codes.NotFound {
 			// Are we trying to decommission a node that does not
@@ -423,6 +434,7 @@ func runDecommissionNodeImpl(
 	c serverpb.AdminClient,
 	wait nodeDecommissionWaitType,
 	nodeIDs []roachpb.NodeID,
+	skipDrainSelf bool,
 ) error {
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
@@ -431,12 +443,11 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
-	// Marking a node as fully decommissioned is driven by a two-step process.
-	// We start off by marking each node as 'decommissioning'. In doing so,
-	// replicas are slowly moved off of these nodes. It's only after when we're
-	// made aware that the replica counts have all hit zero, and that all nodes
-	// have been successfully marked as 'decommissioning', that we then go and
-	// mark each node as 'decommissioned'.
+	// Marking a node as fully decommissioned is driven by a three-step process.
+	// 1) Mark each node as 'decommissioning'. In doing so, replicas are slowly moved off of these nodes.
+	// 2) After when we're made aware that the replica counts have all hit zero, and that all nodes
+	// have been successfully marked as 'decommissioning', drain each node.
+	// 3) After each node has been drained, mark each node as 'decommissioned'.
 	prevResponse := serverpb.DecommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
@@ -467,12 +478,31 @@ func runDecommissionNodeImpl(
 		}
 
 		if !anyActive && replicaCount == 0 {
-			// We now mark the nodes as fully decommissioned.
-			req := &serverpb.DecommissionRequest{
+			// We now drain the nodes in order to close all client connections.
+			// Note: iteration is not necessary here since there are no remaining leases
+			// on the decommissioning node after replica transferral.
+			for _, targetNode := range nodeIDs {
+				if targetNode == serverCfg.IDContainer.Get() && skipDrainSelf {
+					// Skip the draining step for the node serving the request, if it is a target node.
+					continue
+				}
+				drainReq := &serverpb.DrainRequest{
+					Shutdown: false,
+					DoDrain:  true,
+					NodeId:   targetNode.String(),
+				}
+				if _, err = c.Drain(ctx, drainReq); err != nil {
+					fmt.Fprintln(stderr)
+					return errors.Wrapf(err, "while trying to drain n%d", targetNode)
+				}
+			}
+
+			// Finally, mark the nodes as fully decommissioned.
+			decommissionReq := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			}
-			_, err = c.Decommission(ctx, req)
+			_, err = c.Decommission(ctx, decommissionReq)
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")

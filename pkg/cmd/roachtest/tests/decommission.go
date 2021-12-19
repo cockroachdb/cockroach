@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -59,6 +61,17 @@ func registerDecommission(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDrainAndDecommission(ctx, t, c, numNodes, duration)
+			},
+		})
+	}
+	{
+		numNodes := 4
+		r.Add(registry.TestSpec{
+			Name:    "decommission/drains",
+			Owner:   registry.OwnerServer,
+			Cluster: r.MakeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runDecommissionDrains(ctx, t, c)
 			},
 		})
 	}
@@ -991,6 +1004,94 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// runDecommissionDrains tests that a decommission implies a drain.
+// This means that SQL connections of a decommissioning node will be closed near the end of decommissioning.
+// The test cluster contains 4 nodes and the fourth node is decommissioned.
+// While the decommissioning node has open SQL connections, queries should never fail.
+func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) {
+	var (
+		numNodes     = 4
+		pinnedNodeID = 1
+		decommNodeID = numNodes
+		decommNode   = c.Node(decommNodeID)
+	)
+
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
+	require.NoError(t, err)
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+	h := newDecommTestHelper(t, c)
+
+	run := func(db *sql.DB, query string) error {
+		_, err = db.ExecContext(ctx, query)
+		t.L().Printf("run: %s\n", query)
+		return err
+	}
+
+	{
+		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		defer db.Close()
+
+		// Increase the speed of decommissioning.
+		err = run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		require.NoError(t, err)
+		err = run(db, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+		require.NoError(t, err)
+
+		// Wait for initial up-replication.
+		WaitFor3XReplication(t, db)
+	}
+
+	// Connect to node 4 (the target node of the decommission).
+	db := c.Conn(ctx, t.L(), decommNodeID)
+	defer db.Close()
+
+	// Decommission node 4 and poll its status during the decommission.
+	var (
+		maxAttempts = 50
+		retryOpts   = retry.Options{
+			InitialBackoff: time.Second,
+			MaxBackoff:     5 * time.Second,
+			Multiplier:     2,
+		}
+		// The expected output of decommission right before the node is marked as "decommissioned."
+		expDecommissioning = [][]string{
+			decommissionHeader,
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioning", "false"},
+			decommissionFooter,
+		}
+		// The expected output of decommission once the node is finally marked as "decommissioned."
+		expDecommissioned = [][]string{
+			decommissionHeader,
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false"},
+			decommissionFooter,
+		}
+	)
+	t.Status(fmt.Sprintf("decommissioning node %d", decommNodeID))
+	err = retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
+		o, e := h.decommission(ctx, decommNode, pinnedNodeID, "--wait=none", "--format=csv")
+		require.NoError(t, errors.Wrapf(e, "decommission failed: %v"))
+
+		// Near the end of the decommission, check if the SQL connection is still open.
+		if e = cli.MatchCSV(o, expDecommissioning); e == nil {
+			// Check that queries from the open SQL connection do not fail (max duration: 5 seconds).
+			for i := 0; i <= 5; i++ {
+				if isOpenConn := db.Ping() == nil; isOpenConn {
+					queryErr := run(db, `SHOW DATABASES`)
+					require.NoError(t, queryErr)
+					time.Sleep(time.Second)
+				} else {
+					// The decommissioning node was drained.
+					break
+				}
+			}
+		}
+		return cli.MatchCSV(o, expDecommissioned)
+	})
+	require.NoError(t, err)
 }
 
 // Header from the output of `cockroach node decommission`.
