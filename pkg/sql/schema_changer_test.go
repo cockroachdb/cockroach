@@ -5914,7 +5914,7 @@ func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 	var runBeforeConstraintValidation func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func() error {
+			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
 				return runBeforeConstraintValidation()
 			},
 		},
@@ -5967,7 +5967,7 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 	errorReturned := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func() error {
+			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
 				return runBeforeConstraintValidation()
 			},
 		},
@@ -7478,4 +7478,62 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 		`SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'`,
 	).Scan(&id)
 	require.Equal(t, scJobID, id)
+}
+
+func TestShardColumnConstraintSkipValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var runBeforeConstraintValidation func(constraints []catalog.ConstraintToUpdate) error
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
+				return runBeforeConstraintValidation(constraints)
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	runBeforeConstraintValidation = func(constraints []catalog.ConstraintToUpdate) error { return nil }
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT NOT NULL);
+INSERT INTO t.test VALUES (1, 2);
+`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// make sure non-shard column constraint is validated
+	runBeforeConstraintValidation = func(constraints []catalog.ConstraintToUpdate) error {
+		if len(constraints) != 1 {
+			return errors.Newf("Expecting 1 constraint but found %d", len(constraints))
+		}
+		return nil
+	}
+
+	if _, err := sqlDB.Exec(`
+ALTER TABLE t.test ADD CONSTRAINT check_b_positive CHECK (b > 0);
+`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// make sure shard column constraint is not validated
+	runBeforeConstraintValidation = func(constraints []catalog.ConstraintToUpdate) error {
+		return errors.Newf("Should not validating any constraint, but found %d", len(constraints))
+	}
+
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_hash_sharded_indexes = ON;
+CREATE INDEX ON t.test (b) USING HASH WITH BUCKET_COUNT = 8;
+`,
+	); err != nil {
+		t.Fatal(err)
+	}
 }

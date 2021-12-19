@@ -1886,7 +1886,7 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeConstraintValidation is called just before starting the checks validation,
 	// after setting the job status to validating.
-	RunBeforeConstraintValidation func() error
+	RunBeforeConstraintValidation func(constraints []catalog.ConstraintToUpdate) error
 
 	// RunBeforeMutationReversal runs at the beginning of maybeReverseMutations.
 	RunBeforeMutationReversal func(jobID jobspb.JobID) error
