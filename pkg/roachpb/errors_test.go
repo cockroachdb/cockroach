@@ -215,3 +215,11 @@ func TestErrorGRPCStatus(t *testing.T) {
 	require.Equal(t, s.Code(), decoded.Code())
 	require.Equal(t, s.Message(), decoded.Message())
 }
+
+func TestRefreshSpanError(t *testing.T) {
+	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, Key("foo"), hlc.Timestamp{WallTime: 3})
+	require.Equal(t, "encountered recently written committed value \"foo\" @0.000000003,0", e1.Error())
+
+	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, Key("bar"), hlc.Timestamp{WallTime: 4})
+	require.Equal(t, "encountered recently written intent \"bar\" @0.000000004,0", e2.Error())
+}
