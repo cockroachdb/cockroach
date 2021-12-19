@@ -95,20 +95,48 @@ func getStatusJSONProtoWithAdminOption(
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	skip.UnderRaceWithIssue(t, 74133)
 
-	// Verify match with at least two goroutine stacks.
-	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.Background())
 
-	var stacks serverpb.JSONResponse
-	for _, nodeID := range []string{"local", "1"} {
-		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
-			t.Fatal(err)
-		}
-		if !re.Match(stacks.Data) {
-			t.Errorf("expected %s to match %s", stacks.Data, re)
-		}
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
+	rpcContext := newRPCTestContext(ts, rootConfig)
+
+	url := ts.ServingRPCAddr()
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	testCases := []struct {
+		stackType serverpb.StacksType
+		re        *regexp.Regexp
+	}{
+		{serverpb.StacksType_GOROUTINE_STACKS, regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")},
+		// At least `labels: {"pebble":"table-cache"}` and `labels: {"pebble":"wal-sync"}`
+		// should be present.
+		{serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1, regexp.MustCompile("(?s)labels: {.*labels: {.*")},
+	}
+
+	for _, tt := range testCases {
+		t.Run(fmt.Sprintf("debug=%s", tt.stackType), func(t *testing.T) {
+			var stacks serverpb.JSONResponse
+			for _, nodeID := range []string{"local", "1"} {
+				request := serverpb.StacksRequest{
+					NodeId: nodeID, Type: tt.stackType,
+				}
+				response, err := client.Stacks(context.Background(), &request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !tt.re.Match(response.Data) {
+					t.Errorf("expected %s to match %s", stacks.Data, tt.re)
+				}
+			}
+		})
 	}
 }
 
