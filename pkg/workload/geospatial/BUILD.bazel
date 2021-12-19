@@ -3,10 +3,19 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "geospatial",
     srcs = ["geospatial.go"],
+    embedsrcs = [
+        "data/nyc_census_blocks.yaml.gz",
+        "data/nyc_homicides.yaml.gz",
+        "data/nyc_neighborhoods.yaml.gz",
+        "data/nyc_streets.yaml.gz",
+        "data/nyc_subway_stations.yaml.gz",
+        "data/subway_lines.yaml.gz",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/geospatial",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/types",
         "//pkg/workload",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
