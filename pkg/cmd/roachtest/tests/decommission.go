@@ -63,6 +63,17 @@ func registerDecommission(r registry.Registry) {
 		})
 	}
 	{
+		numNodes := 4
+		r.Add(registry.TestSpec{
+			Name:    "decommission/drains",
+			Owner:   registry.OwnerServer,
+			Cluster: r.MakeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runDecommissionDrains(ctx, t, c, numNodes)
+			},
+		})
+	}
+	{
 		numNodes := 6
 		r.Add(registry.TestSpec{
 			Name:    "decommission/randomized",
@@ -991,6 +1002,78 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// runDecommissionDrains tests that a decommission implies a drain.
+// SQL client connections of a decommissioning node should drain near the end of decommissioning.
+// The test cluster contains 4 nodes and the fourth node is decommissioned.
+// After connecting to node 4, queries should not fail, even after the final
+// range has been moved away from the decommissioned node.
+func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster, numNodes int) {
+	var (
+		pinnedNodeID = 1
+		decommNodeID = numNodes
+		decommNode   = c.Node(decommNodeID)
+	)
+
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
+	require.NoError(t, err)
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+	h := newDecommTestHelper(t, c)
+
+	run := func(stmt string) {
+		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		defer db.Close()
+
+		t.Status(stmt)
+		_, err := db.ExecContext(ctx, stmt)
+		require.NoError(t, err)
+
+		t.L().Printf("run: %s\n", stmt)
+	}
+
+	// Increase the speed of decommissioning.
+	run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+	run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+
+	// Connect to node 4.
+	db := c.Conn(ctx, t.L(), decommNodeID)
+	defer db.Close()
+
+	t.Status("waiting for initial up-replication")
+	WaitFor3XReplication(t, db)
+
+	// Decommission node 4 and poll its status during the decommission.
+	t.Status(fmt.Sprintf("decommissioning node %d", decommNodeID))
+	maxAttempts := 50
+	exp := [][]string{
+		decommissionHeader,
+		{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false"},
+		decommissionFooter,
+	}
+	retryOpts := retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     2,
+	}
+
+	err = retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
+		o, err := h.decommission(ctx, decommNode, pinnedNodeID, "--wait=none", "--format=csv")
+		if err != nil {
+			t.Fatalf("decommission failed: %v", err)
+		}
+
+		// Run queries while the node is decommissioning.
+		e := c.RunE(ctx, decommNode, `./cockroach sql -e "SHOW DATABASES" --insecure`)
+		// There should be no error, even after the node is marked as fully decommissioned.
+		require.NoError(t, e)
+
+		t.Status(o)
+		return cli.MatchCSV(o, exp)
+	})
+	require.NoError(t, err)
 }
 
 // Header from the output of `cockroach node decommission`.
