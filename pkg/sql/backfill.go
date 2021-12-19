@@ -251,20 +251,15 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
 				addedIndexes = append(addedIndexes, idx.GetID())
 			} else if c := m.AsConstraint(); c != nil {
-				isValidating := false
-				if c.IsCheck() {
-					isValidating = c.Check().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsForeignKey() {
-					isValidating = c.ForeignKey().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsUniqueWithoutIndex() {
-					isValidating = c.UniqueWithoutIndex().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsNotNull() {
-					// NOT NULL constraints are always validated before they can be added
-					isValidating = true
+				isValidating, isAdding, err := shouldValidateOrAddConstraint(tableDesc, c)
+				if err != nil {
+					return err
 				}
 				if isValidating {
-					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, c)
 					constraintsToValidate = append(constraintsToValidate, c)
+				}
+				if isAdding {
+					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, c)
 				}
 			} else if mvRefresh := m.AsMaterializedViewRefresh(); mvRefresh != nil {
 				viewToRefresh = mvRefresh
@@ -360,6 +355,53 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// shouldValidateCheckConstraint checks if a Check Constraint should be
+// validated during backfill. A Check Constraint can skip validation if it's
+// created for a shard column internally.
+func shouldValidateCheckConstraint(
+	tableDesc *tabledesc.Mutable, checkConstraint descpb.TableDescriptor_CheckConstraint,
+) (bool, error) {
+	// The check constraint on shard column is always on the shard column itself.
+	if len(checkConstraint.ColumnIDs) != 1 {
+		return checkConstraint.Validity == descpb.ConstraintValidity_Validating, nil
+	}
+
+	checkCol, err := tableDesc.FindColumnWithID(checkConstraint.ColumnIDs[0])
+	if err != nil {
+		return false, err
+	}
+
+	if tableDesc.IsShardColumn(checkCol) && checkCol.Adding() {
+		return false, nil
+	}
+	return checkConstraint.Validity == descpb.ConstraintValidity_Validating, nil
+}
+
+func shouldValidateOrAddConstraint(
+	tableDesc *tabledesc.Mutable, constraint catalog.ConstraintToUpdate,
+) (shouldValidate bool, shouldAdd bool, err error) {
+	if constraint.IsCheck() {
+		shouldValidate, err = shouldValidateCheckConstraint(tableDesc, constraint.Check())
+		if err != nil {
+			return
+		}
+	} else if constraint.IsForeignKey() {
+		shouldValidate = constraint.ForeignKey().Validity == descpb.ConstraintValidity_Validating
+	} else if constraint.IsUniqueWithoutIndex() {
+		shouldValidate = constraint.UniqueWithoutIndex().Validity == descpb.ConstraintValidity_Validating
+	} else if constraint.IsNotNull() {
+		// NOT NULL constraints are always validated before they can be added
+		shouldValidate = true
+	}
+
+	if constraint.IsCheck() {
+		shouldAdd = constraint.Check().Validity == descpb.ConstraintValidity_Validating
+	} else {
+		shouldAdd = shouldValidate
+	}
+	return
 }
 
 // dropConstraints publishes a new version of the given table descriptor with
