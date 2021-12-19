@@ -205,6 +205,7 @@ func TestConcurrentZip(t *testing.T) {
 
 func TestZipSpecialNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 74133)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -546,6 +547,7 @@ test/generate_series(1,15000) as t(x).4.txt.err.txt
 func TestToHex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 74133)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
