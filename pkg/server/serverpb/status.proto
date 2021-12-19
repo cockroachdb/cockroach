@@ -567,6 +567,7 @@ message StacksRequest {
   // forwarding is necessary.
   string node_id = 1;
   StacksType type = 2;
+  int64 debug = 3;
 }
 
 // Represents the type of file.

@@ -234,6 +234,7 @@ func (zc *debugZipContext) collectPerNodeData(
 			stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
 				NodeId: id,
 				Type:   serverpb.StacksType_GOROUTINE_STACKS,
+				Debug:  2,
 			})
 			if err == nil {
 				stacksData = stacks.Data
@@ -241,6 +242,24 @@ func (zc *debugZipContext) collectPerNodeData(
 			return err
 		})
 	if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
+		return err
+	}
+
+	var stacksDataWithLabels []byte
+	s = nodePrinter.start("requesting stacks with labels")
+	requestErr = zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+				NodeId: id,
+				Type:   serverpb.StacksType_GOROUTINE_STACKS,
+				Debug:  1,
+			})
+			if err == nil {
+				stacksDataWithLabels = stacks.Data
+			}
+			return err
+		})
+	if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
 		return err
 	}
 
