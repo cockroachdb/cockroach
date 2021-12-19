@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strconv"
@@ -79,9 +78,6 @@ import (
 const (
 	// Default Maximum number of log entries returned.
 	defaultMaxLogEntries = 1000
-
-	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
-	stackTraceApproxSize = 1024
 
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
@@ -956,7 +952,7 @@ func (s *statusServer) GetFiles(
 
 	var dir string
 	switch req.Type {
-	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
+	// TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
 	// instead of reading individual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = s.admin.server.cfg.HeapProfileDirName
@@ -1210,9 +1206,6 @@ func (s *statusServer) Logs(
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil
 }
 
-// TODO(tschottdorf): significant overlap with /debug/pprof/goroutine, except
-// that this one allows querying by NodeID.
-//
 // Stacks returns goroutine or thread stack traces.
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
@@ -1237,23 +1230,21 @@ func (s *statusServer) Stacks(
 		return status.Stacks(ctx, req)
 	}
 
+	var debug int
 	switch req.Type {
 	case serverpb.StacksType_GOROUTINE_STACKS:
-		bufSize := runtime.NumGoroutine() * stackTraceApproxSize
-		for {
-			buf := make([]byte, bufSize)
-			length := runtime.Stack(buf, true)
-			// If this wasn't large enough to accommodate the full set of
-			// stack traces, increase by 2 and try again.
-			if length == bufSize {
-				bufSize = bufSize * 2
-				continue
-			}
-			return &serverpb.JSONResponse{Data: buf[:length]}, nil
-		}
+		debug = 2
+	case serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1:
+		debug = 1
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}
+
+	var buf bytes.Buffer
+	if err := pprof.Lookup("goroutine").WriteTo(&buf, debug); err != nil {
+		return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
+	}
+	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 }
 
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
