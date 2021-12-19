@@ -90,28 +90,6 @@ func getStatusJSONProtoWithAdminOption(
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
 }
 
-// TestStatusLocalStacks verifies that goroutine stack traces are available
-// via the /_status/stacks/local endpoint.
-func TestStatusLocalStacks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Verify match with at least two goroutine stacks.
-	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
-
-	var stacks serverpb.JSONResponse
-	for _, nodeID := range []string{"local", "1"} {
-		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
-			t.Fatal(err)
-		}
-		if !re.Match(stacks.Data) {
-			t.Errorf("expected %s to match %s", stacks.Data, re)
-		}
-	}
-}
-
 // TestStatusJson verifies that status endpoints return expected Json results.
 // The content type of the responses is always httputil.JSONContentType.
 func TestStatusJson(t *testing.T) {
@@ -512,6 +490,68 @@ func TestStatusGetFiles(t *testing.T) {
 			t.Errorf("GetFiles: invalid file type allowed")
 		}
 	})
+}
+
+// TestStatusLocalStacks verifies that goroutine stack traces are available
+// via the /_status/stacks/local endpoint.
+func TestStatusLocalStacks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// skipping because statusServer#Stacks reads goroutine labels simultaneously
+	// with pebble/tableCacheShard#releaseLoop writes to the goroutine labels.
+	skip.UnderRace(t)
+
+	tempDir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	storeSpec := base.StoreSpec{Path: tempDir}
+
+	tsI, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			storeSpec,
+		},
+	})
+	ts := tsI.(*TestServer)
+	defer ts.Stopper().Stop(context.Background())
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
+	rpcContext := newRPCTestContext(ts, rootConfig)
+
+	url := ts.ServingRPCAddr()
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	testCases := []struct {
+		debug int64
+		re    *regexp.Regexp
+	}{
+		// At least `labels: {"pebble":"table-cache"}` and `labels: {"pebble":"wal-sync"}`
+		// should be present.
+		{1, regexp.MustCompile("(?s)labels: {.*labels: {.*")},
+		{2, regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")},
+	}
+
+	for _, tt := range testCases {
+		t.Run(fmt.Sprintf("debug=%d", tt.debug), func(t *testing.T) {
+			var stacks serverpb.JSONResponse
+			for _, nodeID := range []string{"local", "1"} {
+				request := serverpb.StacksRequest{
+					NodeId: nodeID, Type: serverpb.StacksType_GOROUTINE_STACKS, Debug: tt.debug,
+				}
+				response, err := client.Stacks(context.Background(), &request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !tt.re.Match(response.Data) {
+					t.Errorf("expected %s to match %s", stacks.Data, tt.re)
+				}
+			}
+		})
+	}
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
