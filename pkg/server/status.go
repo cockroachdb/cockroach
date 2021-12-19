@@ -946,7 +946,7 @@ func (s *statusServer) GetFiles(
 
 	var dir string
 	switch req.Type {
-	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
+	// TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
 	// instead of reading individual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = s.admin.server.cfg.HeapProfileDirName
@@ -1230,17 +1230,29 @@ func (s *statusServer) Stacks(
 	switch req.Type {
 	case serverpb.StacksType_GOROUTINE_STACKS:
 		bufSize := runtime.NumGoroutine() * stackTraceApproxSize
+		var buf []byte
+		length := 0
 		for {
-			buf := make([]byte, bufSize)
-			length := runtime.Stack(buf, true)
+			buf = make([]byte, bufSize)
+			length = runtime.Stack(buf, true)
 			// If this wasn't large enough to accommodate the full set of
 			// stack traces, increase by 2 and try again.
 			if length == bufSize {
 				bufSize = bufSize * 2
 				continue
 			}
-			return &serverpb.JSONResponse{Data: buf[:length]}, nil
+			break
 		}
+
+		var bufStackWithLabels bytes.Buffer
+
+		if err = pprof.Lookup("goroutine").WriteTo(&bufStackWithLabels, 1); err != nil {
+			return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
+		}
+		res := append(buf[:length], []byte("\n----\n\n")...)
+		res = append(res, bufStackWithLabels.Bytes()...)
+
+		return &serverpb.JSONResponse{Data: res}, nil
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}

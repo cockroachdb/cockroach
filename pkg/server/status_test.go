@@ -96,6 +96,9 @@ func getStatusJSONProtoWithAdminOption(
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// skipping because statusServer#Stacks reads goroutine labels simultaneously
+	// with pebble/tableCacheShard#releaseLoop writes to the goroutine labels.
+	skip.UnderRace(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
