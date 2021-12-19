@@ -431,12 +431,11 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
-	// Marking a node as fully decommissioned is driven by a two-step process.
-	// We start off by marking each node as 'decommissioning'. In doing so,
-	// replicas are slowly moved off of these nodes. It's only after when we're
-	// made aware that the replica counts have all hit zero, and that all nodes
-	// have been successfully marked as 'decommissioning', that we then go and
-	// mark each node as 'decommissioned'.
+	// Marking a node as fully decommissioned is driven by a three-step process.
+	// 1) Mark each node as 'decommissioning'. In doing so, replicas are slowly moved off of these nodes.
+	// 2) After when we're made aware that the replica counts have all hit zero, and that all nodes
+	// have been successfully marked as 'decommissioning', drain each node.
+	// 3) After each node has been drained, mark each node as 'decommissioned'.
 	prevResponse := serverpb.DecommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
@@ -467,12 +466,28 @@ func runDecommissionNodeImpl(
 		}
 
 		if !anyActive && replicaCount == 0 {
-			// We now mark the nodes as fully decommissioned.
-			req := &serverpb.DecommissionRequest{
+			// We now drain the nodes in order to close all client connections.
+			for _, targetNode := range nodeIDs {
+				drainReq := &serverpb.DrainRequest{
+					Shutdown: false,
+					DoDrain:  true,
+					NodeId:   targetNode.String(),
+				}
+				if _, err = c.Drain(ctx, drainReq); err != nil {
+					fmt.Fprintln(stderr)
+					return errors.Wrapf(err, "while trying to drain %s", targetNode.String())
+				}
+			}
+
+			// Allow time for the drains to close the client connections.
+			time.Sleep(200 * time.Millisecond)
+
+			// Finally, mark the nodes as fully decommissioned.
+			decommissionReq := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			}
-			_, err = c.Decommission(ctx, req)
+			_, err = c.Decommission(ctx, decommissionReq)
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
