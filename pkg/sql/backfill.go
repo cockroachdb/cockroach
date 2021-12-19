@@ -250,19 +250,18 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
 				addedIndexes = append(addedIndexes, idx.GetID())
 			} else if c := m.AsConstraint(); c != nil {
-				isValidating := false
-				if c.IsCheck() {
-					isValidating = c.Check().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsForeignKey() {
-					isValidating = c.ForeignKey().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsUniqueWithoutIndex() {
-					isValidating = c.UniqueWithoutIndex().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsNotNull() {
-					// NOT NULL constraints are always validated before they can be added
-					isValidating = true
+				isValidating := c.IsCheck() && c.Check().Validity == descpb.ConstraintValidity_Validating ||
+					c.IsForeignKey() && c.ForeignKey().Validity == descpb.ConstraintValidity_Validating ||
+					c.IsUniqueWithoutIndex() && c.UniqueWithoutIndex().Validity == descpb.ConstraintValidity_Validating ||
+					c.IsNotNull()
+				isSkippingValidation, err := shouldSkipConstraintValidation(tableDesc, c)
+				if err != nil {
+					return err
 				}
 				if isValidating {
 					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, c)
+				}
+				if isValidating && !isSkippingValidation {
 					constraintsToValidate = append(constraintsToValidate, c)
 				}
 			} else if mvRefresh := m.AsMaterializedViewRefresh(); mvRefresh != nil {
@@ -359,6 +358,35 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// shouldSkipConstraintValidation checks if a validating constraint should skip
+// validation and be added directly. A Check Constraint can skip validation if it's
+// created for a shard column internally.
+func shouldSkipConstraintValidation(
+	tableDesc *tabledesc.Mutable, c catalog.ConstraintToUpdate,
+) (bool, error) {
+	if !c.IsCheck() {
+		return false, nil
+	}
+
+	check := c.Check()
+	// The check constraint on shard column is always on the shard column itself.
+	if len(check.ColumnIDs) != 1 {
+		return false, nil
+	}
+
+	checkCol, err := tableDesc.FindColumnWithID(check.ColumnIDs[0])
+	if err != nil {
+		return false, err
+	}
+
+	// We only want to skip validation when the shard column is first added and
+	// the constraint is created internally since the shard column computation is
+	// well defined. Note that we show the shard column in `SHOW CREATE TABLE`,
+	// and we don't prevent users from adding other constraints on it. For those
+	// constraints, we still want to validate.
+	return tableDesc.IsShardColumn(checkCol) && checkCol.Adding(), nil
 }
 
 // dropConstraints publishes a new version of the given table descriptor with
