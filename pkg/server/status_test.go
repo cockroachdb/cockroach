@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,28 +87,6 @@ func getStatusJSONProtoWithAdminOption(
 	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
-}
-
-// TestStatusLocalStacks verifies that goroutine stack traces are available
-// via the /_status/stacks/local endpoint.
-func TestStatusLocalStacks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Verify match with at least two goroutine stacks.
-	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
-
-	var stacks serverpb.JSONResponse
-	for _, nodeID := range []string{"local", "1"} {
-		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
-			t.Fatal(err)
-		}
-		if !re.Match(stacks.Data) {
-			t.Errorf("expected %s to match %s", stacks.Data, re)
-		}
-	}
 }
 
 // TestStatusJson verifies that status endpoints return expected Json results.
