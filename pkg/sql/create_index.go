@@ -141,7 +141,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 		if err != nil {
 			return err
 		}
-		ck.Validity = descpb.ConstraintValidity_Validating
+		ck.Validity = descpb.ConstraintValidity_Validated
 		tableDesc.AddCheckMutation(ck, descpb.DescriptorMutation_ADD)
 	}
 	return nil
