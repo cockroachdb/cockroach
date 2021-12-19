@@ -5914,7 +5914,7 @@ func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 	var runBeforeConstraintValidation func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func() error {
+			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
 				return runBeforeConstraintValidation()
 			},
 		},
@@ -5967,7 +5967,7 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 	errorReturned := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func() error {
+			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
 				return runBeforeConstraintValidation()
 			},
 		},
@@ -7478,4 +7478,44 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 		`SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'`,
 	).Scan(&id)
 	require.Equal(t, scJobID, id)
+}
+
+func TestShardColumnConstraintSkipValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	constraintsToValidate := make(chan []catalog.ConstraintToUpdate, 1)
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
+				constraintsToValidate <- constraints
+				return nil
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	tdb.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT NOT NULL);
+INSERT INTO t.test VALUES (1, 2);
+`,
+	)
+
+	// Make sure non-shard column constraint is validated.
+	tdb.Exec(t, `ALTER TABLE t.test ADD CONSTRAINT check_b_positive CHECK (b > 0);`)
+	require.Len(t, <-constraintsToValidate, 1)
+
+	// Make sure shard column constraint is not validated.
+	tdb.Exec(t, `
+SET experimental_enable_hash_sharded_indexes = ON;
+CREATE INDEX ON t.test (b) USING HASH WITH BUCKET_COUNT = 8;
+`,
+	)
+	require.Len(t, constraintsToValidate, 0)
 }
