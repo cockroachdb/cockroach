@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"sync/atomic"
 	"time"
 
@@ -484,7 +485,8 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(ctx, repl, voterReplicas, nonVoterReplicas, canTransferLeaseFrom, dryRun)
 	case AllocatorFinalizeAtomicReplicationChange:
-		_, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.store, repl.Desc())
+		_, err :=
+			repl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.Desc())
 		// Requeue because either we failed to transition out of a joint state
 		// (bad) or we did and there might be more to do for that range.
 		return true, err
@@ -539,16 +541,19 @@ func (rq *replicateQueue) addOrReplaceVoters(
 				break
 			}
 		}
-		// See about transferring the lease away if we're about to remove the
-		// leaseholder.
-		done, err := rq.maybeTransferLeaseAway(
-			ctx, repl, existingVoters[removeIdx].StoreID, dryRun, nil /* canTransferLeaseFrom */)
-		if err != nil {
-			return false, err
-		}
-		if done {
-			// Lease was transferred away. Next leaseholder is going to take over.
-			return false, nil
+		if !repl.store.cfg.Settings.Version.IsActive(ctx,
+			clusterversion.EnableLeaseHolderRemoval) {
+			// See about transferring the lease away if we're about to remove the
+			// leaseholder.
+			done, err := rq.maybeTransferLeaseAway(
+				ctx, repl, existingVoters[removeIdx].StoreID, dryRun, nil /* canTransferLeaseFrom */)
+			if err != nil {
+				return false, err
+			}
+			if done {
+				// Lease was transferred away. Next leaseholder is going to take over.
+				return false, nil
+			}
 		}
 	}
 
@@ -1107,14 +1112,19 @@ func (rq *replicateQueue) considerRebalance(
 
 		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target for non-voters")
-		} else if done, err := rq.maybeTransferLeaseAway(
-			ctx, repl, removeTarget.StoreID, dryRun, canTransferLeaseFrom,
-		); err != nil {
-			log.VEventf(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
-		} else if done {
-			// Lease is now elsewhere, so we're not in charge any more.
-			return false, nil
-		} else {
+		} else if !repl.store.cfg.Settings.Version.IsActive(ctx,
+			clusterversion.EnableLeaseHolderRemoval) {
+			if done, err := rq.maybeTransferLeaseAway(
+				ctx, repl, removeTarget.StoreID, dryRun, canTransferLeaseFrom,
+			); err != nil {
+				log.VEventf(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
+				ok = false
+			} else if done {
+				// Lease is now elsewhere, so we're not in charge any more.
+				return false, nil
+			}
+		}
+		if ok {
 			// If we have a valid rebalance action (ok == true) and we haven't
 			// transferred our lease away, execute the rebalance.
 			chgs, performingSwap, err := replicationChangesForRebalance(ctx, desc, len(existingVoters), addTarget,

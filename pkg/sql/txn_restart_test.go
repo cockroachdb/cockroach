@@ -1318,7 +1318,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 		tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
-				ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
+				ServerArgs: base.TestServerArgs{UseDatabase: "test"},
 			})
 		defer tc.Stopper().Stop(context.Background())
 		db := tc.ServerConn(0)
