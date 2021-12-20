@@ -2009,11 +2009,17 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 // with an empty or nil `raftStatus` (as will be the case when its called by a
 // replica that is not the raft leader), we pessimistically assume that
 // `replicaID` may need a snapshot.
-func replicaMayNeedSnapshot(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool {
+func replicaMayNeedSnapshot(raftStatus *raft.Status, replica roachpb.ReplicaDescriptor) bool {
+	// When adding replicas, we only move them from LEARNER to VOTER_INCOMING after
+	// they applied the snapshot (see initializeRaftLearners and its use in
+	// changeReplicasImpl).
+	if replica.GetType() == roachpb.VOTER_INCOMING {
+		return false
+	}
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
 		return true
 	}
-	if progress, ok := raftStatus.Progress[uint64(replicaID)]; ok {
+	if progress, ok := raftStatus.Progress[uint64(replica.ReplicaID)]; ok {
 		// We can only reasonably assume that the follower replica is not in need of
 		// a snapshot iff it is in `StateReplicate`. However, even this is racey
 		// because we can still possibly have an ill-timed log truncation between
@@ -2040,7 +2046,7 @@ func excludeReplicasInNeedOfSnapshots(
 
 	filled := 0
 	for _, repl := range replicas {
-		if replicaMayNeedSnapshot(raftStatus, repl.ReplicaID) {
+		if replicaMayNeedSnapshot(raftStatus, repl) {
 			log.VEventf(
 				ctx,
 				5,
