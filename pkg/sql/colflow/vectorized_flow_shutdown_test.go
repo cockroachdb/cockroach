@@ -289,7 +289,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					doneFn := func() { close(serverStreamNotification.Donec) }
 					wg.Add(1)
 					go func(id int, stream execinfrapb.DistSQL_FlowStreamServer, doneFn func()) {
-						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream, make(<-chan struct{}))
+						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream)
 						doneFn()
 						wg.Done()
 					}(id, serverStream, doneFn)
