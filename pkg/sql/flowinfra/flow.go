@@ -12,6 +12,8 @@ package flowinfra
 
 import (
 	"context"
+	"runtime/debug"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -203,7 +205,17 @@ type FlowBase struct {
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
 ) (context.Context, execinfra.OpChains, error) {
-	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	var ctxCancel context.CancelFunc
+	ctx, ctxCancel = contextutil.WithCancel(ctx)
+	f.ctxCancel = func() {
+		stmt := ctx.Value("stmt").(string)
+		if strings.Contains(stmt, "xyz") {
+			if strings.Contains(stmt, "INTERSECT") || strings.Contains(stmt, "EXCEPT") {
+				debug.PrintStack()
+			}
+		}
+		ctxCancel()
+	}
 	f.ctxDone = ctx.Done()
 	f.spec = spec
 	return ctx, nil, nil
