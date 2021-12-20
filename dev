@@ -4,17 +4,13 @@ set -uo pipefail
 
 this_dir=$(cd "$(dirname "$0")" && pwd)
 mkdir -p $this_dir/artifacts
-bazel build //pkg/cmd/dev &> $this_dir/artifacts/dev.log
+bazel build //pkg/cmd/dev --config nonogo &> $this_dir/artifacts/dev.log
 status=$?
 if [ $status -eq 0 ]
 then
-    $(bazel info bazel-bin)/pkg/cmd/dev/dev_/dev "$@"
+    $(bazel info bazel-bin --config nonogo)/pkg/cmd/dev/dev_/dev "$@"
 else
     echo 'Failed to build pkg/cmd/dev! Got output:'
     cat $this_dir/artifacts/dev.log
-    echo 'Hint: if the full `dev` build is failing for you, you can build a minimal version with --config nonogo.'
-    echo 'Afterward, run `dev doctor` to debug your failing build. For example:'
-    echo '    bazel build pkg/cmd/dev --config nonogo && _bazel/bin/pkg/cmd/dev/dev_/dev doctor'
-    echo 'When `dev doctor` says you are ready to build, try re-building the full binary with `./dev`.'
     exit $status
 fi

@@ -80,6 +80,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
+        "//pkg/util/cache",
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/encoding",
