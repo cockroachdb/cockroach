@@ -590,6 +590,12 @@ func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool, catalog ca
 func (md *Metadata) UpdateTableMeta(tables map[cat.StableID]cat.Table) {
 	for i := range md.tables {
 		if tab, ok := tables[md.tables[i].Table.ID()]; ok {
+			// If there are any inverted hypothetical indexes, the hypothetical table
+			// will have extra inverted columns added. Add any new inverted columns to
+			// the metadata.
+			for j, n := md.tables[i].Table.ColumnCount(), tab.ColumnCount(); j < n; j++ {
+				md.AddColumn(string(tab.Column(i).ColName()), types.Bytes)
+			}
 			md.tables[i].Table = tab
 		}
 	}

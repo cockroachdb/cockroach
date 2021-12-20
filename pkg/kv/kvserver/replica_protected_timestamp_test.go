@@ -122,7 +122,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				mt.refresh = func(_ context.Context, refreshTo hlc.Timestamp) error {
 					require.Equal(t, refreshTo, aliveAt)
 					mt.records = append(mt.records, &ptpb.Record{
-						ID:        args.RecordID,
+						ID:        args.RecordID.GetBytes(),
 						Timestamp: ts,
 						Spans: []roachpb.Span{
 							{
@@ -157,7 +157,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				// Insert a record.
 				oldTimestamp := ts
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        id,
+					ID:        id.GetBytes(),
 					Timestamp: oldTimestamp,
 					Spans: []roachpb.Span{
 						{
@@ -199,7 +199,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				// Insert a record.
 				oldTimestamp := ts
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        id,
+					ID:        id.GetBytes(),
 					Timestamp: oldTimestamp,
 					Spans: []roachpb.Span{
 						{
@@ -261,7 +261,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				args := makeArgs(r, ts, aliveAt)
 				mt.asOf = aliveAt.Next()
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        args.RecordID,
+					ID:        args.RecordID.GetBytes(),
 					Timestamp: ts,
 					Spans: []roachpb.Span{
 						{
@@ -432,7 +432,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				ts := r.store.Clock().Now()
 				mt.asOf = r.store.Clock().Now().Next()
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        uuid.MakeV4(),
+					ID:        uuid.MakeV4().GetBytes(),
 					Timestamp: ts,
 					Spans: []roachpb.Span{
 						{
@@ -456,7 +456,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				ts := r.store.Clock().Now().Add(-11*time.Second.Nanoseconds(), 0)
 				mt.asOf = r.store.Clock().Now().Next()
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        uuid.MakeV4(),
+					ID:        uuid.MakeV4().GetBytes(),
 					Timestamp: ts,
 					Spans: []roachpb.Span{
 						{
@@ -484,7 +484,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				r.mu.Unlock()
 				mt.asOf = r.store.Clock().Now().Next()
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        uuid.MakeV4(),
+					ID:        uuid.MakeV4().GetBytes(),
 					Timestamp: th.Next(),
 					Spans: []roachpb.Span{
 						{
@@ -512,7 +512,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				r.mu.state.GCThreshold = &thresh
 				mt.asOf = thresh.Next()
 				mt.records = append(mt.records, &ptpb.Record{
-					ID:        id,
+					ID:        id.GetBytes(),
 					Timestamp: ts,
 					Spans: []roachpb.Span{
 						{
@@ -573,7 +573,7 @@ func (c *manualCache) QueryRecord(
 	ctx context.Context, id uuid.UUID,
 ) (exists bool, asOf hlc.Timestamp) {
 	for _, r := range c.records {
-		if r.ID == id {
+		if r.ID.GetUUID() == id {
 			return true, c.asOf
 		}
 	}

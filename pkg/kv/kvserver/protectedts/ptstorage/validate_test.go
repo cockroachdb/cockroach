@@ -34,7 +34,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 	}{
 		{
 			r: &ptpb.Record{
-				ID:        uuid.MakeV4(),
+				ID:        uuid.MakeV4().GetBytes(),
 				Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1},
 				MetaType:  "job",
 				Meta:      []byte("junk"),
@@ -53,7 +53,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 		},
 		{
 			r: &ptpb.Record{
-				ID:       uuid.MakeV4(),
+				ID:       uuid.MakeV4().GetBytes(),
 				MetaType: "job",
 				Meta:     []byte("junk"),
 				Spans:    spans,
@@ -62,7 +62,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 		},
 		{
 			r: &ptpb.Record{
-				ID:        uuid.MakeV4(),
+				ID:        uuid.MakeV4().GetBytes(),
 				Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1},
 				Meta:      []byte("junk"),
 				Spans:     spans,
@@ -71,7 +71,7 @@ func TestValidateRecordForProtect(t *testing.T) {
 		},
 		{
 			r: &ptpb.Record{
-				ID:        uuid.MakeV4(),
+				ID:        uuid.MakeV4().GetBytes(),
 				Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1},
 				MetaType:  "job",
 				Meta:      []byte("junk"),

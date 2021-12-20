@@ -30,6 +30,19 @@ import (
 // Size of a UUID in bytes.
 const Size = 16
 
+// Bytes represents a byte slice which is intended to be interpreted as a binary
+// encoding of a UUID.
+type Bytes []byte
+
+// GetUUID constructs a UUID from the bytes. If the data is not valid, a zero
+// value will be returned.
+func (b Bytes) GetUUID() UUID { return FromBytesOrNil(b) }
+
+// String returns the string representation of the underlying UUID.
+func (b Bytes) String() string {
+	return b.GetUUID().String()
+}
+
 // UUID is an array type to represent the value of a UUID, as defined in RFC-4122.
 type UUID [Size]byte
 

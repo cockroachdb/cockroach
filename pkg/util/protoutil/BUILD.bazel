@@ -31,6 +31,7 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/storage/enginepb",

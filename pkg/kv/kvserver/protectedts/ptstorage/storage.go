@@ -96,7 +96,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
-		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
+		r.ID, r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
 		len(r.Spans), encodedSpans)
 	if err != nil {
@@ -253,7 +253,7 @@ func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, e
 // in the protected timestamp subsystem would create more problems than it would
 // solve. Malformed records can still be removed (and hopefully will be).
 func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record) error {
-	r.ID = row[0].(*tree.DUuid).UUID
+	r.ID = row[0].(*tree.DUuid).UUID.GetBytes()
 	tsDecimal := row[1].(*tree.DDecimal)
 	ts, err := tree.DecimalToHLC(&tsDecimal.Decimal)
 	if err != nil {
@@ -300,7 +300,7 @@ func validateRecordForProtect(r *ptpb.Record) error {
 	if r.Timestamp.IsEmpty() {
 		return errZeroTimestamp
 	}
-	if r.ID == uuid.Nil {
+	if r.ID.GetUUID() == uuid.Nil {
 		return errZeroID
 	}
 	if len(r.Spans) == 0 {

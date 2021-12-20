@@ -168,7 +168,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			if !shouldRemove {
 				return nil
 			}
-			err = r.pts.Release(ctx, txn, rec.ID)
+			err = r.pts.Release(ctx, txn, rec.ID.GetUUID())
 			if err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 				return err
 			}
