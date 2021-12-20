@@ -1408,6 +1408,7 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 	castRequired := false
 	for ord, colID := range srcCols {
 		if colID == 0 {
+			// Column not mutated, so nothing to do.
 			continue
 		}
 		srcType := mb.md.ColumnMeta(colID).Type
@@ -1423,30 +1424,29 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 
 	projectionScope := mb.outScope.replace()
 	projectionScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
+	var uncastedCols opt.ColSet
 
-	for i := range mb.outScope.cols {
-		colID := mb.outScope.cols[i].id
-		srcType := mb.md.ColumnMeta(colID).Type
-
-		ord, ok := srcCols.Find(colID)
-		if !ok {
-			panic(errors.AssertionFailedf("could not find column %d in srcCols", colID))
+	for ord, colID := range srcCols {
+		if colID == 0 {
+			// Column not mutated, so nothing to do.
+			continue
 		}
+
+		srcType := mb.md.ColumnMeta(colID).Type
+		targetCol := mb.tab.Column(ord)
 		targetType := mb.tab.Column(ord).DatumType()
 
 		// An assignment cast is not necessary if the source and target types
-		// are identical. Add the column to the projection scope so that it
-		// becomes a passthrough column.
+		// are identical.
 		if srcType.Identical(targetType) {
-			projectionScope.appendColumn(&mb.outScope.cols[i])
+			uncastedCols.Add(colID)
 			continue
 		}
 
 		// Check if an assignment cast is available from the inScope column
 		// type to the out type.
 		if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
-			colName := string(mb.tab.Column(ord).ColName())
-			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, colName))
+			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, string(targetCol.ColName())))
 		}
 
 		// Create a new column which casts the input column to the correct
@@ -1455,7 +1455,7 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 		cast := mb.b.factory.ConstructAssignmentCast(variable, targetType)
 		scopeCol := mb.b.synthesizeColumn(
 			projectionScope,
-			mb.outScope.cols[i].name.WithMetadataName(""),
+			scopeColName(targetCol.ColName()).WithMetadataName(""),
 			targetType,
 			nil, /* expr */
 			cast,
@@ -1463,6 +1463,14 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 
 		// Replace old source column with the new one.
 		srcCols[ord] = scopeCol.id
+	}
+
+	// Add uncasted columns to the projection scope so that they become
+	// passthrough columns.
+	for i := range mb.outScope.cols {
+		if uncastedCols.Contains(mb.outScope.cols[i].id) {
+			projectionScope.appendColumn(&mb.outScope.cols[i])
+		}
 	}
 
 	projectionScope.expr = mb.b.constructProject(mb.outScope.expr, projectionScope.cols)
