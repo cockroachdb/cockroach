@@ -136,7 +136,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	for run := 0; run < 10; run++ {
 		for _, scenario := range testScenarios {
 			t.Run(fmt.Sprintf("testScenario=%s", scenario.string), func(t *testing.T) {
-				ctxLocal, cancelLocal := context.WithCancel(context.Background())
+				ctxLocal := context.Background()
 				ctxRemote, cancelRemote := context.WithCancel(context.Background())
 				// Linter says there is a possibility of "context leak" because
 				// cancelRemote variable may not be used, so we defer the call to it.
@@ -378,7 +378,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						1, /* processorID */
 						materializer,
 						nil, /* output */
-						cancelLocal,
 					)
 					coordinator.Start(ctxLocal)
 
@@ -433,7 +432,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						1, /* processorID */
 						inputInfo,
 						recv,
-						cancelLocal,
 					)
 					coordinator.Run(ctxLocal)
 					checkMetadata(recv.receivedMeta)

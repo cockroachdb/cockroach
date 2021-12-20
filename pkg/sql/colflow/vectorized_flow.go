@@ -455,8 +455,6 @@ type flowCreatorHelper interface {
 	addFlowCoordinator(coordinator *FlowCoordinator)
 	// getCtxDone returns done channel of the context of this flow.
 	getFlowCtxDone() <-chan struct{}
-	// getCancelFlowFn returns a flow cancellation function.
-	getCancelFlowFn() context.CancelFunc
 }
 
 type admissionOptions struct {
@@ -1004,7 +1002,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 				pspec.ProcessorID,
 				opWithMetaInfo,
 				s.batchReceiver,
-				s.getCancelFlowFn(),
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, s.batchFlowCoordinator)
@@ -1032,7 +1029,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 				pspec.ProcessorID,
 				input,
 				s.rowReceiver,
-				s.getCancelFlowFn(),
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, f)
@@ -1293,10 +1289,6 @@ func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return r.f.GetCtxDone()
 }
 
-func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
-	return r.f.GetCancelFlowFn()
-}
-
 func (r *vectorizedFlowCreatorHelper) Release() {
 	// Note that processors here can only be of 0 or 1 length, but always of
 	// 1 capacity (only the flow coordinator can be appended to this slice).
@@ -1349,10 +1341,6 @@ func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
 
 func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
-	return nil
-}
-
-func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
 }
 

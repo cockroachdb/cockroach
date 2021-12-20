@@ -38,9 +38,6 @@ type FlowCoordinator struct {
 	// in order for that call to be wrapped in the panic-catcher.
 	row  rowenc.EncDatumRow
 	meta *execinfrapb.ProducerMetadata
-
-	// cancelFlow cancels the context of the flow.
-	cancelFlow context.CancelFunc
 }
 
 var flowCoordinatorPool = sync.Pool{
@@ -51,18 +48,14 @@ var flowCoordinatorPool = sync.Pool{
 
 // NewFlowCoordinator creates a new FlowCoordinator processor that is the root
 // of the vectorized flow.
-// - cancelFlow is the cancellation function of the flow's context (i.e. it is
-// Flow.ctxCancel).
 func NewFlowCoordinator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
-	cancelFlow context.CancelFunc,
 ) *FlowCoordinator {
 	f := flowCoordinatorPool.Get().(*FlowCoordinator)
 	f.input = input
-	f.cancelFlow = cancelFlow
 	f.Init(
 		f,
 		flowCtx,
@@ -74,13 +67,6 @@ func NewFlowCoordinator(
 		execinfra.ProcStateOpts{
 			// We append input to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled FlowCoordinator.
-			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
-				// Note that the input must have been drained by the
-				// ProcessorBaseNoHelper by this point, so we can just close the
-				// FlowCoordinator.
-				f.close()
-				return nil
-			},
 		},
 	)
 	f.AddInputToDrain(input)
@@ -154,17 +140,6 @@ func (f *FlowCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 	return f.row, f.meta
 }
 
-func (f *FlowCoordinator) close() {
-	if f.InternalClose() {
-		f.cancelFlow()
-	}
-}
-
-// ConsumerClosed is part of the execinfra.RowSource interface.
-func (f *FlowCoordinator) ConsumerClosed() {
-	f.close()
-}
-
 // Release implements the execinfra.Releasable interface.
 func (f *FlowCoordinator) Release() {
 	f.ProcessorBaseNoHelper.Reset()
@@ -193,9 +168,6 @@ type BatchFlowCoordinator struct {
 	// batch is the result produced by calling input.Next stored here in order
 	// for that call to be wrapped in the panic-catcher.
 	batch coldata.Batch
-
-	// cancelFlow cancels the context of the flow.
-	cancelFlow context.CancelFunc
 }
 
 var batchFlowCoordinatorPool = sync.Pool{
@@ -206,14 +178,11 @@ var batchFlowCoordinatorPool = sync.Pool{
 
 // NewBatchFlowCoordinator creates a new BatchFlowCoordinator operator that is
 // the root of the vectorized flow.
-// - cancelFlow is the cancellation function of the flow's context (i.e. it is
-// Flow.ctxCancel).
 func NewBatchFlowCoordinator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input colexecargs.OpWithMetaInfo,
 	output execinfra.BatchReceiver,
-	cancelFlow context.CancelFunc,
 ) *BatchFlowCoordinator {
 	f := batchFlowCoordinatorPool.Get().(*BatchFlowCoordinator)
 	*f = BatchFlowCoordinator{
@@ -222,7 +191,6 @@ func NewBatchFlowCoordinator(
 		processorID:  processorID,
 		input:        input,
 		output:       output,
-		cancelFlow:   cancelFlow,
 	}
 	return f
 }
@@ -329,7 +297,6 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 // close cancels the flow and closes all colexecop.Closers the coordinator is
 // responsible for.
 func (f *BatchFlowCoordinator) close() error {
-	f.cancelFlow()
 	var lastErr error
 	for _, toClose := range f.input.ToClose {
 		if err := toClose.Close(); err != nil {

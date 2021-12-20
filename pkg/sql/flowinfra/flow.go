@@ -322,12 +322,6 @@ func (f *FlowBase) GetCtxDone() <-chan struct{} {
 	return f.ctxDone
 }
 
-// GetCancelFlowFn returns the context cancellation function of the context of
-// this flow.
-func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
-	return f.ctxCancel
-}
-
 // SetProcessors overrides the current f.processors with the provided
 // processors. This is used to set up the vectorized flow.
 func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
