@@ -133,8 +133,20 @@ var importRequestsLimit = settings.RegisterIntSetting(
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
-	"number of AddSSTable requests a store will handle concurrently before queuing",
+	"number of concurrent AddSSTable requests per store before queueing",
 	1,
+	settings.PositiveInt,
+)
+
+// addSSTableAsWritesRequestLimit limits concurrent AddSSTable requests with
+// IngestAsWrites set. These are smaller (kv.bulk_io_write.small_write_size),
+// and will end up in the Pebble memtable (default 64 MB) before flushing to
+// disk, so we can allow a greater amount of concurrency than regular AddSSTable
+// requests. Applied independently of concurrent_addsstable_requests.
+var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
+	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
+	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
+	10,
 	settings.PositiveInt,
 )
 
@@ -892,7 +904,15 @@ func NewStore(
 		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
 	)
 	addSSTableRequestLimit.SetOnChange(&cfg.Settings.SV, func() {
-		s.limiters.ConcurrentAddSSTableRequests.SetLimit(int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
+		s.limiters.ConcurrentAddSSTableRequests.SetLimit(
+			int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
+	})
+	s.limiters.ConcurrentAddSSTableAsWritesRequests = limit.MakeConcurrentRequestLimiter(
+		"addSSTableAsWritesRequestLimiter", int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)),
+	)
+	addSSTableAsWritesRequestLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.limiters.ConcurrentAddSSTableAsWritesRequests.SetLimit(
+			int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
 		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
