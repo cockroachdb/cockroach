@@ -150,7 +150,6 @@ go_test(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
