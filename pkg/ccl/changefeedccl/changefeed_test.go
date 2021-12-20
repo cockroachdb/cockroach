@@ -584,7 +584,7 @@ func TestChangefeedMVCCTimestamps(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {

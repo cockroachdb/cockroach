@@ -87,7 +87,6 @@ require (
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
-	github.com/google/uuid v1.3.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
@@ -157,7 +156,6 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
-	gocloud.dev v0.24.0
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
@@ -250,6 +248,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.1.1 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
