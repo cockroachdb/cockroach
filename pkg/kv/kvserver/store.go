@@ -1505,11 +1505,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						conf,
 						transferLeaseOptions{},
 					)
-					duration := timeutil.Since(start).Seconds()
+					duration := timeutil.Since(start).Microseconds()
 
 					if transferStatus != transferOK {
 						const failFormat = "failed to transfer lease %s for range %s when draining: %v"
-						const durationFailFormat = "blocked for %f seconds on transfer attempt"
+						const durationFailFormat = "blocked for %f microseconds on transfer attempt"
 
 						infoArgs := []interface{}{
 							drainingLeaseStatus.Lease,

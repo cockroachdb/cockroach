@@ -112,7 +112,10 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster) {
 	time.Sleep(30 * time.Second)
 
 	// Check for more verbose logging during the lease transfer stall.
-	if err := c.RunE(ctx, c.Node(2), fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe)); err != nil {
+	// Leases should get stuck on node 2.
+	if err := c.RunE(ctx, c.Node(2),
+		fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
+	); err != nil {
 		t.Fatal(errors.Wrap(err, "expected additional logging"))
 	}
 }
