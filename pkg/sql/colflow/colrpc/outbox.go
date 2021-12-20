@@ -153,14 +153,6 @@ func (o *Outbox) Run(
 	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
-	// Derive a child context so that we can cancel all components rooted in
-	// this outbox.
-	var outboxCtxCancel context.CancelFunc
-	ctx, outboxCtxCancel = context.WithCancel(ctx)
-	// Calling outboxCtxCancel is not strictly necessary, but we do it just to
-	// be safe.
-	defer outboxCtxCancel()
-
 	ctx, o.span = execinfra.ProcessorSpan(ctx, "outbox")
 	if o.span != nil {
 		defer o.span.Finish()
@@ -183,7 +175,7 @@ func (o *Outbox) Run(
 		}
 
 		client := execinfrapb.NewDistSQLClient(conn)
-		stream, err = client.FlowStream(ctx)
+		stream, err = client.FlowStream(context.TODO())
 		if err != nil {
 			log.Warningf(
 				ctx,
@@ -213,7 +205,7 @@ func (o *Outbox) Run(
 	}
 
 	log.VEvent(ctx, 2, "Outbox starting normal operation")
-	o.runWithStream(ctx, stream, flowCtxCancel, outboxCtxCancel)
+	o.runWithStream(ctx, stream, flowCtxCancel)
 	log.VEvent(ctx, 2, "Outbox exiting")
 }
 
@@ -222,15 +214,9 @@ func (o *Outbox) Run(
 // called, for all other errors flowCtxCancel is. The given error is logged with
 // the associated opName.
 func handleStreamErr(
-	ctx context.Context,
-	opName redact.SafeString,
-	err error,
-	flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	ctx context.Context, opName redact.SafeString, err error, flowCtxCancel context.CancelFunc,
 ) {
-	if err == io.EOF {
-		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
-		outboxCtxCancel()
-	} else {
+	if err != io.EOF {
 		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
 		flowCtxCancel()
 	}
@@ -263,7 +249,7 @@ func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableStr
 //    (indicating a graceful shutdown initiated by the remote Inbox),
 //    outboxCtxCancel will be called.
 func (o *Outbox) sendBatches(
-	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	ctx context.Context, stream flowStreamClient, flowCtxCancel context.CancelFunc,
 ) (terminatedGracefully bool, errToSend error) {
 	if o.runnerCtx == nil {
 		// In the non-testing path, runnerCtx has been set in Run() method;
@@ -313,7 +299,7 @@ func (o *Outbox) sendBatches(
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
 			if err := stream.Send(o.scratch.msg); err != nil {
-				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
+				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel)
 				return
 			}
 		}
@@ -362,15 +348,12 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 // runWithStream should be called after sending the ProducerHeader on the
 // stream. It implements the behavior described in Run.
 func (o *Outbox) runWithStream(
-	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	ctx context.Context, stream flowStreamClient, flowCtxCancel context.CancelFunc,
 ) {
 	// Cancellation functions might be nil in some tests, but we'll make them
 	// noops for convenience.
 	if flowCtxCancel == nil {
 		flowCtxCancel = func() {}
-	}
-	if outboxCtxCancel == nil {
-		outboxCtxCancel = func() {}
 	}
 	waitCh := make(chan struct{})
 	go func() {
@@ -391,7 +374,7 @@ func (o *Outbox) runWithStream(
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
+				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel)
 				break
 			}
 			switch {
@@ -405,7 +388,7 @@ func (o *Outbox) runWithStream(
 		close(waitCh)
 	}()
 
-	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
+	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel)
 	if terminatedGracefully || errToSend != nil {
 		var reason redact.RedactableString
 		if errToSend != nil {
@@ -415,14 +398,14 @@ func (o *Outbox) runWithStream(
 		}
 		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
+			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
+				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel)
 			}
 		}
 	}
