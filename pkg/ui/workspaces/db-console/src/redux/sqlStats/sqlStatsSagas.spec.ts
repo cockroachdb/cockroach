@@ -17,7 +17,10 @@ import {
 } from "./sqlStatsActions";
 import { resetSQLStatsSaga } from "./sqlStatsSagas";
 import { resetSQLStats } from "src/util/api";
-import { invalidateStatements, refreshStatements } from "src/redux/apiReducers";
+import {
+  apiReducersReducer,
+  invalidateStatements,
+} from "src/redux/apiReducers";
 import { throwError } from "redux-saga-test-plan/providers";
 
 import { cockroach } from "src/js/protos";
@@ -27,17 +30,19 @@ describe("SQL Stats sagas", () => {
     const resetSQLStatsResponse = new cockroach.server.serverpb.ResetSQLStatsResponse();
 
     it("successfully resets SQL stats", () => {
-      expectSaga(resetSQLStatsSaga)
+      // TODO(azhng): validate refreshStatement() actions once we can figure out
+      //  how to get ThunkAction to work with sagas.
+      return expectSaga(resetSQLStatsSaga)
+        .withReducer(apiReducersReducer)
         .provide([[call.fn(resetSQLStats), resetSQLStatsResponse]])
         .put(resetSQLStatsCompleteAction())
         .put(invalidateStatements())
-        .put(refreshStatements() as any)
         .run();
     });
 
     it("returns error on failed reset", () => {
       const err = new Error("failed to reset");
-      expectSaga(resetSQLStatsSaga)
+      return expectSaga(resetSQLStatsSaga)
         .provide([[call.fn(resetSQLStats), throwError(err)]])
         .put(resetSQLStatsFailedAction())
         .run();
