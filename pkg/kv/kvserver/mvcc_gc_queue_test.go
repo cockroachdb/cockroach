@@ -50,15 +50,15 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 	}
 }
 
-func TestGCQueueScoreString(t *testing.T) {
+func TestMVCCGCQueueScoreString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	for i, c := range []struct {
-		r   gcQueueScore
+		r   mvccGCQueueScore
 		exp string
 	}{
-		{gcQueueScore{}, "(empty)"},
-		{gcQueueScore{
+		{mvccGCQueueScore{}, "(empty)"},
+		{mvccGCQueueScore{
 			ShouldQueue:              true,
 			FuzzFactor:               1.25,
 			FinalScore:               3.45 * 1.25,
@@ -73,7 +73,7 @@ func TestGCQueueScoreString(t *testing.T) {
 			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
 likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
 		// Check case of empty Threshold.
-		{gcQueueScore{ShouldQueue: true}, `queue=true with 0.00/fuzz(0.00)=NaN=valScaleScore(0.00)*deadFrac(0.00)+intentScore(0.00)
+		{mvccGCQueueScore{ShouldQueue: true}, `queue=true with 0.00/fuzz(0.00)=NaN=valScaleScore(0.00)*deadFrac(0.00)+intentScore(0.00)
 likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`},
 	} {
 		if act := c.r.String(); act != c.exp {
@@ -82,7 +82,7 @@ likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`
 	}
 }
 
-func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
+func TestMVCCGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -108,7 +108,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 			GCBytesAge:      gcByteAge,
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeGCQueueScoreImpl(
+		r := makeMVCCGCQueueScoreImpl(
 			ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{},
 			true /* canAdvanceGCThreshold */)
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
@@ -123,11 +123,11 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 	}
 }
 
-func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
+func TestMVCCGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	if err := quick.Check(func(keyBytes, valBytes, liveBytes int32, containsEstimates int64) bool {
-		r := makeGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
+		r := makeMVCCGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
 			ContainsEstimates: containsEstimates,
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
@@ -139,7 +139,7 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 	}
 }
 
-func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
+func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const seed = 1
@@ -152,7 +152,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 
 	// GC triggered if abort span should all be gc'able and it's large.
 	{
-		r := makeGCQueueScoreImpl(
+		r := makeMVCCGCQueueScoreImpl(
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
@@ -167,7 +167,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	ms.AbortSpanBytes = 0
 	ms.SysCount = probablyLargeAbortSpanSysCountThreshold
 	{
-		r := makeGCQueueScoreImpl(
+		r := makeMVCCGCQueueScoreImpl(
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
@@ -179,7 +179,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 
 	// Heuristic doesn't fire if last GC within TxnCleanupThreshold.
 	{
-		r := makeGCQueueScoreImpl(context.Background(), seed,
+		r := makeMVCCGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
 			ms, 10000*time.Second,
 			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
@@ -189,7 +189,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	}
 }
 
-func TestGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
+func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -207,9 +207,9 @@ func TestGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 		"just GCed":                {lastGC: now.Add(-1, 0), expectGC: false},
 		"future GC":                {lastGC: now.Add(1, 0), expectGC: false},
 		"MVCC GC ignores cooldown": {lastGC: now.Add(-1, 0), mvccGC: true, expectGC: true},
-		"before GC cooldown":       {lastGC: now.Add(-gcQueueIntentCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
-		"at GC cooldown":           {lastGC: now.Add(-gcQueueIntentCooldownDuration.Nanoseconds(), 0), expectGC: true},
-		"after GC cooldown":        {lastGC: now.Add(-gcQueueIntentCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
+		"before GC cooldown":       {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
+		"at GC cooldown":           {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds(), 0), expectGC: true},
+		"after GC cooldown":        {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
 	}
 	for name, tc := range testcases {
 		tc := tc
@@ -221,7 +221,7 @@ func TestGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 				ms.ValBytes = 1e9
 			}
 
-			r := makeGCQueueScoreImpl(
+			r := makeMVCCGCQueueScoreImpl(
 				ctx, seed, now, ms, gcTTL, tc.lastGC, true /* canAdvanceGCThreshold */)
 			require.Equal(t, tc.expectGC, r.ShouldQueue)
 		})
@@ -341,7 +341,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 ) {
 	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
-	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
+	r := makeMVCCGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
 		hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
@@ -349,11 +349,11 @@ func (cws *cachedWriteSimulator) shouldQueue(
 	}
 }
 
-// TestGCQueueMakeGCScoreRealistic verifies conditions which inform priority and
-// whether or not the range should be queued into the GC queue. Ranges are
-// queued for GC based on two conditions. The age of bytes available to be GC'd,
-// and the age of unresolved intents.
-func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
+// TestMVCCGCQueueMakeGCScoreRealistic verifies conditions which inform priority
+// and whether or not the range should be queued into the MVCC GC queue. Ranges
+// are queued for MVCC GC based on two conditions. The age of bytes available to
+// be GC'd, and the age of unresolved intents.
+func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -457,9 +457,9 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 	}
 }
 
-// TestGCQueueProcess creates test data in the range over various time
+// TestMVCCGCQueueProcess creates test data in the range over various time
 // scales and verifies that scan queue process properly GCs test data.
-func TestGCQueueProcess(t *testing.T) {
+func TestMVCCGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -633,8 +633,8 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.store)
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	mgcq := newMVCCGCQueue(tc.store)
+	processed, err := mgcq.process(ctx, tc.repl, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -694,7 +694,7 @@ func TestGCQueueProcess(t *testing.T) {
 	})
 }
 
-func TestGCQueueTransactionTable(t *testing.T) {
+func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -866,13 +866,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	// Run GC.
-	gcQ := newGCQueue(tc.store)
+	mgcq := newMVCCGCQueue(tc.store)
 	cfg := tc.gossip.GetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
-	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -957,9 +957,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tc.repl.raftMu.Unlock()
 }
 
-// TestGCQueueIntentResolution verifies intent resolution with many
-// intents spanning just two transactions.
-func TestGCQueueIntentResolution(t *testing.T) {
+// TestMVCCGCQueueIntentResolution verifies intent resolution with many intents
+// spanning just two transactions.
+func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1005,8 +1005,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gcQ := newGCQueue(tc.store)
-	processed, err := gcQ.process(ctx, tc.repl, confReader)
+	mgcq := newMVCCGCQueue(tc.store)
+	processed, err := mgcq.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1033,7 +1033,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	})
 }
 
-func TestGCQueueLastProcessedTimestamps(t *testing.T) {
+func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1068,8 +1068,8 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	gcQ := newGCQueue(tc.store)
-	processed, err := gcQ.process(ctx, tc.repl, confReader)
+	mgcq := newMVCCGCQueue(tc.store)
+	processed, err := mgcq.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1091,10 +1091,10 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	})
 }
 
-// TestGCQueueChunkRequests verifies that many intents are chunked
-// into separate batches. This is verified both for many different
-// keys and also for many different versions of keys.
-func TestGCQueueChunkRequests(t *testing.T) {
+// TestMVCCGCQueueChunkRequests verifies that many intents are chunked into
+// separate batches. This is verified both for many different keys and also for
+// many different versions of keys.
+func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1176,8 +1176,8 @@ func TestGCQueueChunkRequests(t *testing.T) {
 		t.Fatalf("could not find span config for range %s", err)
 	}
 	tc.manualClock.Increment(conf.TTL().Nanoseconds() + 1)
-	gcQ := newGCQueue(tc.store)
-	processed, err := gcQ.process(ctx, tc.repl, confReader)
+	mgcq := newMVCCGCQueue(tc.store)
+	processed, err := mgcq.process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
