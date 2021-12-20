@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -27,9 +28,8 @@ import (
 // be confusing than valuable. Not much is being done transactionally.
 
 func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.Op) (err error) {
-	backfillsToExecute, tables, err := extractBackfillsFromOps(
-		ctx, deps.Catalog(), execute,
-	)
+	backfillsToExecute := extractBackfillsFromOps(execute)
+	tables, err := getTableDescriptorsForBackfills(ctx, deps.Catalog(), backfillsToExecute)
 	if err != nil {
 		return err
 	}
@@ -43,33 +43,43 @@ func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.O
 	return runBackfills(ctx, deps, tracker, progresses, tables)
 }
 
-func extractBackfillsFromOps(
-	ctx context.Context, cat Catalog, execute []scop.Op,
-) ([]Backfill, map[descpb.ID]catalog.TableDescriptor, error) {
+func getTableDescriptorsForBackfills(
+	ctx context.Context, cat Catalog, backfills []Backfill,
+) (_ map[descpb.ID]catalog.TableDescriptor, err error) {
+	var descIDs catalog.DescriptorIDSet
+	for _, bf := range backfills {
+		descIDs.Add(bf.TableID)
+	}
+	tables := make(map[descpb.ID]catalog.TableDescriptor, descIDs.Len())
+	for _, id := range descIDs.Ordered() {
+		desc, err := cat.MustReadImmutableDescriptor(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			return nil, errors.AssertionFailedf("descriptor %d is not a table", id)
+		}
+		tables[id] = tbl
+	}
+	return tables, nil
+}
+
+func extractBackfillsFromOps(execute []scop.Op) []Backfill {
 	var backfillsToExecute []Backfill
-	tables := map[descpb.ID]catalog.TableDescriptor{}
 	for _, op := range execute {
 		switch op := op.(type) {
 		case *scop.BackfillIndex:
-			table, ok := tables[op.TableID]
-			if !ok {
-				desc, err := cat.MustReadImmutableDescriptor(ctx, op.TableID)
-				if err != nil {
-					return nil, nil, err
-				}
-				table = desc.(catalog.TableDescriptor)
-				tables[op.TableID] = table
-			}
 			backfillsToExecute = append(backfillsToExecute, Backfill{
 				TableID:       op.TableID,
-				SourceIndexID: table.GetPrimaryIndexID(),
+				SourceIndexID: op.SourceIndexID,
 				DestIndexIDs:  []descpb.IndexID{op.IndexID},
 			})
 		default:
 			panic("unimplemented")
 		}
 	}
-	return mergeBackfillFromSameSource(backfillsToExecute), tables, nil
+	return mergeBackfillFromSameSource(backfillsToExecute)
 }
 
 func mergeBackfillFromSameSource(backfillsToExecute []Backfill) []Backfill {
