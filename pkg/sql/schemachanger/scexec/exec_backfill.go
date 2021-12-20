@@ -27,49 +27,32 @@ import (
 // be confusing than valuable. Not much is being done transactionally.
 
 func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.Op) (err error) {
-	backfillsToExecute, tables, err := extractBackfillsFromOps(
-		ctx, deps.Catalog(), execute,
-	)
-	if err != nil {
-		return err
-	}
+	backfillsToExecute := extractBackfillsFromOps(execute)
 	tracker := deps.BackfillProgressTracker()
 	progresses, err := loadProgressesAndMaybePerformInitialScan(
-		ctx, deps, backfillsToExecute, tracker, tables,
+		ctx, deps, backfillsToExecute, tracker,
 	)
 	if err != nil {
 		return err
 	}
-	return runBackfills(ctx, deps, tracker, progresses, tables)
+	return runBackfills(ctx, deps, tracker, progresses)
 }
 
-func extractBackfillsFromOps(
-	ctx context.Context, cat Catalog, execute []scop.Op,
-) ([]Backfill, map[descpb.ID]catalog.TableDescriptor, error) {
+func extractBackfillsFromOps(execute []scop.Op) []Backfill {
 	var backfillsToExecute []Backfill
-	tables := map[descpb.ID]catalog.TableDescriptor{}
 	for _, op := range execute {
 		switch op := op.(type) {
 		case *scop.BackfillIndex:
-			table, ok := tables[op.TableID]
-			if !ok {
-				desc, err := cat.MustReadImmutableDescriptor(ctx, op.TableID)
-				if err != nil {
-					return nil, nil, err
-				}
-				table = desc.(catalog.TableDescriptor)
-				tables[op.TableID] = table
-			}
 			backfillsToExecute = append(backfillsToExecute, Backfill{
 				TableID:       op.TableID,
-				SourceIndexID: table.GetPrimaryIndexID(),
+				SourceIndexID: op.SourceIndexID,
 				DestIndexIDs:  []descpb.IndexID{op.IndexID},
 			})
 		default:
 			panic("unimplemented")
 		}
 	}
-	return mergeBackfillFromSameSource(backfillsToExecute), tables, nil
+	return mergeBackfillFromSameSource(backfillsToExecute)
 }
 
 func mergeBackfillFromSameSource(backfillsToExecute []Backfill) []Backfill {
@@ -98,18 +81,14 @@ func mergeBackfillFromSameSource(backfillsToExecute []Backfill) []Backfill {
 }
 
 func loadProgressesAndMaybePerformInitialScan(
-	ctx context.Context,
-	deps Dependencies,
-	backfillsToExecute []Backfill,
-	tracker BackfillTracker,
-	tables map[descpb.ID]catalog.TableDescriptor,
+	ctx context.Context, deps Dependencies, backfillsToExecute []Backfill, tracker BackfillTracker,
 ) ([]BackfillProgress, error) {
 	progresses, err := loadProgresses(ctx, backfillsToExecute, tracker)
 	if err != nil {
 		return nil, err
 	}
 	{
-		didScan, err := maybeScanDestinationIndexes(ctx, deps, progresses, tables, tracker)
+		didScan, err := maybeScanDestinationIndexes(ctx, deps, progresses, tracker)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +110,6 @@ func maybeScanDestinationIndexes(
 	ctx context.Context,
 	deps Dependencies,
 	progresses []BackfillProgress,
-	tables map[descpb.ID]catalog.TableDescriptor,
 	tracker BackfillProgressWriter,
 ) (didScan bool, _ error) {
 	g, ctx := errgroup.WithContext(ctx)
@@ -142,8 +120,12 @@ func maybeScanDestinationIndexes(
 		didScan = true
 		i := i // copy for closure
 		g.Go(func() (err error) {
+			tbl, err := deps.Catalog().MustReadImmutableDescriptor(ctx, progresses[i].TableID)
+			if err != nil {
+				return err
+			}
 			if progresses[i], err = deps.IndexBackfiller().MaybePrepareDestIndexesForBackfill(
-				ctx, progresses[i], tables[progresses[i].TableID],
+				ctx, progresses[i], tbl.(catalog.TableDescriptor),
 			); err != nil {
 				return err
 			}
@@ -171,11 +153,7 @@ func loadProgresses(
 }
 
 func runBackfills(
-	ctx context.Context,
-	deps Dependencies,
-	tracker BackfillTracker,
-	progresses []BackfillProgress,
-	tables map[descpb.ID]catalog.TableDescriptor,
+	ctx context.Context, deps Dependencies, tracker BackfillTracker, progresses []BackfillProgress,
 ) error {
 
 	bf := deps.IndexBackfiller()
@@ -183,8 +161,12 @@ func runBackfills(
 	for i := range progresses {
 		p := progresses[i] // copy for closure
 		g.Go(func() error {
+			tbl, err := deps.Catalog().MustReadImmutableDescriptor(ctx, p.TableID)
+			if err != nil {
+				return err
+			}
 			return executeBackfill(
-				gCtx, deps.IndexSpanSplitter(), bf, p, tracker, tables[p.TableID],
+				gCtx, deps.IndexSpanSplitter(), bf, p, tracker, tbl.(catalog.TableDescriptor),
 			)
 		})
 	}
