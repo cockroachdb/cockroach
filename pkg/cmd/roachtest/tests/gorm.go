@@ -99,7 +99,7 @@ func registerGORM(r registry.Registry) {
 
 		// Write the cockroach config into the test suite to use.
 		if err := repeatRunE(
-			ctx, t, c, node, fmt.Sprintf(`echo "%s" > %s/tests_test.go`, gormTestHelperGoFile, gormTestPath),
+			ctx, t, c, node, "write the cockroach config into the test suite", fmt.Sprintf(`echo '%s' > %s/tests_test.go`, gormTestHelperGoFile, gormTestPath),
 		); err != nil {
 			t.Fatal(err)
 		}
