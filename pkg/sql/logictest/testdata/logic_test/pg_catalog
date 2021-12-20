@@ -3840,7 +3840,7 @@ objoid      classoid    objsubid  description
 4294967130  4294967132  0         pg_config was created for compatibility and is currently unimplemented
 4294967129  4294967132  0         table constraints (incomplete - see also information_schema.table_constraints)
 4294967128  4294967132  0         encoding conversions (empty - unimplemented)
-4294967127  4294967132  0         pg_cursors was created for compatibility and is currently unimplemented
+4294967127  4294967132  0         contains currently active SQL cursors created with DECLARE
 4294967126  4294967132  0         available databases (incomplete)
 4294967125  4294967132  0         contains the default values that have been configured for session variables
 4294967124  4294967132  0         default ACLs; these are the privileges that will be assigned to newly created objects

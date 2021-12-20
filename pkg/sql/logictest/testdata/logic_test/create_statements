@@ -3914,19 +3914,19 @@ CREATE TABLE pg_catalog.pg_conversion (
    condefault BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_cursors (
-   is_scrollable BOOL NULL,
    name STRING NULL,
    statement STRING NULL,
-   creation_time TIMESTAMPTZ NULL,
+   is_holdable BOOL NULL,
    is_binary BOOL NULL,
-   is_holdable BOOL NULL
+   is_scrollable BOOL NULL,
+   creation_time TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_cursors (
-   is_scrollable BOOL NULL,
    name STRING NULL,
    statement STRING NULL,
-   creation_time TIMESTAMPTZ NULL,
+   is_holdable BOOL NULL,
    is_binary BOOL NULL,
-   is_holdable BOOL NULL
+   is_scrollable BOOL NULL,
+   creation_time TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_database (
    oid OID NULL,
