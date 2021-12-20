@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -141,7 +142,9 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 		},
 		getAdminClient,
-		drainAndShutdown,
+		func(ctx context.Context, ac serverpb.AdminClient) error {
+			return drainAndShutdown(ctx, ac, "local" /* targetNode */)
+		},
 	)
 	if err != nil {
 		c.Close(ctx)
