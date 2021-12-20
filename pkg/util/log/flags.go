@@ -86,7 +86,7 @@ func IsActive() (active bool, firstUse string) {
 // process entirely terminates. This ensures that any Go runtime
 // assertion failures on the way to termination can be properly
 // captured.
-func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
+func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
@@ -110,7 +110,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 
 	// cleanupFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
-	cleanupFn = func() {
+	cleanupFn := func() {
 		// Reset the logging channels to default.
 		si := logging.stderrSinkInfoTemplate
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)

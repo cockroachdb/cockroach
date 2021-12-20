@@ -492,6 +492,9 @@ var quitCtx struct {
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
+	// nodeDrainSelf indicates that the command should target
+	// the node we're connected to (this is the default behavior).
+	nodeDrainSelf bool
 }
 
 // setQuitContextDefaults set the default values in quitCtx.  This
@@ -499,6 +502,7 @@ var quitCtx struct {
 // test that exercises command-line parsing.
 func setQuitContextDefaults() {
 	quitCtx.drainWait = 10 * time.Minute
+	quitCtx.nodeDrainSelf = false
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
@@ -517,6 +521,7 @@ var nodeCtx struct {
 // test that exercises command-line parsing.
 func setNodeContextDefaults() {
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.nodeDecommissionSelf = false
 	nodeCtx.statusShowRanges = false
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false

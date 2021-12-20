@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -37,8 +38,12 @@ client connections, then stops extant connections, and finally pushes range
 leases onto other nodes, subject to various timeout parameters configurable via
 cluster settings. After the first stage completes, the server process is shut
 down.
+
+If an argument is specified, the command affects the node
+whose ID is given. If --self is specified, the command
+affects the node that the command is connected to (via --host).
 `,
-	Args: cobra.NoArgs,
+	Args: cobra.MaximumNArgs(1),
 	RunE: clierrorplus.MaybeDecorateError(runQuit),
 	Deprecated: `see 'cockroach node drain' instead to drain a 
 server without terminating the server process (which can in turn be done using 
@@ -58,6 +63,19 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 		}
 	}()
 
+	if !quitCtx.nodeDrainSelf && len(args) == 0 {
+		fmt.Fprintf(stderr, "warning: draining a node without node ID or passing --self explicitly is deprecated.\n")
+		quitCtx.nodeDrainSelf = true
+	}
+	if quitCtx.nodeDrainSelf && len(args) > 0 {
+		return errors.Newf("cannot use --%s with an explicit node ID", cliflags.NodeDrainSelf.Name)
+	}
+
+	targetNode := "local"
+	if len(args) > 0 {
+		targetNode = args[0]
+	}
+
 	// Establish a RPC connection.
 	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
@@ -65,13 +83,13 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	}
 	defer finish()
 
-	return drainAndShutdown(ctx, c)
+	return drainAndShutdown(ctx, c, targetNode)
 }
 
 // drainAndShutdown attempts to drain the server and then shut it
 // down.
-func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
-	hardError, remainingWork, err := doDrain(ctx, c)
+func drainAndShutdown(ctx context.Context, c serverpb.AdminClient, targetNode string) (err error) {
+	hardError, remainingWork, err := doDrain(ctx, c, targetNode)
 	if hardError {
 		return err
 	}
@@ -85,10 +103,10 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
 	}
 	// We have already performed the drain above, so now go straight to
 	// shutdown. We try twice just in case there is a transient error.
-	hardErr, err := doShutdown(ctx, c)
+	hardErr, err := doShutdown(ctx, c, targetNode)
 	if err != nil && !hardErr {
 		log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
-		_, err = doShutdown(ctx, c)
+		_, err = doShutdown(ctx, c, targetNode)
 	}
 	return errors.Wrap(err, "hard shutdown failed")
 }
@@ -99,16 +117,16 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
 // proceed with an alternate strategy (it's likely the server has gone
 // away).
 func doDrain(
-	ctx context.Context, c serverpb.AdminClient,
+	ctx context.Context, c serverpb.AdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
 	if quitCtx.drainWait == 0 {
-		return doDrainNoTimeout(ctx, c)
+		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
 	err = contextutil.RunWithTimeout(ctx, "drain", quitCtx.drainWait, func(ctx context.Context) (err error) {
-		hardError, remainingWork, err = doDrainNoTimeout(ctx, c)
+		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
 	})
 	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
@@ -120,7 +138,7 @@ func doDrain(
 }
 
 func doDrainNoTimeout(
-	ctx context.Context, c serverpb.AdminClient,
+	ctx context.Context, c serverpb.AdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	defer func() {
 		if server.IsWaitingForInit(err) {
@@ -141,6 +159,7 @@ func doDrainNoTimeout(
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
 			DoDrain:  true,
 			Shutdown: false,
+			NodeId:   targetNode,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "\n") // finish the line started above.
@@ -203,20 +222,24 @@ func doDrainNoTimeout(
 // doShutdown attempts to trigger a server shutdown *without*
 // draining. Use doDrain() prior to perform a drain, or
 // drainAndShutdown() to combine both.
-func doShutdown(ctx context.Context, c serverpb.AdminClient) (hardError bool, err error) {
+func doShutdown(
+	ctx context.Context, c serverpb.AdminClient, targetNode string,
+) (hardError bool, err error) {
 	defer func() {
-		if server.IsWaitingForInit(err) {
-			log.Infof(ctx, "encountered error: %v", err)
-			err = errors.New("node cannot be shut down before it has been initialized")
-			err = errors.WithHint(err, "You can still stop the process using a service manager or a signal.")
-			hardError = true
-		}
-		if grpcutil.IsClosedConnection(err) {
-			// This most likely means that we shut down successfully. Note
-			// that sometimes the connection can be shut down even before a
-			// DrainResponse gets sent back to us, so we don't require a
-			// response on the stream (see #14184).
-			err = nil
+		if err != nil {
+			if server.IsWaitingForInit(err) {
+				log.Infof(ctx, "encountered error: %v", err)
+				err = errors.New("node cannot be shut down before it has been initialized")
+				err = errors.WithHint(err, "You can still stop the process using a service manager or a signal.")
+				hardError = true
+			}
+			if grpcutil.IsClosedConnection(err) {
+				// This most likely means that we shut down successfully. Note
+				// that sometimes the connection can be shut down even before a
+				// DrainResponse gets sent back to us, so we don't require a
+				// response on the stream (see #14184).
+				err = nil
+			}
 		}
 	}()
 
@@ -225,7 +248,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient) (hardError bool, er
 	err = contextutil.RunWithTimeout(ctx, "hard shutdown", 10*time.Second, func(ctx context.Context) error {
 		// Send a drain request with the drain bit unset (no drain).
 		// and the shutdown bit set.
-		stream, err := c.Drain(ctx, &serverpb.DrainRequest{Shutdown: true})
+		stream, err := c.Drain(ctx, &serverpb.DrainRequest{NodeId: targetNode, Shutdown: true})
 		if err != nil {
 			return errors.Wrap(err, "error sending shutdown request")
 		}

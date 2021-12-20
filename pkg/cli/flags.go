@@ -704,6 +704,7 @@ func init() {
 	for _, cmd := range []*cobra.Command{quitCmd, drainNodeCmd} {
 		f := cmd.Flags()
 		durationFlag(f, &quitCtx.drainWait, cliflags.DrainWait)
+		boolFlag(f, &quitCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 	}
 
 	// SQL and demo commands.

@@ -413,6 +413,7 @@ func TestShowBackups(t *testing.T) {
 	defer cleanupEmptyCluster()
 
 	const full = LocalFoo + "/full"
+	const remoteInc = LocalFoo + "/inc"
 
 	// Make an initial backup.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
@@ -427,6 +428,9 @@ func TestShowBackups(t *testing.T) {
 	// Make a third full backup, add changes to it.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	// Make 2 remote incremental backups, chaining to the third full backup
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_storage = $2`, full, remoteInc)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_storage = $2`, full, remoteInc)
 
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
 
@@ -443,6 +447,12 @@ func TestShowBackups(t *testing.T) {
 		sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[2][0], full),
 		sqlDBRestore.QueryStr(t, `SHOW BACKUP LATEST IN $1`, full),
 	)
+
+	// check that full and remote incremental backups appear
+	b3 := sqlDBRestore.QueryStr(t,
+		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_storage= 'nodelocal://0/foo/inc'] WHERE object_type='table'`, full)
+	require.Equal(t, 3, len(b3))
+
 }
 
 func TestShowBackupTenants(t *testing.T) {

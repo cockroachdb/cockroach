@@ -215,6 +215,10 @@ message LocalOnlySessionData {
   // IndexRecommendationsEnabled controls whether or not we display index
   // recommendations below the plan in EXPLAIN.
   bool index_recommendations_enabled = 58;
+  // AvoidBuffering indicates that the returned data should not be
+  // buffered by conn executor.  This is currently used by replication primitives
+  // to ensure the data is flushed to the consumer immediately.
+  bool avoid_buffering = 59;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
