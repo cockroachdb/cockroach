@@ -446,6 +446,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
+	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
 
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor,
@@ -542,6 +543,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		VecFDSemaphore:    semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
 		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
+		BackupMonitor:     backupMemoryMonitor,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
 		BulkAdder: func(
