@@ -12,12 +12,14 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,11 +48,16 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 	if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
 		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
 	}
-	rows, err := ie.QueryIterator(ctx, "sql-cursor", p.txn, s.Select.String())
+	statement := s.Select.String()
+	rows, err := ie.QueryIterator(ctx, "sql-cursor", p.txn, statement)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to DECLARE CURSOR")
 	}
-	cursor := &sqlCursor{InternalRows: rows}
+	cursor := &sqlCursor{
+		InternalRows: rows,
+		statement:    statement,
+		created:      timeutil.Now(),
+	}
 	if err := p.sqlCursors.addCursor(cursorName, cursor); err != nil {
 		// thread at a time. But let's be diligent and clean up if it somehow does
 		// happen anyway.
@@ -164,7 +171,9 @@ func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNod
 
 type sqlCursor struct {
 	sqlutil.InternalRows
-	curRow int64
+	statement string
+	created   time.Time
+	curRow    int64
 }
 
 // Next implements the InternalRows interface.
@@ -189,6 +198,8 @@ type sqlCursors interface {
 	// addCursor adds a new cursor with the given name to the set, returning an
 	// error if the cursor already existed in the set.
 	addCursor(string, *sqlCursor) error
+	// list returns all open cursors in the set.
+	list() map[string]*sqlCursor
 }
 
 // cursorMap is a sqlCursors that's backed by an actual map.
@@ -232,6 +243,10 @@ func (c *cursorMap) addCursor(s string, cursor *sqlCursor) error {
 	return nil
 }
 
+func (c *cursorMap) list() map[string]*sqlCursor {
+	return c.cursors
+}
+
 // connExCursorAccessor is a sqlCursors that delegates to a connExecutor's
 // extraTxnState.
 type connExCursorAccessor struct {
@@ -252,4 +267,8 @@ func (c connExCursorAccessor) getCursor(s string) (*sqlCursor, error) {
 
 func (c connExCursorAccessor) addCursor(s string, cursor *sqlCursor) error {
 	return c.ex.extraTxnState.sqlCursors.addCursor(s, cursor)
+}
+
+func (c connExCursorAccessor) list() map[string]*sqlCursor {
+	return c.ex.extraTxnState.sqlCursors.list()
 }
