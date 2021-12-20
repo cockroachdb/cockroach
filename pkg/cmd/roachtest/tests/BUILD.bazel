@@ -55,7 +55,6 @@ go_library(
         "gopg_blocklist.go",
         "gorm.go",
         "gorm_blocklist.go",
-        "gorm_helpers.go",
         "gossip.go",
         "hibernate.go",
         "hibernate_blocklist.go",
