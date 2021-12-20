@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -399,6 +400,11 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 								accumulatedMeta = append(accumulatedMeta, *meta)
 							}
 						}
+					},
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+						AllowLeaseTransfersToReplicasNeedingSnapshots: true,
 					},
 				},
 			},

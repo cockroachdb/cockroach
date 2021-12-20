@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -72,6 +73,13 @@ func TestTraceAnalyzer(t *testing.T) {
 				},
 				DistSQL: &execinfra.TestingKnobs{
 					ForceDiskSpill: true,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// The consistency queue makes a lot of noisy logs during logic tests.
+					DisableConsistencyQueue: true,
+					AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+						AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+					},
 				},
 			},
 		}})

@@ -695,6 +695,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 								),
 							)
 						},
+						AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+							AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+						},
 					},
 				},
 				UseDatabase: "test",

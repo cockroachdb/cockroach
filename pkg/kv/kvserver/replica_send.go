@@ -904,7 +904,7 @@ func (r *Replica) executeAdminBatch(
 		transferLeaseToFirstVoter := !tArgs.TransferLeaseToFirstVoterAccurate
 		// We also revert to that behavior if the caller specifically asked for it.
 		transferLeaseToFirstVoter = transferLeaseToFirstVoter || tArgs.TransferLeaseToFirstVoter
-		err := r.store.AdminRelocateRange(
+		err := r.AdminRelocateRange(
 			ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets, transferLeaseToFirstVoter,
 		)
 		pErr = roachpb.NewError(err)
