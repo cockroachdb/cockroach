@@ -11,8 +11,10 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"regexp"
 	"runtime"
 	"sync"
 
@@ -78,6 +80,80 @@ func HashPassword(ctx context.Context, password string) ([]byte, error) {
 	}
 	defer alloc.Release()
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
+}
+
+// AutoDetectPasswordHashes is the cluster setting that configures whether
+// the server recognizes pre-hashed passwords.
+var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
+	"server.user_login.store_client_pre_hashed_passwords.enabled",
+	"whether the server accepts to store passwords pre-hashed by clients",
+	false,
+).WithPublic()
+
+const crdbBcryptPrefix = "CRDB-BCRYPT"
+
+// bcryptHashRe matches the lexical structure of the bcrypt hash
+// format supported by CockroachDB. The base64 encoding of the hash
+// uses the alphabet used by the bcrypt package:
+// "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+var bcryptHashRe = regexp.MustCompile(`^` + crdbBcryptPrefix + `\$\d[a-z]?\$\d\d\$[0-9A-Za-z\./]{22}[0-9A-Za-z\./]+$`)
+
+func isBcryptHash(hashedPassword []byte) bool {
+	return bcryptHashRe.Match(hashedPassword)
+}
+
+// scramHashRe matches the lexical structure of PostgreSQL's
+// pre-computed SCRAM hashes.
+//
+// This structure is inspired from PosgreSQL's parse_scram_secret() function.
+// The base64 encoding uses the alphabet used by pg_b64_encode():
+// "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+// The salt must have size >0; the server key pair is two times 32 bytes,
+// which always encode to 44 base64 characters.
+var scramHashRe = regexp.MustCompile(`^SCRAM-SHA-256\$\d+:[A-Za-z0-9+/]+=*\$[A-Za-z0-9+/]{43}=:[A-Za-z0-9+/]{43}=$`)
+
+func isSCRAMHash(hashedPassword []byte) bool {
+	return scramHashRe.Match(hashedPassword)
+}
+
+func isMD5Hash(hashedPassword []byte) bool {
+	// This logic is inspired from PostgreSQL's get_password_type() function.
+	return bytes.HasPrefix(hashedPassword, []byte("md5")) &&
+		len(hashedPassword) == 35 &&
+		len(bytes.Trim(hashedPassword[3:], "0123456789abcdef")) == 0
+}
+
+// CheckPasswordHashValidity determines whether a (user-provided)
+// password is already hashed, and if already hashed, verifies whether
+// the hash is recognized as a valid hash.
+// Return values:
+// - isPreHashed indicates whether the password is already hashed.
+// - supportedScheme indicates whether the scheme is currently supported
+//   for authentication.
+// - schemeName is the name of the hashing scheme, for inclusion
+//   in error messages (no guarantee is made of stability of this string).
+// - hashedPassword is a translated version from the input,
+//   suitable for storage in the password database.
+func CheckPasswordHashValidity(
+	ctx context.Context, inputPassword []byte,
+) (isPreHashed, supportedScheme bool, schemeName string, hashedPassword []byte, err error) {
+	if isBcryptHash(inputPassword) {
+		// Trim the "CRDB-BCRYPT" prefix. We trim this because previous version
+		// CockroachDB nodes do not understand the prefix when stored.
+		hashedPassword = inputPassword[len(crdbBcryptPrefix):]
+		// The bcrypt.Cost() function parses the hash and checks its syntax.
+		_, err = bcrypt.Cost(hashedPassword)
+		return true, true, "crdb-bcrypt", hashedPassword, err
+	}
+	if isSCRAMHash(inputPassword) {
+		return true, false /* unsupported yet */, "scram-sha-256", inputPassword, nil
+	}
+	if isMD5Hash(inputPassword) {
+		// See: https://github.com/cockroachdb/cockroach/issues/73337
+		return true, false /* not supported */, "md5", inputPassword, nil
+	}
+
+	return false, false, "", inputPassword, nil
 }
 
 // MinPasswordLength is the cluster setting that configures the

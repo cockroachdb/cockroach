@@ -1388,3 +1388,51 @@ user testuser
 # because of a missing ADMIN power, not because of a missing CREATEROLE option.
 statement error only users with the admin role are allowed to ALTER ROLE admin
 ALTER ROLE other_admin NOCREATEDB
+
+subtest pw_hashes
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = true
+
+let $bcrypt_pw
+SELECT 'CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq'
+
+statement ok
+CREATE USER hash1 WITH PASSWORD '$bcrypt_pw'
+
+# We don't plan to support md5 ever.
+statement error pgcode 0A000 hash scheme "md5" is not supported
+CREATE USER hash2 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+let $scram_pw
+SELECT 'SCRAM-SHA-256$'||'4096:B5VaTCvCLDzZxSYL829oVA==$'||'3Ako3mNxNtdsaSOJl0Av3i6vyV2OiSP9Ly7famdFSbw=:d7BfSmrtjwbF74mSoOhQiDSpoIvlakXKdpBNb3Meunc='
+
+# Refers to https://github.com/cockroachdb/cockroach/issues/42519
+statement error pgcode 0A000 hash scheme "scram-sha-256" is not supported
+CREATE USER hash3 WITH PASSWORD '$scram_pw'
+
+
+statement ok
+SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = false
+
+# Password hash not recognized: hash considered as password input.
+statement ok
+CREATE USER hash4 WITH PASSWORD '$bcrypt_pw'
+
+# Password hash not recognized: hash considered as password input.
+statement ok
+CREATE USER hash5 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+# Password hash not recognized: hash considered as password input.
+statement ok
+CREATE USER hash6 WITH PASSWORD '$scram_pw'
+
+query TTB
+SELECT username, substr("hashedPassword", 1, 7), 'CRDB-BCRYPT'||"hashedPassword" = '$bcrypt_pw' FROM system.users WHERE username LIKE 'hash%' ORDER BY 1
+----
+hash1  $2a$10$  true
+hash4  $2a$10$  false
+hash5  $2a$10$  false
+hash6  $2a$10$  false
