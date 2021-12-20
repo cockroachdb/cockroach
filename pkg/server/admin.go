@@ -2603,7 +2603,17 @@ func (s *adminServer) enqueueRangeLocal(
 		return response, nil
 	}
 
-	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, req.Queue, repl, req.SkipShouldQueue)
+	// Handle mixed-version clusters across the "gc" to "mvccGC" queue rename.
+	// TODO(nvanbenschoten): remove this in v23.1. Inline req.Queue again.
+	// The client logic in pkg/ui/workspaces/db-console/src/views/reports/containers/enqueueRange/index.tsx
+	// should stop sending "gc" in v22.2. When removing, confirm that the
+	// associated TODO in index.tsx was addressed in the previous release.
+	queueName := req.Queue
+	if strings.ToLower(queueName) == "gc" {
+		queueName = "mvccGC"
+	}
+
+	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, queueName, repl, req.SkipShouldQueue)
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil

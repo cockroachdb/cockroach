@@ -3393,7 +3393,7 @@ CREATE TABLE crdb_internal.zones (
 					if index == nil {
 						// If we can't find an active index that corresponds to this index
 						// ID then continue, as the index is being dropped, or is already
-						// dropped and in the GC queue.
+						// dropped and in the MVCC GC queue.
 						continue
 					}
 					if zoneSpecifier != nil {

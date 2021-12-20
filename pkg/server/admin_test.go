@@ -2096,7 +2096,7 @@ func TestEnqueueRange(t *testing.T) {
 		expectedNonErrors int
 	}{
 		// Success cases
-		{0, "gc", realRangeID, allReplicas, leaseholder},
+		{0, "mvccGC", realRangeID, allReplicas, leaseholder},
 		{0, "split", realRangeID, allReplicas, leaseholder},
 		{0, "replicaGC", realRangeID, allReplicas, allReplicas},
 		{0, "RaFtLoG", realRangeID, allReplicas, allReplicas},
@@ -2106,6 +2106,10 @@ func TestEnqueueRange(t *testing.T) {
 		{1, "raftlog", realRangeID, leaseholder, leaseholder},
 		{2, "raftlog", realRangeID, leaseholder, 1},
 		{3, "raftlog", realRangeID, leaseholder, 1},
+		// Compatability cases.
+		// TODO(nvanbenschoten): remove this in v23.1.
+		{0, "gc", realRangeID, allReplicas, leaseholder},
+		{0, "GC", realRangeID, allReplicas, leaseholder},
 		// Error cases
 		{0, "gv", realRangeID, allReplicas, none},
 		{0, "GC", fakeRangeID, allReplicas, none},
@@ -2139,9 +2143,9 @@ func TestEnqueueRange(t *testing.T) {
 
 	// Finally, test a few more basic error cases.
 	reqs := []*serverpb.EnqueueRangeRequest{
-		{NodeID: -1, Queue: "gc"},
+		{NodeID: -1, Queue: "mvccGC"},
 		{Queue: ""},
-		{RangeID: -1, Queue: "gc"},
+		{RangeID: -1, Queue: "mvccGC"},
 	}
 	for _, req := range reqs {
 		t.Run(fmt.Sprint(req), func(t *testing.T) {

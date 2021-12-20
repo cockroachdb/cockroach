@@ -6303,7 +6303,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 				require.NoError(t, err)
 				lhServer := tc.Server(int(l.Replica.NodeID) - 1)
 				s, repl := getFirstStoreReplica(t, lhServer, startKey)
-				trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, skipShouldQueue)
+				trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, skipShouldQueue)
 				require.NoError(t, err)
 				fmt.Fprintf(&traceBuf, "%s\n", trace.String())
 			}
