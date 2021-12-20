@@ -353,6 +353,9 @@ func (d *execDeps) User() security.SQLUsername {
 	return d.user
 }
 
+// EventLoggerFactory constructs a new event logger with a txn.
+type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
+
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
 	return d.eventLogger
