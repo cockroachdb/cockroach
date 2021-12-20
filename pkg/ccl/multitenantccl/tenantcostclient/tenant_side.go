@@ -31,6 +31,7 @@ import (
 
 // TargetPeriodSetting is exported for testing purposes.
 var TargetPeriodSetting = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"tenant_cost_control_period",
 	"target duration between token bucket requests from tenants (requires restart)",
 	10*time.Second,
@@ -39,6 +40,7 @@ var TargetPeriodSetting = settings.RegisterDurationSetting(
 
 // CPUUsageAllowance is exported for testing purposes.
 var CPUUsageAllowance = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"tenant_cpu_usage_allowance",
 	"this much CPU usage per second is considered background usage and "+
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+

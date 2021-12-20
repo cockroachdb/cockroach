@@ -2637,6 +2637,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 const experimentalBox2DClusterSettingName = "sql.spatial.experimental_box2d_comparison_operators.enabled"
 
 var experimentalBox2DClusterSetting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	experimentalBox2DClusterSettingName,
 	"enables the use of certain experimental box2d comparison operators",
 	false,

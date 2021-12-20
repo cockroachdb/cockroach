@@ -48,9 +48,9 @@ func (s *MaskedSetting) Typ() string {
 	return s.setting.Typ()
 }
 
-// SystemOnly returns the underlying setting's SystemOnly.
-func (s *MaskedSetting) SystemOnly() bool {
-	return s.setting.SystemOnly()
+// Class returns the class for the underlying setting.
+func (s *MaskedSetting) Class() Class {
+	return s.setting.Class()
 }
 
 // TestingIsReportable is used in testing for reportability.
