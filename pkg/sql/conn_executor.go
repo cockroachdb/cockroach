@@ -2557,6 +2557,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
+	p.sqlCursors = ex.getCursorAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)

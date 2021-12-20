@@ -251,3 +251,60 @@ FETCH PRIOR foo
 statement error cursor can only scan forward
 ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
 FETCH BACKWARD ALL foo
+
+statement ok
+ROLLBACK
+
+
+# Test pg_catalog.pg_cursors
+query TTBBBT colnames
+SELECT * FROM pg_catalog.pg_cursors
+----
+name  statement  is_holdable  is_binary  is_scrollable  creation_time
+
+statement ok
+BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+
+query TTBBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary, now() - creation_time < '1 second'::interval FROM pg_catalog.pg_cursors
+----
+foo  SELECT * FROM a ORDER BY a  false  false  false  true
+
+statement ok
+DECLARE bar CURSOR FOR SELECT 1,2,3;
+
+query TTBBB rowsort
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+foo  SELECT * FROM a ORDER BY a  false  false  false
+bar  SELECT 1, 2, 3              false  false  false
+
+statement ok
+CLOSE foo
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+bar  SELECT 1, 2, 3  false  false  false
+
+statement ok
+ROLLBACK
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+
+statement ok
+BEGIN; DECLARE bar CURSOR FOR SELECT 1,2,3
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----
+bar  SELECT 1, 2, 3  false  false  false
+
+statement ok
+COMMIT
+
+query TTBBB
+SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
+----

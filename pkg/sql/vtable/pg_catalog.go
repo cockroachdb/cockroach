@@ -1095,12 +1095,12 @@ CREATE TABLE pg_catalog.pg_group (
 // and is currently unimplemented.
 const PgCatalogCursors = `
 CREATE TABLE pg_catalog.pg_cursors (
-	is_scrollable BOOL,
 	name STRING,
 	statement STRING,
-	creation_time TIMESTAMPTZ,
+	is_holdable BOOL,
 	is_binary BOOL,
-	is_holdable BOOL
+	is_scrollable BOOL,
+	creation_time TIMESTAMPTZ
 )`
 
 // PgCatalogTsParser is an empty table created by pg_catalog_test
