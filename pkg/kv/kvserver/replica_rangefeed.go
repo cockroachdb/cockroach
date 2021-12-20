@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -656,10 +657,12 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 		// Ignore the result of DoChan since, to keep this all async, it always
 		// returns nil and any errors are logged by the closure passed to the
 		// `DoChan` call.
-		_, _ = m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
+		taskCtx, sp := tracing.EnsureForkSpan(ctx, r.AmbientContext.Tracer, key)
+		_, leader := m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
+			defer sp.Finish()
 			// Also ignore the result of RunTask, since it only returns errors when
 			// the task didn't start because we're shutting down.
-			_ = r.store.stopper.RunTask(ctx, key, func(context.Context) {
+			_ = r.store.stopper.RunTask(taskCtx, key, func(ctx context.Context) {
 				// Limit the amount of work this can suddenly spin up. In particular,
 				// this is to protect against the case of a system-wide slowdown on
 				// closed timestamps, which would otherwise potentially launch a huge
@@ -677,6 +680,11 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 			})
 			return nil, nil
 		})
+		if !leader {
+			// In the leader case, we've passed ownership of sp to the task. If the
+			// task was not triggered, though, it's up to us to Finish() it.
+			sp.Finish()
+		}
 	}
 
 	// If the closed timestamp is not empty, inform the Processor.
