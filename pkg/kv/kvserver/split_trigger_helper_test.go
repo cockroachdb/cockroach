@@ -36,7 +36,9 @@ func (td *testMsgAppDropper) Args() (initialized bool, ticks int) {
 	return td.initialized, td.ticks
 }
 
-func (td *testMsgAppDropper) ShouldDrop(startKey roachpb.RKey) (fmt.Stringer, bool) {
+func (td *testMsgAppDropper) ShouldDrop(
+	ctx context.Context, startKey roachpb.RKey,
+) (fmt.Stringer, bool) {
 	if len(startKey) == 0 {
 		panic("empty startKey")
 	}
