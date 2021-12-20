@@ -214,6 +214,9 @@ type Replica struct {
 	// The writes to this key happen in Replica.setStartKeyLocked.
 	startKey roachpb.RKey
 
+	// creationTime is the time that the Replica struct was initially constructed.
+	creationTime time.Time
+
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
 
