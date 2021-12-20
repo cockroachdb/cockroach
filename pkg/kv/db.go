@@ -624,7 +624,13 @@ func (db *DB) AdminTransferLease(
 ) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
-	return getOneErr(db.Run(ctx, b), b)
+	err := db.Run(ctx, b)
+	if err == nil {
+		log.Infof(ctx, "transferring lease to StoreID s%d succeeded", target)
+	} else {
+		log.Infof(ctx, "transferring lease to StoreID %s failed with error: s%d", target, err)
+	}
+	return getOneErr(err, b)
 }
 
 // AdminChangeReplicas adds or removes a set of replicas for a range.
