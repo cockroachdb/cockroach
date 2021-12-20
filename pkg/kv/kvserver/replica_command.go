@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -299,15 +300,15 @@ func (r *Replica) adminSplitWithDescriptor(
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
 	var err error
+	var reply roachpb.AdminSplitResponse
+
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
 	// continuing.
-	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
-		return roachpb.AdminSplitResponse{}, err
+		return reply, err
 	}
-
-	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
@@ -996,7 +997,7 @@ func (r *Replica) changeReplicasImpl(
 	// If in a joint config, clean up. The assumption here is that the caller
 	// of ChangeReplicas didn't even realize that they were holding on to a
 	// joint descriptor and would rather not have to deal with that fact.
-	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -1046,6 +1047,26 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
+	// Before we initialize learners, check that we're not removing the leaseholder.
+	// Or if we are, ensure that leaseholder is collocated with the Raft leader.
+	// A leaseholder that isn't the Raft leader doesn't know whether other replicas
+	// are sufficiently up-to-date (have the latest snapshot), and so choosing a
+	// target for lease transfer is riskier as it may result in temporary unavailability.
+	for _, target := range targets.voterRemovals {
+		if r.NodeID() == target.NodeID && r.StoreID() == target.StoreID {
+			if !r.store.cfg.Settings.Version.IsActive(ctx,
+				clusterversion.EnableLeaseHolderRemoval) {
+				return nil, errors.Newf("%s is inactive, leaseholder removal not"+
+					" permitted", clusterversion.EnableLeaseHolderRemoval.String())
+			}
+			raftStatus := r.RaftStatus()
+			if raftStatus == nil || len(raftStatus.Progress) == 0 {
+				log.VErrEventf(ctx, 5, "%v", errLeaseholderNotRaftLeader)
+				return nil, errLeaseholderNotRaftLeader
+			}
+		}
+	}
+
 	if adds := targets.voterAdditions; len(adds) > 0 {
 		// For all newly added voters, first add LEARNER replicas. They accept raft
 		// traffic (so they can catch up) but don't get to vote (so they don't
@@ -1072,9 +1093,8 @@ func (r *Replica) changeReplicasImpl(
 		)
 		if err != nil {
 			// If the error occurred while transitioning out of an atomic replication
-			// change, try again here with a fresh descriptor; this is a noop
-			// otherwise.
-			if _, err := maybeLeaveAtomicChangeReplicas(ctx, r.store, r.Desc()); err != nil {
+			// change, try again here with a fresh descriptor; this is a noop otherwise.
+			if _, err := r.maybeLeaveAtomicChangeReplicas(ctx, r.Desc()); err != nil {
 				return nil, err
 			}
 			if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
@@ -1133,7 +1153,7 @@ func (r *Replica) changeReplicasImpl(
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
-		return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+		return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 	}
 	return desc, nil
 }
@@ -1176,9 +1196,9 @@ func synthesizeTargetsByChangeType(
 // updating said descriptor, the result of which will be returned. The
 // descriptor returned from this method will contain replicas of type LEARNER,
 // NON_VOTER, and VOTER_FULL only.
-func maybeLeaveAtomicChangeReplicas(
-	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
-) (*roachpb.RangeDescriptor, error) {
+func (r *Replica) maybeLeaveAtomicChangeReplicas(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) (rangeDesc *roachpb.RangeDescriptor, err error) {
 	// We want execChangeReplicasTxn to be able to make sure it's only tasked
 	// with leaving a joint state when it's in one, so make sure we don't call
 	// it if we're not.
@@ -1187,6 +1207,51 @@ func maybeLeaveAtomicChangeReplicas(
 	}
 	// NB: this is matched on in TestMergeQueueSeesLearner.
 	log.Eventf(ctx, "transitioning out of joint configuration %s", desc)
+	voters := desc.Replicas().VoterDescriptors()
+	s := r.store
+
+	// Determine whether the current leaseholder is being removed. voters includes
+	// the set of full or incoming voters that will remain after the joint configuration is
+	// complete. If we don't find the current leaseholder there this means it's being removed,
+	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
+	beingRemoved := true
+	for _, v := range voters {
+		if v.ReplicaID == r.ReplicaID() {
+			beingRemoved = false
+			break
+		}
+	}
+	if beingRemoved {
+		target := s.allocator.TransferLeaseTarget(
+			ctx,
+			r.SpanConfig(),
+			voters,
+			r,
+			r.leaseholderStats,
+			true, /* forceDecisionWithoutStats */
+			transferLeaseOptions{
+				goal:                     followTheWorkload,
+				checkTransferLeaseSource: false,
+				checkCandidateFullness:   false,
+				dryRun:                   false,
+			},
+		)
+		if target == (roachpb.ReplicaDescriptor{}) {
+			err := errors.Errorf(
+				"could not find a better lease transfer target for r%d", desc.RangeID)
+			log.VErrEventf(ctx, 5, "%v", err)
+			// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
+			// caller will retry. Note that the JOINT config isn't rolled back.
+			return desc, err
+		}
+		log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
+			" atomic replication change. Transferring lease to %v", r.String(), target)
+		err := s.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
+		if err != nil {
+			return desc, err
+		}
+		log.VEventf(ctx, 5, "Leaseholder transfer to %v complete.", target)
+	}
 
 	// NB: reason and detail won't be used because no range log event will be
 	// emitted.
@@ -1206,16 +1271,16 @@ func maybeLeaveAtomicChangeReplicas(
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
-func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
-	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
-) (*roachpb.RangeDescriptor, error) {
-	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
+func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) (rangeDesc *roachpb.RangeDescriptor, err error) {
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
+
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
-
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
 		return desc, nil
@@ -1231,6 +1296,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	//
 	// https://github.com/cockroachdb/cockroach/pull/40268
 	origDesc := desc
+	store := r.store
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
@@ -1744,7 +1810,7 @@ func (r *Replica) execReplicationChangesForVoters(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	voterAdditions, voterRemovals []roachpb.ReplicationTarget,
-) (*roachpb.RangeDescriptor, error) {
+) (rangeDesc *roachpb.RangeDescriptor, err error) {
 	// TODO(dan): We allow ranges with learner replicas to split, so in theory
 	// this may want to detect that and retry, sending a snapshot and promoting
 	// both sides.
@@ -1762,7 +1828,6 @@ func (r *Replica) execReplicationChangesForVoters(
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
 	}
 
-	var err error
 	desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
 		db:                                   r.store.DB(),
 		liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
@@ -1780,7 +1845,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+	return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 }
 
 // tryRollbackRaftLearner attempts to remove a learner specified by the target.
@@ -2661,7 +2726,7 @@ func updateRangeDescriptor(
 //
 // This is best-effort; it's possible that the replicate queue on the
 // leaseholder could take action at the same time, causing errors.
-func (s *Store) AdminRelocateRange(
+func (r *Replica) AdminRelocateRange(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
@@ -2688,14 +2753,15 @@ func (s *Store) AdminRelocateRange(
 
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
-	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
+	newDesc, err :=
+		r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err
 	}
 	rangeDesc = *newDesc
 
-	rangeDesc, err = s.relocateReplicas(
+	rangeDesc, err = r.store.relocateReplicas(
 		ctx, rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
 	)
 	if err != nil {
@@ -2763,17 +2829,29 @@ func (s *Store) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			if leaseTarget != nil {
-				// NB: we may need to transfer even if there are no ops, to make
-				// sure the attempt is made to make the first target the final
-				// leaseholder.
-				if err := transferLease(*leaseTarget); err != nil {
-					return rangeDesc, err
+			if !s.cfg.Settings.Version.IsActive(ctx,
+				clusterversion.EnableLeaseHolderRemoval) {
+				if leaseTarget != nil {
+					// NB: we may need to transfer even if there are no ops, to make
+					// sure the attempt is made to make the first target the final
+					// leaseholder.
+					if err := transferLease(*leaseTarget); err != nil {
+						return rangeDesc, err
+					}
 				}
-			}
-
-			if len(ops) == 0 {
-				// Done.
+				if len(ops) == 0 {
+					// Done
+					return rangeDesc, ctx.Err()
+				}
+			} else if len(ops) == 0 {
+				if len(voterTargets) > 0 && transferLeaseToFirstVoter {
+					// NB: we may need to transfer even if there are no ops, to make
+					// sure the attempt is made to make the first target the final
+					// leaseholder.
+					if err := transferLease(voterTargets[0]); err != nil {
+						return rangeDesc, err
+					}
+				}
 				return rangeDesc, ctx.Err()
 			}
 
@@ -2796,7 +2874,12 @@ func (s *Store) relocateReplicas(
 			}
 			if success {
 				if fn := s.cfg.TestingKnobs.OnRelocatedOne; fn != nil {
-					fn(ops, leaseTarget)
+					if !s.cfg.Settings.Version.IsActive(ctx,
+						clusterversion.EnableLeaseHolderRemoval) {
+						fn(ops, leaseTarget)
+					} else {
+						fn(ops, &voterTargets[0])
+					}
 				}
 
 				break
@@ -3013,7 +3096,9 @@ func (s *Store) relocateOne(
 			return nil, nil, errors.Wrap(err, "looking up lease")
 		}
 		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = curLeaseholder.StoreID != removalTarget.StoreID
+		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) ||
+			s.cfg.Settings.Version.IsActive(ctx,
+				clusterversion.EnableLeaseHolderRemoval)
 		if args.targetType == voterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.

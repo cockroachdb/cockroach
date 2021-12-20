@@ -26,6 +26,7 @@ go_test(
     embed = [":execstats"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvserver",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

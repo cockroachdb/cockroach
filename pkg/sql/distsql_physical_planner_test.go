@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -352,6 +353,13 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+							AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+						},
+					},
+				},
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
