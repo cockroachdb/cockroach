@@ -499,8 +499,10 @@ func (ib *IndexBackfiller) InitForLocalUse(
 }
 
 // constructExprs is a helper to construct the index and column expressions
-// required for an index backfill. It also returns the set of columns referenced
-// by any of these exprs.
+// required for an index backfill. It also returns the set of non-virtual
+// columns referenced by any of these exprs that should be fetched from the
+// primary index. Virtual columns are not included because they don't exist in
+// the primary index.
 //
 // The cols argument is the full set of cols in the table (including those being
 // added). The addedCols argument is the set of non-public, non-computed
@@ -568,21 +570,34 @@ func constructExprs(
 		colExprs[id] = computedExprs[i]
 	}
 
-	// Ensure that only existing columns are added to the needed set. Otherwise
-	// the fetcher may complain that the columns don't exist. There's a somewhat
-	// subtle invariant that if any dependencies exist between computed columns
-	// and default values that the computed column be a later column and thus the
-	// default value will have been populated. Computed columns are not permitted
-	// to reference each other.
-	addToReferencedColumns := func(cols catalog.TableColSet) {
-		cols.ForEach(func(col descpb.ColumnID) {
-			if !addedColSet.Contains(col) {
-				referencedColumns.Add(col)
+	// Ensure that only existing, non-virtual columns are added to the needed
+	// set. Otherwise the fetcher may complain that the columns don't exist.
+	// There's a somewhat subtle invariant that if any dependencies exist
+	// between computed columns and default values that the computed column be a
+	// later column and thus the default value will have been populated.
+	// Computed columns are not permitted to reference each other.
+	addToReferencedColumns := func(cols catalog.TableColSet) error {
+		for colID, ok := cols.Next(0); ok; colID, ok = cols.Next(colID + 1) {
+			if addedColSet.Contains(colID) {
+				continue
 			}
-		})
+			col, err := desc.FindColumnWithID(colID)
+			if err != nil {
+				return errors.AssertionFailedf("column %d does not exist", colID)
+			}
+			if col.IsVirtual() {
+				continue
+			}
+			referencedColumns.Add(colID)
+		}
+		return nil
 	}
-	addToReferencedColumns(predicateRefColIDs)
-	addToReferencedColumns(computedExprRefColIDs)
+	if err := addToReferencedColumns(predicateRefColIDs); err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
+	if err := addToReferencedColumns(computedExprRefColIDs); err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
 	return predicates, colExprs, referencedColumns, nil
 }
 
