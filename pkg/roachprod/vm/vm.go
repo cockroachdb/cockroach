@@ -409,7 +409,13 @@ func ProvidersSequential(named []string, action func(Provider) error) error {
 //   ZonePlacement(3, 8) = []int{0, 0, 1, 1, 2, 2, 0, 1}
 //
 func ZonePlacement(numZones, numNodes int) (nodeZones []int) {
+	if numZones < 1 {
+		panic("expected 1 or more zones")
+	}
 	numPerZone := numNodes / numZones
+	if numPerZone < 1 {
+		numPerZone = 1
+	}
 	extraStartIndex := numPerZone * numZones
 	nodeZones = make([]int, numNodes)
 	for i := 0; i < numNodes; i++ {
