@@ -775,6 +775,7 @@ func (ds *DistSender) Send(
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
+		isReverse := ba.IsReverse()
 
 		// Determine whether this part of the BatchRequest contains a committing
 		// EndTxn request.
@@ -788,9 +789,9 @@ func (ds *DistSender) Send(
 		var rpl *roachpb.BatchResponse
 		var pErr *roachpb.Error
 		if withParallelCommit {
-			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, 0 /* batchIdx */)
+			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, isReverse, 0 /* batchIdx */)
 		} else {
-			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, 0 /* batchIdx */)
+			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, 0 /* batchIdx */)
 		}
 
 		if pErr == errNo1PCTxn {
@@ -882,7 +883,7 @@ type response struct {
 // method is never invoked recursively, but it is exposed to maintain symmetry
 // with divideAndSendBatchToRanges.
 func (ds *DistSender) divideAndSendParallelCommit(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
+	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, isReverse bool, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Search backwards, looking for the first pre-commit QueryIntent.
 	swapIdx := -1
@@ -897,7 +898,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	}
 	if swapIdx == -1 {
 		// No pre-commit QueryIntents. Nothing to split.
-		return ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* withCommit */, batchIdx)
+		return ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, true /* withCommit */, batchIdx)
 	}
 
 	// Swap the EndTxn request and the first pre-commit QueryIntent. This
@@ -924,6 +925,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if err != nil {
 		return br, roachpb.NewError(err)
 	}
+	qiIsReverse := qiBa.IsReverse()
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 	qiBaCopy := qiBa // avoids escape to heap
@@ -953,7 +955,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 
 		// Send the batch with withCommit=true since it will be inflight
 		// concurrently with the EndTxn batch below.
-		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, true /* withCommit */, qiBatchIdx)
+		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, qiIsReverse, true /* withCommit */, qiBatchIdx)
 		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
 	}); err != nil {
 		return nil, roachpb.NewError(err)
@@ -967,7 +969,8 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	br, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* withCommit */, batchIdx)
+	isReverse = ba.IsReverse()
+	br, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, true /* withCommit */, batchIdx)
 
 	// Wait for the QueryIntent-only batch to complete and stitch
 	// the responses together.
@@ -1123,16 +1126,27 @@ func mergeErrors(pErr1, pErr2 *roachpb.Error) *roachpb.Error {
 // is trimmed against each range which is part of the span and sent
 // either serially or in parallel, if possible.
 //
-// batchIdx indicates which partial fragment of the larger batch is
-// being processed by this method. It's specified as non-zero when
-// this method is invoked recursively.
+// isReverse indicates the direction that the provided span should be
+// iterated over while sending requests. It is passed in by callers
+// instead of being recomputed based on the requests in the batch to
+// prevent the iteration direction from switching midway through a
+// batch, in cases where partial batches recuse into this function.
 //
 // withCommit indicates that the batch contains a transaction commit
 // or that a transaction commit is being run concurrently with this
 // batch. Either way, if this is true then sendToReplicas will need
 // to handle errors differently.
+//
+// batchIdx indicates which partial fragment of the larger batch is
+// being processed by this method. It's specified as non-zero when
+// this method is invoked recursively.
 func (ds *DistSender) divideAndSendBatchToRanges(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, withCommit bool, batchIdx int,
+	ctx context.Context,
+	ba roachpb.BatchRequest,
+	rs roachpb.RSpan,
+	isReverse bool,
+	withCommit bool,
+	batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Clone the BatchRequest's transaction so that future mutations to the
 	// proto don't affect the proto in this batch.
@@ -1142,7 +1156,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Get initial seek key depending on direction of iteration.
 	var scanDir ScanDirection
 	var seekKey roachpb.RKey
-	if !ba.IsReverse() {
+	if !isReverse {
 		scanDir = Ascending
 		seekKey = rs.Key
 	} else {
@@ -1157,7 +1171,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
 		resp := ds.sendPartialBatch(
-			ctx, ba, rs, ri.Token(), withCommit, batchIdx, false, /* needsTruncate */
+			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(), false, /* needsTruncate */
 		)
 		return resp.reply, resp.pErr
 	}
@@ -1315,11 +1329,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Token(), withCommit, batchIdx, responseCh) {
+			ds.sendPartialBatchAsync(ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(), responseCh) {
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, ba, rs, ri.Token(), withCommit, batchIdx, true, /* needsTruncate */
+				ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(), true, /* needsTruncate */
 			)
 			responseCh <- resp
 			if resp.pErr != nil {
@@ -1408,9 +1422,10 @@ func (ds *DistSender) sendPartialBatchAsync(
 	ctx context.Context,
 	ba roachpb.BatchRequest,
 	rs roachpb.RSpan,
-	routing rangecache.EvictionToken,
+	isReverse bool,
 	withCommit bool,
 	batchIdx int,
+	routing rangecache.EvictionToken,
 	responseCh chan response,
 ) bool {
 	if err := ds.rpcContext.Stopper.RunAsyncTaskEx(
@@ -1424,7 +1439,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
 			responseCh <- ds.sendPartialBatch(
-				ctx, ba, rs, routing, withCommit, batchIdx, true, /* needsTruncate */
+				ctx, ba, rs, isReverse, withCommit, batchIdx, routing, true, /* needsTruncate */
 			)
 		},
 	); err != nil {
@@ -1470,9 +1485,10 @@ func (ds *DistSender) sendPartialBatch(
 	ctx context.Context,
 	ba roachpb.BatchRequest,
 	rs roachpb.RSpan,
-	routingTok rangecache.EvictionToken,
+	isReverse bool,
 	withCommit bool,
 	batchIdx int,
+	routingTok rangecache.EvictionToken,
 	needsTruncate bool,
 ) response {
 	if batchIdx == 1 {
@@ -1484,8 +1500,6 @@ func (ds *DistSender) sendPartialBatch(
 	var pErr *roachpb.Error
 	var err error
 	var positions []int
-
-	isReverse := ba.IsReverse()
 
 	if needsTruncate {
 		// Truncate the request to range descriptor.
@@ -1534,7 +1548,7 @@ func (ds *DistSender) sendPartialBatch(
 				continue
 			}
 
-			// See if the range shrunk. If it has, we need to to sub-divide the
+			// See if the range shrunk. If it has, we need to sub-divide the
 			// request. Note that for the resending, we use the already truncated
 			// batch, so that we know that the response to it matches the positions
 			// into our batch (using the full batch here would give a potentially
@@ -1545,7 +1559,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
-				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
+				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
 				return response{reply: reply, positions: positions, pErr: pErr}
 			}
 		}
@@ -1652,7 +1666,7 @@ func (ds *DistSender) sendPartialBatch(
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
 			return response{reply: reply, positions: positions, pErr: pErr}
 		}
 		break
