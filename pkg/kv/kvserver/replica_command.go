@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -299,15 +298,20 @@ func (r *Replica) adminSplitWithDescriptor(
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
 	var err error
+	var reply roachpb.AdminSplitResponse
+
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
 	// continuing.
-	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
-		return roachpb.AdminSplitResponse{}, err
+		return reply, err
 	}
 
-	var reply roachpb.AdminSplitResponse
+	// As a result of exiting the joint config, we might no longer be the leaseholder
+	if !r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+		return reply, &benignError{errLeaseholderMovedDuringJointConfig}
+	}
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
@@ -988,9 +992,14 @@ func (r *Replica) changeReplicasImpl(
 	// If in a joint config, clean up. The assumption here is that the caller
 	// of ChangeReplicas didn't even realize that they were holding on to a
 	// joint descriptor and would rather not have to deal with that fact.
-	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return nil, err
+	}
+
+	// As a result of exiting the joint config, we might no longer be the leaseholder
+	if !r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+		return nil, errLeaseholderMovedDuringJointConfig
 	}
 
 	if err := validateReplicationChanges(desc, chgs); err != nil {
@@ -1038,6 +1047,21 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
+	// Before we initialize learners, check that we're not removing the leaseholder.
+	// Or if we are, ensure that leaseholder is collocated with the Raft leader.
+	// A leaseholder that isn't the Raft leader doesn't know whether other replicas
+	// are sufficiently up-to-date (have the latest snapshot), and so choosing a
+	// target for lease transfer is riskier as it may result in temporary unavailability.
+	for _, target := range targets.voterRemovals {
+		if r.NodeID() == target.NodeID && r.StoreID() == target.StoreID {
+			raftStatus := r.RaftStatus()
+			if raftStatus == nil || len(raftStatus.Progress) == 0 {
+				log.VErrEventf(ctx, 5, "%v", errLeaseholderNotRaftLeader)
+				return nil, errLeaseholderNotRaftLeader
+			}
+		}
+	}
+
 	if adds := targets.voterAdditions; len(adds) > 0 {
 		// For all newly added voters, first add LEARNER replicas. They accept raft
 		// traffic (so they can catch up) but don't get to vote (so they don't
@@ -1063,21 +1087,24 @@ func (r *Replica) changeReplicasImpl(
 			targets.voterAdditions, targets.voterRemovals,
 		)
 		if err != nil {
-			// If the error occurred while transitioning out of an atomic replication
-			// change, try again here with a fresh descriptor; this is a noop
-			// otherwise.
-			if _, err := maybeLeaveAtomicChangeReplicas(ctx, r.store, r.Desc()); err != nil {
-				return nil, err
-			}
-			if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
-				return nil, err
-			}
-			// Don't leave a learner replica lying around if we didn't succeed in
-			// promoting it to a voter.
-			if adds := targets.voterAdditions; len(adds) > 0 {
-				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
-				for _, target := range adds {
-					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
+			if r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+				// If the error occurred while transitioning out of an atomic replication
+				// change, try again here with a fresh descriptor; this is a noop
+				// otherwise.
+				if _, err := r.maybeLeaveAtomicChangeReplicas(ctx, r.Desc()); err != nil {
+					return nil, err
+				}
+
+				if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
+					return nil, err
+				}
+				// Don't leave a learner replica lying around if we didn't succeed in
+				// promoting it to a voter.
+				if adds := targets.voterAdditions; len(adds) > 0 {
+					log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
+					for _, target := range adds {
+						r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
+					}
 				}
 			}
 			return nil, err
@@ -1125,7 +1152,7 @@ func (r *Replica) changeReplicasImpl(
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
-		return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+		return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 	}
 	return desc, nil
 }
@@ -1168,8 +1195,8 @@ func synthesizeTargetsByChangeType(
 // updating said descriptor, the result of which will be returned. The
 // descriptor returned from this method will contain replicas of type LEARNER,
 // NON_VOTER, and VOTER_FULL only.
-func maybeLeaveAtomicChangeReplicas(
-	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
+func (r *Replica) maybeLeaveAtomicChangeReplicas(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
 	// We want execChangeReplicasTxn to be able to make sure it's only tasked
 	// with leaving a joint state when it's in one, so make sure we don't call
@@ -1179,6 +1206,52 @@ func maybeLeaveAtomicChangeReplicas(
 	}
 	// NB: this is matched on in TestMergeQueueSeesLearner.
 	log.Eventf(ctx, "transitioning out of joint configuration %s", desc)
+	voters := desc.Replicas().VoterDescriptors()
+	s := r.store
+
+	// Determine whether the current leaseholder is being removed. voters includes
+	// the set of full or incoming voters that will remain after the joint configuration is
+	// complete. If we don't find the current leaseholder there this means it's being removed,
+	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
+	beingRemoved := true
+	for _, v := range voters {
+		if v.ReplicaID == r.ReplicaID() {
+			beingRemoved = false
+			break
+		}
+	}
+	if beingRemoved {
+		target := s.allocator.TransferLeaseTarget(
+			ctx,
+			r.SpanConfig(),
+			voters,
+			r,
+			r.leaseholderStats,
+			true, /* forceDecisionWithoutStats */
+			transferLeaseOptions{
+				goal:                     followTheWorkload,
+				checkTransferLeaseSource: false,
+				checkCandidateFullness:   false,
+				dryRun:                   false,
+			},
+		)
+		if target == (roachpb.ReplicaDescriptor{}) {
+			err := errors.Errorf(
+				"could not find a better lease transfer target for r%d", desc.RangeID)
+			log.VErrEventf(ctx, 5, "%v", err)
+			// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
+			// caller will retry. Note that the JOINT config isn't rolled back.
+			return nil, err
+		}
+		log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
+			" atomic replication change. Transferring lease to %v", r.String(), target)
+		err := s.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
+		if err != nil {
+			return nil, err
+		}
+		log.VEventf(ctx, 5, "Leaseholder transfer to %v complete.", target)
+		return nil, nil
+	}
 
 	// NB: reason and detail won't be used because no range log event will be
 	// emitted.
@@ -1198,16 +1271,20 @@ func maybeLeaveAtomicChangeReplicas(
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
-func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
-	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
+func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
-	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
+	desc, err := r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
+
+	// As a result of exiting the joint config, we might no longer be the leaseholder
+	if !r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+		return nil, errLeaseholderMovedDuringJointConfig
+	}
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
-
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
 		return desc, nil
@@ -1223,6 +1300,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	//
 	// https://github.com/cockroachdb/cockroach/pull/40268
 	origDesc := desc
+	store := r.store
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
@@ -1772,7 +1850,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+	return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 }
 
 // tryRollbackRaftLearner attempts to remove a learner specified by the target.
@@ -2653,7 +2731,7 @@ func updateRangeDescriptor(
 //
 // This is best-effort; it's possible that the replicate queue on the
 // leaseholder could take action at the same time, causing errors.
-func (s *Store) AdminRelocateRange(
+func (r *Replica) AdminRelocateRange(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
@@ -2680,14 +2758,14 @@ func (s *Store) AdminRelocateRange(
 
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
-	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
+	newDesc, err := r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err
 	}
 	rangeDesc = *newDesc
 
-	rangeDesc, err = s.relocateReplicas(
+	rangeDesc, err = r.store.relocateReplicas(
 		ctx, rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
 	)
 	if err != nil {
@@ -2748,24 +2826,21 @@ func (s *Store) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			ops, leaseTarget, err := s.relocateOne(
+			ops, err := s.relocateOne(
 				ctx, &rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
 			)
 			if err != nil {
 				return rangeDesc, err
 			}
-
-			if leaseTarget != nil {
-				// NB: we may need to transfer even if there are no ops, to make
-				// sure the attempt is made to make the first target the final
-				// leaseholder.
-				if err := transferLease(*leaseTarget); err != nil {
-					return rangeDesc, err
-				}
-			}
-
 			if len(ops) == 0 {
-				// Done.
+				if len(voterTargets) > 0 && transferLeaseToFirstVoter {
+					// NB: we may need to transfer even if there are no ops, to make
+					// sure the attempt is made to make the first target the final
+					// leaseholder.
+					if err := transferLease(voterTargets[0]); err != nil {
+						return rangeDesc, err
+					}
+				}
 				return rangeDesc, ctx.Err()
 			}
 
@@ -2788,7 +2863,7 @@ func (s *Store) relocateReplicas(
 			}
 			if success {
 				if fn := s.cfg.TestingKnobs.OnRelocatedOne; fn != nil {
-					fn(ops, leaseTarget)
+					fn(ops, &voterTargets[0])
 				}
 
 				break
@@ -2842,21 +2917,21 @@ func (s *Store) relocateOne(
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,
-) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
+) ([]roachpb.ReplicationChange, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
 		// shouldn't be anything but voters and non_voters.
-		return nil, nil, errors.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
 	confReader, err := s.GetConfReader(ctx)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "can't relocate range")
+		return nil, errors.Wrap(err, "can't relocate range")
 	}
 	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
@@ -2872,7 +2947,7 @@ func (s *Store) relocateOne(
 	existingReplicas := desc.Replicas().Descriptors()
 
 	var additionTarget, removalTarget roachpb.ReplicationTarget
-	var shouldAdd, shouldRemove, canPromoteNonVoter, canDemoteVoter bool
+	var canPromoteNonVoter, canDemoteVoter bool
 	if len(args.targetsToAdd()) > 0 {
 		// Each iteration, pick the most desirable replica to add. However,
 		// prefer the first target because it's the one that should hold the
@@ -2891,7 +2966,7 @@ func (s *Store) relocateOne(
 		for _, candidate := range candidateTargets {
 			store, ok := storeMap[candidate.StoreID]
 			if !ok {
-				return nil, nil, fmt.Errorf(
+				return nil, fmt.Errorf(
 					"cannot up-replicate to s%d; missing gossiped StoreDescriptor"+
 						" (the store is likely dead, draining or decommissioning)", candidate.StoreID,
 				)
@@ -2914,7 +2989,7 @@ func (s *Store) relocateOne(
 			args.targetType,
 		)
 		if targetStore == nil {
-			return nil, nil, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"none of the remaining %ss %v are legal additions to %v",
 				args.targetType, args.targetsToAdd(), desc.Replicas(),
 			)
@@ -2960,10 +3035,8 @@ func (s *Store) relocateOne(
 				},
 			)
 		}
-		shouldAdd = true
 	}
 
-	var transferTarget *roachpb.ReplicationTarget
 	if len(args.targetsToRemove()) > 0 {
 		// Pick a replica to remove. Note that existingVoters/existingNonVoters may
 		// already reflect a replica we're adding in the current round. This is the
@@ -2983,7 +3056,7 @@ func (s *Store) relocateOne(
 			s.allocator.scorerOptions(),
 		)
 		if err != nil {
-			return nil, nil, errors.Wrapf(
+			return nil, errors.Wrapf(
 				err, "unable to select removal target from %v; current replicas %v",
 				args.targetsToRemove(), existingReplicas,
 			)
@@ -3002,10 +3075,8 @@ func (s *Store) relocateOne(
 		liReq.Key = desc.StartKey.AsRawKey()
 		b.AddRawRequest(liReq)
 		if err := s.DB().Run(ctx, &b); err != nil {
-			return nil, nil, errors.Wrap(err, "looking up lease")
+			return nil, errors.Wrap(err, "looking up lease")
 		}
-		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = curLeaseholder.StoreID != removalTarget.StoreID
 		if args.targetType == voterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.
@@ -3014,55 +3085,24 @@ func (s *Store) relocateOne(
 					canDemoteVoter = true
 				}
 			}
-			if !shouldRemove {
-				// Pick a voting replica that we can give the lease to. We sort the first
-				// target to the beginning (if it's there) because that's where the lease
-				// needs to be in the end. We also exclude the last voter if it was
-				// added by the add branch above (in which case it doesn't exist yet).
-				added := 0
-				if shouldAdd {
-					added++
-				}
-				sortedTargetReplicas := append(
-					[]roachpb.ReplicaDescriptor(nil),
-					existingVoters[:len(existingVoters)-added]...,
-				)
-				sort.Slice(
-					sortedTargetReplicas, func(i, j int) bool {
-						sl := sortedTargetReplicas
-						// finalRelocationTargets[0] goes to the front (if it's present).
-						return sl[i].StoreID == args.finalRelocationTargets()[0].StoreID
-					},
-				)
-				for _, rDesc := range sortedTargetReplicas {
-					if rDesc.StoreID != curLeaseholder.StoreID {
-						transferTarget = &roachpb.ReplicationTarget{
-							NodeID:  rDesc.NodeID,
-							StoreID: rDesc.StoreID,
-						}
-						shouldRemove = true
-						break
-					}
-				}
-			}
 		}
 	}
 
 	var ops []roachpb.ReplicationChange
-	if shouldAdd && shouldRemove {
+	if len(args.targetsToAdd()) > 0 && len(args.targetsToRemove()) > 0 {
 		ops, _, err = replicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-	} else if shouldAdd {
+	} else if len(args.targetsToAdd()) > 0 {
 		if canPromoteNonVoter {
 			ops = roachpb.ReplicationChangesForPromotion(additionTarget)
 		} else {
 			ops = roachpb.MakeReplicationChanges(args.targetType.AddChangeType(), additionTarget)
 		}
-	} else if shouldRemove {
+	} else if len(args.targetsToRemove()) > 0 {
 		// Carry out the removal only if there was no lease problem above. If there
 		// was, we're not going to do a swap in this round but just do the addition.
 		// (Note that !shouldRemove implies that we're trying to remove the last
@@ -3074,12 +3114,7 @@ func (s *Store) relocateOne(
 		}
 	}
 
-	if len(ops) == 0 && transferLeaseToFirstVoter {
-		// Make sure that the first target is the final leaseholder, if the caller
-		// asked for it.
-		transferTarget = &voterTargets[0]
-	}
-	return ops, transferTarget, nil
+	return ops, nil
 }
 
 func getRelocationArgs(

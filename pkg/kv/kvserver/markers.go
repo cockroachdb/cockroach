@@ -78,3 +78,19 @@ var errMarkInvalidReplicationChange = errors.New("invalid replication change")
 func IsIllegalReplicationChangeError(err error) bool {
 	return errors.Is(err, errMarkInvalidReplicationChange)
 }
+
+var errLeaseholderMovedDuringJointConfig = errors.New(
+	"unable to complete - leaseholder moved")
+
+var errLeaseholderNotRaftLeader = errors.New(
+	"Removing leaseholder not allowed since it isn't the Raft leader")
+
+// IsTransientLeaseholderError indicates whether err is a transient issue related
+// to the identity of the leaseholder and Raft leader. When a reconfiguration is invoked,
+// it might fail because the leaseholder changes during the operation, or because the
+// Raft leader might not be collocated with the leaseholder. Both are temporary, and
+// indicate that the operation should be retried.
+func IsTransientLeaseholderError(err error) bool {
+	return errors.Is(err, errLeaseholderNotRaftLeader) ||
+		errors.Is(err, errLeaseholderMovedDuringJointConfig)
+}
