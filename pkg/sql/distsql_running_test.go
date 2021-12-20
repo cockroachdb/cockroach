@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -401,6 +402,11 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 						}
 					},
 				},
+				Store: &kvserver.StoreTestingKnobs{
+					AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+						AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+					},
+				},
 			},
 			Insecure: true,
 		}})
@@ -562,6 +568,15 @@ func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+						AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+					},
+				},
+			},
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 

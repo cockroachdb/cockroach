@@ -1318,7 +1318,16 @@ func TestDistSQLRetryableError(t *testing.T) {
 		tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
-				ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
+				ServerArgs: base.TestServerArgs{
+					UseDatabase: "test",
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+								AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+							},
+						},
+					},
+				},
 			})
 		defer tc.Stopper().Stop(context.Background())
 		db := tc.ServerConn(0)
@@ -1342,6 +1351,9 @@ func TestDistSQLRetryableError(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+							AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+						},
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 							TestingEvalFilter: func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 								_, ok := fArgs.Req.(*roachpb.ScanRequest)

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -195,6 +196,13 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+							AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+						},
+					},
+				},
 			},
 		})
 	defer tc.Stopper().Stop(ctx)

@@ -818,6 +818,9 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+					AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+						AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+					},
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 							scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)

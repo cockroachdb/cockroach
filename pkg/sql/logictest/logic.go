@@ -1445,6 +1445,9 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
 					DisableConsistencyQueue: true,
+					AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+						AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+					},
 				},
 				SQLEvalContext: &tree.EvalContextTestingKnobs{
 					AssertBinaryExprReturnTypes:     true,

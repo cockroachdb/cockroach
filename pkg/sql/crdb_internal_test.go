@@ -553,6 +553,9 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 					}
 					return nil
 				},
+				AllocatorKnobs: &kvserver.AllocatorTestingKnobs{
+					AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+				},
 			},
 		},
 	}
