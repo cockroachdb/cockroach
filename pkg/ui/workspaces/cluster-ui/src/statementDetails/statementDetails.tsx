@@ -561,13 +561,13 @@ export class StatementDetails extends React.Component<
         activeKey={currentTab}
       >
         <TabPane tab="Overview" key="overview">
-          <Row gutter={16}>
-            <Col className="gutter-row" span={16}>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={24}>
               <SqlBox value={statement} />
             </Col>
           </Row>
-          <Row gutter={16}>
-            <Col className="gutter-row" span={8}>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <Row>
                   <Col>
@@ -670,7 +670,7 @@ export class StatementDetails extends React.Component<
                 </Row>
               </SummaryCard>
             </Col>
-            <Col className="gutter-row" span={8}>
+            <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
