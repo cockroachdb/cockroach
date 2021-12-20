@@ -1642,7 +1642,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7::DECIMAL + c:9::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7::DECIMAL + c:9::DECIMAL
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15] [as=b_new:14]
@@ -1650,7 +1650,7 @@ update decimals
       │    │    │         ├── crdb_internal.round_decimal_values(a_new:13, 0) [as=a_new:15]
       │    │    │         └── crdb_internal.round_decimal_values(b_new:14, 1) [as=b_new:16]
       │    │    └── projections
-      │    │         └── (a_new:15 + c:9::DECIMAL)::DECIMAL(10,1) [as=d_comp:17]
+      │    │         └── a_new:15 + c:9::DECIMAL [as=d_comp:17]
       │    └── projections
       │         └── crdb_internal.round_decimal_values(d_comp:17, 1) [as=d_comp:18]
       └── projections
