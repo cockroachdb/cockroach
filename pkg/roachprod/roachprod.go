@@ -466,7 +466,7 @@ func Reset(clusterName string) error {
 }
 
 // SetupSSH sets up the keys and host keys for the vms in the cluster.
-func SetupSSH(clusterName string, zones map[string][]string) error {
+func SetupSSH(clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -475,17 +475,27 @@ func SetupSSH(clusterName string, zones map[string][]string) error {
 		return err
 	}
 
-	// Congigure SSH for machines in the zones we operate on.
-	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
+	cloudCluster, ok := cld.Clusters[clusterName]
+	if !ok {
+		return fmt.Errorf("could not find %s in list of cluster", clusterName)
+	}
+
+	zones := make(map[string][]string, len(cloudCluster.VMs))
+	for _, vm := range cloudCluster.VMs {
+		zones[vm.Provider] = append(zones[vm.Provider], vm.Zone)
+	}
+	providers := make([]string, 0)
+	for provider := range zones {
+		providers = append(providers, provider)
+	}
+
+	// Configure SSH for machines in the zones we operate on.
+	if err := vm.ProvidersSequential(providers, func(p vm.Provider) error {
 		return p.ConfigSSH(zones[p.Name()])
 	}); err != nil {
 		return err
 	}
 
-	cloudCluster, ok := cld.Clusters[clusterName]
-	if !ok {
-		return fmt.Errorf("could not find %s in list of cluster", clusterName)
-	}
 	cloudCluster.PrintDetails()
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
 	for _, v := range cloudCluster.VMs {
@@ -1133,12 +1143,7 @@ func Create(
 		// No need for ssh for local clusters.
 		return LoadClusters()
 	}
-	zonesMap := make(map[string][]string)
-	// Only adding aws zones because only aws.ConfigSSH uses it.
-	if vm.Providers[aws.ProviderName].Active() {
-		zonesMap[aws.ProviderName] = providerOptsContainer[aws.ProviderName].(*aws.ProviderOpts).CreateZones
-	}
-	return SetupSSH(clusterName, zonesMap)
+	return SetupSSH(clusterName)
 }
 
 // GC garbage-collects expired clusters and unused SSH keypairs in AWS.
