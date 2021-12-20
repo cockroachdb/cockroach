@@ -1517,6 +1517,9 @@ type fakePubsubSink struct {
 var _ Sink = (*fakePubsubSink)(nil)
 
 func (p *fakePubsubSink) Dial() error {
+	s := p.Sink.(*pubsubSink)
+	s.client = p.client
+	s.setupWorkers()
 	return nil
 }
 
@@ -1552,12 +1555,16 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal("gcppubsub://testfeed")
+	}
+
 	if err != nil {
 		return nil, err
 	}
 	ss := &sinkSynchronizer{}
 
-	client := &fakePubsubClient{}
+	client := &fakePubsubClient{buffer: &mockPubsubMessageBuffer{rows: make([]mockPubsubMessage, 0)}}
 
 	wrapSink := func(s Sink) Sink {
 		return &fakePubsubSink{
@@ -1630,7 +1637,7 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		msg := p.client.buffer.pop()
 		log.Info(context.Background(), "next loop start")
-		if msg == nil {
+		if msg != nil {
 			log.Info(context.Background(), "there is message")
 			m := &cdctest.TestFeedMessage{}
 			resolved, err := isResolvedTimestamp([]byte(msg.data))

@@ -69,11 +69,11 @@ type pubsubMessage struct {
 
 type gcpPubsubClient struct {
 	client    *pubsub.Client
-	creds     *google.Credentials
 	topics    map[descpb.ID]*topicStruct
 	ctx       context.Context
 	projectID string
 	region    string
+	url       sinkURL
 }
 
 type topicStruct struct {
@@ -82,7 +82,6 @@ type topicStruct struct {
 }
 
 type pubsubSink struct {
-	url        sinkURL
 	numWorkers int
 
 	workerCtx   context.Context
@@ -174,7 +173,7 @@ func MakePubsubSink(
 	ctx, cancel := context.WithCancel(ctx)
 	// currently just hardcoding numWorkers to 128, it will be a config option later down the road
 	p := &pubsubSink{
-		workerCtx: ctx, url: pubsubURL, numWorkers: numOfWorkers,
+		workerCtx: ctx, numWorkers: numOfWorkers,
 		exitWorkers: cancel, withTopicName: pubsubTopicName,
 	}
 
@@ -182,15 +181,10 @@ func MakePubsubSink(
 	switch u.Scheme {
 	case gcpScheme:
 		const regionParam = "region"
-		creds, err := getGCPCredentials(ctx, p.url)
-		if err != nil {
-			_ = p.Close()
-			return nil, err
-		}
 		projectID := pubsubURL.Host
 		region := pubsubURL.consumeParam(regionParam)
-		g := &gcpPubsubClient{creds: creds, topics: p.getTopicsMap(targets, pubsubTopicName),
-			ctx: ctx, projectID: projectID, region: region}
+		g := &gcpPubsubClient{topics: p.getTopicsMap(targets, pubsubTopicName),
+			ctx: ctx, projectID: projectID, region: region, url: pubsubURL}
 		p.client = g
 		return p, nil
 	default:
@@ -219,7 +213,7 @@ func (p *pubsubSink) EmitRow(
 			Key:   key,
 			Value: value,
 			// we use getTopicName because of the option use full topic name which is not exposed in topic.GetName()
-			Topic: p.client.getTopicName(topic.GetID()),
+			Topic: topic.GetName(),
 		}}
 
 	// calculate index by hashing key
@@ -428,13 +422,17 @@ func (p *gcpPubsubClient) openTopics(withTopicName string) error {
 	var client *pubsub.Client
 	var err error
 
+	creds, err := getGCPCredentials(p.ctx, p.url)
+	if err != nil {
+		return err
+	}
 	// Sending messages to the same region ensures they are received in order
 	// even when multiple publishers are used.
 	// region can be changed from query parameter to config option
 	if p.region != "" {
-		client, err = pubsub.NewClient(p.ctx, p.projectID, option.WithCredentials(p.creds), option.WithEndpoint(p.region))
+		client, err = pubsub.NewClient(p.ctx, p.projectID, option.WithCredentials(creds), option.WithEndpoint(p.region))
 	} else {
-		client, err = pubsub.NewClient(p.ctx, p.projectID, option.WithCredentials(p.creds), option.WithEndpoint(p.region))
+		client, err = pubsub.NewClient(p.ctx, p.projectID, option.WithCredentials(creds), option.WithEndpoint(p.region))
 	}
 
 	if err != nil {
