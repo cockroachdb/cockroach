@@ -31,7 +31,7 @@ func NewJobRunDependencies(
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
 	indexBackfiller scexec.IndexBackfiller,
-	eventLoggerBuilder func(txn *kv.Txn) scexec.EventLogger,
+	eventLoggerFactory EventLoggerFactory,
 	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
@@ -46,7 +46,7 @@ func NewJobRunDependencies(
 		db:                 db,
 		internalExecutor:   internalExecutor,
 		indexBackfiller:    indexBackfiller,
-		eventLoggerBuilder: eventLoggerBuilder,
+		eventLoggerFactory: eventLoggerFactory,
 		partitioner:        partitioner,
 		jobRegistry:        jobRegistry,
 		job:                job,
@@ -63,7 +63,7 @@ type jobExecutionDeps struct {
 	db                 *kv.DB
 	internalExecutor   sqlutil.InternalExecutor
 	indexBackfiller    scexec.IndexBackfiller
-	eventLoggerBuilder func(txn *kv.Txn) scexec.EventLogger
+	eventLoggerFactory func(txn *kv.Txn) scexec.EventLogger
 	partitioner        scmutationexec.Partitioner
 	jobRegistry        *jobs.Registry
 	job                *jobs.Job
@@ -95,7 +95,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				descsCollection:    descriptors,
 				jobRegistry:        d.jobRegistry,
 				indexValidator:     d.indexValidator,
-				eventLogger:        d.eventLoggerBuilder(txn),
+				eventLogger:        d.eventLoggerFactory(txn),
 				schemaChangerJobID: d.job.ID(),
 			},
 			indexBackfiller: d.indexBackfiller,
