@@ -106,13 +106,13 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
 		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := ensureNotExists(ctx, txn, recMovedToFailed.ID); err != nil {
+			if err := ensureNotExists(ctx, txn, recMovedToFailed.ID.GetUUID()); err != nil {
 				return err
 			}
-			if err := ensureNotExists(ctx, txn, recFinished.ID); err != nil {
+			if err := ensureNotExists(ctx, txn, recFinished.ID.GetUUID()); err != nil {
 				return err
 			}
-			_, err := ptp.GetRecord(ctx, txn, recRemains.ID)
+			_, err := ptp.GetRecord(ctx, txn, recRemains.ID.GetUUID())
 			require.NoError(t, err)
 			return err
 		})
@@ -186,10 +186,10 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
 		return s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := ensureNotExists(ctx, txn, recScheduleDropped.ID); err != nil {
+			if err := ensureNotExists(ctx, txn, recScheduleDropped.ID.GetUUID()); err != nil {
 				return err
 			}
-			_, err := ptp.GetRecord(ctx, txn, recSchedule.ID)
+			_, err := ptp.GetRecord(ctx, txn, recSchedule.ID.GetUUID())
 			require.NoError(t, err)
 			return err
 		})
