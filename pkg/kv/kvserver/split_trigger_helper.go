@@ -32,18 +32,20 @@ func (rd *replicaMsgAppDropper) Args() (initialized bool, ticks int) {
 	return initialized, ticks
 }
 
-func (rd *replicaMsgAppDropper) ShouldDrop(startKey roachpb.RKey) (fmt.Stringer, bool) {
+func (rd *replicaMsgAppDropper) ShouldDrop(
+	ctx context.Context, startKey roachpb.RKey,
+) (fmt.Stringer, bool) {
 	lhsRepl := (*Replica)(rd).store.LookupReplica(startKey)
 	if lhsRepl == nil {
 		return nil, false
 	}
-	lhsRepl.store.replicaGCQueue.AddAsync(context.Background(), lhsRepl, replicaGCPriorityDefault)
+	lhsRepl.store.replicaGCQueue.AddAsync(ctx, lhsRepl, replicaGCPriorityDefault)
 	return lhsRepl, true
 }
 
 type msgAppDropper interface {
 	Args() (initialized bool, ticks int)
-	ShouldDrop(key roachpb.RKey) (fmt.Stringer, bool)
+	ShouldDrop(ctx context.Context, key roachpb.RKey) (fmt.Stringer, bool)
 }
 
 // maybeDropMsgApp returns true if the incoming Raft message should be dropped.
@@ -125,7 +127,7 @@ func maybeDropMsgApp(
 
 	// NB: the caller is likely holding r.raftMu, but that's OK according to
 	// the lock order. We're not allowed to hold r.mu, but we don't.
-	lhsRepl, drop := r.ShouldDrop(startKey)
+	lhsRepl, drop := r.ShouldDrop(ctx, startKey)
 	if !drop {
 		return false
 	}
