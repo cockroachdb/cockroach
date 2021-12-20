@@ -2178,67 +2178,70 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 // startRangefeedUpdater periodically informs all the replicas with rangefeeds
 // about closed timestamp updates.
 func (s *Store) startRangefeedUpdater(ctx context.Context) {
-	const name = "closedts-rangefeed-updater"
-	_ /* err */ = s.stopper.RunAsyncTask(ctx, name, func(ctx context.Context) {
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-		var replIDs []roachpb.RangeID
-		st := s.cfg.Settings
+	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName: "closedts-rangefeed-updater",
+			SpanOpt:  stop.SterileRootSpan,
+		}, func(ctx context.Context) {
+			timer := timeutil.NewTimer()
+			defer timer.Stop()
+			var replIDs []roachpb.RangeID
+			st := s.cfg.Settings
 
-		confCh := make(chan struct{}, 1)
-		confChanged := func(ctx context.Context) {
-			select {
-			case confCh <- struct{}{}:
-			default:
-			}
-		}
-		closedts.SideTransportCloseInterval.SetOnChange(&st.SV, confChanged)
-		RangeFeedRefreshInterval.SetOnChange(&st.SV, confChanged)
-
-		getInterval := func() time.Duration {
-			refresh := RangeFeedRefreshInterval.Get(&st.SV)
-			if refresh != 0 {
-				return refresh
-			}
-			return closedts.SideTransportCloseInterval.Get(&st.SV)
-		}
-
-		for {
-			interval := getInterval()
-			if interval > 0 {
-				timer.Reset(interval)
-			} else {
-				// Disable the side-transport.
-				timer.Stop()
-				timer = timeutil.NewTimer()
-			}
-			select {
-			case <-timer.C:
-				timer.Read = true
-				s.rangefeedReplicas.Lock()
-				replIDs = replIDs[:0]
-				for replID := range s.rangefeedReplicas.m {
-					replIDs = append(replIDs, replID)
+			confCh := make(chan struct{}, 1)
+			confChanged := func(ctx context.Context) {
+				select {
+				case confCh <- struct{}{}:
+				default:
 				}
-				s.rangefeedReplicas.Unlock()
-				// Notify each replica with an active rangefeed to check for an updated
-				// closed timestamp.
-				for _, replID := range replIDs {
-					r := s.GetReplicaIfExists(replID)
-					if r == nil {
-						continue
+			}
+			closedts.SideTransportCloseInterval.SetOnChange(&st.SV, confChanged)
+			RangeFeedRefreshInterval.SetOnChange(&st.SV, confChanged)
+
+			getInterval := func() time.Duration {
+				refresh := RangeFeedRefreshInterval.Get(&st.SV)
+				if refresh != 0 {
+					return refresh
+				}
+				return closedts.SideTransportCloseInterval.Get(&st.SV)
+			}
+
+			for {
+				interval := getInterval()
+				if interval > 0 {
+					timer.Reset(interval)
+				} else {
+					// Disable the side-transport.
+					timer.Stop()
+					timer = timeutil.NewTimer()
+				}
+				select {
+				case <-timer.C:
+					timer.Read = true
+					s.rangefeedReplicas.Lock()
+					replIDs = replIDs[:0]
+					for replID := range s.rangefeedReplicas.m {
+						replIDs = append(replIDs, replID)
 					}
-					r.handleClosedTimestampUpdate(ctx, r.GetClosedTimestamp(ctx))
+					s.rangefeedReplicas.Unlock()
+					// Notify each replica with an active rangefeed to check for an updated
+					// closed timestamp.
+					for _, replID := range replIDs {
+						r := s.GetReplicaIfExists(replID)
+						if r == nil {
+							continue
+						}
+						r.handleClosedTimestampUpdate(ctx, r.GetClosedTimestamp(ctx))
+					}
+				case <-confCh:
+					// Loop around to use the updated timer.
+					continue
+				case <-s.stopper.ShouldQuiesce():
+					return
 				}
-			case <-confCh:
-				// Loop around to use the updated timer.
-				continue
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
 
-		}
-	})
+			}
+		})
 }
 
 func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
