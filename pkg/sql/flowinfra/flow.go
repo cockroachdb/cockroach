@@ -549,5 +549,5 @@ func (f *FlowBase) cancel() {
 	}
 	// Pending streams have yet to be started; send an error to its receivers
 	// and prevent them from being connected.
-	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.QueryCanceledError)
+	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.NewQueryCanceledError("cancel pending streams"))
 }

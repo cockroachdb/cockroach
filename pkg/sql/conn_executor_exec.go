@@ -323,8 +323,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
-			res.SetError(cancelchecker.QueryCanceledError)
-			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+			err := cancelchecker.NewQueryCanceledError("connExecutor")
+			res.SetError(err)
+			retPayload = eventNonRetriableErrPayload{err: err}
 		}
 
 		// If the query timed out, we intercept the error, payload, and event here

@@ -83,7 +83,7 @@ func (c *CancelChecker) Check() {
 func (c *CancelChecker) CheckEveryCall() {
 	select {
 	case <-c.Ctx.Done():
-		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
+		colexecerror.ExpectedError(cancelchecker.NewQueryCanceledError("cancel checker"))
 	default:
 	}
 }
