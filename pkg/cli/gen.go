@@ -217,7 +217,7 @@ Output the list of cluster settings known to this binary.
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}
 
-			if excludeSystemSettings && setting.SystemOnly() {
+			if excludeSystemSettings && setting.Class() == settings.SystemOnly {
 				continue
 			}
 

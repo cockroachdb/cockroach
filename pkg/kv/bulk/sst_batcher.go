@@ -33,12 +33,14 @@ import (
 
 var (
 	tooSmallSSTSize = settings.RegisterByteSizeSetting(
+		settings.TenantWritable,
 		"kv.bulk_io_write.small_write_size",
 		"size below which a 'bulk' write will be performed as a normal write instead",
 		400*1<<10, // 400 Kib
 	)
 
 	ingestDelay = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"bulkio.ingest.flush_delay",
 		"amount of time to wait before sending a file to the KV/Storage layer to ingest",
 		0,

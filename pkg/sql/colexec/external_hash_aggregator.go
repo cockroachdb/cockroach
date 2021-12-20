@@ -104,6 +104,7 @@ const HashAggregationDiskSpillingEnabledSettingName = "sql.distsql.temp_storage.
 // HashAggregationDiskSpillingEnabled is a cluster setting that allows to
 // disable hash aggregator disk spilling.
 var HashAggregationDiskSpillingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	HashAggregationDiskSpillingEnabledSettingName,
 	"set to false to disable hash aggregator disk spilling "+
 		"(this will improve performance, but the query might hit the memory limit)",

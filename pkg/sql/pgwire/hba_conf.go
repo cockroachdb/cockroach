@@ -72,6 +72,7 @@ const serverHBAConfSetting = "server.host_based_authentication.configuration"
 // configuration.
 var connAuthConf = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		serverHBAConfSetting,
 		"host-based authentication configuration to use during connection authentication",
 		"",

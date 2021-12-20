@@ -117,7 +117,7 @@ var retiredSettings = map[string]struct{}{
 }
 
 // register adds a setting to the registry.
-func register(key, desc string, s internalSetting) {
+func register(class Class, key, desc string, s internalSetting) {
 	if _, ok := retiredSettings[key]; ok {
 		panic(fmt.Sprintf("cannot reuse previously defined setting name: %s", key))
 	}
@@ -142,9 +142,9 @@ func register(key, desc string, s internalSetting) {
 			))
 		}
 	}
-	s.setDescription(desc)
 	registry[key] = s
-	s.setSlotIdx(len(registry))
+	slotIdx := len(registry)
+	s.init(class, slotIdx, desc)
 }
 
 // NumRegisteredSettings returns the number of registered settings.

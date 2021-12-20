@@ -43,6 +43,7 @@ const (
 )
 
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.guardrails.max_row_size_log",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
@@ -65,6 +66,7 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 ).WithPublic()
 
 var maxRowSizeErr = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.guardrails.max_row_size_err",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an error is returned; use 0 to disable",

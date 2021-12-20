@@ -286,6 +286,7 @@ type alterDatabaseDropRegionNode struct {
 }
 
 var allowDropFinalRegion = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.multiregion.drop_primary_region.enabled",
 	"allows dropping the PRIMARY REGION of a database if it is the last region",
 	true,

@@ -60,6 +60,7 @@ import (
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
 var featureChangefeedEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"feature.changefeed.enabled",
 	"set to true to enable changefeeds, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,

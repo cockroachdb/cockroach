@@ -53,7 +53,8 @@ const Endpoint = "/debug/"
 var _ = func() *settings.StringSetting {
 	// This setting definition still exists so as to not break
 	// deployment scripts that set it unconditionally.
-	v := settings.RegisterStringSetting("server.remote_debugging.mode", "unused", "local")
+	v := settings.RegisterStringSetting(
+		settings.TenantWritable, "server.remote_debugging.mode", "unused", "local")
 	v.SetRetired()
 	return v
 }()

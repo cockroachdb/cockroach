@@ -696,11 +696,12 @@ func validatePositive(v int64) error {
 // context of up-replication or rebalancing (i.e. any snapshot that was not
 // requested by raft itself, to which `kv.snapshot_recovery.max_rate` applies).
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	32<<20, // 32mb/s
 	validatePositive,
-).WithPublic().WithSystemOnly()
+).WithPublic()
 
 // recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
 // sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
@@ -712,17 +713,19 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 // to a semaphore at the receiver, and so the slower one ultimately determines
 // the pace at which things can move along.
 var recoverySnapshotRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	32<<20, // 32mb/s
 	validatePositive,
-).WithPublic().WithSystemOnly()
+).WithPublic()
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit
 // places an upper-bound on the memory footprint of the sender of a Range
 // snapshot. It is also the granularity of rate limiting.
 var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"kv.snapshot_sender.batch_size",
 	"size of key-value batches sent over the network during snapshots",
 	256<<10, // 256 KB
@@ -733,6 +736,7 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // The default of 2 MiB was chosen to be in line with the behavior in bulk-io.
 // See sstWriteSyncRate.
 var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
 	bulkIOWriteBurst,

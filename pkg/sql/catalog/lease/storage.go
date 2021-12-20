@@ -62,6 +62,7 @@ type storage struct {
 // LeaseRenewalDuration controls the default time before a lease expires when
 // acquisition to renew the lease begins.
 var LeaseRenewalDuration = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.catalog.descriptor_lease_renewal_fraction",
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)

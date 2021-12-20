@@ -28,6 +28,7 @@ import (
 )
 
 var multipleModificationsOfTableEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.multiple_modifications_of_table.enabled",
 	"if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE "+
 		"subqueries modifying the same table, at the risk of data corruption if the same row is "+

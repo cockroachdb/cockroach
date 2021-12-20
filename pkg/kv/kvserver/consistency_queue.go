@@ -24,6 +24,7 @@ import (
 )
 
 var consistencyCheckInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"server.consistency_check.interval",
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
@@ -32,6 +33,7 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 )
 
 var consistencyCheckRate = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"server.consistency_check.max_rate",
 	"the rate limit (bytes/sec) to use for consistency checks; used in "+
 		"conjunction with server.consistency_check.interval to control the "+

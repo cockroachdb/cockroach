@@ -41,6 +41,7 @@ const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	AutoStatsClusterSettingName,
 	"automatic statistics collection mode",
 	true,
@@ -49,6 +50,7 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 // MultiColumnStatisticsClusterMode controls the cluster setting for enabling
 // automatic collection of multi-column statistics.
 var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.multi_column_collection.enabled",
 	"multi-column statistics collection mode",
 	true,
@@ -59,6 +61,7 @@ var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
 // statistics (in high load scenarios). This value can be tuned to trade off
 // the runtime vs performance impact of automatic stats.
 var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
+	settings.TenantWritable,
 	"sql.stats.automatic_collection.max_fraction_idle",
 	"maximum fraction of time that automatic statistics sampler processors are idle",
 	0.9,
@@ -77,6 +80,7 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
 // AutomaticStatisticsMinStaleRows.
 var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"sql.stats.automatic_collection.fraction_stale_rows",
 		"target fraction of stale rows per table that will trigger a statistics refresh",
 		0.2,
@@ -91,6 +95,7 @@ var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
 // addition to the fraction AutomaticStatisticsFractionStaleRows.
 var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
 	s := settings.RegisterIntSetting(
+		settings.TenantWritable,
 		"sql.stats.automatic_collection.min_stale_rows",
 		"target minimum number of stale rows per table that will trigger a statistics refresh",
 		500,

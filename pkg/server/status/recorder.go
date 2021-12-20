@@ -87,7 +87,8 @@ type storeMetrics interface {
 	Registry() *metric.Registry
 }
 
-var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.enabled",
+var childMetricsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
 	false)
 

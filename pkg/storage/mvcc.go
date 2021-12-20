@@ -66,6 +66,7 @@ var (
 )
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"rocksdb.min_wal_sync_interval",
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
@@ -75,6 +76,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 // WriteIntentError in operations that return multiple intents per error.
 // Currently it is used in Scan, ReverseScan, and ExportToSST.
 var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"storage.mvcc.max_intents_per_error",
 	"maximum number of intents returned in error during export of scan requests",
 	maxIntentsPerWriteIntentErrorDefault)
