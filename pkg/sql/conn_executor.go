@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1050,10 +1049,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
-		for name, r := range ex.planner.sqlCursors.cursorMap {
-			_ = r.Close()
-			delete(ex.planner.sqlCursors.cursorMap, name)
-		}
+		ex.extraTxnState.sqlCursors.closeAll()
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -1231,9 +1227,11 @@ type connExecutor struct {
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
 
-		sqlCursors struct {
-			cursorMap map[string]sqlutil.InternalRows
-		}
+		// sqlCursors contains the list of SQL CURSORs the session currently has
+		// access to.
+		// Cursors are bound to an explicit transaction and they're all destroyed
+		// once the transaction finishes.
+		sqlCursors cursorMap
 
 		// shouldExecuteOnTxnFinish indicates that ex.onTxnFinish will be called
 		// when txn is finished (either committed or aborted). It is true when
@@ -1542,10 +1540,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	}
 
 	// Close all cursors.
-	for name, r := range ex.planner.sqlCursors.cursorMap {
-		_ = r.Close()
-		delete(ex.planner.sqlCursors.cursorMap, name)
-	}
+	ex.extraTxnState.sqlCursors.closeAll()
 
 	switch ev {
 	case txnCommit, txnRollback:
@@ -2901,6 +2896,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 	return connExPrepStmtsAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCursorAccessor() sqlCursors {
+	return connExCursorAccessor{
 		ex: ex,
 	}
 }
