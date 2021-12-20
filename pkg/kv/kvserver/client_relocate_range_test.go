@@ -238,10 +238,9 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 
 	// s5 (LH) ---> s3 (LH)
-	// Lateral movement while at replication factor one. In this case atomic
-	// replication changes cannot be used; we add-then-remove instead.
+	// Lateral movement while at replication factor one.
 	{
-		requireNumAtomic(0, 2, func() {
+		requireNumAtomic(1, 0, func() {
 			relocateAndCheck(t, tc, k, tc.Targets(2), nil /* nonVoterTargets */)
 		})
 	}

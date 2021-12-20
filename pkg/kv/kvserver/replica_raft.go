@@ -299,27 +299,42 @@ func (r *Replica) propose(
 		log.Infof(p.ctx, "proposing %s", crt)
 		prefix = false
 
-		// Ensure that we aren't trying to remove ourselves from the range without
-		// having previously given up our lease, since the range won't be able
-		// to make progress while the lease is owned by a removed replica (and
-		// leases can stay in such a state for a very long time when using epoch-
-		// based range leases). This shouldn't happen often, but has been seen
-		// before (#12591).
+		// The following deals with removing a leaseholder. A voter can be removed
+		// in two ways. 1) Simple (old style) where there is a reconfiguration
+		// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
+		// joint configuration, where the replica remains in the descriptor, but
+		// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
+		// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
 		//
-		// Note that due to atomic replication changes, when a removal is initiated,
-		// the replica remains in the descriptor, but as VOTER_{OUTGOING,DEMOTING}.
-		// We want to block it from getting into that state in the first place,
-		// since there's no stopping the actual removal/demotion once it's there.
-		// The Removed() field has contains these replicas when this first
-		// transition is initiated, so its use here is copacetic.
+		// In case (1) the lease needs to be transferred out before a removal is
+		// proposed (cooperative transfer). The code below permits leaseholder
+		// removal only if entering a joint configuration (option 2 above) in which
+		// the leaseholder is (any kind of) voter. In this case, the lease is
+		// transferred to a different voter (potentially incoming) in
+		// maybeLeaveAtomicChangeReplicas right before we exit the joint
+		// configuration.
+		//
+		// When the leaseholder is replaced by a new replica, transferring the
+		// lease in the joint config allows transferring directly from old to new,
+		// since both are active in the joint config, without going through a third
+		// node or adding the new node before transferring, which might reduce
+		// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
+		// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
+		// region1. We add v4 as LEARNER. At this point we can't transfer the lease
+		// to v4, so we could transfer it to v2 first, but this is likely to hurt
+		// application performance. We could instead add v4 as VOTER first, and
+		// then transfer lease directly to v4, but this would change the number of
+		// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
+		// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
+		// lease to v4 (VOTER_INCOMING) directly.
+		// See also https://github.com/cockroachdb/cockroach/issues/67740.
 		replID := r.ReplicaID()
-		for _, rDesc := range crt.Removed() {
-			if rDesc.ReplicaID == replID {
-				err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
-					errMarkInvalidReplicationChange)
-				log.Errorf(p.ctx, "%v", err)
-				return roachpb.NewError(err)
-			}
+		rDesc, ok := p.command.ReplicatedEvalResult.State.Desc.GetReplicaDescriptorByID(replID)
+		if !ok || !rDesc.IsAnyVoter() {
+			err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
+				errMarkInvalidReplicationChange)
+			log.Errorf(p.ctx, "%v", err)
+			return roachpb.NewError(err)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")

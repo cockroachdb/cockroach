@@ -1530,10 +1530,23 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		readBlocked <- struct{}{}
 	}
 }
+func validateLeaseholderSoon(
+	t *testing.T, db *kv.DB, key roachpb.Key, replica roachpb.ReplicaDescriptor, isTarget bool) {
+	testutils.SucceedsSoon(t, func() error {
+		leaseInfo := getLeaseInfoOrFatal(t, context.Background(), db, key)
+		if isTarget && leaseInfo.Lease.Replica != replica {
+			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
+				replica, leaseInfo.Lease.Replica)
+		} else if !isTarget && leaseInfo.Lease.Replica == replica {
+			return fmt.Errorf("lease holder still on replica: %+v", replica)
+		}
+		return nil
+	})
+}
 
-func getLeaseInfo(
-	ctx context.Context, db *kv.DB, key roachpb.Key,
-) (*roachpb.LeaseInfoResponse, error) {
+func getLeaseInfoOrFatal(
+	t *testing.T, ctx context.Context, db *kv.DB, key roachpb.Key,
+) *roachpb.LeaseInfoResponse {
 	header := roachpb.Header{
 		// INCONSISTENT read with a NEAREST routing policy, since we want to make
 		// sure that the node used to send this is the one that processes the
@@ -1544,19 +1557,18 @@ func getLeaseInfo(
 	leaseInfoReq := &roachpb.LeaseInfoRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
 	reply, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, leaseInfoReq)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		t.Fatal(pErr)
 	}
-	return reply.(*roachpb.LeaseInfoResponse), nil
+	return reply.(*roachpb.LeaseInfoResponse)
 }
 
-func TestLeaseInfoRequest(t *testing.T) {
+func TestRemoveLeaseholder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	kvDB0 := tc.Servers[0].DB()
-	kvDB1 := tc.Servers[1].DB()
 
 	key := []byte("a")
 	rangeDesc, err := tc.LookupRange(key)
@@ -1571,12 +1583,43 @@ func TestLeaseInfoRequest(t *testing.T) {
 			t.Fatalf("expected to find replica in server %d", i)
 		}
 	}
-	mustGetLeaseInfo := func(db *kv.DB) *roachpb.LeaseInfoResponse {
-		resp, err := getLeaseInfo(context.Background(), db, rangeDesc.StartKey.AsRawKey())
-		if err != nil {
-			t.Fatal(err)
+
+	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
+	// there might be already a lease owned by a random node.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now test the LeaseInfo. We might need to loop until the node we query has applied the lease.
+	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[0], true)
+
+	tc.RemoveLeaseHolderOrFatal(t, rangeDesc, tc.Target(0))
+
+	// Check that the lease is no longer on 0
+	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[0], false)
+}
+
+func TestLeaseInfoRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+
+	kvDB0 := tc.Servers[0].DB()
+
+	key := []byte("a")
+	rangeDesc, err := tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replicas := make([]roachpb.ReplicaDescriptor, 3)
+	for i := 0; i < 3; i++ {
+		var ok bool
+		replicas[i], ok = rangeDesc.GetReplicaDescriptor(tc.Servers[i].GetFirstStoreID())
+		if !ok {
+			t.Fatalf("expected to find replica in server %d", i)
 		}
-		return resp
 	}
 
 	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
@@ -1586,16 +1629,8 @@ func TestLeaseInfoRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Now test the LeaseInfo. We might need to loop until the node we query has
-	// applied the lease.
-	testutils.SucceedsSoon(t, func() error {
-		leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
-		if leaseHolderReplica != replicas[0] {
-			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
-				replicas[0], leaseHolderReplica)
-		}
-		return nil
-	})
+	// Now test the LeaseInfo. We might need to loop until the node we query has applied the lease.
+	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[0], true)
 
 	// Transfer the lease to Server 1 and check that LeaseInfoRequest gets the
 	// right answer.
@@ -1606,26 +1641,19 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
-	if !leaseHolderReplica.Equal(replicas[1]) {
+	leaseInfo := getLeaseInfoOrFatal(t, context.Background(), kvDB0, rangeDesc.StartKey.AsRawKey())
+	if !leaseInfo.Lease.Replica.Equal(replicas[1]) {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
-			replicas[1], leaseHolderReplica)
+			replicas[1], leaseInfo.Lease.Replica)
 	}
 
 	// A read on the new lease holder does not necessarily succeed immediately,
 	// since it might take a while for it to apply the transfer.
-	testutils.SucceedsSoon(t, func() error {
-		// We can't reliably do a CONSISTENT read here, even though we're reading
-		// from the supposed lease holder, because this node might initially be
-		// unaware of the new lease and so the request might bounce around for a
-		// while (see #8816).
-		leaseHolderReplica = mustGetLeaseInfo(kvDB1).Lease.Replica
-		if !leaseHolderReplica.Equal(replicas[1]) {
-			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
-				replicas[1], leaseHolderReplica)
-		}
-		return nil
-	})
+	// We can't reliably do a CONSISTENT read here, even though we're reading
+	// from the supposed lease holder, because this node might initially be
+	// unaware of the new lease and so the request might bounce around for a
+	// while (see #8816).
+	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[1], true)
 
 	// Transfer the lease to Server 2 and check that LeaseInfoRequest gets the
 	// right answer.
@@ -1657,10 +1685,9 @@ func TestLeaseInfoRequest(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	resp := *(reply.(*roachpb.LeaseInfoResponse))
-	leaseHolderReplica = resp.Lease.Replica
 
-	if !leaseHolderReplica.Equal(replicas[2]) {
-		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], leaseHolderReplica)
+	if !resp.Lease.Replica.Equal(replicas[2]) {
+		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], resp.Lease.Replica)
 	}
 
 	// TODO(andrei): test the side-effect of LeaseInfoRequest when there's no
@@ -1991,8 +2018,8 @@ func TestClearRange(t *testing.T) {
 			t.Fatal(err)
 		}
 		var actualKeys []roachpb.Key
-		for _, kv := range kvs {
-			actualKeys = append(actualKeys, kv.Key.Key)
+		for _, keyValue := range kvs {
+			actualKeys = append(actualKeys, keyValue.Key.Key)
 		}
 		if !reflect.DeepEqual(expectedKeys, actualKeys) {
 			t.Fatalf("expected %v, but got %v", expectedKeys, actualKeys)
@@ -2253,7 +2280,7 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	const actors = 10
-	errors := make([]error, actors)
+	errs := make([]error, actors)
 	var wg sync.WaitGroup
 	key := roachpb.Key("a")
 	db := tc.Servers[0].DB()
@@ -2288,11 +2315,11 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	}
 	wg.Add(actors)
 	for i := 0; i < actors; i++ {
-		go func(i int) { errors[i] = addReplicas(); wg.Done() }(i)
+		go func(i int) { errs[i] = addReplicas(); wg.Done() }(i)
 	}
 	wg.Wait()
 	var gotSuccess bool
-	for _, err := range errors {
+	for _, err := range errs {
 		if err != nil {
 			require.Truef(t, kvserver.IsRetriableReplicationChangeError(err), "%s; desc: %v", err, rangeInfo.Desc)
 		} else if gotSuccess {
@@ -2318,7 +2345,7 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 	key := tc.ScratchRange(t)
 	// NB: The test cluster starts with firstVoter having a voting replica (and
 	// the lease) for all ranges.
-	firstVoter, secondVoter, nonVoter := tc.Target(0), tc.Target(1), tc.Target(3)
+	firstVoter, nonVoter := tc.Target(0), tc.Target(1)
 	firstStore, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
 	firstRepl := firstStore.LookupReplica(roachpb.RKey(key))
@@ -2326,17 +2353,8 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 		" replica for the ScratchRange")
 
 	tc.AddNonVotersOrFatal(t, key, nonVoter)
-	// TODO(aayush): Trying to swap the last voting replica with a non-voter hits
-	// the safeguard inside Replica.propose() as the last voting replica is always
-	// the leaseholder. There are a bunch of subtleties around getting a
-	// leaseholder to remove itself without another voter to immediately transfer
-	// the lease to. See #40333.
-	_, err = tc.SwapVoterWithNonVoter(key, firstVoter, nonVoter)
-	require.Regexp(t, "received invalid ChangeReplicasTrigger", err)
-
-	tc.AddVotersOrFatal(t, key, secondVoter)
-
-	tc.SwapVoterWithNonVoterOrFatal(t, key, secondVoter, nonVoter)
+	// Swap the only voting replica (leaseholder) with a non-voter
+	tc.SwapVoterWithNonVoterOrFatal(t, key, firstVoter, nonVoter)
 }
 
 // TestReplicaTombstone ensures that tombstones are written when we expect
