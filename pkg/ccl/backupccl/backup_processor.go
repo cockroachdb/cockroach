@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/google/btree"
 	"github.com/kr/pretty"
 )
 
@@ -231,6 +231,9 @@ type returnedSST struct {
 	revStart       hlc.Timestamp
 	completedSpans int32
 	atKeyBoundary  bool
+	// skipWrite is set when we want the sstSink to skip writing the SST file.
+	// This is a testing only knob.
+	skipWrite bool
 }
 
 func runBackupProcessor(
@@ -573,8 +576,8 @@ type sstSink struct {
 	dest cloud.ExternalStorage
 	conf sstSinkConf
 
-	queue     []returnedSST
-	queueSize int
+	tree            *btree.BTree
+	bufferedSSTSize int
 
 	sst     storage.SSTWriter
 	ctx     context.Context
@@ -601,7 +604,7 @@ type sstSink struct {
 func makeSSTSink(
 	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *memoryAccumulator,
 ) (*sstSink, error) {
-	s := &sstSink{conf: conf, dest: dest, backupMem: backupMem}
+	s := &sstSink{conf: conf, dest: dest, backupMem: backupMem, tree: btree.New(8)}
 
 	// Reserve memory for the file buffer.
 	if err := s.backupMem.request(ctx, smallFileBuffer.Get(s.conf.settings)); err != nil {
@@ -628,45 +631,105 @@ func (s *sstSink) Close() error {
 	return nil
 }
 
+// Less implements the btree.Item interface.
+func (ret *returnedSST) Less(thanItem btree.Item) bool {
+	than := thanItem.(*returnedSST)
+	return ret.f.Span.Key.Compare(than.f.Span.Key) < 0
+}
+
 // push pushes one returned backup file into the sink. Returned files can arrive
 // out of order, but must be written to an underlying file in-order or else a
-// new underlying file has to be opened. The queue allows buffering up files and
-// sorting them before pushing them to the underlying file to try to avoid this.
-// When the queue length or sum of the data sizes in it exceeds thresholds the
-// queue is sorted and the first half is flushed.
+// new underlying file has to be opened.
+//
+// `push` inserts the returned backup file into the underlying btree and tries
+// to pick out all the spans that can be written to the underlying file before
+// flushing it.
+// If the bufferedSSTs hit a certain maximum size then we know that given the
+// current `returnedSST`s we cannot extend the underlying file further, and so
+// we flush the first half of the tree in sorted order.
 func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
-	s.queue = append(s.queue, resp)
-	s.queueSize += len(resp.sst)
+	replaced := s.tree.ReplaceOrInsert(&resp)
+	if replaced != nil {
+		r := replaced.(*returnedSST)
+		return errors.AssertionFailedf("programming error: returnedSST: %+v replaces an already existing sst: %+v in btree", resp, *r)
+	}
+	s.bufferedSSTSize += len(resp.sst)
 
-	if s.queueSize >= int(smallFileBuffer.Get(s.conf.settings)) {
-		sort.Slice(s.queue, func(i, j int) bool { return s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key) < 0 })
+	// Walk the tree in ascending order to find all the Spans that can extend the
+	// underlying SST.
+	if len(s.flushedFiles) > 0 {
+		deleteEntries := make([]roachpb.Span, 0)
+		last := s.flushedFiles[len(s.flushedFiles)-1].Span
+		pivot := returnedSST{f: BackupManifest_File{Span: last}}
+		var err error
+		s.tree.AscendGreaterOrEqual(&pivot, func(i btree.Item) (wantMore bool) {
+			retSST := i.(*returnedSST)
+			// If the returned sst span starts before the last buffered span ended, we
+			// need to flush since it overlaps but SSTWriter demands writes in-order.
+			if retSST.f.Span.Key.Compare(last.EndKey) < 0 {
+				return true
+			}
 
+			if err = s.write(ctx, *retSST); err != nil {
+				return false
+			}
+			s.bufferedSSTSize -= len(retSST.sst)
+			deleteEntries = append(deleteEntries, retSST.f.Span)
+
+			last = s.flushedFiles[len(s.flushedFiles)-1].Span
+			return true
+		})
+		if err != nil {
+			return errors.Wrap(err, "error when checking for spans to add to last SST")
+		}
+
+		for _, del := range deleteEntries {
+			foo := s.tree.Delete(&returnedSST{f: BackupManifest_File{Span: del}})
+			if foo == nil {
+				return errors.AssertionFailedf("programming error: returnedSST: %+v not found in btree", del)
+			}
+		}
+	}
+
+	if s.bufferedSSTSize >= int(smallFileBuffer.Get(s.conf.settings)) {
+		// TODO(adityamaru): Delete before merge.
+		// Sanity check that the only time we come here is when the tree has only
+		// elements that have a Key < EndKey of the underlying SST file.
+		if len(s.flushedFiles) > 0 {
+			var lessCounter int
+			s.tree.DescendLessOrEqual(&returnedSST{f: BackupManifest_File{Span: s.flushedFiles[len(s.flushedFiles)-1].Span}}, func(i btree.Item) bool {
+				lessCounter++
+				return true
+			})
+			if lessCounter != s.tree.Len() {
+				panic("unexpected entry when draining tree")
+			}
+		}
 		// Drain the first half.
-		drain := len(s.queue) / 2
+		drain := s.tree.Len() / 2
 		if drain < 1 {
 			drain = 1
 		}
-		for i := range s.queue[:drain] {
-			if err := s.write(ctx, s.queue[i]); err != nil {
-				return err
+		for i := 0; i < drain && s.tree.Len() > 0; i++ {
+			retSST := s.tree.DeleteMin().(*returnedSST)
+			if err := s.write(ctx, *retSST); err != nil {
+				return errors.Wrap(err, "error when draining file buffer")
 			}
-			s.queueSize -= len(s.queue[i].sst)
+			s.bufferedSSTSize -= len(retSST.sst)
 		}
-
-		// Shift down the remainder of the queue and slice off the tail.
-		copy(s.queue, s.queue[drain:])
-		s.queue = s.queue[:len(s.queue)-drain]
 	}
 	return nil
 }
 
 func (s *sstSink) flush(ctx context.Context) error {
-	for i := range s.queue {
-		if err := s.write(ctx, s.queue[i]); err != nil {
-			return err
+	for s.tree.Len() > 0 {
+		retSST := s.tree.DeleteMin().(*returnedSST)
+		if err := s.write(ctx, *retSST); err != nil {
+			return errors.Wrap(err, "error when flushing sstSink")
 		}
+		s.bufferedSSTSize -= len(retSST.sst)
 	}
-	s.queue = nil
+	s.tree = nil
 	return s.flushFile(ctx)
 }
 
@@ -754,7 +817,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	}
 
 	// Initialize the writer if needed.
-	if s.out == nil {
+	if s.out == nil && !resp.skipWrite {
 		if err := s.open(ctx); err != nil {
 			return err
 		}
@@ -763,36 +826,38 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	log.VEventf(ctx, 2, "writing %s to backup file %s", span, s.outName)
 
 	// Copy SST content.
-	sst, err := storage.NewMemSSTIterator(resp.sst, false)
-	if err != nil {
-		return err
-	}
-	defer sst.Close()
+	if !resp.skipWrite {
+		sst, err := storage.NewMemSSTIterator(resp.sst, false)
+		if err != nil {
+			return err
+		}
+		defer sst.Close()
 
-	sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
-	for {
-		if valid, err := sst.Valid(); !valid || err != nil {
-			if err != nil {
-				return err
+		sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+		for {
+			if valid, err := sst.Valid(); !valid || err != nil {
+				if err != nil {
+					return err
+				}
+				break
 			}
-			break
+			k := sst.UnsafeKey()
+			if k.Timestamp.IsEmpty() {
+				if err := s.sst.PutUnversioned(k.Key, sst.UnsafeValue()); err != nil {
+					return err
+				}
+			} else {
+				if err := s.sst.PutMVCC(sst.UnsafeKey(), sst.UnsafeValue()); err != nil {
+					return err
+				}
+			}
+			sst.Next()
 		}
-		k := sst.UnsafeKey()
-		if k.Timestamp.IsEmpty() {
-			if err := s.sst.PutUnversioned(k.Key, sst.UnsafeValue()); err != nil {
-				return err
-			}
-		} else {
-			if err := s.sst.PutMVCC(sst.UnsafeKey(), sst.UnsafeValue()); err != nil {
-				return err
-			}
-		}
-		sst.Next()
 	}
 
 	// If this span extended the last span added -- that is, picked up where it
 	// ended and has the same time-bounds -- then we can simply extend that span
-	// and add to its entry counts. Otherwise we need to record it separately.
+	// and add to its entry counts. Otherwise, we need to record it separately.
 	if l := len(s.flushedFiles) - 1; l > 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
 		s.flushedFiles[l].EndTime.EqOrdering(resp.f.EndTime) &&
 		s.flushedFiles[l].StartTime.EqOrdering(resp.f.StartTime) {
