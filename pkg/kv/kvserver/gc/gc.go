@@ -50,7 +50,7 @@ const (
 // will be resolved.
 var IntentAgeThreshold = settings.RegisterDurationSetting(
 	"kv.gc.intent_age_threshold",
-	"intents older than this threshold will be resolved when encountered by the GC queue",
+	"intents older than this threshold will be resolved when encountered by the MVCC GC queue",
 	2*time.Hour,
 	func(d time.Duration) error {
 		if d < 2*time.Minute {
@@ -120,7 +120,7 @@ type PureGCer interface {
 	GC(context.Context, []roachpb.GCRequest_GCKey) error
 }
 
-// A GCer is an abstraction used by the GC queue to carry out chunked deletions.
+// A GCer is an abstraction used by the MVCC GC queue to carry out chunked deletions.
 type GCer interface {
 	Thresholder
 	PureGCer

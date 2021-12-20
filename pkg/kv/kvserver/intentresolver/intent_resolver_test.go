@@ -39,7 +39,7 @@ import (
 
 // TestCleanupTxnIntentsOnGCAsync exercises the code which is used to
 // asynchronously clean up transaction intents and then transaction records.
-// This method is invoked from the storage GC queue.
+// This method is invoked from the MVCC GC queue.
 func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -103,7 +103,7 @@ func (s *Store) ForceConsistencyQueueProcess() error {
 // is only meant to happen in tests.
 
 func (s *Store) setGCQueueActive(active bool) {
-	s.gcQueue.SetDisabled(!active)
+	s.mvccGCQueue.SetDisabled(!active)
 }
 func (s *Store) setMergeQueueActive(active bool) {
 	s.mergeQueue.SetDisabled(!active)

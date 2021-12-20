@@ -35,29 +35,30 @@ import (
 )
 
 const (
-	// gcQueueTimerDuration is the duration between GCs of queued replicas.
-	gcQueueTimerDuration = 1 * time.Second
-	// gcQueueTimeout is the timeout for a single GC run.
-	gcQueueTimeout = 10 * time.Minute
-	// gcQueueIntentBatchTimeout is the timeout for resolving a single batch of
-	// intents. It is used to ensure progress in the face of unavailable ranges
+	// mvccGCQueueTimerDuration is the duration between MVCC GCs of queued
+	// replicas.
+	mvccGCQueueTimerDuration = 1 * time.Second
+	// mvccGCQueueTimeout is the timeout for a single MVCC GC run.
+	mvccGCQueueTimeout = 10 * time.Minute
+	// mvccGCQueueIntentBatchTimeout is the timeout for resolving a single batch
+	// of intents. It is used to ensure progress in the face of unavailable ranges
 	// (since intent resolution may touch other ranges), but can prevent progress
 	// for ranged intent resolution if it exceeds the timeout.
-	gcQueueIntentBatchTimeout = 2 * time.Minute
+	mvccGCQueueIntentBatchTimeout = 2 * time.Minute
 
-	// gcQueueIntentCooldownDuration is the duration to wait between GC attempts
-	// of the same range when triggered solely by intents. This is to prevent
-	// continually spinning on intents that belong to active transactions, which
-	// can't be cleaned up.
-	gcQueueIntentCooldownDuration = 2 * time.Hour
+	// mvccGCQueueIntentCooldownDuration is the duration to wait between MVCC GC
+	// attempts of the same range when triggered solely by intents. This is to
+	// prevent continually spinning on intents that belong to active transactions,
+	// which can't be cleaned up.
+	mvccGCQueueIntentCooldownDuration = 2 * time.Hour
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total replica priority.
 	intentAgeNormalization = 8 * time.Hour
 
-	// Thresholds used to decide whether to queue for GC based
-	// on keys and intents.
-	gcKeyScoreThreshold    = 2
-	gcIntentScoreThreshold = 1
+	// Thresholds used to decide whether to queue for MVCC GC based on keys and
+	// intents.
+	mvccGCKeyScoreThreshold    = 2
+	mvccGCIntentScoreThreshold = 1
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
@@ -90,9 +91,9 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 	return definitelyLargeAbortSpan || probablyLargeAbortSpan
 }
 
-// gcQueue manages a queue of replicas slated to be scanned in their
-// entirety using the MVCC versions iterator. The gc queue manages the
-// following tasks:
+// mvccGCQueue manages a queue of replicas slated to be scanned in their
+// entirety using the MVCC versions iterator. The mvcc gc queue manages
+// the following tasks:
 //
 //  - GC of version data via TTL expiration (and more complex schemes
 //    as implemented going forward).
@@ -103,40 +104,40 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 //
 // The shouldQueue function combines the need for the above tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
-type gcQueue struct {
+type mvccGCQueue struct {
 	*baseQueue
 }
 
-// newGCQueue returns a new instance of gcQueue.
-func newGCQueue(store *Store) *gcQueue {
-	gcq := &gcQueue{}
-	gcq.baseQueue = newBaseQueue(
-		"gc", gcq, store,
+// newMVCCGCQueue returns a new instance of mvccGCQueue.
+func newMVCCGCQueue(store *Store) *mvccGCQueue {
+	mgcq := &mvccGCQueue{}
+	mgcq.baseQueue = newBaseQueue(
+		"mvccGC", mgcq, store,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,
 			processTimeoutFunc: func(st *cluster.Settings, _ replicaInQueue) time.Duration {
-				timeout := gcQueueTimeout
+				timeout := mvccGCQueueTimeout
 				if d := queueGuaranteedProcessingTimeBudget.Get(&st.SV); d > timeout {
 					timeout = d
 				}
 				return timeout
 			},
-			successes:       store.metrics.GCQueueSuccesses,
-			failures:        store.metrics.GCQueueFailures,
-			pending:         store.metrics.GCQueuePending,
-			processingNanos: store.metrics.GCQueueProcessingNanos,
+			successes:       store.metrics.MVCCGCQueueSuccesses,
+			failures:        store.metrics.MVCCGCQueueFailures,
+			pending:         store.metrics.MVCCGCQueuePending,
+			processingNanos: store.metrics.MVCCGCQueueProcessingNanos,
 		},
 	)
-	return gcq
+	return mgcq
 }
 
-// gcQueueScore holds details about the score returned by makeGCQueueScoreImpl for
-// testing and logging. The fields in this struct are documented in
-// makeGCQueueScoreImpl.
-type gcQueueScore struct {
+// mvccGCQueueScore holds details about the score returned by
+// makeMVCCGCQueueScoreImpl for testing and logging. The fields in this struct
+// are documented in makeMVCCGCQueueScoreImpl.
+type mvccGCQueueScore struct {
 	TTL                 time.Duration
 	LastGC              time.Duration
 	DeadFraction        float64
@@ -151,8 +152,8 @@ type gcQueueScore struct {
 	ExpMinGCByteAgeReduction int64
 }
 
-func (r gcQueueScore) String() string {
-	if (r == gcQueueScore{}) {
+func (r mvccGCQueueScore) String() string {
+	if (r == mvccGCQueueScore{}) {
 		return "(empty)"
 	}
 	if r.ExpMinGCByteAgeReduction < 0 {
@@ -173,7 +174,7 @@ func (r gcQueueScore) String() string {
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (gcq *gcQueue) shouldQueue(
+func (mgcq *mvccGCQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
@@ -184,23 +185,23 @@ func (gcq *gcQueue) shouldQueue(
 		return false, 0
 	}
 	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
-	lastGC, err := repl.getQueueLastProcessed(ctx, gcq.name)
+	lastGC, err := repl.getQueueLastProcessed(ctx, mgcq.name)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 		return false, 0
 	}
-	r := makeGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
+	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
 	return r.ShouldQueue, r.FinalScore
 }
 
-func makeGCQueueScore(
+func makeMVCCGCQueueScore(
 	ctx context.Context,
 	repl *Replica,
 	now hlc.Timestamp,
 	lastGC hlc.Timestamp,
 	gcTTL time.Duration,
 	canAdvanceGCThreshold bool,
-) gcQueueScore {
+) mvccGCQueueScore {
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
 	repl.mu.Unlock()
@@ -212,21 +213,22 @@ func makeGCQueueScore(
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
 	// trigger GC at the same time.
-	r := makeGCQueueScoreImpl(
+	r := makeMVCCGCQueueScoreImpl(
 		ctx, int64(repl.RangeID), now, ms, gcTTL, lastGC, canAdvanceGCThreshold,
 	)
 	return r
 }
 
-// makeGCQueueScoreImpl is used to compute when to trigger the GC Queue. It's
-// important that we don't queue a replica before a relevant amount of data is
-// actually deletable, or the queue might run in a tight loop. To this end, we
-// use a base score with the right interplay between GCByteAge and TTL and
-// additionally weigh it so that GC is delayed when a large proportion of the
-// data in the replica is live. Additionally, returned scores are slightly
-// perturbed to avoid groups of replicas becoming eligible for GC at the same
-// time repeatedly. We also use gcQueueIntentCooldownTimer to avoid spinning
-// when GCing solely based on intents, since we may not be able to GC them.
+// makeMVCCGCQueueScoreImpl is used to compute when to trigger the MVCC GC
+// Queue. It's important that we don't queue a replica before a relevant amount
+// of data is actually deletable, or the queue might run in a tight loop. To
+// this end, we use a base score with the right interplay between GCByteAge and
+// TTL and additionally weigh it so that GC is delayed when a large proportion
+// of the data in the replica is live. Additionally, returned scores are
+// slightly perturbed to avoid groups of replicas becoming eligible for GC at
+// the same time repeatedly. We also use gcQueueIntentCooldownTimer to avoid
+// spinning when GCing solely based on intents, since we may not be able to GC
+// them.
 //
 // More details below.
 //
@@ -307,7 +309,7 @@ func makeGCQueueScore(
 // This means that running GC will always result in a `GCBytesAge` of `<=
 // ttl*GCBytes`, and that a decent trigger for GC is a multiple of
 // `ttl*GCBytes`.
-func makeGCQueueScoreImpl(
+func makeMVCCGCQueueScoreImpl(
 	ctx context.Context,
 	fuzzSeed int64,
 	now hlc.Timestamp,
@@ -315,9 +317,9 @@ func makeGCQueueScoreImpl(
 	gcTTL time.Duration,
 	lastGC hlc.Timestamp,
 	canAdvanceGCThreshold bool,
-) gcQueueScore {
+) mvccGCQueueScore {
 	ms.Forward(now.WallTime)
-	var r gcQueueScore
+	var r mvccGCQueueScore
 
 	if !lastGC.IsEmpty() {
 		r.LastGC = time.Duration(now.WallTime - lastGC.WallTime)
@@ -385,13 +387,13 @@ func makeGCQueueScoreImpl(
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
 	// First determine whether we should queue based on MVCC score alone.
-	r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > gcKeyScoreThreshold
+	r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCKeyScoreThreshold
 
 	// Next, determine whether we should queue based on intent score. For
 	// intents, we also enforce a cooldown time since we may not actually
 	// be able to clean up any intents (for active transactions).
-	if !r.ShouldQueue && r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold &&
-		(r.LastGC == 0 || r.LastGC >= gcQueueIntentCooldownDuration) {
+	if !r.ShouldQueue && r.FuzzFactor*r.IntentScore > mvccGCIntentScoreThreshold &&
+		(r.LastGC == 0 || r.LastGC >= mvccGCQueueIntentCooldownDuration) {
 		r.ShouldQueue = true
 	}
 
@@ -485,10 +487,10 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 	return r.send(ctx, req)
 }
 
-// process first determines whether the replica can run GC given its view of
-// the protected timestamp subsystem and its current state. This check also
-// determines the most recent time which can be used for the purposes of updating
-// the GC threshold and running GC.
+// process first determines whether the replica can run MVCC GC given its view
+// of the protected timestamp subsystem and its current state. This check also
+// determines the most recent time which can be used for the purposes of
+// updating the GC threshold and running GC.
 //
 // If it is safe to GC, process iterates through all keys in a replica's range,
 // calling the garbage collector for each key and associated set of
@@ -514,7 +516,7 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 // 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(
+func (mgcq *mvccGCQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	// Lookup the descriptor and GC policy for the zone containing this key range.
@@ -530,12 +532,12 @@ func (gcq *gcQueue) process(
 	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
 	// We don't recheck ShouldQueue here, since the range may have been enqueued
 	// manually e.g. via the admin server.
-	lastGC, err := repl.getQueueLastProcessed(ctx, gcq.name)
+	lastGC, err := repl.getQueueLastProcessed(ctx, mgcq.name)
 	if err != nil {
 		lastGC = hlc.Timestamp{}
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 	}
-	r := makeGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
+	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
 	// Synchronize the new GC threshold decision with concurrent
 	// AdminVerifyProtectedTimestamp requests.
@@ -544,7 +546,7 @@ func (gcq *gcQueue) process(
 		return false, nil
 	}
 	// Update the last processed timestamp.
-	if err := repl.setQueueLastProcessed(ctx, gcq.name, repl.store.Clock().Now()); err != nil {
+	if err := repl.setQueueLastProcessed(ctx, mgcq.name, repl.store.Clock().Now()); err != nil {
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
@@ -561,21 +563,21 @@ func (gcq *gcQueue) process(
 			MaxIntentsPerIntentCleanupBatch:        maxIntentsPerCleanupBatch,
 			MaxIntentKeyBytesPerIntentCleanupBatch: maxIntentKeyBytesPerCleanupBatch,
 			MaxTxnsPerIntentCleanupBatch:           intentresolver.MaxTxnsPerIntentCleanupBatch,
-			IntentCleanupBatchTimeout:              gcQueueIntentBatchTimeout,
+			IntentCleanupBatchTimeout:              mvccGCQueueIntentBatchTimeout,
 		},
 		conf.TTL(),
 		&replicaGCer{
 			repl:                repl,
-			admissionController: gcq.store.cfg.KVAdmissionController,
-			storeID:             gcq.store.StoreID(),
+			admissionController: mgcq.store.cfg.KVAdmissionController,
+			storeID:             mgcq.store.StoreID(),
 		},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_TOUCH)
 			if err == nil {
-				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
+				mgcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
 			} else {
-				gcq.store.metrics.GCResolveFailed.Inc(int64(intentCount))
+				mgcq.store.metrics.GCResolveFailed.Inc(int64(intentCount))
 			}
 			return err
 		},
@@ -584,12 +586,12 @@ func (gcq *gcQueue) process(
 				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, gcTimestamp,
 					func(pushed, succeeded bool) {
 						if pushed {
-							gcq.store.metrics.GCPushTxn.Inc(1)
+							mgcq.store.metrics.GCPushTxn.Inc(1)
 						}
 						if succeeded {
-							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
+							mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
 						} else {
-							gcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
+							mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
 						}
 					})
 			if errors.Is(err, stop.ErrThrottled) {
@@ -603,9 +605,9 @@ func (gcq *gcQueue) process(
 	}
 
 	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
-	log.Eventf(ctx, "GC score after GC: %s", makeGCQueueScore(
+	log.Eventf(ctx, "GC score after GC: %s", makeMVCCGCQueueScore(
 		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold))
-	updateStoreMetricsWithGCInfo(gcq.store.metrics, info)
+	updateStoreMetricsWithGCInfo(mgcq.store.metrics, info)
 	return true, nil
 }
 
@@ -627,11 +629,11 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
-func (*gcQueue) timer(_ time.Duration) time.Duration {
-	return gcQueueTimerDuration
+func (*mvccGCQueue) timer(_ time.Duration) time.Duration {
+	return mvccGCQueueTimerDuration
 }
 
 // purgatoryChan returns nil.
-func (*gcQueue) purgatoryChan() <-chan time.Time {
+func (*mvccGCQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }

@@ -57,7 +57,7 @@ const (
 var (
 	metaReplicaGCQueueRemoveReplicaCount = metric.Metadata{
 		Name:        "queue.replicagc.removereplica",
-		Help:        "Number of replica removals attempted by the replica gc queue",
+		Help:        "Number of replica removals attempted by the replica GC queue",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}

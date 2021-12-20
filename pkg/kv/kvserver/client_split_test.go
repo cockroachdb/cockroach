@@ -2601,13 +2601,13 @@ func TestUnsplittableRange(t *testing.T) {
 
 	// Wait for much longer than the ttl to accumulate GCByteAge.
 	manualClock.Increment(10 * ttl.Nanoseconds())
-	// Trigger the GC queue, which should clean up the earlier version of the
+	// Trigger the MVCC GC queue, which should clean up the earlier version of the
 	// row. Once the first version of the row is cleaned up, the range should
 	// exit the split queue purgatory. We need to tickle the protected timestamp
 	// subsystem to release a timestamp at which we get to actually remove the data.
 	require.NoError(t, store.GetStoreConfig().ProtectedTimestampCache.Refresh(ctx, s.Clock().Now()))
 	repl := store.LookupReplica(tableKey)
-	if err := store.ManualGC(repl); err != nil {
+	if err := store.ManualMVCCGC(repl); err != nil {
 		t.Fatal(err)
 	}
 
