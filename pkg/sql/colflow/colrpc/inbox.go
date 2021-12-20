@@ -69,10 +69,9 @@ type Inbox struct {
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
 	streamCh chan flowStreamServer
-	// contextCh is the channel over which the reader goroutine passes the
-	// context to the stream handler so that it can listen for context
-	// cancellation.
-	contextCh chan context.Context
+	// waitForReaderCh is the channel which the reader goroutine closes when it
+	// arrives. This allows for the handler goroutine to wait for the reader.
+	waitForReaderCh chan struct{}
 
 	// timeoutCh is the channel over which an error will be sent if the reader
 	// goroutine should exit while waiting for a stream.
@@ -149,7 +148,7 @@ func NewInbox(
 		serializer:               s,
 		streamID:                 streamID,
 		streamCh:                 make(chan flowStreamServer, 1),
-		contextCh:                make(chan context.Context, 1),
+		waitForReaderCh:          make(chan struct{}),
 		timeoutCh:                make(chan error, 1),
 		errCh:                    make(chan error, 1),
 		deserializationStopWatch: timeutil.NewStopWatch(),
@@ -217,9 +216,9 @@ func (i *Inbox) checkFlowCtxCancellation() error {
 }
 
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
-// canceled, the Inbox's host cancels the flow context, a caller of Next cancels
-// the context passed into Init, or any error is encountered on the stream by
-// the Next goroutine.
+// canceled, the Inbox's host cancels the flow context, or any error is
+// encountered on the stream by the Next goroutine (which includes io.EOF that
+// indicates a graceful shutdown - CloseSend() from the outbox).
 func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
 	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
@@ -227,12 +226,11 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 	// Pass the stream to the reader goroutine (non-blocking) and get the
 	// context to listen for cancellation.
 	i.streamCh <- stream
-	var readerCtx context.Context
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
 		return err
-	case readerCtx = <-i.contextCh:
+	case <-i.waitForReaderCh:
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return errors.Wrap(streamCtx.Err(), "streamCtx error while waiting for reader (remote client canceled)")
@@ -255,12 +253,6 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		// e.g. when the query is canceled, or when another stream encountered
 		// an unrecoverable error forcing it to shutdown the flow.
 		return cancelchecker.QueryCanceledError
-	case <-readerCtx.Done():
-		// readerCtx is canceled, but we don't know whether it was because the
-		// flow context was canceled or for other reason. In the former case we
-		// have an ungraceful shutdown whereas in the latter case we have a
-		// graceful one.
-		return i.checkFlowCtxCancellation()
 	case <-streamCtx.Done():
 		// The client canceled the stream.
 		return errors.Wrap(streamCtx.Err(), "streamCtx error in Inbox stream handler (remote client canceled)")
@@ -308,7 +300,7 @@ func (i *Inbox) Init(ctx context.Context) {
 		if i.ctxInterceptorFn != nil {
 			i.ctxInterceptorFn(i.Ctx)
 		}
-		i.contextCh <- i.Ctx
+		close(i.waitForReaderCh)
 		return nil
 	}(); err != nil {
 		// An error occurred while initializing the Inbox and is likely caused
