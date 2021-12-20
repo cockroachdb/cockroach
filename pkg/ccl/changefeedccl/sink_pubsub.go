@@ -29,20 +29,20 @@ import (
 
 const credentialsParam = "CREDENTIALS"
 const gcpScheme = "gcppubsub"
-const memScheme = "mem"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
 const numOfWorkers = 128
 
 // isPubsubSInk returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
 	switch u.Scheme {
-	case gcpScheme, memScheme:
+	case gcpScheme:
 		return true
 	default:
 		return false
 	}
 }
 
+//  i dont really like having getTopicName in the interface but fullname test requires it
 type pubsubClient interface {
 	openTopics(string) error
 	closeTopics(string)
@@ -148,6 +148,7 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 func MakePubsubSink(
 	ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
+	log.Info(ctx, "making pubsub")
 
 	pubsubURL := sinkURL{u, u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
@@ -359,7 +360,6 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				// Signals a flush request, makes sure that the messages in eventsChans are finished sending
 				continue
 			}
-
 			m := msg.message
 			b, err := json.Marshal(m)
 			if err != nil {
