@@ -95,7 +95,7 @@ func NewDistSenderForLocalTestCluster(
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
 				opts SendOptions,
-				nodeDialer *nodedialer.Dialer,
+				nodeDialer NodeDialer,
 				replicas ReplicaSlice,
 			) (Transport, error) {
 				transport, err := senderTransportFactory(opts, nodeDialer, replicas)

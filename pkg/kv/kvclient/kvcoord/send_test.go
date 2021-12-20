@@ -217,7 +217,7 @@ func TestComplexScenarios(t *testing.T) {
 			t,
 			func(
 				_ SendOptions,
-				_ *nodedialer.Dialer,
+				_ NodeDialer,
 				replicas ReplicaSlice,
 			) (Transport, error) {
 				return &firstNErrorTransport{

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,7 +55,7 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 	var args base.TestClusterArgs
 	args.ServerArgs.Knobs.KVClient = &kvcoord.ClientTestingKnobs{TransportFactory: func(
 		options kvcoord.SendOptions,
-		dialer *nodedialer.Dialer,
+		dialer kvcoord.NodeDialer,
 		slice kvcoord.ReplicaSlice,
 	) (kvcoord.Transport, error) {
 		tf, err := kvcoord.GRPCTransportFactory(options, dialer, slice)

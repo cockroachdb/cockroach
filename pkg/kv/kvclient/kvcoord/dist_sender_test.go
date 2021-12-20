@@ -132,7 +132,7 @@ var stubRPCSendFn simpleSendFn = func(
 func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		_ SendOptions,
-		_ *nodedialer.Dialer,
+		_ NodeDialer,
 		replicas ReplicaSlice,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
@@ -360,7 +360,7 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+		opts SendOptions, dialer NodeDialer, replicas ReplicaSlice,
 	) (Transport, error) {
 		reps := replicas.Descriptors()
 		if err := verifyCall(opts, reps); err != nil {
@@ -3971,7 +3971,7 @@ func TestConnectionClass(t *testing.T) {
 	// created.
 	var class rpc.ConnectionClass
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+		opts SendOptions, dialer NodeDialer, replicas ReplicaSlice,
 	) (Transport, error) {
 		class = opts.class
 		return adaptSimpleTransport(

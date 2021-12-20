@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -95,7 +94,7 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		params.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
 			TransportFactory: func(
-				opts kvcoord.SendOptions, nodeDialer *nodedialer.Dialer, replicas kvcoord.ReplicaSlice,
+				opts kvcoord.SendOptions, nodeDialer kvcoord.NodeDialer, replicas kvcoord.ReplicaSlice,
 			) (kvcoord.Transport, error) {
 				transport, err := kvcoord.GRPCTransportFactory(opts, nodeDialer, replicas)
 				return &interceptingTransport{

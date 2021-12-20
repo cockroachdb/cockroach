@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -49,7 +48,7 @@ type SendOptions struct {
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
 type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, ReplicaSlice,
+	SendOptions, NodeDialer, ReplicaSlice,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -91,6 +90,24 @@ type Transport interface {
 	Release()
 }
 
+// NodeDialer narrows nodedialer.Dialer to the set of methods needed for transport operation.
+type NodeDialer interface {
+	// DialInternalClient is a specialization of DialClass for callers that
+	// want a roachpb.InternalClient. This supports an optimization to bypass the
+	// network for the local node. Returns a context.Context which should be used
+	// when making RPC calls on the returned server. (This context is annotated to
+	// mark this request as in-process and bypass ctx.Peer checks).
+	DialInternalClient(
+		ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	) (context.Context, roachpb.InternalClient, error)
+
+	// ConnHealth returns nil if we have an open connection of the request
+	// class to the given node that succeeded on its most recent heartbeat.
+	// Returns circuit.ErrBreakerOpen if the breaker is tripped, otherwise
+	// ErrNoConnection if no connection to the node currently exists.
+	ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error
+}
+
 // These constants are used for the replica health map below.
 const (
 	healthUnhealthy = iota
@@ -103,7 +120,7 @@ const (
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
+	opts SendOptions, nodeDialer NodeDialer, rs ReplicaSlice,
 ) (Transport, error) {
 	transport := grpcTransportPool.Get().(*grpcTransport)
 	// Grab the saved slice memory from grpcTransport.
@@ -144,7 +161,7 @@ func grpcTransportFactoryImpl(
 
 type grpcTransport struct {
 	opts       SendOptions
-	nodeDialer *nodedialer.Dialer
+	nodeDialer NodeDialer
 	class      rpc.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
@@ -305,7 +322,7 @@ func (h *byHealth) Less(i, j int) bool {
 // without a full RPC stack.
 func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
+		_ SendOptions, _ NodeDialer, replicas ReplicaSlice,
 	) (Transport, error) {
 		// Always send to the first replica.
 		replica := replicas[0].ReplicaDescriptor
