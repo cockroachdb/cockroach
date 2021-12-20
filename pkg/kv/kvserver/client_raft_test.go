@@ -3800,6 +3800,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	tc.WaitForValues(t, key, []int64{16, 16, 16})
 }
 
+
 // TestLeaseHolderRemoveSelf verifies that a lease holder cannot remove itself
 // without encountering an error.
 func TestLeaseHolderRemoveSelf(t *testing.T) {
@@ -3818,11 +3819,22 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
 
-	// Attempt to remove the replica from first store.
-	expectedErr := "invalid ChangeReplicasTrigger"
-	if _, err := tc.RemoveVoters(key, tc.Target(0)); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("expected %q error trying to remove leaseholder replica; got %v", expectedErr, err)
+	// Remove the replica from first store.
+  _, err := tc.RemoveVoters(key, tc.Target(0))
+	require.NoError(t, err)
+
+	// Check that lease moved to server 2
+	leaseInfo := getLeaseInfoOrFatal(t, context.Background(), tc.Servers[1].DB(), key)
+	rangeDesc, err := tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
 	}
+	replica, ok := rangeDesc.GetReplicaDescriptor(tc.Servers[1].GetFirstStoreID())
+	if !ok {
+		t.Fatalf("expected to find replica in server 2")
+	}
+	require.Equal(t, leaseInfo.Lease.Replica, replica)
+	leaseHolder = tc.GetFirstStoreFromServer(t, 1)
 
 	// Expect that we can still successfully do a get on the range.
 	getArgs := getArgs(key)
@@ -3831,6 +3843,7 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 		t.Fatal(pErr)
 	}
 }
+
 
 // TestRemovedReplicaError verifies that a replica that has been removed from a
 // range returns a RangeNotFoundError if it receives a request for that range

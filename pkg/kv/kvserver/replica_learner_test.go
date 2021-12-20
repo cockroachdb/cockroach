@@ -837,8 +837,8 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 	}
 }
 
-// TestJointConfigLease verifies that incoming and outgoing voters can't have the
-// lease transferred to them.
+// TestJointConfigLease verifies that incoming voters can have the
+// lease transferred to them, and outgoing voters cannot.
 func TestJointConfigLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -857,14 +857,14 @@ func TestJointConfigLease(t *testing.T) {
 	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 	err := tc.TransferRangeLease(desc, tc.Target(1))
-	exp := `replica cannot hold lease`
-	require.True(t, testutils.IsError(err, exp), err)
+	require.NoError(t, err)
 
 	// NB: we don't have to transition out of the previous joint config first
 	// because this is done automatically by ChangeReplicas before it does what
 	// it's asked to do.
-	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(1))
-	err = tc.TransferRangeLease(desc, tc.Target(1))
+	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(0))
+	err = tc.TransferRangeLease(desc, tc.Target(0))
+	exp := `replica cannot hold lease`
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
@@ -1186,7 +1186,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 		// Repeat the game, except now we start with two replicas and we're
-		// giving the RHS a VOTER_OUTGOING.
+		// giving the RHS a VOTER_DEMOTING_LEARNER.
 		desc = splitAndUnsplit()
 		ltk.withStopAfterJointConfig(func() {
 			descRight := tc.RemoveVotersOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))

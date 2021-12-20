@@ -1378,7 +1378,8 @@ func (a *Allocator) TransferLeaseTarget(
 				}
 				fallthrough
 			case decideWithoutStats:
-				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing) {
+				if !opts.disableLeaseCountConvergenceChecks &&
+					!a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing) {
 					return roachpb.ReplicaDescriptor{}
 				}
 			case shouldTransfer:

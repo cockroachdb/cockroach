@@ -809,7 +809,7 @@ func (r *Replica) executeAdminBatch(
 		}
 
 	case *roachpb.AdminRelocateRangeRequest:
-		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets)
+		err := r.AdminRelocateRange(ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets)
 		pErr = roachpb.NewError(err)
 		resp = &roachpb.AdminRelocateRangeResponse{}
 

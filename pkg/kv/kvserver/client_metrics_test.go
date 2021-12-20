@@ -337,7 +337,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify stats after addition.
 	verifyStats(t, tc, 1, 2)
 	checkGauge(t, "store 0", tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount, initialCount+1)
-	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0), tc.Target(1))
+	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0))
 	testutils.SucceedsSoon(t, func() error {
 		_, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		if err == nil {
