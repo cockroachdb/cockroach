@@ -19,16 +19,16 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (crdb_internal_a_shard_11_comp, column1, check1)
+    │ columns: (column7, column1, check1)
     │ estimated row count: 2
-    │ render check1: crdb_internal_a_shard_11_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    │ render check1: column7 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     │ render column1: column1
-    │ render crdb_internal_a_shard_11_comp: crdb_internal_a_shard_11_comp
+    │ render column7: column7
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_11_comp, column1)
+        │ columns: (column7, column1)
         │ estimated row count: 2
-        │ render crdb_internal_a_shard_11_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 11)::INT4
+        │ render column7: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column1)), 11), NULL::INT4)
         │ render column1: column1
         │
         └── • values
@@ -53,17 +53,17 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (column1, crdb_internal_a_shard_12_comp, rowid_default, check1)
+    │ columns: (column1, column9, rowid_default, check1)
     │ estimated row count: 2
-    │ render check1: crdb_internal_a_shard_12_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    │ render check1: column9 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
     │ render column1: column1
     │ render rowid_default: rowid_default
-    │ render crdb_internal_a_shard_12_comp: crdb_internal_a_shard_12_comp
+    │ render column9: column9
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
+        │ columns: (column9, rowid_default, column1)
         │ estimated row count: 2
-        │ render crdb_internal_a_shard_12_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 12)::INT4
+        │ render column9: crdb_internal.assignment_cast(mod(fnv32(crdb_internal.datums_to_bytes(column1)), 12), NULL::INT4)
         │ render rowid_default: unique_rowid()
         │ render column1: column1
         │
