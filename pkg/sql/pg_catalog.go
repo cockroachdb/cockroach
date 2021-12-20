@@ -3259,12 +3259,28 @@ var pgCatalogGroupTable = virtualSchemaTable{
 }
 
 var pgCatalogCursorsTable = virtualSchemaTable{
-	comment: "pg_cursors was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogCursors,
+	comment: `contains currently active SQL cursors created with DECLARE
+https://www.postgresql.org/docs/14/view-pg-cursors.html`,
+	schema: vtable.PgCatalogCursors,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for name, c := range p.sqlCursors.list() {
+			tz, err := tree.MakeDTimestampTZ(c.created, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				tree.NewDString(name),        /* name */
+				tree.NewDString(c.statement), /* statement */
+				tree.DBoolFalse,              /* is_holdable */
+				tree.DBoolFalse,              /* is_binary */
+				tree.DBoolFalse,              /* is_scrollable */
+				tz,                           /* creation_date */
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogTsParserTable = virtualSchemaTable{
