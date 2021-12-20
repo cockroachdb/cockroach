@@ -77,6 +77,7 @@ const (
 // of ranges.
 var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.allocator.range_rebalance_threshold",
 		"minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull",
 		0.05,

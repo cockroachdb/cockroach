@@ -21,6 +21,7 @@ import (
 // SQLStatsFlushInterval is the cluster setting that controls how often the SQL
 // stats are flushed to system table.
 var SQLStatsFlushInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.stats.flush.interval",
 	"the interval at which SQL execution statistics are flushed to disk",
 	time.Hour,
@@ -30,6 +31,7 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 // SQLStatsFlushEnabled is the cluster setting that controls if the sqlstats
 // subsystem persists the statistics into system table.
 var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.flush.enabled",
 	"if set, SQL execution statistics are periodically flushed to disk",
 	true, /* defaultValue */
@@ -41,6 +43,7 @@ var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
 //  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 var SQLStatsFlushJitter = settings.RegisterFloatSetting(
+	settings.TenantWritable,
 	"sql.stats.flush.jitter",
 	"jitter fraction on the duration between sql stats flushes",
 	0.15,
@@ -55,6 +58,7 @@ var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 // SQLStatsMaxPersistedRows specifies maximum number of rows that will be
 // retained in system.statement_statistics and system.transaction_statistics.
 var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"sql.stats.persisted_rows.max",
 	"maximum number of rows of statement and transaction"+
 		" statistics that will be persisted in the system tables",
@@ -64,6 +68,7 @@ var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 // SQLStatsCleanupRecurrence is the cron-tab string specifying the recurrence
 // for SQL Stats cleanup job.
 var SQLStatsCleanupRecurrence = settings.RegisterValidatedStringSetting(
+	settings.TenantWritable,
 	"sql.stats.cleanup.recurrence",
 	"cron-tab recurrence for SQL Stats cleanup job",
 	"@hourly", /* defaultValue */

@@ -30,6 +30,7 @@ import (
 // which the CPU will be considered overloaded, when running in a node that
 // executes KV operations.
 var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"admission.kv_slot_adjuster.overload_threshold",
 	"when the number of runnable goroutines per CPU is greater than this threshold, the "+
 		"slot adjuster considers the cpu to be overloaded",
@@ -38,6 +39,7 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 // L0FileCountOverloadThreshold sets a file count threshold that signals an
 // overloaded store.
 var L0FileCountOverloadThreshold = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"admission.l0_file_count_overload_threshold",
 	"when the L0 file count exceeds this theshold, the store is considered overloaded",
 	l0FileCountOverloadThreshold, settings.PositiveInt)
@@ -45,6 +47,7 @@ var L0FileCountOverloadThreshold = settings.RegisterIntSetting(
 // L0SubLevelCountOverloadThreshold sets a sub-level count threshold that
 // signals an overloaded store.
 var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"admission.l0_sub_level_count_overload_threshold",
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)

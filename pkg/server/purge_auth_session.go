@@ -25,12 +25,14 @@ import (
 
 var (
 	webSessionPurgeTTL = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.web_session.purge.ttl",
 		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
 		time.Hour,
 	).WithPublic()
 
 	webSessionAutoLogoutTimeout = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.web_session.auto_logout.timeout",
 		"the duration that web sessions will survive before being periodically purged, since they were last used",
 		7*24*time.Hour,
@@ -38,6 +40,7 @@ var (
 	).WithPublic()
 
 	webSessionPurgePeriod = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.web_session.purge.period",
 		"the time until old sessions are deleted",
 		time.Hour,
@@ -45,6 +48,7 @@ var (
 	).WithPublic()
 
 	webSessionPurgeLimit = settings.RegisterIntSetting(
+		settings.TenantWritable,
 		"server.web_session.purge.max_deletions_per_cycle",
 		"the maximum number of old sessions to delete for each purge",
 		10,

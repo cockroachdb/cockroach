@@ -66,12 +66,14 @@ import (
 // logStatementsExecuteEnabled causes the Executor to log executed
 // statements and, if any, resulting errors.
 var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.trace.log_statement_execute",
 	"set to true to enable logging of executed statements",
 	false,
 ).WithPublic()
 
 var slowQueryLogThreshold = settings.RegisterPublicDurationSettingWithExplicitUnit(
+	settings.TenantWritable,
 	"sql.log.slow_query.latency_threshold",
 	"when set to non-zero, log statements whose service latency exceeds "+
 		"the threshold to a secondary logger on each node",
@@ -80,6 +82,7 @@ var slowQueryLogThreshold = settings.RegisterPublicDurationSettingWithExplicitUn
 )
 
 var slowInternalQueryLogEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.log.slow_query.internal_queries.enabled",
 	"when set to true, internal queries which exceed the slow query log threshold "+
 		"are logged to a separate log. Must have the slow query log enabled for this "+
@@ -88,6 +91,7 @@ var slowInternalQueryLogEnabled = settings.RegisterBoolSetting(
 ).WithPublic()
 
 var slowQueryLogFullTableScans = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.log.slow_query.experimental_full_table_scans.enabled",
 	"when set to true, statements that perform a full table/index scan will be logged to the "+
 		"slow query log even if they do not meet the latency threshold. Must have the slow query "+
@@ -96,18 +100,21 @@ var slowQueryLogFullTableScans = settings.RegisterBoolSetting(
 ).WithPublic()
 
 var unstructuredQueryLog = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.log.unstructured_entries.enabled",
 	"when set, SQL execution and audit logs use the pre-v21.1 unstrucured format",
 	false,
 )
 
 var adminAuditLogEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.log.admin_audit.enabled",
 	"when set, log SQL queries that are executed by a user with admin privileges",
 	false,
 )
 
 var telemetryLoggingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.telemetry.query_sampling.enabled",
 	"when set to true, executed queries will emit an event on the telemetry logging channel",
 	// Note: Usage of an env var here makes it possible to set a default without

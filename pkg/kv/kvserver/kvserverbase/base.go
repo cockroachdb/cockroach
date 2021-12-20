@@ -28,6 +28,7 @@ import (
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
 var MergeQueueEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
 	true,
@@ -209,6 +210,7 @@ func IntersectSpan(
 
 // SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
 var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,

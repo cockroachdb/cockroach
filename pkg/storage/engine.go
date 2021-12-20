@@ -1013,12 +1013,14 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"rocksdb.ingest_backpressure.l0_file_count_threshold",
 	"number of L0 files after which to backpressure SST ingestions",
 	20,
 )
 
 var ingestDelayTime = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"rocksdb.ingest_backpressure.max_delay",
 	"maximum amount of time to backpressure a single SST ingestion",
 	time.Second*5,

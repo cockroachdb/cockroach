@@ -25,6 +25,7 @@ import (
 )
 
 var parallelCommitsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.transaction.parallel_commits_enabled",
 	"if enabled, transactional commits will be parallelized with transactional writes",
 	true,

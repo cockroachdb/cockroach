@@ -87,6 +87,7 @@ var ConfigureOIDC = func(
 }
 
 var webSessionTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,

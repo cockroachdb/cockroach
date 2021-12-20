@@ -36,6 +36,7 @@ const (
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
 var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,

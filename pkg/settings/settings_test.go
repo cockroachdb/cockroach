@@ -146,26 +146,30 @@ var changes = struct {
 	byteSize int
 }{}
 
-var boolTA = settings.RegisterBoolSetting("bool.t", "desc", true)
-var boolFA = settings.RegisterBoolSetting("bool.f", "desc", false)
-var strFooA = settings.RegisterStringSetting("str.foo", "desc", "")
-var strBarA = settings.RegisterStringSetting("str.bar", "desc", "bar")
-var i1A = settings.RegisterIntSetting("i.1", "desc", 0)
-var i2A = settings.RegisterIntSetting("i.2", "desc", 5)
-var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
-var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
-var duA = settings.RegisterPublicDurationSettingWithExplicitUnit("d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration)
-var _ = settings.RegisterDurationSetting("d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
-var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
-var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
-var mA = settings.TestingRegisterVersionSetting("v.1", "desc", &dummyVersionSettingImpl{})
+var boolTA = settings.RegisterBoolSetting(settings.SystemOnly, "bool.t", "desc", true)
+var boolFA = settings.RegisterBoolSetting(settings.TenantReadOnly, "bool.f", "desc", false)
+var strFooA = settings.RegisterStringSetting(settings.TenantWritable, "str.foo", "desc", "")
+var strBarA = settings.RegisterStringSetting(settings.SystemOnly, "str.bar", "desc", "bar")
+var i1A = settings.RegisterIntSetting(settings.TenantWritable, "i.1", "desc", 0)
+var i2A = settings.RegisterIntSetting(settings.TenantWritable, "i.2", "desc", 5)
+var fA = settings.RegisterFloatSetting(settings.TenantWritable, "f", "desc", 5.4)
+var dA = settings.RegisterDurationSetting(settings.TenantWritable, "d", "desc", time.Second)
+var duA = settings.RegisterPublicDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration)
+var _ = settings.RegisterDurationSetting(settings.TenantWritable, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
+var eA = settings.RegisterEnumSetting(settings.TenantWritable, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
+var byteSize = settings.RegisterByteSizeSetting(settings.TenantWritable, "zzz", "desc", mb)
+var mA = func() *settings.VersionSetting {
+	s := settings.MakeVersionSetting(&dummyVersionSettingImpl{})
+	settings.RegisterVersionSetting(settings.SystemOnly, "v.1", "desc", &s)
+	return &s
+}()
 
 func init() {
-	settings.RegisterBoolSetting("sekretz", "desc", false).SetReportable(false)
-	settings.RegisterBoolSetting("rezervedz", "desc", false).SetVisibility(settings.Reserved)
+	settings.RegisterBoolSetting(settings.SystemOnly, "sekretz", "desc", false).SetReportable(false)
+	settings.RegisterBoolSetting(settings.SystemOnly, "rezervedz", "desc", false).SetVisibility(settings.Reserved)
 }
 
-var strVal = settings.RegisterValidatedStringSetting(
+var strVal = settings.RegisterValidatedStringSetting(settings.SystemOnly,
 	"str.val", "desc", "", func(sv *settings.Values, v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
@@ -174,16 +178,16 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterDurationSetting("dVal", "desc", time.Second, settings.NonNegativeDuration)
-var fVal = settings.RegisterFloatSetting("fVal", "desc", 5.4, settings.NonNegativeFloat)
-var byteSizeVal = settings.RegisterByteSizeSetting(
+var dVal = settings.RegisterDurationSetting(settings.SystemOnly, "dVal", "desc", time.Second, settings.NonNegativeDuration)
+var fVal = settings.RegisterFloatSetting(settings.SystemOnly, "fVal", "desc", 5.4, settings.NonNegativeFloat)
+var byteSizeVal = settings.RegisterByteSizeSetting(settings.SystemOnly,
 	"byteSize.Val", "desc", mb, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("bytesize cannot be negative")
 		}
 		return nil
 	})
-var iVal = settings.RegisterIntSetting(
+var iVal = settings.RegisterIntSetting(settings.SystemOnly,
 	"i.Val", "desc", 0, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
@@ -228,7 +232,9 @@ func TestCache(t *testing.T) {
 
 	t.Run("VersionSetting", func(t *testing.T) {
 		u := settings.NewUpdater(sv)
-		mB := settings.TestingRegisterVersionSetting("local.m", "foo", &dummyVersionSettingImpl{})
+		v := settings.MakeVersionSetting(&dummyVersionSettingImpl{})
+		mB := &v
+		settings.RegisterVersionSetting(settings.SystemOnly, "local.m", "foo", mB)
 		// Version settings don't have defaults, so we need to start by setting
 		// it to something.
 		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "X"}
@@ -738,15 +744,15 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 	}()
 	for i := 0; i < count; i++ {
 		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
-		settings.RegisterIntSetting(name, "desc", 0)
+		settings.RegisterIntSetting(settings.SystemOnly, name, "desc", 0)
 	}
 	return name, err
 }
 
-var overrideBool = settings.RegisterBoolSetting("override.bool", "desc", true)
-var overrideInt = settings.RegisterIntSetting("override.int", "desc", 0)
-var overrideDuration = settings.RegisterDurationSetting("override.duration", "desc", time.Second)
-var overrideFloat = settings.RegisterFloatSetting("override.float", "desc", 1.0)
+var overrideBool = settings.RegisterBoolSetting(settings.SystemOnly, "override.bool", "desc", true)
+var overrideInt = settings.RegisterIntSetting(settings.TenantReadOnly, "override.int", "desc", 0)
+var overrideDuration = settings.RegisterDurationSetting(settings.TenantWritable, "override.duration", "desc", time.Second)
+var overrideFloat = settings.RegisterFloatSetting(settings.TenantWritable, "override.float", "desc", 1.0)
 
 func TestOverride(t *testing.T) {
 	ctx := context.Background()
