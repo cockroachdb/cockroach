@@ -43,17 +43,20 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	cursorName := s.Name.String()
-	if _, ok := p.sqlCursors.cursorMap[cursorName]; ok {
+	if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
 		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
 	}
 	rows, err := ie.QueryIterator(ctx, "sql-cursor", p.txn, s.Select.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to DECLARE CURSOR")
 	}
-	if p.sqlCursors.cursorMap == nil {
-		p.sqlCursors.cursorMap = make(map[string]*sqlCursor)
+	cursor := &sqlCursor{InternalRows: rows}
+	if err := p.sqlCursors.addCursor(cursorName, cursor); err != nil {
+		// thread at a time. But let's be diligent and clean up if it somehow does
+		// happen anyway.
+		_ = cursor.Close()
+		return nil, err
 	}
-	p.sqlCursors.cursorMap[cursorName] = &sqlCursor{InternalRows: rows}
 	return newZeroNode(nil /* columns */), nil
 }
 
@@ -62,10 +65,9 @@ var errBackwardScan = pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cursor 
 // FetchCursor implements the FETCH statement.
 // See https://www.postgresql.org/docs/current/sql-fetch.html for details.
 func (p *planner) FetchCursor(_ context.Context, s *tree.FetchCursor) (planNode, error) {
-	cursorName := s.Name.String()
-	rows, ok := p.sqlCursors.cursorMap[cursorName]
-	if !ok {
-		return nil, pgerror.Newf(pgcode.InvalidCursorName, "cursor %q does not exist", cursorName)
+	cursor, err := p.sqlCursors.getCursor(s.Name.String())
+	if err != nil {
+		return nil, err
 	}
 	if s.Count < 0 || s.FetchType == tree.FetchBackwardAll {
 		return nil, errBackwardScan
@@ -73,7 +75,7 @@ func (p *planner) FetchCursor(_ context.Context, s *tree.FetchCursor) (planNode,
 	node := &fetchNode{
 		n:         s.Count,
 		fetchType: s.FetchType,
-		rows:      rows,
+		cursor:    cursor,
 	}
 	if s.FetchType != tree.FetchNormal {
 		node.n = 0
@@ -83,7 +85,7 @@ func (p *planner) FetchCursor(_ context.Context, s *tree.FetchCursor) (planNode,
 }
 
 type fetchNode struct {
-	rows *sqlCursor
+	cursor *sqlCursor
 	// n is the number of rows requested.
 	n int64
 	// offset is the number of rows to read first, when in relative or absolute
@@ -98,7 +100,7 @@ func (f fetchNode) startExec(_ runParams) error { return nil }
 
 func (f *fetchNode) Next(params runParams) (bool, error) {
 	if f.fetchType == tree.FetchAll {
-		return f.rows.Next(params.ctx)
+		return f.cursor.Next(params.ctx)
 	}
 
 	if !f.seeked {
@@ -107,9 +109,9 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 		f.seeked = true
 		switch f.fetchType {
 		case tree.FetchFirst:
-			switch f.rows.curRow {
+			switch f.cursor.curRow {
 			case 0:
-				_, err := f.rows.Next(params.ctx)
+				_, err := f.cursor.Next(params.ctx)
 				return true, err
 			case 1:
 				return true, nil
@@ -118,11 +120,11 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 		case tree.FetchLast:
 			return false, errBackwardScan
 		case tree.FetchAbsolute:
-			if f.rows.curRow > f.offset {
+			if f.cursor.curRow > f.offset {
 				return false, errBackwardScan
 			}
-			for f.rows.curRow < f.offset {
-				more, err := f.rows.Next(params.ctx)
+			for f.cursor.curRow < f.offset {
+				more, err := f.cursor.Next(params.ctx)
 				if !more || err != nil {
 					return more, err
 				}
@@ -130,7 +132,7 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 			return true, nil
 		case tree.FetchRelative:
 			for i := int64(0); i < f.offset; i++ {
-				more, err := f.rows.Next(params.ctx)
+				more, err := f.cursor.Next(params.ctx)
 				if !more || err != nil {
 					return more, err
 				}
@@ -142,11 +144,11 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	f.n--
-	return f.rows.Next(params.ctx)
+	return f.cursor.Next(params.ctx)
 }
 
 func (f fetchNode) Values() tree.Datums {
-	return f.rows.Cur()
+	return f.cursor.Cur()
 }
 
 func (f fetchNode) Close(ctx context.Context) {
@@ -157,14 +159,7 @@ func (f fetchNode) Close(ctx context.Context) {
 // CloseCursor implements the FETCH statement.
 // See https://www.postgresql.org/docs/current/sql-close.html for details.
 func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNode, error) {
-	cursorName := n.Name.String()
-	_, ok := p.sqlCursors.cursorMap[cursorName]
-	if !ok {
-		return nil, pgerror.Newf(pgcode.InvalidCursorName, "cursor %q does not exist", cursorName)
-	}
-	err := p.sqlCursors.cursorMap[cursorName].Close()
-	delete(p.sqlCursors.cursorMap, cursorName)
-	return newZeroNode(nil /* columns */), err
+	return newZeroNode(nil /* columns */), p.sqlCursors.closeCursor(n.Name.String())
 }
 
 type sqlCursor struct {
@@ -178,4 +173,82 @@ func (s *sqlCursor) Next(ctx context.Context) (bool, error) {
 		s.curRow++
 	}
 	return more, err
+}
+
+// sqlCursors contains a set of active cursors for a session.
+type sqlCursors interface {
+	// closeAll closes all cursors in the set.
+	closeAll()
+	// closeCursors closes the named cursor, returning an error if that cursor
+	// didn't exist in the set.
+	closeCursor(string) error
+	// closeCursors returns the named cursor, returning an error if that cursor
+	// didn't exist in the set.
+	getCursor(string) (*sqlCursor, error)
+	// addCursor adds a new cursor with the given name to the set, returning an
+	// error if the cursor already existed in the set.
+	addCursor(string, *sqlCursor) error
+}
+
+// cursorMap is a sqlCursors that's backed by an actual map.
+type cursorMap struct {
+	cursors map[string]*sqlCursor
+}
+
+func (c *cursorMap) closeAll() {
+	for _, c := range c.cursors {
+		_ = c.Close()
+	}
+	c.cursors = nil
+}
+
+func (c *cursorMap) closeCursor(s string) error {
+	cursor, ok := c.cursors[s]
+	if !ok {
+		return pgerror.Newf(pgcode.InvalidCursorName, "cursor %q does not exist", s)
+	}
+	err := cursor.Close()
+	delete(c.cursors, s)
+	return err
+}
+
+func (c *cursorMap) getCursor(s string) (*sqlCursor, error) {
+	cursor, ok := c.cursors[s]
+	if !ok {
+		return nil, pgerror.Newf(pgcode.InvalidCursorName, "cursor %q does not exist", s)
+	}
+	return cursor, nil
+}
+
+func (c *cursorMap) addCursor(s string, cursor *sqlCursor) error {
+	if c.cursors == nil {
+		c.cursors = make(map[string]*sqlCursor)
+	}
+	if _, ok := c.cursors[s]; ok {
+		return pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s)
+	}
+	c.cursors[s] = cursor
+	return nil
+}
+
+// connExCursorAccessor is a sqlCursors that delegates to a connExecutor's
+// extraTxnState.
+type connExCursorAccessor struct {
+	ex *connExecutor
+}
+
+func (c connExCursorAccessor) closeAll() {
+	c.ex.extraTxnState.sqlCursors.closeAll()
+}
+
+func (c connExCursorAccessor) closeCursor(s string) error {
+	return c.ex.extraTxnState.sqlCursors.closeCursor(s)
+}
+
+func (c connExCursorAccessor) getCursor(s string) (*sqlCursor, error) {
+	return c.ex.extraTxnState.sqlCursors.getCursor(s)
+}
+
+func (c connExCursorAccessor) addCursor(s string, cursor *sqlCursor) error {
+	return c.ex.extraTxnState.sqlCursors.addCursor(s, cursor)
 }
