@@ -34,6 +34,7 @@ import (
 // KVAdmissionControlEnabled controls whether KV server-side admission control
 // is enabled.
 var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"admission.kv.enabled",
 	"when true, work performed by the KV layer is subject to admission control",
 	true).WithPublic()
@@ -41,6 +42,7 @@ var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
 // SQLKVResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for KV requests, is enabled.
 var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"admission.sql_kv_response.enabled",
 	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
 		"admission control",
@@ -49,6 +51,7 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 // SQLSQLResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for DistSQL requests, is enabled.
 var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"admission.sql_sql_response.enabled",
 	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
 		"to admission control",

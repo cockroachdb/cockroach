@@ -83,6 +83,7 @@ type s3Client struct {
 }
 
 var reuseSession = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,

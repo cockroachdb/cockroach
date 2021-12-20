@@ -203,6 +203,7 @@ func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) e
 // ValidateOnWriteEnabled is the cluster setting used to enable or disable
 // validating descriptors prior to writing.
 var ValidateOnWriteEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.catalog.descs.validate_on_write.enabled",
 	"set to true to validate descriptors prior to writing, false to disable; default is true",
 	true, /* defaultValue */

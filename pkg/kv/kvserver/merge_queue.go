@@ -44,6 +44,7 @@ const (
 // MergeQueueInterval is a setting that controls how often the merge queue waits
 // between processing replicas.
 var MergeQueueInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.range_merge.queue_interval",
 	"how long the merge queue waits between processing replicas",
 	5*time.Second,
