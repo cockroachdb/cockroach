@@ -3901,8 +3901,7 @@ func TestTenantID(t *testing.T) {
 
 }
 
-
-//  TestUninitializedMetric 
+//  TestUninitializedMetric
 // This test examines the following behaviors:
 // TODO(austen) add test description
 func TestUninitializedMetric(t *testing.T) {
@@ -3944,6 +3943,8 @@ func TestUninitializedMetric(t *testing.T) {
 
 	tenant2 := roachpb.MakeTenantID(2)
 	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
+	// Ensure that a range with a tenant prefix has the proper tenant ID.
+	tc.SplitRangeOrFatal(t, tenant2Prefix)
 	t.Run("(1) uninitialized replic is reflected in UninitializedMetric", func(t *testing.T) {
 		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
 		sawSnapshot := make(chan struct{}, 1)
@@ -3992,13 +3993,27 @@ func TestUninitializedMetric(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		const forceMetricTick = iota
 		uninitStore := tc.GetFirstStoreFromServer(t, 1)
+
+		// Force the store to compute the replica metrics
+		err := uninitStore.ComputeMetrics(ctx, forceMetricTick)
+		require.NoError(t, err)
+
+		// Blocked snapshot on the second server (1) should realize 1 uninitialized replica.
 		storeMetrics := uninitStore.Metrics()
-		require.Equal(t, uint64(1), storeMetrics.UninitializedCount)
+		require.Equal(t, uint64(1), storeMetrics.UninitializedCount.Value())
+
+		// Unblock snapshot on the second server (1), this should initialize replica.
+		// Again force the store to compute the metrics, increment tick counter (iota)
 		close(blockSnapshot)
 		require.NoError(t, <-addReplicaErr)
+		err = uninitStore.ComputeMetrics(ctx, forceMetricTick)
+		require.NoError(t, err)
+
+		// There should now be no uninitialized replicas in the recorded metrics
 		storeMetrics = uninitStore.Metrics() // now initialized
-		require.Equal(t, uint64(0), storeMetrics.UninitializedCount)
+		require.Equal(t, uint64(1), storeMetrics.UninitializedCount)
 	})
 }
 
