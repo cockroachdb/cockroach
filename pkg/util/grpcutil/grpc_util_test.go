@@ -71,7 +71,7 @@ func TestRequestDidNotStart(t *testing.T) {
 	go func() {
 		_ = server.Serve(lis)
 	}()
-
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	if err != nil {
 		t.Fatal(err)
