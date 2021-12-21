@@ -30,6 +30,7 @@ import (
 )
 
 var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"server.cpu_profile.total_dump_size_limit",
 	"maximum combined disk size of preserved CPU profiles",
 	128<<20, // 128MiB

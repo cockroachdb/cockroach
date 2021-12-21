@@ -77,6 +77,7 @@ const (
 // entries for before we attempt to fill in a single index batch before queueing
 // it up for ingestion and progress reporting in the index backfiller processor.
 var indexBackfillBatchSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"bulkio.index_backfill.batch_size",
 	"the number of rows for which we construct index entries in a single batch",
 	50000,
@@ -85,6 +86,7 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 
 // indexBackfillCheckpointInterval is the duration between backfill detail updates.
 var indexBackfillCheckpointInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
 	30*time.Second,
@@ -94,6 +96,7 @@ var indexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 // columnBackfillBatchSize is the maximum number of rows we update at once when
 // adding or removing columns.
 var columnBackfillBatchSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"bulkio.column_backfill.batch_size",
 	"the number of rows updated at a time to add/remove columns",
 	200,
