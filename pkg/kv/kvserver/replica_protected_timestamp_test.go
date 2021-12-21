@@ -124,7 +124,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 					mt.records = append(mt.records, &ptpb.Record{
 						ID:        args.RecordID.GetBytes(),
 						Timestamp: ts,
-						Spans: []roachpb.Span{
+						DeprecatedSpans: []roachpb.Span{
 							{
 								Key:    roachpb.Key(r.Desc().StartKey),
 								EndKey: roachpb.Key(r.Desc().StartKey.Next()),
@@ -159,7 +159,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        id.GetBytes(),
 					Timestamp: oldTimestamp,
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    roachpb.Key(r.Desc().StartKey),
 							EndKey: roachpb.Key(r.Desc().StartKey.Next()),
@@ -201,7 +201,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        id.GetBytes(),
 					Timestamp: oldTimestamp,
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    roachpb.Key(r.Desc().StartKey),
 							EndKey: roachpb.Key(r.Desc().StartKey.Next()),
@@ -263,7 +263,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        args.RecordID.GetBytes(),
 					Timestamp: ts,
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    keys.MinKey,
 							EndKey: keys.MaxKey,
@@ -434,7 +434,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        uuid.MakeV4().GetBytes(),
 					Timestamp: ts,
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    keys.MinKey,
 							EndKey: keys.MaxKey,
@@ -458,7 +458,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        uuid.MakeV4().GetBytes(),
 					Timestamp: ts,
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    keys.MinKey,
 							EndKey: keys.MaxKey,
@@ -486,7 +486,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        uuid.MakeV4().GetBytes(),
 					Timestamp: th.Next(),
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    keys.MinKey,
 							EndKey: keys.MaxKey,
@@ -514,7 +514,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				mt.records = append(mt.records, &ptpb.Record{
 					ID:        id.GetBytes(),
 					Timestamp: ts,
-					Spans: []roachpb.Span{
+					DeprecatedSpans: []roachpb.Span{
 						{
 							Key:    keys.MinKey,
 							EndKey: keys.MaxKey,
@@ -551,7 +551,7 @@ func (c *manualCache) Iterate(
 ) hlc.Timestamp {
 	query := roachpb.Span{Key: start, EndKey: end}
 	for _, r := range c.records {
-		for _, sp := range r.Spans {
+		for _, sp := range r.DeprecatedSpans {
 			if query.Overlaps(sp) {
 				it(r)
 				break
