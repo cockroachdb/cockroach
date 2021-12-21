@@ -1094,36 +1094,6 @@ func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableNode) Close(context.Context)        {}
 
-// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given
-// table descriptor, but sets up the index with KeySuffixColumnIDs from the
-// given index, rather than the table's primary key.
-func addIndexMutationWithSpecificPrimaryKey(
-	ctx context.Context,
-	table *tabledesc.Mutable,
-	toAdd *descpb.IndexDescriptor,
-	primary *descpb.IndexDescriptor,
-) error {
-	// Reset the ID so that a call to AllocateIDs will set up the index.
-	toAdd.ID = 0
-	if err := table.AddIndexMutation(toAdd, descpb.DescriptorMutation_ADD); err != nil {
-		return err
-	}
-	if err := table.AllocateIDs(ctx); err != nil {
-		return err
-	}
-	// Use the columns in the given primary index to construct this indexes
-	// KeySuffixColumnIDs list.
-	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
-	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
-	toAdd.KeySuffixColumnIDs = nil
-	for _, colID := range primary.KeyColumnIDs {
-		if !presentColIDs.Contains(colID) {
-			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
-		}
-	}
-	return nil
-}
-
 // applyColumnMutation applies the mutation specified in `mut` to the given
 // columnDescriptor, and saves the containing table descriptor. If the column's
 // dependencies on sequences change, it updates them as well.
