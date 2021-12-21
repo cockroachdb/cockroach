@@ -1070,13 +1070,16 @@ func (e *distSQLSpecExecFactory) ConstructAlterTableUnsplitAll(index cat.Index) 
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
-	index cat.Index, input exec.Node, relocateLease bool, relocateNonVoters bool,
+	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table relocate")
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterRangeRelocate(
-	input exec.Node, relocateLease bool, relocateNonVoters bool, toStoreID int64, fromStoreID int64,
+	input exec.Node,
+	relocateSubject tree.RelocateSubject,
+	toStoreID tree.TypedExpr,
+	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter range relocate")
 }
@@ -1128,7 +1131,11 @@ func (e *distSQLSpecExecFactory) ConstructCreateStatistics(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExport(
-	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
+	input exec.Node,
+	fileName tree.TypedExpr,
+	fileFormat string,
+	options []exec.KVOption,
+	notNullColsSet exec.NodeColumnOrdinalSet,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: export")
 }

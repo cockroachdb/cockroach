@@ -1599,9 +1599,15 @@ func (expr *Placeholder) TypeCheck(
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
 	// checking.
+	//
+	// The width of a placeholder value is not known during Prepare, so we
+	// remove type modifiers from the desired type so that a value of any width
+	// will fit within the placeholder type.
+	desired = desired.WithoutTypeModifiers()
 	if typ, ok, err := semaCtx.Placeholders.Type(expr.Idx); err != nil {
 		return expr, err
 	} else if ok {
+		typ = typ.WithoutTypeModifiers()
 		if !desired.Equivalent(typ) {
 			// This indicates there's a conflict between what the type system thinks
 			// the type for this position should be, and the actual type of the
@@ -1764,6 +1770,12 @@ func (d *DJSON) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedE
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DTuple) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DVoid) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
 	return d, nil
 }
 
@@ -2365,7 +2377,9 @@ func typeCheckSameTypedConsts(
 			}
 		}
 		if all {
-			return setTypeForConsts(typ)
+			// Constants do not have types with modifiers so clear the modifiers
+			// of typ before setting it.
+			return setTypeForConsts(typ.WithoutTypeModifiers())
 		}
 	}
 

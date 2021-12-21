@@ -1,8 +1,8 @@
 rules
 ----
 - name: parent dependencies
-  from: parent-node
-  to: other-node
+  from: other-node
+  to: parent-node
   query:
     - $parent[Type] IN ['*scpb.Database', '*scpb.Schema']
     - $other[Type] IN ['*scpb.Type', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Schema']
@@ -20,8 +20,8 @@ rules
     - $other-target[Direction] = DROP
     - $other-node[Status] = ABSENT
 - name: column depends on indexes
-  from: column-node
-  to: index-node
+  from: index-node
+  to: column-node
   query:
     - $index-status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
     - $direction = ADD
@@ -43,8 +43,8 @@ rules
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
 - name: index depends on column
-  from: index-node
-  to: column-node
+  from: column-node
+  to: index-node
   query:
     - $column[Type] = '*scpb.Column'
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
@@ -64,8 +64,8 @@ rules
     - $index-target[Direction] = ADD
     - $index-node[Status] = DELETE_ONLY
 - name: primary index add depends on drop
-  from: add-idx-node
-  to: drop-idx-node
+  from: drop-idx-node
+  to: add-idx-node
   query:
     - $add-idx[Type] = '*scpb.PrimaryIndex'
     - $drop-idx[Type] = '*scpb.PrimaryIndex'
@@ -85,8 +85,8 @@ rules
     - $drop-idx-target[Direction] = DROP
     - $drop-idx-node[Status] = DELETE_AND_WRITE_ONLY
 - name: partitioning information needs the basic index as created
-  from: partitioning-node
-  to: add-idx-node
+  from: add-idx-node
+  to: partitioning-node
   query:
     - $add-idx[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $partitioning[Type] = '*scpb.Partitioning'
@@ -107,8 +107,8 @@ rules
     - $partitioning-target[Direction] = ADD
     - $partitioning-node[Status] = PUBLIC
 - name: index needs partitioning information to be filled
-  from: partitioning-node
-  to: add-idx-node
+  from: add-idx-node
+  to: partitioning-node
   query:
     - $add-idx[Type] = '*scpb.PrimaryIndex'
     - $partitioning[Type] = '*scpb.Partitioning'
@@ -129,8 +129,8 @@ rules
     - $partitioning-target[Direction] = ADD
     - $partitioning-node[Status] = PUBLIC
 - name: dependency needs relation/type as non-synthetically dropped
-  from: dep-node
-  to: relation-node
+  from: relation-node
+  to: dep-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
     - $dep[Type] IN ['*scpb.DefaultExpression', '*scpb.RelationDependedOnBy', '*scpb.SequenceOwnedBy', '*scpb.ForeignKey']
@@ -149,8 +149,8 @@ rules
     - $dep-target[Direction] = DROP
     - $dep-node[Status] = ABSENT
 - name: dependency needs relation/type as non-synthetically dropped
-  from: dep-node
-  to: relation-node
+  from: relation-node
+  to: dep-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Type']
     - $dep[Type] IN ['*scpb.ForeignKeyBackReference', '*scpb.RelationDependedOnBy', '*scpb.ViewDependsOnType', '*scpb.DefaultExprTypeReference', '*scpb.OnUpdateExprTypeReference', '*scpb.ComputedExprTypeReference', '*scpb.ColumnTypeReference', '*scpb.CheckConstraintTypeReference']
@@ -169,26 +169,6 @@ rules
     - $dep-target[Direction] = DROP
     - $dep-node[Status] = ABSENT
 - name: namespace needs descriptor to be dropped
-  from: namespace-node
-  to: dep-node
-  query:
-    - $namespace[Type] = '*scpb.Namespace'
-    - $dep[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Database', '*scpb.Schema', '*scpb.Type']
-    - $dep[DescID] = $desc-id
-    - $namespace[DescID] = $desc-id
-    - $namespace-target[Type] = '*scpb.Target'
-    - $namespace-target[Element] = $namespace
-    - $namespace-node[Type] = '*scpb.Node'
-    - $namespace-node[Target] = $namespace-target
-    - $namespace-target[Direction] = DROP
-    - $namespace-node[Status] = ABSENT
-    - $dep-target[Type] = '*scpb.Target'
-    - $dep-target[Element] = $dep
-    - $dep-node[Type] = '*scpb.Node'
-    - $dep-node[Target] = $dep-target
-    - $dep-target[Direction] = DROP
-    - $dep-node[Status] = DROPPED
-- name: descriptor can only be cleaned up once the name is drained
   from: dep-node
   to: namespace-node
   query:
@@ -207,30 +187,28 @@ rules
     - $dep-node[Type] = '*scpb.Node'
     - $dep-node[Target] = $dep-target
     - $dep-target[Direction] = DROP
+    - $dep-node[Status] = DROPPED
+- name: descriptor can only be cleaned up once the name is drained
+  from: namespace-node
+  to: dep-node
+  query:
+    - $namespace[Type] = '*scpb.Namespace'
+    - $dep[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.Database', '*scpb.Schema', '*scpb.Type']
+    - $dep[DescID] = $desc-id
+    - $namespace[DescID] = $desc-id
+    - $namespace-target[Type] = '*scpb.Target'
+    - $namespace-target[Element] = $namespace
+    - $namespace-node[Type] = '*scpb.Node'
+    - $namespace-node[Target] = $namespace-target
+    - $namespace-target[Direction] = DROP
+    - $namespace-node[Status] = ABSENT
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*scpb.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[Direction] = DROP
     - $dep-node[Status] = ABSENT
 - name: column name is assigned once the column is created
-  from: column-name-node
-  to: column-node
-  query:
-    - $column-name[Type] = '*scpb.ColumnName'
-    - $column[Type] = '*scpb.Column'
-    - $column[DescID] = $desc-id
-    - $column-name[DescID] = $desc-id
-    - $column[ColumnID] = $column-id
-    - $column-name[ColumnID] = $column-id
-    - $column-name-target[Type] = '*scpb.Target'
-    - $column-name-target[Element] = $column-name
-    - $column-name-node[Type] = '*scpb.Node'
-    - $column-name-node[Target] = $column-name-target
-    - $column-name-target[Direction] = ADD
-    - $column-name-node[Status] = PUBLIC
-    - $column-target[Type] = '*scpb.Target'
-    - $column-target[Element] = $column
-    - $column-node[Type] = '*scpb.Node'
-    - $column-node[Target] = $column-target
-    - $column-target[Direction] = ADD
-    - $column-node[Status] = DELETE_ONLY
-- name: column needs a name to be assigned
   from: column-node
   to: column-name-node
   query:
@@ -251,10 +229,32 @@ rules
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
     - $column-target[Direction] = ADD
+    - $column-node[Status] = DELETE_ONLY
+- name: column needs a name to be assigned
+  from: column-name-node
+  to: column-node
+  query:
+    - $column-name[Type] = '*scpb.ColumnName'
+    - $column[Type] = '*scpb.Column'
+    - $column[DescID] = $desc-id
+    - $column-name[DescID] = $desc-id
+    - $column[ColumnID] = $column-id
+    - $column-name[ColumnID] = $column-id
+    - $column-name-target[Type] = '*scpb.Target'
+    - $column-name-target[Element] = $column-name
+    - $column-name-node[Type] = '*scpb.Node'
+    - $column-name-node[Target] = $column-name-target
+    - $column-name-target[Direction] = ADD
+    - $column-name-node[Status] = PUBLIC
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*scpb.Node'
+    - $column-node[Target] = $column-target
+    - $column-target[Direction] = ADD
     - $column-node[Status] = DELETE_AND_WRITE_ONLY
 - name: index name is assigned once the index is created
-  from: index-name-node
-  to: index-node
+  from: index-node
+  to: index-name-node
   query:
     - $index-name[Type] = '*scpb.IndexName'
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
@@ -275,8 +275,8 @@ rules
     - $index-target[Direction] = ADD
     - $index-node[Status] = DELETE_ONLY
 - name: index needs a name to be assigned
-  from: index-node
-  to: index-name-node
+  from: index-name-node
+  to: index-node
   query:
     - $index-name[Type] = '*scpb.IndexName'
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
@@ -319,8 +319,8 @@ rules
     - $type-ref-add-target[Direction] = ADD
     - $type-ref-add-node[Status] = PUBLIC
 - name: table deps removal happens after table marked as dropped
-  from: dep-drop-node
-  to: table-drop-node
+  from: table-drop-node
+  to: dep-drop-node
   query:
     - $dep-drop[Type] IN ['*scpb.Owner', '*scpb.UserPrivileges']
     - $table-drop[Type] IN ['*scpb.Table', '*scpb.Sequence', '*scpb.View']
@@ -339,8 +339,8 @@ rules
     - $table-drop-target[Direction] = DROP
     - $table-drop-node[Status] = DROPPED
 - name: schema can be dropped after schema entry inside the database
-  from: schema-node
-  to: schema-entry-node
+  from: schema-entry-node
+  to: schema-node
   query:
     - $schema[Type] = '*scpb.Schema'
     - $schema-entry[Type] = '*scpb.DatabaseSchemaEntry'
@@ -359,8 +359,8 @@ rules
     - $schema-entry-target[Direction] = DROP
     - $schema-entry-node[Status] = ABSENT
 - name: schema entry can be dropped after the database has exited synth drop
-  from: schema-entry-node
-  to: database-node
+  from: database-node
+  to: schema-entry-node
   query:
     - $database[Type] = '*scpb.Database'
     - $schema-entry[Type] = '*scpb.DatabaseSchemaEntry'

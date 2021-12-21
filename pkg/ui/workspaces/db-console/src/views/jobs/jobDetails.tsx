@@ -10,7 +10,6 @@
 
 import { Col, Row } from "antd";
 import _ from "lodash";
-import { TimestampToMoment } from "src/util/convert";
 import Long from "long";
 import React from "react";
 import Helmet from "react-helmet";
@@ -20,7 +19,7 @@ import { cockroach } from "src/js/protos";
 import { jobRequestKey, refreshJob } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, util } from "@cockroachlabs/cluster-ui";
 import SqlBox from "../shared/components/sql/box";
 import { SummaryCard } from "../shared/components/summaryCard";
 
@@ -70,7 +69,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
               <Col span={24}>
                 <div className="summary--card__counting">
                   <h3 className="summary--card__counting--value">
-                    {TimestampToMoment(job.created).format(DATE_FORMAT)}
+                    {util.TimestampToMoment(job.created).format(DATE_FORMAT)}
                   </h3>
                   <p className="summary--card__counting--label">
                     Creation time

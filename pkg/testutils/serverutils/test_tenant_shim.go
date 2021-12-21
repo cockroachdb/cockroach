@@ -66,6 +66,10 @@ type TestTenantInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
+	// ExecutorConfig returns a copy of the tenant's SystemIDChecker.
+	// The real return type is keys.SystemIDChecker.
+	SystemIDChecker() interface{}
+
 	// RangeFeedFactory returns the range feed factory used by the tenant.
 	// The real return type is *rangefeed.Factory.
 	RangeFeedFactory() interface{}
@@ -83,6 +87,10 @@ type TestTenantInterface interface {
 	// SpanConfigKVAccessor returns the underlying spanconfig.KVAccessor as an
 	// interface{}.
 	SpanConfigKVAccessor() interface{}
+
+	// SpanConfigReconciler returns the underlying spanconfig.Reconciler as an
+	// interface{}.
+	SpanConfigReconciler() interface{}
 
 	// SpanConfigSQLTranslator returns the underlying spanconfig.SQLTranslator as
 	// an interface{}.

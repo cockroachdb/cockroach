@@ -37,6 +37,10 @@ vectorized: true
       spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUE9L-0AQvf8-xTCn9sdKNxVB9tRiUwzUtCYBBc1hTYYSSLNxdyNKyHeXZK21QkWP8968P7wWzXOJAv37zWoehDBaBHES367GEPsr_yqB_7CM1jdg4e7aj3wYvcBjw_k5gcfHMA8Xn0gGF3yMDCuVUyh3ZFA8oIcpw1qrjIxRuofa4SHIX1FwhkVVN7aHU4aZ0oSiRVvYklBgIp9KikjmpCccGeZkZVEOtnZW62In9RsyjGtZGQFnmHYMVWMPhsbKLaHwOvb70GVRWtKkJ95xosMFjGbTwwBCiCBMLj922DP9EHvmZKnpX0pFZGpVGTqqdMqZdylDyrfk1jaq0RlttMqGGHeuB90A5GSsYz13BJWj-oJfxd6P4uk3cdr9ew8AAP__FVC8zg==
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
@@ -56,6 +60,10 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFLw0AQhe_-imFOra40SRFkT602xUBNaxJQ0RzWZCiBNBt3N0Up-e-SxFortNjjvLfvm8fsBvV7jhzdp8Vs7PnQm3hhFD7M-hC6M_c2gnOYBvN7MPB45wYu9NbwWlnWkMC2-jD2Jz9KAldWH-bBxA3g5hnWyLCQKfliRRr5C9oYMyyVTEhrqRpp0z7w0g_kFsOsKCvTyDHDRCpCvkGTmZyQYyTecgpIpKQGFjJMyYgsb7FmVKpsJdQnMgxLUWgOlxjXDGVldkBtxJKQ2zX7_9JplhtSpAb2_sZO59AbObtbcM49P7r-PsnWaW6ydQ6Wck4pFUplSA2c_Uoj5-IgfngKPiBdykLTHv4Q2apjhpQuqftMLSuV0ELJpF3TjfM21wopadO5djd4RWc1BX-H7aNh53jYORoe_gnH9dlXAAAA__8M7_K8
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
@@ -76,6 +84,10 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1ro0AUfd9fcblPCTtLHGVhmSezG8MKWc2qsFtaH6xegmAcOzOmLcH_XtSmaQoJzeM9Z84HZ_aoHyoU6P1fr-Z-AJOFHyfx39UUYm_l_UrgEZZR-AcM_PvtRR5MdnDXWpZDwK0pzIPFG5LDd2sKYbTwIvh5AztkWMuCgmxLGsUtckwZNkrmpLVUPbQfHvjFEwqLYVk3renhlGEuFaHYoylNRSgwye4riigrSM0sZFiQycpqsDVuo8ptpp6RYdxktRbwDRmGrRHg2sx1MO0YytYc3bXJNoSCd-zzDZZlZUiRmvHT-BEXMHH5cRghhB8kP173OTD9QAfmbCn7mlKxVIbUzD6t5PKvxwHOBjnXBEWkG1lrOgk652x1KUMqNjT-sZatymmtZD7EjGc46AagIG1Glo-HX49UX_C9mF8U25fF9kWx80Gcdl9eAgAA__92zfiN
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T
@@ -93,3 +105,7 @@ vectorized: true
       spans: [/41 - /49]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGPmkAQx9_7KSbzpMkaFtCXfdJWmtJYsGDSNi0PFCaGBFm6u9i7GL77Bbh4aiJ39zj_md_8YPaE-l-JAr2f283KD2Cy9uNd_H0zhdjbeJ928B8-R-E3MPDjixd5MDnCn4Zzl2DOp7AK1uckgwWfQhitvQg-_oIjMqxkTkF6II3iN9rIcIEJw1rJjLSWqotP_ZCfP6DgDIuqbkwXJwwzqQjFCU1hSkKBgZzJ2nKQYU4mLcp-rGUoG_MCaZPuCYXbsovF9vjiXfq3pIjSnJTFr9ajWXa_EddppQVYc3tmLbqJsDECljbe09vv0X-VRfVst2_ttSoOqXo8K927SudK-copI9K1rDS96Za8TRhSvqfhubRsVEZbJbNeM5Rhz_VBTtoMXXco_GpodR94CdujsDMOO6Mwv4GT9sNTAAAA__82C-wq
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;

@@ -26,7 +26,7 @@ import {
 } from "../transactionsPage/transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import {
   aggregatedTsAttr,
@@ -64,7 +64,7 @@ export const selectTransaction = createSelector(
 const mapStateToProps = (state: AppState, props: TransactionDetailsProps) => {
   return {
     aggregatedTs: getMatchParamByName(props.match, aggregatedTsAttr),
-    dateRange: selectDateRange(state),
+    timeScale: selectTimeScale(state),
     error: selectTransactionsLastError(state),
     isTenant: selectIsTenant(state),
     nodeRegions: nodeRegionsByIDSelector(state),

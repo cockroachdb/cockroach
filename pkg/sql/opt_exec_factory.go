@@ -1955,35 +1955,36 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 
 // ConstructAlterTableRelocate is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableRelocate(
-	index cat.Index, input exec.Node, relocateLease bool, relocateNonVoters bool,
+	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
 	return &relocateNode{
-		relocateLease:     relocateLease,
-		relocateNonVoters: relocateNonVoters,
-		tableDesc:         index.Table().(*optTable).desc,
-		index:             index.(*optIndex).idx,
-		rows:              input.(planNode),
+		subjectReplicas: relocateSubject,
+		tableDesc:       index.Table().(*optTable).desc,
+		index:           index.(*optIndex).idx,
+		rows:            input.(planNode),
 	}, nil
 }
 
 // ConstructAlterRangeRelocate is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterRangeRelocate(
-	input exec.Node, relocateLease bool, relocateNonVoters bool, toStoreID int64, fromStoreID int64,
+	input exec.Node,
+	relocateSubject tree.RelocateSubject,
+	toStoreID tree.TypedExpr,
+	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
 	return &relocateRange{
-		rows:              input.(planNode),
-		relocateLease:     relocateLease,
-		relocateNonVoters: relocateNonVoters,
-		toStoreID:         roachpb.StoreID(toStoreID),
-		fromStoreID:       roachpb.StoreID(fromStoreID),
+		rows:            input.(planNode),
+		subjectReplicas: relocateSubject,
+		toStoreID:       toStoreID,
+		fromStoreID:     fromStoreID,
 	}, nil
 }
 

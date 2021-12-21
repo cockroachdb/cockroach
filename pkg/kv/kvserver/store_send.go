@@ -276,15 +276,12 @@ func (s *Store) maybeThrottleBatch(
 
 	switch t := ba.Requests[0].GetInner().(type) {
 	case *roachpb.AddSSTableRequest:
-		// Limit the number of concurrent AddSSTable requests, since they're
-		// expensive and block all other writes to the same span. However, don't
-		// limit AddSSTable requests that are going to ingest as a WriteBatch.
+		limiter := s.limiters.ConcurrentAddSSTableRequests
 		if t.IngestAsWrites {
-			return nil, nil
+			limiter = s.limiters.ConcurrentAddSSTableAsWritesRequests
 		}
-
 		before := timeutil.Now()
-		res, err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx)
+		res, err := limiter.Begin(ctx)
 		if err != nil {
 			return nil, err
 		}

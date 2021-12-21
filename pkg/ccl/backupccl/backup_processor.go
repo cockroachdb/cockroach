@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/kr/pretty"
 )
 
 var backupOutputTypes = []*types.T{}
@@ -90,10 +91,6 @@ var (
 		false,
 	)
 )
-
-// maxSinkQueueFiles is how many replies we'll queue up before flushing to allow
-// some re-ordering, unless we hit smallFileBuffer size first.
-const maxSinkQueueFiles = 24
 
 const backupProcessorName = "backupDataProcessor"
 
@@ -534,7 +531,7 @@ func runBackupProcessor(
 			err := sink.Close()
 			err = errors.CombineErrors(storage.Close(), err)
 			if err != nil {
-				log.Warningf(ctx, "failed to close backup sink(s): %+v", err)
+				log.Warningf(ctx, "failed to close backup sink(s): % #v", pretty.Formatter(err))
 			}
 		}()
 
@@ -608,7 +605,7 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 	s.queue = append(s.queue, resp)
 	s.queueSize += len(resp.sst)
 
-	if len(s.queue) >= maxSinkQueueFiles || s.queueSize >= int(smallFileBuffer.Get(s.conf.settings)) {
+	if s.queueSize >= int(smallFileBuffer.Get(s.conf.settings)) {
 		sort.Slice(s.queue, func(i, j int) bool { return s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key) < 0 })
 
 		// Drain the first half.
@@ -650,6 +647,7 @@ func (s *sstSink) flushFile(ctx context.Context) error {
 		return err
 	}
 	if err := s.out.Close(); err != nil {
+		log.Warningf(ctx, "failed to close write in sstSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
 	s.outName = ""

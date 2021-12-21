@@ -119,6 +119,18 @@ const (
 	// these were implicitly derived based on the set of non-virtual columns in
 	// the table.
 	PrimaryIndexWithStoredColumnsVersion
+
+	// LatestPrimaryIndexDescriptorVersion is the latest index descriptor
+	// version value for primary indexes, and so will be found in all
+	// newly-created primary indexes.
+	// This property is tested by TestLatestIndexDescriptorVersionValues.
+	LatestPrimaryIndexDescriptorVersion = PrimaryIndexWithStoredColumnsVersion
+
+	// LatestNonPrimaryIndexDescriptorVersion is the latest index descriptor
+	// version value for non-primary indexes, and so will be found in all
+	// newly-created secondary indexes, as well as index mutations.
+	// this property is tested by TestLatestIndexDescriptorVersionValues.
+	LatestNonPrimaryIndexDescriptorVersion = StrictIndexColumnIDGuaranteesVersion
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
@@ -290,11 +302,6 @@ func IsVirtualTable(id ID) bool {
 // IsSystemConfigID returns whether this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
-}
-
-// IsReservedID returns whether this ID is for any system object.
-func IsReservedID(id ID) bool {
-	return id > 0 && id <= keys.MaxReservedDescID
 }
 
 // AnonymousTable is the empty table name, used when a data source

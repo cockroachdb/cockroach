@@ -50,11 +50,14 @@ type CatalogReader interface {
 
 	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
 	RemoveSyntheticDescriptor(id descpb.ID)
+}
 
-	// AddPartitioning adds partitioning information on an index descriptor.
+// Partitioner is the interface for adding partitioning to a table descriptor.
+type Partitioner interface {
 	AddPartitioning(
-		tableDesc *tabledesc.Mutable,
-		indexDesc *descpb.IndexDescriptor,
+		ctx context.Context,
+		tbl *tabledesc.Mutable,
+		index catalog.Index,
 		partitionFields []string,
 		listPartition []*scpb.ListPartition,
 		rangePartition []*scpb.RangePartitions,
@@ -91,34 +94,26 @@ type MutationVisitorStateUpdater interface {
 	// UpdateSchemaChangerJobProgress will write the status of the job to the
 	// specified job progress.
 	UpdateSchemaChangerJobProgress(jobID jobspb.JobID, statuses []scpb.Status) error
-}
 
-// EventLogWriter encapsulates operations for generating
-// event log entries.
-type EventLogWriter interface {
-	EnqueueEvent(
-		ctx context.Context,
-		descID descpb.ID,
-		metadata *scpb.ElementMetadata,
-		event eventpb.EventPayload,
-	) error
+	// EnqueueEvent will enqueue an event to be written to the event log.
+	EnqueueEvent(id descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload) error
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
 func NewMutationVisitor(
-	cr CatalogReader, s MutationVisitorStateUpdater, ev EventLogWriter,
+	cr CatalogReader, s MutationVisitorStateUpdater, p Partitioner,
 ) scop.MutationVisitor {
 	return &visitor{
 		cr: cr,
 		s:  s,
-		ev: ev,
+		p:  p,
 	}
 }
 
 type visitor struct {
 	cr CatalogReader
 	s  MutationVisitorStateUpdater
-	ev EventLogWriter
+	p  Partitioner
 }
 
 func (m *visitor) RemoveJobReference(ctx context.Context, reference scop.RemoveJobReference) error {
@@ -778,10 +773,10 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	}
 	// Set up the encoding type.
 	encodingType := descpb.PrimaryIndexEncoding
-	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
+	indexVersion := descpb.LatestPrimaryIndexDescriptorVersion
 	if op.SecondaryIndex {
 		encodingType = descpb.SecondaryIndexEncoding
-		indexVersion = descpb.StrictIndexColumnIDGuaranteesVersion
+		indexVersion = descpb.LatestNonPrimaryIndexDescriptorVersion
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
@@ -939,7 +934,7 @@ func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
 	if err != nil {
 		return err
 	}
-	return m.ev.EnqueueEvent(ctx, op.DescID, &op.Metadata, event)
+	return m.s.EnqueueEvent(op.DescID, &op.Metadata, event)
 }
 
 func asEventPayload(
@@ -1017,7 +1012,16 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 	if err != nil {
 		return err
 	}
-	return m.cr.AddPartitioning(tbl, index.IndexDesc(), op.PartitionFields, op.ListPartitions, op.RangePartitions, nil, true)
+	return m.p.AddPartitioning(
+		ctx,
+		tbl,
+		index,
+		op.PartitionFields,
+		op.ListPartitions,
+		op.RangePartitions,
+		nil,  /* allowedNewColumnNames */
+		true, /* allowImplicitPartitioning */
+	)
 }
 
 func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {

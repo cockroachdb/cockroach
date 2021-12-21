@@ -10,6 +10,7 @@
 
 import React from "react";
 import { Col, Row, Tabs } from "antd";
+import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 import _ from "lodash";
 import { Tooltip } from "antd";
@@ -22,6 +23,7 @@ import { SqlBox } from "src/sql";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import * as format from "src/util/format";
+import { syncHistory } from "src/util";
 
 import styles from "./databaseTablePage.module.scss";
 import { commonStyles } from "src/common";
@@ -129,10 +131,12 @@ export interface DatabaseTablePageActions {
 }
 
 export type DatabaseTablePageProps = DatabaseTablePageData &
-  DatabaseTablePageActions;
+  DatabaseTablePageActions &
+  RouteComponentProps;
 
 interface DatabaseTablePageState {
   sortSetting: SortSetting;
+  tab: string;
 }
 
 class DatabaseTableGrantsTable extends SortedTable<Grant> {}
@@ -145,18 +149,33 @@ export class DatabaseTablePage extends React.Component<
   constructor(props: DatabaseTablePageProps) {
     super(props);
 
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const defaultTab = searchParams.get("tab") || "overview";
+
     this.state = {
       sortSetting: {
         ascending: true,
       },
+      tab: defaultTab,
     };
   }
 
-  componentDidMount() {
+  onTabChange = (tab: string): void => {
+    this.setState({ tab });
+    syncHistory(
+      {
+        tab: tab,
+      },
+      this.props.history,
+    );
+  };
+
+  componentDidMount(): void {
     this.refresh();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refresh();
   }
 
@@ -284,7 +303,7 @@ export class DatabaseTablePage extends React.Component<
     },
   ];
 
-  render() {
+  render(): React.ReactElement {
     return (
       <div className="root table-area">
         <section className={baseHeadingClasses.wrapper}>
@@ -313,7 +332,11 @@ export class DatabaseTablePage extends React.Component<
         </section>
 
         <section className={(baseHeadingClasses.wrapper, cx("tab-area"))}>
-          <Tabs className={commonStyles("cockroach--tabs")}>
+          <Tabs
+            className={commonStyles("cockroach--tabs")}
+            onChange={this.onTabChange}
+            activeKey={this.state.tab}
+          >
             <TabPane tab="Overview" key="overview">
               <Row gutter={18}>
                 <Col className="gutter-row" span={18}>
@@ -368,7 +391,7 @@ export class DatabaseTablePage extends React.Component<
                     <div className={cx("index-stats__reset-info")}>
                       <Tooltip
                         placement="bottom"
-                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset index stats’ will reset index stats for the entire cluster."
+                        title="Index stats accumulate from the time they were last cleared. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster."
                       >
                         <div
                           className={cx("index-stats__last-reset", "underline")}
@@ -390,7 +413,7 @@ export class DatabaseTablePage extends React.Component<
                             )
                           }
                         >
-                          Reset index stats
+                          Reset all index stats
                         </a>
                       </div>
                     </div>

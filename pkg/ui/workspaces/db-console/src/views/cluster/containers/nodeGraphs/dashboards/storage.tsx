@@ -141,11 +141,14 @@ export default function(props: GraphDashboardProps) {
       tooltip={`The average number of real read operations executed per logical read operation ${tooltipSelection}.`}
     >
       <Axis label="factor">
-        <Metric
-          name="cr.store.rocksdb.read-amplification"
-          title="Read Amplification"
-          aggregateAvg
-        />
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.read-amplification"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
@@ -155,7 +158,14 @@ export default function(props: GraphDashboardProps) {
       tooltip={`The number of SSTables in use ${tooltipSelection}.`}
     >
       <Axis label="sstables">
-        <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.num-sstables"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+          />
+        ))}
       </Axis>
     </LineGraph>,
 

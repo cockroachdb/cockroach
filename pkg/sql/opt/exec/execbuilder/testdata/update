@@ -235,6 +235,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: xyz@xyz_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON xyz (y) STORING (z); DROP INDEX xyz@y_idx;
 
 # With the hint, we use a constrained scan.
 query T
@@ -270,6 +274,10 @@ vectorized: true
               table: xyz@y_idx
               spans: /1-/1000 /2001-/3000
               locking strength: for update
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON xyz (y) STORING (z); DROP INDEX xyz@y_idx;
 
 statement ok
 CREATE TABLE pks (
@@ -335,6 +343,10 @@ vectorized: true
               missing stats
               table: kv@kv_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON kv (v DESC);
 
 # Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
 query T
@@ -568,6 +580,10 @@ vectorized: true
               table: kv3@kv3_v_idx
               spans: [/10 - /10]
               locking strength: for update
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
@@ -588,6 +604,10 @@ vectorized: true
           table: kv3@kv3_v_idx
           spans: [/2 - /9]
           locking strength: for update
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 statement ok
 SET enable_implicit_select_for_update = false
@@ -711,6 +731,10 @@ vectorized: true
               missing stats
               table: kv3@kv3_v_idx
               spans: [/10 - /10]
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
@@ -730,6 +754,10 @@ vectorized: true
           missing stats
           table: kv3@kv3_v_idx
           spans: [/2 - /9]
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON kv3 (v) STORING (meta); DROP INDEX kv3@kv3_v_idx;
 
 # Reset for rest of test.
 statement ok

@@ -41,7 +41,7 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
+	_ ImmutableRangeState, header *roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -53,7 +53,7 @@ func declareKeysWriteTransaction(
 
 func declareKeysEndTxn(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 ) {
@@ -387,10 +387,11 @@ func EndTxn(
 	return txnResult, nil
 }
 
-// IsEndTxnExceedingDeadline returns true if the transaction exceeded its
-// deadline.
-func IsEndTxnExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTxnRequest) bool {
-	return args.Deadline != nil && args.Deadline.LessEq(t)
+// IsEndTxnExceedingDeadline returns true if the transaction's provisional
+// commit timestamp exceeded its deadline. If so, the transaction should not be
+// allowed to commit.
+func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline *hlc.Timestamp) bool {
+	return deadline != nil && deadline.LessEq(commitTS)
 }
 
 // IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be
@@ -415,7 +416,7 @@ func IsEndTxnTriggeringRetryError(
 	}
 
 	// A transaction must obey its deadline, if set.
-	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args) {
+	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args.Deadline) {
 		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
 		extraMsg = fmt.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",

@@ -11,7 +11,6 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
@@ -20,20 +19,11 @@ import {
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
-import {
-  aggregateStatementStats,
-  combineStatementStats,
-  ExecutionStatistics,
-  flattenStatementStats,
-  statementKey,
-  StatementStatistics,
-} from "src/util/appStats";
 import { appAttr } from "src/util/constants";
-import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import { queryByName } from "src/util/query";
 
 import {
@@ -41,11 +31,12 @@ import {
   AggregateStatistics,
   Filters,
   defaultFilters,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
-  setCombinedStatementsDateRangeAction,
+  setCombinedStatementsTimeScaleAction,
 } from "src/redux/statements";
 import {
   trackDownloadDiagnosticsBundleAction,
@@ -57,6 +48,16 @@ import { nodeRegionsByIDSelector } from "src/redux/nodes";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+
+const {
+  aggregateStatementStats,
+  combineStatementStats,
+  flattenStatementStats,
+  statementKey,
+} = util;
+
+type ExecutionStatistics = util.ExecutionStatistics;
+type StatementStatistics = util.StatementStatistics;
 
 interface StatementsSummaryData {
   statement: string;
@@ -221,14 +222,7 @@ export const selectLastReset = createSelector(
     if (!state.data) {
       return "unknown";
     }
-    return PrintTime(TimestampToMoment(state.data.last_reset));
-  },
-);
-
-export const selectDateRange = createSelector(
-  statementsDateRangeLocalSetting.selector,
-  (state: { start: number; end: number }): [Moment, Moment] => {
-    return [moment.unix(state.start), moment.unix(state.end)];
+    return PrintTime(util.TimestampToMoment(state.data.last_reset));
   },
 );
 
@@ -262,7 +256,7 @@ export default withRouter(
       apps: selectApps(state),
       columns: statementColumnsLocalSetting.selectorToArray(state),
       databases: selectDatabases(state),
-      dateRange: selectDateRange(state),
+      timeScale: statementsTimeScaleLocalSetting.selector(state),
       filters: filtersLocalSetting.selector(state),
       lastReset: selectLastReset(state),
       nodeRegions: nodeRegionsByIDSelector(state),
@@ -274,7 +268,7 @@ export default withRouter(
     }),
     {
       refreshStatements: refreshStatements,
-      onDateRangeChange: setCombinedStatementsDateRangeAction,
+      onTimeScaleChange: setCombinedStatementsTimeScaleAction,
       refreshStatementDiagnosticsRequests,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>

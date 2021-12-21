@@ -26,6 +26,12 @@ vectorized: true
       missing stats
       table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
@@ -45,6 +51,12 @@ vectorized: true
       missing stats
       table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (y) STORING (x);
 
 query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
@@ -66,6 +78,10 @@ vectorized: true
           missing stats
           table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 query T
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
@@ -85,6 +101,12 @@ vectorized: true
       missing stats
       table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (y) STORING (x);
 
 query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
@@ -104,6 +126,12 @@ vectorized: true
       missing stats
       table: twocolumn@twocolumn_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (y) STORING (x);
 
 query T
 EXPLAIN SELECT * FROM
@@ -147,6 +175,12 @@ vectorized: true
               missing stats
               table: twocolumn@twocolumn_pkey
               spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 # The following queries verify that only the necessary columns are scanned.
 query T
@@ -197,6 +231,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
@@ -224,6 +262,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
@@ -293,6 +335,12 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: twocolumn@twocolumn_pkey
               spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query T
@@ -598,6 +646,10 @@ vectorized: true
       missing stats
       table: square@square_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON pairs (b) STORING (a);
 
 # The filter expression becomes an ON predicate.
 query T
@@ -793,6 +845,12 @@ vectorized: true
               estimated row count: 333 (missing stats)
               table: square@square_pkey
               spans: -/6
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON pairs (b) STORING (a);
+2. type: index creation
+   SQL command: CREATE INDEX ON square (sq);
 
 query T
 EXPLAIN (VERBOSE)
@@ -830,6 +888,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: pairs@pairs_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON pairs (a) STORING (b);
 
 # The simpler plan for an inner join, to compare.
 query T
@@ -863,6 +925,10 @@ vectorized: true
       table: square@square_pkey
       spans: /2-/6
       parallel
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON pairs (b) STORING (a);
 
 
 statement ok
@@ -897,6 +963,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t2@t2_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (x, y);
+2. type: index creation
+   SQL command: CREATE INDEX ON t2 (x, y);
 
 # Tests for merge join ordering information.
 statement ok
@@ -935,6 +1007,12 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: pkbc@pkbc_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON pkba (a) STORING (c, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON pkbc (a) STORING (d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
@@ -967,6 +1045,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: pkba@pkba_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON pkba (a) STORING (c, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON pkbad (a, b, c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
@@ -1060,6 +1144,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: str2@str2_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON str1 (s);
+2. type: index creation
+   SQL command: CREATE INDEX ON str2 (s);
 
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
@@ -1086,6 +1176,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: str2@str2_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON str1 (s);
+2. type: index creation
+   SQL command: CREATE INDEX ON str2 (s);
 
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
@@ -1116,6 +1212,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: str1@str1_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON str1 (s);
+2. type: index creation
+   SQL command: CREATE INDEX ON str2 (s);
 
 query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
@@ -1146,6 +1248,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: str2@str2_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON str1 (s);
+2. type: index creation
+   SQL command: CREATE INDEX ON str2 (s);
 
 # Verify that we resolve the merged column a to str2.a but use IFNULL for
 # column s which is a collated string.
@@ -1874,6 +1982,12 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: bar@bar_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON bar (a) STORING (b, c, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON foo (a) STORING (b, c, d);
 
 # Only a and c can be equality columns.
 query T
@@ -1952,6 +2066,12 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: bar@bar_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON bar (a) STORING (b, c, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON foo (a) STORING (b, c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
@@ -2000,6 +2120,12 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: bar@bar_pkey
       spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON bar (a) STORING (b, c, d);
+2. type: index creation
+   SQL command: CREATE INDEX ON foo (a) STORING (b, c, d);
 
 # Only a and c can be equality columns.
 query T
@@ -2051,6 +2177,10 @@ vectorized: true
           missing stats
           table: zigzag@b_idx
           spans: [/5 - /5]
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON zigzag (b, c);
 
 statement ok
 SET enable_zigzag_join = false
@@ -2071,6 +2201,10 @@ vectorized: true
           missing stats
           table: zigzag@b_idx
           spans: [/5 - /5]
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON zigzag (b, c);
 
 # Enable zigzag joins.
 statement ok
@@ -2113,6 +2247,10 @@ vectorized: true
       right table: zigzag@c_idx
       right columns: (c)
       right fixed values: 1 column
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON zigzag (c) STORING (b, d); DROP INDEX zigzag@c_idx;
 
 # Zigzag join nested inside a lookup, with an on condition on lookup join.
 query T
@@ -2135,6 +2273,10 @@ vectorized: true
       right table: zigzag@c_idx
       right columns: (c)
       right fixed values: 1 column
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON zigzag (c) STORING (b, d); DROP INDEX zigzag@c_idx;
 
 
 # Regression test for part of #34695.
@@ -2192,6 +2334,12 @@ vectorized: true
           missing stats
           table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 # Test that we can force a merge join using the NATURAL syntax.
 query T
@@ -2218,6 +2366,12 @@ vectorized: true
           missing stats
           table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 # Test that we can force a merge join using the CROSS syntax.
 query T
@@ -2244,6 +2398,12 @@ vectorized: true
           missing stats
           table: twocolumn@twocolumn_pkey
           spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON onecolumn (x);
+2. type: index creation
+   SQL command: CREATE INDEX ON twocolumn (x) STORING (y);
 
 statement error LOOKUP can only be used with INNER or LEFT joins
 EXPLAIN SELECT * FROM onecolumn RIGHT LOOKUP JOIN twocolumn USING(x)

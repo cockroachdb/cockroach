@@ -32,7 +32,7 @@ import (
 type mockClient struct {
 	rangefeed func(
 		ctx context.Context,
-		span roachpb.Span,
+		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- *roachpb.RangeFeedEvent,
@@ -40,29 +40,34 @@ type mockClient struct {
 
 	scan func(
 		ctx context.Context,
-		span roachpb.Span,
+		spans []roachpb.Span,
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
+		cfg rangefeed.ScanConfig,
 	) error
 }
 
 func (m *mockClient) RangeFeed(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error {
-	return m.rangefeed(ctx, span, startFrom, withDiff, eventC)
+	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
 }
 
 func (m *mockClient) Scan(
-	ctx context.Context, span roachpb.Span, asOf hlc.Timestamp, rowFn func(value roachpb.KeyValue),
+	ctx context.Context,
+	spans []roachpb.Span,
+	asOf hlc.Timestamp,
+	rowFn func(value roachpb.KeyValue),
+	cfg rangefeed.ScanConfig,
 ) error {
-	return m.scan(ctx, span, asOf, rowFn)
+	return m.scan(ctx, spans, asOf, rowFn, cfg)
 }
 
-var _ (rangefeed.KVDB) = (*mockClient)(nil)
+var _ rangefeed.KVDB = (*mockClient)(nil)
 
 // TestRangefeedMock utilizes the kvDB interface to test the behavior of the
 // RangeFeed.
@@ -89,9 +94,10 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		const numFailures = 2
 		mc := mockClient{
-			scan: func(ctx context.Context, span roachpb.Span, asOf hlc.Timestamp, rowFn func(value roachpb.KeyValue)) error {
+			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
+				rowFn func(value roachpb.KeyValue), cfg rangefeed.ScanConfig) error {
 				assert.Equal(t, ts, asOf)
-				assert.Equal(t, sp, span)
+				assert.Equal(t, []roachpb.Span{sp}, spans)
 				rowFn(row)
 				if i++; i <= numFailures {
 					return errors.New("boom")
@@ -106,7 +112,7 @@ func TestRangeFeedMock(t *testing.T) {
 		require.NotNil(t, f)
 		rows := make(chan *roachpb.RangeFeedValue)
 
-		r, err := f.RangeFeed(ctx, "foo", sp, ts, func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, ts, func(ctx context.Context, value *roachpb.RangeFeedValue) {
 			rows <- value
 		}, rangefeed.WithInitialScan(func(ctx context.Context) {
 			close(rows)
@@ -149,13 +155,14 @@ func TestRangeFeedMock(t *testing.T) {
 		var gotToTheEnd bool
 		mc := mockClient{
 			scan: func(
-				ctx context.Context, span roachpb.Span, asOf hlc.Timestamp, rowFn func(value roachpb.KeyValue),
+				ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
+				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
 			) error {
 				assert.False(t, withDiff) // it was not set
 				sendEvent := func(ts hlc.Timestamp) {
@@ -222,7 +229,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
-		r, err := f.RangeFeed(ctx, "foo", sp, initialTS, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, initialTS, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 			rows <- value
@@ -249,14 +256,14 @@ func TestRangeFeedMock(t *testing.T) {
 			EndKey: roachpb.Key("c"),
 		}
 		mc := mockClient{
-			scan: func(
-				ctx context.Context, span roachpb.Span, asOf hlc.Timestamp, rowFn func(value roachpb.KeyValue),
+			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
+				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
 			},
 			rangefeed: func(
-				ctx context.Context, span roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
+				ctx context.Context, spans []roachpb.Span, startFrom hlc.Timestamp, withDiff bool, eventC chan<- *roachpb.RangeFeedEvent,
 			) error {
 				assert.True(t, withDiff)
 				eventC <- &roachpb.RangeFeedEvent{
@@ -270,7 +277,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
-		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 			rows <- value
@@ -288,7 +295,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		stopper.Stop(ctx)
 		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{}, nil /* knobs */)
-		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 		})
@@ -305,12 +312,13 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		var called int
 		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
-			scan: func(ctx context.Context, span roachpb.Span, asOf hlc.Timestamp, rowFn func(value roachpb.KeyValue)) error {
+			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
+				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig) error {
 				return errors.New("boom")
 			},
 		}, nil /* knobs */)
 		done := make(chan struct{})
-		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
+		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 		},
@@ -342,8 +350,8 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 	db := rangefeed.NewMockkvDB(ctrl)
 
 	// Make sure scan failure gets retried.
-	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))
-	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))
+	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	// Make sure rangefeed is retried even after 3 failures, then succeed and cancel context
 	// (which signals the rangefeed to shut down gracefully).
@@ -351,14 +359,14 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 		Times(3).
 		Return(errors.New("rangefeed failed"))
 	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(context.Context, roachpb.Span, hlc.Timestamp, bool, chan<- *roachpb.RangeFeedEvent) {
+		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- *roachpb.RangeFeedEvent) {
 			cancel()
 		}).
 		Return(nil)
 
 	f := rangefeed.NewFactoryWithDB(stopper, db, nil /* knobs */)
 	r, err := f.RangeFeed(ctx, "foo",
-		roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+		[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}},
 		hlc.Timestamp{},
 		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
 		rangefeed.WithInitialScan(func(ctx context.Context) {}),

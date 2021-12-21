@@ -22,6 +22,10 @@ type SchemaDescriptor interface {
 	// SchemaDesc returns the underlying protocol buffer in the
 	// case that this is a real descriptor.
 	SchemaDesc() *descpb.SchemaDescriptor
+
+	// GetDefaultPrivilegeDescriptor returns the default privileges for this
+	// database.
+	GetDefaultPrivilegeDescriptor() DefaultPrivilegeDescriptor
 }
 
 // ResolvedSchemaKind is an enum that represents what kind of schema

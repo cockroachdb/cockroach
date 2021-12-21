@@ -272,6 +272,11 @@ var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
 	)
 })
 
+// MultiRegionDDLs causes the Smither to enable multiregion features.
+var MultiRegionDDLs = simpleOption("include multiregion DDLs", func(s *Smither) {
+	s.alterWeights = append(s.alterWeights, alterMultiregion...)
+})
+
 // DisableWith causes the Smither to not emit WITH clauses.
 var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true

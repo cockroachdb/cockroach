@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/hmac"
 	"crypto/md5"
 	cryptorand "crypto/rand"
 	"crypto/sha1"
@@ -111,6 +112,7 @@ const (
 	categoryArray               = "Array"
 	categoryComparison          = "Comparison"
 	categoryCompatibility       = "Compatibility"
+	categoryCrypto              = "Cryptographic"
 	categoryDateAndTime         = "Date and time"
 	categoryEnum                = "Enum"
 	categoryFullTextSearch      = "Full Text Search"
@@ -222,6 +224,14 @@ func newDecodeError(enc string) error {
 func newEncodeError(c rune, enc string) error {
 	return pgerror.Newf(pgcode.UntranslatableCharacter,
 		"character %q has no representation in encoding %q", c, enc)
+}
+
+func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
+	tenID := tree.MustBeDInt(e)
+	if int64(tenID) <= 0 {
+		return 0, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+	}
+	return tenID, nil
 }
 
 // builtins contains the built-in functions indexed by name.
@@ -1233,6 +1243,90 @@ var builtins = map[string]builtinDefinition{
 	"crc32c": hash32Builtin(
 		func() hash.Hash32 { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
 		"Calculates the CRC-32 hash using the Castagnoli polynomial.",
+	),
+
+	"digest": makeBuiltin(
+		tree.FunctionProperties{Category: categoryCrypto},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				alg := tree.MustBeDString(args[1])
+				hashFunc, err := getHashFunc(string(alg))
+				if err != nil {
+					return nil, err
+				}
+				h := hashFunc()
+				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
+			},
+			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
+				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
+			Volatility: tree.VolatilityLeakProof,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"data", types.Bytes}, {"type", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				alg := tree.MustBeDString(args[1])
+				hashFunc, err := getHashFunc(string(alg))
+				if err != nil {
+					return nil, err
+				}
+				h := hashFunc()
+				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
+			},
+			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
+				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"hmac": makeBuiltin(
+		tree.FunctionProperties{Category: categoryCrypto},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				key := tree.MustBeDString(args[1])
+				alg := tree.MustBeDString(args[2])
+				hashFunc, err := getHashFunc(string(alg))
+				if err != nil {
+					return nil, err
+				}
+				h := hmac.New(hashFunc, []byte(key))
+				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
+			},
+			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
+			Volatility: tree.VolatilityLeakProof,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				key := tree.MustBeDBytes(args[1])
+				alg := tree.MustBeDString(args[2])
+				hashFunc, err := getHashFunc(string(alg))
+				if err != nil {
+					return nil, err
+				}
+				h := hmac.New(hashFunc, []byte(key))
+				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
+			},
+			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 
 	"to_hex": makeBuiltin(
@@ -4456,9 +4550,9 @@ value if you rely on the HLC for accuracy.`,
 				if err := requireNonNull(args[0]); err != nil {
 					return nil, err
 				}
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID)); err != nil {
 					return nil, err
@@ -4498,9 +4592,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				if err := ctx.Tenant.DestroyTenant(ctx.Context, uint64(sTenID)); err != nil {
 					return nil, err
@@ -4728,6 +4822,21 @@ value if you rely on the HLC for accuracy.`,
 				}
 				msg := string(s)
 				return nil, errors.AssertionFailedf("%s", msg)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.void_func": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DVoidDatum, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: tree.VolatilityVolatile,
@@ -5638,9 +5747,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				if err := ctx.Tenant.GCTenant(ctx.Context, uint64(sTenID)); err != nil {
 					return nil, err
@@ -5669,9 +5778,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				sTenID := int64(tree.MustBeDInt(args[0]))
-				if sTenID <= 0 {
-					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
 				}
 				availableRU := float64(tree.MustBeDFloat(args[1]))
 				refillRate := float64(tree.MustBeDFloat(args[2]))
@@ -5927,8 +6036,8 @@ the locality flag on node startup. Returns an error if no region is set.`,
 				}
 				return tree.MakeDBool(true), nil
 			},
-			Info: `Resets the zone configuration for a multi-region table to 
-match its original state. No-ops if the given table ID is not a multi-region 
+			Info: `Resets the zone configuration for a multi-region table to
+match its original state. No-ops if the given table ID is not a multi-region
 table.`,
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -5949,8 +6058,8 @@ table.`,
 				}
 				return tree.MakeDBool(true), nil
 			},
-			Info: `Resets the zone configuration for a multi-region database to 
-match its original state. No-ops if the given database ID is not multi-region 
+			Info: `Resets the zone configuration for a multi-region database to
+match its original state. No-ops if the given database ID is not multi-region
 enabled.`,
 			Volatility: tree.VolatilityVolatile,
 		},
@@ -7315,6 +7424,27 @@ func bitsOverload2(
 		},
 		Info:       info,
 		Volatility: volatility,
+	}
+}
+
+// getHashFunc returns a function that will create a new hash.Hash using the
+// given algorithm.
+func getHashFunc(alg string) (func() hash.Hash, error) {
+	switch strings.ToLower(alg) {
+	case "md5":
+		return md5.New, nil
+	case "sha1":
+		return sha1.New, nil
+	case "sha224":
+		return sha256.New224, nil
+	case "sha256":
+		return sha256.New, nil
+	case "sha384":
+		return sha512.New384, nil
+	case "sha512":
+		return sha512.New, nil
+	default:
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use %q, no such hash algorithm", alg)
 	}
 }
 

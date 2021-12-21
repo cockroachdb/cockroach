@@ -1077,13 +1077,12 @@ func (a Allocator) rebalanceTarget(
 		return zero, zero, "", false
 	}
 	// Keep looping until we either run out of options or find a target that we're
-	// pretty sure we won't want to remove immediately after adding it.
-	// If we would, we don't want to actually rebalance to that target.
-	var target *candidate
+	// pretty sure we won't want to remove immediately after adding it. If we
+	// would, we don't want to actually rebalance to that target.
+	var target, existingCandidate *candidate
 	var removeReplica roachpb.ReplicaDescriptor
-	var existingCandidates candidateList
 	for {
-		target, existingCandidates = bestRebalanceTarget(a.randGen, results)
+		target, existingCandidate = bestRebalanceTarget(a.randGen, results)
 		if target == nil {
 			return zero, zero, "", false
 		}
@@ -1146,7 +1145,7 @@ func (a Allocator) rebalanceTarget(
 	// debugging/auditability purposes.
 	dDetails := decisionDetails{
 		Target:   target.compactString(),
-		Existing: existingCandidates.compactString(options),
+		Existing: existingCandidate.compactString(),
 	}
 	detailsBytes, err := json.Marshal(dDetails)
 	if err != nil {

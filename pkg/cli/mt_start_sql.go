@@ -75,7 +75,16 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
+	// Set up a cancellable context for the entire start command.
+	// The context will be canceled at the end.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The context annotation ensures that server identifiers show up
+	// in the logging metadata as soon as they are known.
+	ambientCtx := serverCfg.AmbientCtx
+	ctx = ambientCtx.AnnotateCtx(ctx)
+
 	const clusterName = ""
 
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)

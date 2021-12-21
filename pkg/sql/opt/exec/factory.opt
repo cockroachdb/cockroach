@@ -658,8 +658,7 @@ define AlterTableUnsplitAll {
 define AlterTableRelocate {
     Index cat.Index
     input exec.Node
-    relocateLease bool
-    relocateNonVoters bool
+    subjectReplicas tree.RelocateSubject
 }
 
 # Buffer passes through the input rows but also saves them in a buffer, which
@@ -730,13 +729,13 @@ define Export {
     FileName tree.TypedExpr
     FileFormat string
     Options []exec.KVOption
+    NotNullCols exec.NodeColumnOrdinalSet
 }
 
 # AlterTableRelocate implements ALTER RANGE RELOCATE.
 define AlterRangeRelocate {
     input exec.Node
-    relocateLease bool
-    relocateNonVoters bool
-    toStoreID int64
-    fromStoreID int64
+    subjectReplicas tree.RelocateSubject
+    toStoreID tree.TypedExpr
+    fromStoreID tree.TypedExpr
 }

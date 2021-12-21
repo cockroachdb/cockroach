@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "slinstance",
-    srcs = [
-        "slinstance.go",
-        "test_helpers.go",
-    ],
+    srcs = ["slinstance.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance",
     visibility = ["//visibility:public"],
     deps = [
@@ -25,14 +22,16 @@ go_library(
 go_test(
     name = "slinstance_test",
     size = "small",
-    srcs = ["slinstance_test.go"],
+    srcs = [
+        "helpers_test.go",
+        "slinstance_test.go",
+    ],
+    embed = [":slinstance"],
     deps = [
-        ":slinstance",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
-        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

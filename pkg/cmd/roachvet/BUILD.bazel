@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/testutils/lint/passes/errcmp",
+        "//pkg/testutils/lint/passes/errwrap",
         "//pkg/testutils/lint/passes/fmtsafe",
         "//pkg/testutils/lint/passes/forbiddenmethod",
         "//pkg/testutils/lint/passes/hash",

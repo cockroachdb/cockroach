@@ -457,9 +457,8 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	for i := range infos {
 		info := &infos[i]
 		if pErr := s.withReplicaForRequest(
-			ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
-				ctx = r.raftSchedulerCtx(ctx)
-				return s.processRaftRequestWithReplica(ctx, r, info.req)
+			ctx, info.req, func(_ context.Context, r *Replica) *roachpb.Error {
+				return s.processRaftRequestWithReplica(r.raftCtx, r, info.req)
 			},
 		); pErr != nil {
 			hadError = true
@@ -497,13 +496,13 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	return true // ready
 }
 
-func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
+func (s *Store) processReady(rangeID roachpb.RangeID) {
 	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return
 	}
 
-	ctx = r.raftSchedulerCtx(ctx)
+	ctx := r.raftCtx
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	maybeFatalOnRaftReadyErr(ctx, expl, err)
@@ -520,7 +519,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	}
 }
 
-func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
+func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return false
@@ -528,7 +527,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	livenessMap, _ := s.livenessMap.Load().(liveness.IsLiveMap)
 
 	start := timeutil.Now()
-	ctx = r.raftSchedulerCtx(ctx)
+	ctx := r.raftCtx
 	exists, err := r.tick(ctx, livenessMap)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
@@ -562,7 +561,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		lagging := r.mu.laggingFollowersOnQuiesce
 		r.mu.RUnlock()
 		if quiescent && lagging.MemberStale(l) {
-			r.unquiesce()
+			r.maybeUnquiesce()
 		}
 	})
 }

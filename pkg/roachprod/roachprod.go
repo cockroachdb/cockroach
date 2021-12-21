@@ -294,12 +294,6 @@ func Sync() (*cloud.Cloud, error) {
 		return nil, err
 	}
 
-	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
-		return p.ConfigSSH()
-	}); err != nil {
-		return nil, err
-	}
-
 	return cld, nil
 }
 
@@ -480,10 +474,28 @@ func SetupSSH(clusterName string) error {
 	if err != nil {
 		return err
 	}
+
 	cloudCluster, ok := cld.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("could not find %s in list of cluster", clusterName)
 	}
+
+	zones := make(map[string][]string, len(cloudCluster.VMs))
+	for _, vm := range cloudCluster.VMs {
+		zones[vm.Provider] = append(zones[vm.Provider], vm.Zone)
+	}
+	providers := make([]string, 0)
+	for provider := range zones {
+		providers = append(providers, provider)
+	}
+
+	// Configure SSH for machines in the zones we operate on.
+	if err := vm.ProvidersSequential(providers, func(p vm.Provider) error {
+		return p.ConfigSSH(zones[p.Name()])
+	}); err != nil {
+		return err
+	}
+
 	cloudCluster.PrintDetails()
 	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
 	for _, v := range cloudCluster.VMs {
@@ -1184,11 +1196,34 @@ func StageURL(applicationName, version, stageOS string) ([]*url.URL, error) {
 	return urls, nil
 }
 
-// InitProviders initializes the vm.Providers.
-func InitProviders() {
-	// Initialize providers.
-	aws.Init()
-	gce.Init()
-	azure.Init()
-	local.Init(localVMStorage{})
+// InitProviders initializes providers and returns a map that indicates
+// if a provider is active or inactive.
+func InitProviders() map[string]string {
+	providersState := make(map[string]string)
+
+	if err := aws.Init(); err != nil {
+		providersState[aws.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[aws.ProviderName] = "Active"
+	}
+
+	if err := gce.Init(); err != nil {
+		providersState[gce.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[gce.ProviderName] = "Active"
+	}
+
+	if err := azure.Init(); err != nil {
+		providersState[azure.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[azure.ProviderName] = "Active"
+	}
+
+	if err := local.Init(localVMStorage{}); err != nil {
+		providersState[local.ProviderName] = "Inactive - " + err.Error()
+	} else {
+		providersState[local.ProviderName] = "Active"
+	}
+
+	return providersState
 }

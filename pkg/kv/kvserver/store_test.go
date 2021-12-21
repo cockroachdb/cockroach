@@ -1274,7 +1274,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		},
 		&cfg)
 
-	baseID := uint32(keys.MinUserDescID)
+	baseID := keys.TestingUserDescID(0)
 	testData := []struct {
 		repl        *Replica
 		expMaxBytes int64
@@ -2139,17 +2139,13 @@ func TestStoreScanIntents(t *testing.T) {
 func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test relies on having a committed Txn record and open intents on
-	// the same Range. This only works with auto-gc turned off; alternatively
-	// the test could move to splitting its underlying Range.
-	defer setTxnAutoGC(false)()
+
 	var intercept atomic.Value
-	intercept.Store(true)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
-			if ok && intercept.Load().(bool) {
+			req, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+			if ok && intercept.Load().(uuid.UUID).Equal(req.IntentTxn.ID) {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 			return nil
@@ -2157,40 +2153,41 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	splitTestRange(store, keys.MustAddr(keys.ScratchRangeMin), t)
 
-	// Lay down 10 intents to scan over.
-	txn := newTransaction("test", roachpb.Key("foo"), 1, store.cfg.Clock)
-	keys := []roachpb.Key{}
-	for j := 0; j < 10; j++ {
-		key := roachpb.Key(fmt.Sprintf("key%02d", j))
-		keys = append(keys, key)
-		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
-		assignSeqNumsForReqs(txn, &args)
-		if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
-			t.Fatal(pErr)
+	ctx := context.Background()
+	var sl []roachpb.Key
+	require.NoError(t, store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		sl = nil                  // handle retries
+		intercept.Store(txn.ID()) // prevent async intent resolution for this txn
+		// Anchor the txn on TableDataMin-range. This prevents a fast-path in which
+		// the txn removes its intents atomically with the commit, which we want to
+		// avoid for the purpose of this test.
+		if err := txn.Put(ctx, keys.TableDataMin, "hello"); err != nil {
+			return err
 		}
-	}
+		for j := 0; j < 10; j++ {
+			var key roachpb.Key
+			key = append(key, keys.ScratchRangeMin...)
+			key = append(key, byte(j))
+			sl = append(sl, key)
+			if err := txn.Put(ctx, key, fmt.Sprintf("value%02d", j)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
 
-	// Now, commit txn without resolving intents. If we hadn't disabled auto-gc
-	// of Txn entries in this test, the Txn entry would be removed and later
-	// attempts to resolve the intents would fail.
-	etArgs, h := endTxnArgs(txn, true)
-	assignSeqNumsForReqs(txn, &etArgs)
-	if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	intercept.Store(false) // allow async intent resolution
+	intercept.Store(uuid.Nil) // allow async intent resolution
 
 	// Scan the range repeatedly until we've verified count.
-	sArgs := scanArgs(keys[0], keys[9].Next())
 	testutils.SucceedsSoon(t, func() error {
-		if reply, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, sArgs); pErr != nil {
-			return pErr.GoError()
-		} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 10 {
-			return errors.Errorf("could not read rows as expected")
+		var b kv.Batch
+		b.Scan(sl[0], sl[9].Next())
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
+		require.NoError(t, store.DB().Run(ctx, &b))
+		if exp, act := len(sl), len(b.Results[0].Rows); exp != act {
+			return errors.Errorf("expected %d keys, scanned %d", exp, act)
 		}
 		return nil
 	})

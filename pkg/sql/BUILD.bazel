@@ -328,6 +328,7 @@ go_library(
         "//pkg/sql/opt/exec",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/exec/explain",
+        "//pkg/sql/opt/indexrec",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",

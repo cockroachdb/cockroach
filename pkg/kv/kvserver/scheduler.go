@@ -137,7 +137,10 @@ type raftProcessor interface {
 	// Process a raft.Ready struct containing entries and messages that are
 	// ready to read, be saved to stable storage, committed, or sent to other
 	// peers.
-	processReady(context.Context, roachpb.RangeID)
+	//
+	// This method does not take a ctx; the implementation is expected to use a
+	// ctx annotated with the range information, according to RangeID.
+	processReady(roachpb.RangeID)
 	// Process all queued messages for the specified range.
 	// Return true if the range should be queued for ready processing.
 	processRequestQueue(context.Context, roachpb.RangeID) bool
@@ -299,7 +302,7 @@ func (s *raftScheduler) worker(ctx context.Context) {
 			}
 		}
 		if state.flags&stateRaftReady != 0 {
-			s.processor.processReady(ctx, id)
+			s.processor.processReady(id)
 		}
 
 		s.mu.Lock()

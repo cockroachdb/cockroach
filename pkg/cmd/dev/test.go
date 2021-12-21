@@ -28,6 +28,7 @@ const (
 
 	// General testing flags.
 	vFlag           = "verbose"
+	showLogsFlag    = "show-logs"
 	stressFlag      = "stress"
 	stressArgsFlag  = "stress-args"
 	raceFlag        = "race"
@@ -52,7 +53,17 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	// Attach flags for the test sub-command.
 	addCommonBuildFlags(testCmd)
 	addCommonTestFlags(testCmd)
-	testCmd.Flags().BoolP(vFlag, "v", false, "enable logging during test runs")
+
+	// Go's test runner runs tests in sub-processes; the stderr/stdout data from
+	// the test process is first swallowed by go test and then only
+	// conditionally released to the invoking user depending on flags passed to
+	// `go test`. The `-v` switch controls whether `go test` shows the test
+	// process' output (which test is being run, how long it took, etc.) always,
+	// or only on failures. `--show-logs` by contrast is a flag for the process
+	// under test, controlling whether the process-internal logs are made
+	// visible.
+	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output")
+	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
@@ -80,6 +91,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		stressArgs  = mustGetFlagString(cmd, stressArgsFlag)
 		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose     = mustGetFlagBool(cmd, vFlag)
+		showLogs    = mustGetFlagBool(cmd, showLogsFlag)
 	)
 	if rewriteArg != "" && rewrite == "" {
 		rewrite = "-rewrite"
@@ -215,13 +227,25 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if short {
 		args = append(args, "--test_arg", "-test.short")
 	}
-	if stress {
-		args = append(args, "--test_output", "streamed")
-	} else if verbose {
-		args = append(args, "--test_output", "all", "--test_arg", "-test.v")
-	} else {
-		args = append(args, "--test_output", "errors")
+	if verbose {
+		args = append(args, "--test_arg", "-test.v")
 	}
+	if showLogs {
+		args = append(args, "--test_arg", "-show-logs")
+	}
+
+	{ // Handle test output flags.
+		testOutputArgs := []string{"--test_output", "errors"}
+		if stress {
+			// Stream the output to continually observe the number of successful
+			// test iterations.
+			testOutputArgs = []string{"--test_output", "streamed"}
+		} else if verbose || showLogs {
+			testOutputArgs = []string{"--test_output", "all"}
+		}
+		args = append(args, testOutputArgs...)
+	}
+
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)

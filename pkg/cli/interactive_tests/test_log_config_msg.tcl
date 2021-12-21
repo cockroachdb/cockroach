@@ -9,30 +9,23 @@ start_server $argv
 
 start_test "Check that the cluster and node ID is reported at the start of the first log file."
 spawn tail -n 1000 -F logs/db/logs/cockroach.log
-eexpect "\\\[config\\\] * clusterID:"
-eexpect "\\\[config\\\] * nodeID:"
 eexpect "node startup completed"
+eexpect "start.go*clusterID:"
+eexpect "start.go*nodeID:"
 end_test
 
 stop_server $argv
 
 
-# Make a server with a tiny log buffer so as to force frequent log rotation.
-system "$argv start-single-node --insecure --pid-file=server_pid --background -s=path=logs/db --log-file-max-size=2k >>logs/expect-cmd.log 2>&1;
-        $argv sql --insecure -e 'select 1'"
-# Stop the server, which also flushes and closes the log files.
+# Restart the server, to check that the server identifiers are also reported after restarts.
+start_server $argv
 stop_server $argv
 
 start_test "Check that the cluster and node ID is reported at the start of new log files."
 # Verify that the string "restarted pre-existing node" can be found
-# somewhere. This ensures that if this string ever changes, the test
-# below won't report a false negative.
+# somewhere.
 system "grep -q 'restarted pre-existing node' logs/db/logs/*.log"
-# Verify that "cockroach.log" is not the file where the server reports
-# it just started.
-system "if grep -q 'restarted pre-existing node' logs/db/logs/cockroach.log; then false; fi"
 # Verify that the last log file does contain the cluster ID.
-system "grep -qF '\[config\]   clusterID:' logs/db/logs/cockroach.log"
-system "grep -qF '\[config\]   nodeID:' logs/db/logs/cockroach.log"
+system "grep -q 'start\.go.*clusterID:' logs/db/logs/cockroach.log"
+system "grep -q 'start\.go.*nodeID:' logs/db/logs/cockroach.log"
 end_test
-

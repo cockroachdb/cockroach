@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -334,10 +335,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	privs := n.dbDesc.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
-		n.dbDesc.GetID(),
-		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
-	)
 	var desc *tabledesc.Mutable
 	var affected map[descpb.ID]*tabledesc.Mutable
 	// creationTime is initialized to a zero value and populated at read time.
@@ -346,6 +343,14 @@ func (n *createTableNode) startExec(params runParams) error {
 	// TODO(ajwerner): remove the timestamp from newTableDesc and its friends,
 	// it's	currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetDefaultPrivilegeDescriptor(),
+		schema.GetDefaultPrivilegeDescriptor(),
+		n.dbDesc.GetID(),
+		params.SessionData().User(),
+		tree.Tables,
+		n.dbDesc.GetPrivileges(),
+	)
 	if n.n.As() {
 		asCols := planColumns(n.sourcePlan)
 		if !n.n.AsHasUserSpecifiedPrimaryKey() {
@@ -1112,7 +1117,7 @@ func getFinalSourceQuery(
 		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 			d, err := placeholder.Eval(evalCtx)
 			if err != nil {
-				panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 			}
 			d.Format(ctx)
 		}),
@@ -1278,7 +1283,7 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
+	indexEncodingVersion := descpb.LatestNonPrimaryIndexDescriptorVersion
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
 
 	var partitionAllBy *tree.PartitionBy

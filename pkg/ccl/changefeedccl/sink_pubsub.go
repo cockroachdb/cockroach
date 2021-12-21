@@ -11,14 +11,10 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"hash/crc32"
 	"net/url"
-	"path"
 
-	// gcp pubsub driver used by gocloud.dev/pubsub
-	_ "cloud.google.com/go/pubsub"
-	gcpClient "cloud.google.com/go/pubsub/apiv1"
+	"cloud.google.com/go/pubsub"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,36 +22,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"gocloud.dev/pubsub"
-	"gocloud.dev/pubsub/gcppubsub"
-	// in memory pubsub driver used by gocloud.dev/pubsub
-	_ "gocloud.dev/pubsub/mempubsub"
 	"golang.org/x/oauth2/google"
-	pbapi "google.golang.org/genproto/googleapis/pubsub/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/api/option"
 )
 
 const credentialsParam = "CREDENTIALS"
-const authParam = "AUTH"
-const authSpecified = "specified"
-const authImplicit = "implicit"
-const authDefault = "default"
 const gcpScheme = "gcppubsub"
-const memScheme = "mem"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
 const numOfWorkers = 128
 
 // isPubsubSInk returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
 	switch u.Scheme {
-	case gcpScheme, memScheme:
+	case gcpScheme:
 		return true
 	default:
 		return false
 	}
+}
+
+//  i dont really like having getTopicName in the interface but fullname test requires it
+type pubsubClient interface {
+	openTopics(string) error
+	closeTopics(string)
+	flushTopics()
+	sendMessage([]byte, descpb.ID, string) error
+	sendMessageToAllTopics([]byte, string) error
+	getTopicName(descpb.ID) string
 }
 
 // payload struct is sent to the sink
@@ -71,31 +65,23 @@ type pubsubMessage struct {
 	message payload
 	isFlush bool
 	topicID descpb.ID
-	logIt   func()
 }
 
-type gcpPubsubSink struct {
-	client     *gcpClient.PublisherClient
-	cleanup    func()
-	pubsubSink *pubsubSink
-	creds      *google.Credentials
-	conn       *grpc.ClientConn
-}
-
-type memPubsubSink struct {
-	pubsubSink *pubsubSink
-	isDialed   bool
+type gcpPubsubClient struct {
+	client    *pubsub.Client
+	topics    map[descpb.ID]*topicStruct
+	ctx       context.Context
+	projectID string
+	region    string
+	url       sinkURL
 }
 
 type topicStruct struct {
 	topicName   string
-	pathName    string
 	topicClient *pubsub.Topic
 }
 
 type pubsubSink struct {
-	topics     map[descpb.ID]*topicStruct
-	url        sinkURL
 	numWorkers int
 
 	workerCtx   context.Context
@@ -110,11 +96,23 @@ type pubsubSink struct {
 	// errChan is written to indicate an error while sending message.
 	errChan chan error
 
-	withTopicName bool
+	withTopicName string
+
+	client pubsubClient
 }
+
+// my idea is to force this to be an interface so it adheres to api, but not too sure since Sink is already an API
+//func getPubsubSinkObject(url sinkURL, withTopicName bool) pubsubSink {
+//	return &pubsubSinkObject{url: url, withTopicName: withTopicName}
+//}
 
 // getGCPCredentials returns gcp credentials parsed out from url
 func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, error) {
+	const authParam = "AUTH"
+	const authSpecified = "specified"
+	const authImplicit = "implicit"
+	const authDefault = "default"
+
 	var credsJSON []byte
 	var creds *google.Credentials
 	var err error
@@ -145,15 +143,11 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 	}
 }
 
-func createGCPURL(u sinkURL, topicName string) (string, error) {
-	// TODO: look into topic name validation https://cloud.google.com/pubsub/docs/admin#resource_names
-	return path.Join("projects", u.Host, "topics", topicName), nil
-}
-
 // MakePubsubSink returns the corresponding pubsub sink based on the url given
 func MakePubsubSink(
 	ctx context.Context, u *url.URL, opts map[string]string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
+	log.Info(ctx, "making pubsub")
 
 	pubsubURL := sinkURL{u, u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
@@ -177,71 +171,49 @@ func MakePubsubSink(
 	//}
 
 	ctx, cancel := context.WithCancel(ctx)
-	// currently just hardcoding numWorkers to 1024, it will be a config option later down the road
+	// currently just hardcoding numWorkers to 128, it will be a config option later down the road
 	p := &pubsubSink{
-		workerCtx: ctx, url: pubsubURL, numWorkers: numOfWorkers,
-		exitWorkers: cancel, topics: make(map[descpb.ID]*topicStruct),
+		workerCtx: ctx, numWorkers: numOfWorkers,
+		exitWorkers: cancel, withTopicName: pubsubTopicName,
 	}
-	//creates a topic for each target
-	for id, target := range targets {
-		var topicName string
-		if pubsubTopicName == "" {
-			topicName = target.StatementTimeName
-		} else {
-			topicName = pubsubTopicName
-		}
-		p.topics[id] = &topicStruct{topicName: topicName}
-	}
-	p.setupWorkers()
-
-	// set flag true if with topic name option is on
-	p.withTopicName = pubsubTopicName == ""
 
 	// creates custom pubsub object based on scheme
 	switch u.Scheme {
 	case gcpScheme:
-		creds, err := getGCPCredentials(ctx, p.url)
-		if err != nil {
-			_ = p.close()
-			return nil, err
-		}
-		g := &gcpPubsubSink{creds: creds, pubsubSink: p}
-		return g, nil
-	case memScheme:
-		m := &memPubsubSink{pubsubSink: p, isDialed: false}
-		return m, nil
+		const regionParam = "region"
+		projectID := pubsubURL.Host
+		region := pubsubURL.consumeParam(regionParam)
+		g := &gcpPubsubClient{topics: p.getTopicsMap(targets, pubsubTopicName),
+			ctx: ctx, projectID: projectID, region: region, url: pubsubURL}
+		p.client = g
+		return p, nil
 	default:
-		_ = p.close()
+		_ = p.Close()
 		return nil, errors.Errorf("unknown scheme: %s", u.Scheme)
 	}
 }
 
-// getWorkerCtx returns workerCtx
-func (p *pubsubSink) getWorkerCtx() context.Context {
-	return p.workerCtx
-}
-
-func timeIt(ctx context.Context, fmtOrStr string, args ...interface{}) func() {
-	start := timeutil.Now()
-	return func() {
-		log.Infof(ctx, "%s took duration=%s",
-			fmt.Sprintf(fmtOrStr, args...), timeutil.Since(start))
-	}
+func (p *pubsubSink) Dial() error {
+	p.setupWorkers()
+	err := p.client.openTopics(p.withTopicName)
+	return err
 }
 
 // EmitRow pushes a message to event channel where it is consumed by workers
-func (p *pubsubSink) emitRow(
+func (p *pubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	m := pubsubMessage{logIt: timeIt(ctx, "key:%s, mvcc:%s", string(key), mvcc),
+	m := pubsubMessage{
 		alloc: alloc, isFlush: false, topicID: topic.GetID(), message: payload{
 			Key:   key,
 			Value: value,
-			Topic: p.topics[topic.GetID()].topicName,
+			// we use getTopicName because of the option use full topic name which is not exposed in topic.GetName()
+			Topic: topic.GetName(),
 		}}
 
 	// calculate index by hashing key
@@ -264,7 +236,7 @@ func (p *pubsubSink) emitRow(
 }
 
 // EmitResolvedTimestamp sends resolved timestamp message
-func (p *pubsubSink) emitResolvedTimestamp(
+func (p *pubsubSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
@@ -272,22 +244,11 @@ func (p *pubsubSink) emitResolvedTimestamp(
 		return errors.Wrap(err, "encoding resolved timestamp")
 	}
 
-	for topicID := range p.topics {
-		err = p.sendMessage(payload, topicID, "")
-		if err != nil {
-			return errors.Wrap(err, "emitting resolved timestamp")
-		}
-
-		// if with topic name option is set then you only need to send out to one of the topics
-		if p.withTopicName {
-			break
-		}
-	}
-	return nil
+	return p.client.sendMessageToAllTopics(payload, p.withTopicName)
 }
 
 // Flush blocks until all messages in the event channels are sent
-func (p *pubsubSink) flush(ctx context.Context) error {
+func (p *pubsubSink) Flush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -312,13 +273,9 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 }
 
 // Close closes all the channels and shutdowns the topic
-func (p *pubsubSink) close() error {
+func (p *pubsubSink) Close() error {
 	var err error
-	for _, topic := range p.topics {
-		if topic.topicClient != nil {
-			err = topic.topicClient.Shutdown(p.getWorkerCtx())
-		}
-	}
+	p.client.closeTopics(p.withTopicName)
 	p.exitWorkers()
 	log.Info(p.workerCtx, "workers cancelled")
 	_ = p.workerGroup.Wait()
@@ -340,26 +297,27 @@ func (p *pubsubSink) close() error {
 	return nil
 }
 
-// sendMessage sends a message to the topic
-func (p *pubsubSink) sendMessage(m []byte, topicID descpb.ID, key string) error {
-	var c *gcpClient.PublisherClient
-	var err error
-	if p.topics[topicID].topicClient.As(&c) {
-		gcpMessage := &pbapi.PublishRequest{Topic: p.topics[topicID].pathName}
-		ts := timestamppb.Now()
-		gcpMessage.Messages = append(gcpMessage.Messages, &pbapi.PubsubMessage{Data: m, OrderingKey: key, PublishTime: ts})
-		_, err = c.Publish(p.workerCtx, gcpMessage)
-	} else {
-		// this is for mempubsub since As() on mempubsub returns an unexported topic type that we cannot interact with
-		// https://github.com/google/go-cloud/blob/master/pubsub/mempubsub/mem.go#L185-L188
-		err = p.topics[topicID].topicClient.Send(p.workerCtx, &pubsub.Message{
-			Body: m,
-		})
+func (p *gcpPubsubClient) getTopicClient(topicID descpb.ID) (*pubsub.Topic, error) {
+	if topicStruct, ok := p.topics[topicID]; ok {
+		return topicStruct.topicClient, nil
 	}
-	if err != nil {
-		return err
+	return nil, errors.New("topic client does not exist")
+}
+
+func (p *pubsubSink) getTopicsMap(targets jobspb.ChangefeedTargets, pubsubTopicName string) map[descpb.ID]*topicStruct {
+	topics := make(map[descpb.ID]*topicStruct)
+
+	//creates a topic for each target
+	for id, target := range targets {
+		var topicName string
+		if p.withTopicName != "" {
+			topicName = pubsubTopicName
+		} else {
+			topicName = target.StatementTimeName
+		}
+		topics[id] = &topicStruct{topicName: topicName}
 	}
-	return nil
+	return topics
 }
 
 // setupWorkers sets up the channels used by the sink and starts a goroutine for every worker
@@ -396,18 +354,16 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				// Signals a flush request, makes sure that the messages in eventsChans are finished sending
 				continue
 			}
-
 			m := msg.message
 			b, err := json.Marshal(m)
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
-			err = p.sendMessage(b, msg.topicID, string(msg.message.Key))
+			err = p.client.sendMessage(b, msg.topicID, string(msg.message.Key))
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
 			msg.alloc.Release(p.workerCtx)
-			msg.logIt()
 		}
 	}
 }
@@ -448,6 +404,10 @@ func (p *pubsubSink) flushWorkers() error {
 		case p.eventsChans[i] <- pubsubMessage{isFlush: true}:
 		}
 	}
+
+	// flush messages within topic
+	p.client.flushTopics()
+
 	select {
 	// signals sink that flush is complete
 	case <-p.workerCtx.Done():
@@ -458,155 +418,114 @@ func (p *pubsubSink) flushWorkers() error {
 }
 
 // Dial connects to gcp client and opens a topic
-func (p *gcpPubsubSink) Dial() error {
-	// Open a gRPC connection to the GCP Pub/Sub API.
-	conn, cleanup, err := gcppubsub.Dial(p.pubsubSink.getWorkerCtx(), p.creds.TokenSource)
-	if err != nil {
-		return errors.Wrap(err, "establishing gcp connection")
-	}
-	p.conn = conn
+func (p *gcpPubsubClient) openTopics(withTopicName string) error {
+	var client *pubsub.Client
+	var err error
 
-	p.cleanup = cleanup
-
-	// Construct a PublisherClient using the connection.
-	pubClient, err := gcppubsub.PublisherClient(p.pubsubSink.getWorkerCtx(), conn)
-	if err != nil {
-		return errors.Wrap(err, "creating publisher client")
-	}
-	p.client = pubClient
-
-	for _, topic := range p.pubsubSink.topics {
-		topicPath, err := createGCPURL(p.pubsubSink.url, topic.topicName)
-		if err != nil {
-			return errors.Wrap(err, "invalid topic name")
-		}
-		// TODO: implement topic config https://pkg.go.dev/cloud.google.com/go/pubsub#TopicConfig
-		topic.topicClient, err = gcppubsub.OpenTopicByPath(pubClient, topicPath, nil)
-		if err != nil {
-			return errors.Wrap(err, "opening topic")
-		}
-		topic.pathName = topicPath
-	}
-	return nil
-}
-
-// EmitRow calls the pubsubDesc EmitRow
-func (p *gcpPubsubSink) EmitRow(
-	ctx context.Context,
-	topic TopicDescriptor,
-	key, value []byte,
-	updated hlc.Timestamp,
-	_ hlc.Timestamp,
-	alloc kvevent.Alloc,
-) error {
-	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
+	creds, err := getGCPCredentials(p.ctx, p.url)
 	if err != nil {
 		return err
 	}
-	return nil
-}
+	// Sending messages to the same region ensures they are received in order
+	// even when multiple publishers are used.
+	// region can be changed from query parameter to config option
+	if p.region != "" {
+		client, err = pubsub.NewClient(p.ctx, p.projectID, option.WithCredentials(creds), option.WithEndpoint(p.region))
+	} else {
+		client, err = pubsub.NewClient(p.ctx, p.projectID, option.WithCredentials(creds), option.WithEndpoint(p.region))
+	}
 
-// EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
-func (p *gcpPubsubSink) EmitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
-) error {
-	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
-}
+	if err != nil {
+		return errors.Wrap(err, "opening client")
+	}
+	p.client = client
 
-// Flush calls the pubsubDesc Flush
-func (p *gcpPubsubSink) Flush(ctx context.Context) error {
-	return p.pubsubSink.flush(ctx)
-}
-
-// Close calls the pubsubDesc Close and closes the client and connection
-func (p *gcpPubsubSink) Close() error {
-	//	.Info(p.pubsubSink.workerCtx, "\x1b[33m closing pubsub \x1b[0m")
-	if p.pubsubSink != nil {
-		err := p.pubsubSink.close()
+	var withTopicNameClient *pubsub.Topic
+	if withTopicName != "" {
+		withTopicNameClient, err = p.openTopic(withTopicName)
 		if err != nil {
 			return err
 		}
 	}
-	if p.client != nil {
-		_ = p.client.Close()
-	}
-	if p.conn != nil {
-		_ = p.conn.Close() // nolint:grpcconnclose
-	}
-	if p.cleanup != nil {
-		p.cleanup()
-	}
-	return nil
-}
 
-// Dial returns nil
-func (p *memPubsubSink) Dial() error {
-	// returns nil so that canary sink can Dial and Close without erroring out
-	// when the sink is reopened again with the same url
-	return nil
-}
-
-// lazyDial connects mempubsub with url
-func (p *memPubsubSink) lazyDial() error {
-	var err error
-	for _, topic := range p.pubsubSink.topics {
-		topic.topicClient, err = pubsub.OpenTopic(p.pubsubSink.getWorkerCtx(), p.pubsubSink.url.String())
-		if err != nil {
-			return errors.Wrap(err, "opening topic")
+	for _, topic := range p.topics {
+		if withTopicName != "" {
+			topic.topicClient = withTopicNameClient
+		} else {
+			topic.topicClient, err = p.openTopic(topic.topicName)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	p.isDialed = true
 	return nil
 }
 
-// EmitRow calls the pubsubDesc EmitRow
-func (p *memPubsubSink) EmitRow(
-	ctx context.Context,
-	topic TopicDescriptor,
-	key, value []byte,
-	updated hlc.Timestamp,
-	_ hlc.Timestamp,
-	alloc kvevent.Alloc,
-) error {
-	if !p.isDialed {
-		err := p.lazyDial()
-		if err != nil {
-			return errors.Wrap(err, "lazy Dial")
+func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
+	t := p.client.Topic(topicName)
+	topicExist, err := t.Exists(p.ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening topic")
+	}
+	if !topicExist {
+		t, err = p.client.CreateTopic(p.ctx, topicName)
+	}
+	t.EnableMessageOrdering = true
+	return t, nil
+}
+
+func (p *gcpPubsubClient) closeTopics(withTopicName string) {
+	for _, topicStruct := range p.topics {
+		topicStruct.topicClient.Stop()
+		// only need to shutdown one topic if they are all sent to the same one
+		if withTopicName != "" {
+			break
 		}
 	}
-	err := p.pubsubSink.emitRow(ctx, topic, key, value, updated, alloc)
+}
+
+// sendMessage sends a message to the topic
+func (p *gcpPubsubClient) sendMessage(m []byte, topicID descpb.ID, key string) error {
+	t, err := p.getTopicClient(topicID)
 	if err != nil {
 		return err
 	}
+	res := t.Publish(p.ctx, &pubsub.Message{
+		Data:        m,
+		OrderingKey: key,
+	})
+
+	// The Get method blocks until a server-generated ID or
+	// an error is returned for the published message.
+	_, err = res.Get(p.ctx)
+
 	return nil
 }
 
-// EmitResolvedTimestamp calls the pubsubDesc EmitResolvedTimestamp
-func (p *memPubsubSink) EmitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
-) error {
-	if !p.isDialed {
-		err := p.lazyDial()
+func (p *gcpPubsubClient) sendMessageToAllTopics(m []byte, withTopicName string) error {
+	for topicID := range p.topics {
+		err := p.sendMessage(m, topicID, "")
 		if err != nil {
-			return errors.Wrap(err, "lazy Dial")
+			return errors.Wrap(err, "emitting resolved timestamp")
+		}
+
+		// if with topic name option is set then you only need to send out to one of the topics
+		if withTopicName != "" {
+			break
 		}
 	}
-	return p.pubsubSink.emitResolvedTimestamp(ctx, encoder, resolved)
+	return nil
 }
 
-// Flush calls the pubsubDesc Flush
-func (p *memPubsubSink) Flush(ctx context.Context) error {
-	if !p.isDialed {
-		err := p.lazyDial()
-		if err != nil {
-			return errors.Wrap(err, "lazy Dial")
-		}
+func (p *gcpPubsubClient) getTopicName(topicID descpb.ID) string {
+	if topicStruct, ok := p.topics[topicID]; ok {
+		return topicStruct.topicName
 	}
-	return p.pubsubSink.flush(ctx)
+	return ""
 }
 
-// Close calls the pubsubDesc Close
-func (p *memPubsubSink) Close() error {
-	err := p.pubsubSink.close()
-	return err
+func (p *gcpPubsubClient) flushTopics() {
+	for _, topicStruct := range p.topics {
+		topicStruct.topicClient.Flush()
+	}
 }

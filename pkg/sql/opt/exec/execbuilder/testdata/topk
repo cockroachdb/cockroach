@@ -22,6 +22,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (w) STORING (v);
 
 # No TopK when ordering by an index.
 query T
@@ -44,6 +48,10 @@ vectorized: true
       table: t@v
       spans: LIMITED SCAN
       limit: 10
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON t (v) STORING (w); DROP INDEX t@v;
 
 # TopK descending.
 query T
@@ -64,6 +72,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (w DESC) STORING (v);
 
 # TopK added in subquery.
 query T
@@ -88,6 +100,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (w);
 
 # TopK with filter.
 query T
@@ -113,6 +129,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (w) STORING (v);
 
 # When partial ordering is available, choose topk.
 query T
@@ -130,12 +150,14 @@ vectorized: true
 │
 └── • index join
     │ columns: (k, v, w)
+    │ ordering: +v
     │ estimated row count: 1,000 (missing stats)
     │ table: t@t_pkey
     │ key columns: k
     │
     └── • scan
           columns: (k, v)
+          ordering: +v
           estimated row count: 1,000 (missing stats)
           table: t@v
           spans: FULL SCAN

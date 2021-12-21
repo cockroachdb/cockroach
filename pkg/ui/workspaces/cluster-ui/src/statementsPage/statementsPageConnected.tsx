@@ -11,7 +11,6 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
@@ -32,7 +31,7 @@ import {
   selectStatementsLastError,
   selectTotalFingerprints,
   selectColumns,
-  selectDateRange,
+  selectTimeScale,
   selectSortSetting,
   selectFilters,
   selectSearch,
@@ -40,6 +39,7 @@ import {
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
+import { TimeScale } from "../timeScaleDropdown";
 
 export const ConnectedStatementsPage = withRouter(
   connect<
@@ -51,7 +51,7 @@ export const ConnectedStatementsPage = withRouter(
       apps: selectApps(state),
       columns: selectColumns(state),
       databases: selectDatabases(state),
-      dateRange: selectDateRange(state),
+      timeScale: selectTimeScale(state),
       filters: selectFilters(state),
       isTenant: selectIsTenant(state),
       lastReset: selectLastReset(state),
@@ -65,11 +65,10 @@ export const ConnectedStatementsPage = withRouter(
     (dispatch: Dispatch) => ({
       refreshStatements: (req?: StatementsRequest) =>
         dispatch(sqlStatsActions.refresh(req)),
-      onDateRangeChange: (start: Moment, end: Moment) => {
+      onTimeScaleChange: (ts: TimeScale) => {
         dispatch(
-          sqlStatsActions.updateDateRange({
-            start: start.unix(),
-            end: end.unix(),
+          sqlStatsActions.updateTimeScale({
+            ts: ts,
           }),
         );
       },

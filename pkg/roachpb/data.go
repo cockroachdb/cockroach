@@ -914,10 +914,20 @@ func (TransactionStatus) SafeValue() {}
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
 //
+// coordinatorNodeID is provided to track the SQL (or possibly KV) node
+// that created this transaction, in order to be used (as
+// of this writing) to enable observability on contention events
+// between different transactions.
+//
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
 func MakeTransaction(
-	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
+	name string,
+	baseKey Key,
+	userPriority UserPriority,
+	now hlc.Timestamp,
+	maxOffsetNs int64,
+	coordinatorNodeID int32,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -927,12 +937,13 @@ func MakeTransaction(
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:            baseKey,
-			ID:             u,
-			WriteTimestamp: now,
-			MinTimestamp:   now,
-			Priority:       MakePriority(userPriority),
-			Sequence:       0, // 1-indexed, incremented before each Request
+			Key:               baseKey,
+			ID:                u,
+			WriteTimestamp:    now,
+			MinTimestamp:      now,
+			Priority:          MakePriority(userPriority),
+			Sequence:          0, // 1-indexed, incremented before each Request
+			CoordinatorNodeID: coordinatorNodeID,
 		},
 		Name:                   name,
 		LastHeartbeat:          now,
@@ -1446,6 +1457,7 @@ func PrepareTransactionForRetry(
 			NormalUserPriority,
 			now.ToTimestamp(),
 			clock.MaxOffset().Nanoseconds(),
+			txn.CoordinatorNodeID,
 		)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
@@ -1494,33 +1506,20 @@ func PrepareTransactionForRetry(
 	return txn
 }
 
-// PrepareTransactionForRefresh returns whether the transaction can be refreshed
-// to the specified timestamp to avoid a client-side transaction restart. If
-// true, returns a cloned, updated Transaction object with the provisional
-// commit timestamp and read timestamp set appropriately.
-func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
-	if txn.CommitTimestampFixed {
-		return false, nil
-	}
-	newTxn := txn.Clone()
-	newTxn.Refresh(timestamp)
-	return true, newTxn
-}
-
-// CanTransactionRefresh returns whether the transaction specified in the
-// supplied error can be retried at a refreshed timestamp to avoid a client-side
-// transaction restart. If true, returns a cloned, updated Transaction object
-// with the provisional commit timestamp and read timestamp set appropriately.
-func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
+// TransactionRefreshTimestamp returns whether the supplied error is a retry
+// error that can be discarded if the transaction in the error is refreshed. If
+// true, the function returns the timestamp that the Transaction object should
+// be refreshed at in order to discard the error and avoid a restart.
+func TransactionRefreshTimestamp(pErr *Error) (bool, hlc.Timestamp) {
 	txn := pErr.GetTxn()
 	if txn == nil {
-		return false, nil
+		return false, hlc.Timestamp{}
 	}
 	timestamp := txn.WriteTimestamp
 	switch err := pErr.GetDetail().(type) {
 	case *TransactionRetryError:
 		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
-			return false, nil
+			return false, hlc.Timestamp{}
 		}
 	case *WriteTooOldError:
 		// TODO(andrei): Chances of success for on write-too-old conditions might be
@@ -1532,9 +1531,9 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 	case *ReadWithinUncertaintyIntervalError:
 		timestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(err))
 	default:
-		return false, nil
+		return false, hlc.Timestamp{}
 	}
-	return PrepareTransactionForRefresh(txn, timestamp)
+	return true, timestamp
 }
 
 func readWithinUncertaintyIntervalRetryTimestamp(

@@ -529,7 +529,7 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	key := keys.UserTableDataMin
+	key := keys.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
@@ -576,6 +576,8 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "https://github.com/cockroachdb/cockroach/issues/70113")
 
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyRegistry.CloseAllStickyInMemEngines()
@@ -633,7 +635,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	key := keys.UserTableDataMin
+	key := keys.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Targets(2, 4)...)
 	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
@@ -666,6 +668,8 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			if err == nil {
 				wait(timetoDie.Nanoseconds())
 			}
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("expected server 2 to be dead, instead err=%v, dead=%v", err, dead)
 		}
 		return nil
@@ -809,7 +813,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = 'false'`)
 	require.NoError(t, err)
 
-	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.UserTableDataMin)
+	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.TestingUserTableDataMin())
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
 	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
 
@@ -963,17 +967,17 @@ func TestAlterRangeRelocate(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.UserTableDataMin)
+	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.TestingUserTableDataMin())
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
 	// We start with having the range under test on (1,2,3).
 	db := tc.ServerConn(0)
 	// Move 2 -> 4.
-	_, err := db.Exec("ALTER RANGE " + rhsDesc.RangeID.String() + " RELOCATE FROM 2 TO 4")
+	_, err := db.Exec("ALTER RANGE $1 RELOCATE FROM $2 TO $3", rhsDesc.RangeID, 2, 4)
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 2, 3)...))
 	// Move lease 1 -> 4.
-	_, err = db.Exec("ALTER RANGE " + rhsDesc.RangeID.String() + " RELOCATE LEASE TO 4")
+	_, err = db.Exec("ALTER RANGE $1 RELOCATE LEASE TO $2", rhsDesc.RangeID, 4)
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		repl := tc.GetFirstStoreFromServer(t, 3).LookupReplica(rhsDesc.StartKey)
@@ -988,7 +992,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	})
 
 	// Move lease 3 -> 5.
-	_, err = db.Exec("ALTER RANGE RELOCATE FROM 3 TO 5 FOR (SELECT range_id from crdb_internal.ranges where range_id = " + rhsDesc.RangeID.String() + ")")
+	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges where range_id = $3)", 3, 5, rhsDesc.RangeID)
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
 }

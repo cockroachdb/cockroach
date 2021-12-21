@@ -10,7 +10,6 @@ package changefeedbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +26,7 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 	// saved in it), but there are subtle differences in the way many of them
 	// work and this will be under-tested, so disallow them all until demand
 	// dictates.
-	if tableDesc.GetID() < keys.MinUserDescID {
+	if catalog.IsSystemDescriptor(tableDesc) {
 		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
 	}
 	if tableDesc.IsView() {
@@ -54,4 +53,17 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 	}
 
 	return nil
+}
+
+// WarningsForTable returns any known nonfatal issues with running a changefeed on this kind of table.
+func WarningsForTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor) []error {
+	warnings := []error{}
+	for _, col := range tableDesc.AccessibleColumns() {
+		if col.IsVirtual() {
+			warnings = append(warnings,
+				errors.Errorf("Changefeeds will emit null values for virtual column %s in table %s", col.ColName(), tableDesc.GetName()),
+			)
+		}
+	}
+	return warnings
 }

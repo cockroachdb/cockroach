@@ -265,6 +265,17 @@ ORDER BY object_type, object_name`, [][]string{
 			t.Run(dir.Name(), restorePublicSchemaMixedVersion(exportDir))
 		}
 	})
+
+	t.Run("missing_public_schema_namespace_entry", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(publicSchemaDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreSyntheticPublicSchemaNamespaceEntry(exportDir))
+		}
+	})
 }
 
 func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
@@ -876,5 +887,36 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 		require.Equal(t, publicSchemaID, keys.PublicSchemaID)
 
 		sqlDB.CheckQueryResults(t, `SELECT x FROM test.public.t`, [][]string{{"3"}, {"4"}})
+	}
+}
+
+func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, _, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+						Server: &server.TestingKnobs{
+							DisableAutomaticVersionUpgrade: 1,
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
+						},
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+
+		var dbID int
+		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'd'`)
+		row.Scan(&dbID)
+
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = 'public' AND "parentID"=%d`, dbID), [][]string{{"29"}})
 	}
 }

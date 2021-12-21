@@ -18,32 +18,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
-type schemaChangerCCLCallbacks struct {
+type partitioner struct {
 	settings    *cluster.Settings
 	evalContext *tree.EvalContext
 }
 
-func (s *schemaChangerCCLCallbacks) AddPartitioning(
+// AddPartitioning implements the scmutationexec.Partitioner interface.
+func (s *partitioner) AddPartitioning(
 	ctx context.Context,
-	tableDesc *tabledesc.Mutable,
-	indexDesc *descpb.IndexDescriptor,
+	tbl *tabledesc.Mutable,
+	index catalog.Index,
 	partitionFields []string,
 	listPartition []*scpb.ListPartition,
 	rangePartition []*scpb.RangePartitions,
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
 ) (err error) {
-	if s.settings == nil ||
-		s.evalContext == nil {
-		panic("unimplemented when settings or evalContext are omitted")
-	}
 	// Deserialize back into tree based types
 	partitionBy := &tree.PartitionBy{}
 	partitionBy.List = make([]tree.ListPartition, 0, len(listPartition))
@@ -79,19 +76,28 @@ func (s *schemaChangerCCLCallbacks) AddPartitioning(
 	for _, field := range partitionFields {
 		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
 	}
-	// Create the paritioning
-	newImplicitCols, newPartitioning, err := CreatePartitioningCCL(ctx, s.settings, s.evalContext, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
+	newImplicitCols, newPartitioning, err := CreatePartitioningCCL(
+		ctx,
+		s.settings,
+		s.evalContext,
+		tbl,
+		index.IndexDescDeepCopy(),
+		partitionBy,
+		allowedNewColumnNames,
+		allowImplicitPartitioning,
+	)
 	if err != nil {
 		return err
 	}
-	tabledesc.UpdateIndexPartitioning(indexDesc, false, newImplicitCols, newPartitioning)
+	tabledesc.UpdateIndexPartitioning(index.IndexDesc(), false, newImplicitCols, newPartitioning)
 	return nil
 }
 
-// NewCCLCallbacks makes callbacks needed for the new schema
-// changer.
-func NewCCLCallbacks(settings *cluster.Settings, evalContext *tree.EvalContext) scexec.Partitioner {
-	return &schemaChangerCCLCallbacks{
+// NewPartitioner returns an implementation of scmutationexec.Partitioner.
+func NewPartitioner(
+	settings *cluster.Settings, evalContext *tree.EvalContext,
+) scmutationexec.Partitioner {
+	return &partitioner{
 		settings:    settings,
 		evalContext: evalContext,
 	}

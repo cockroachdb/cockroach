@@ -1807,3 +1807,19 @@ at or near "[": syntax error
 DETAIL: source SQL:
 SELECT (0) FROM y[array[]]
                  ^
+
+parse
+SELECT ''::void
+----
+SELECT ''::VOID -- normalized!
+SELECT (('')::VOID) -- fully parenthesized
+SELECT '_'::VOID -- literals removed
+SELECT ''::VOID -- identifiers removed
+
+error
+SELECT ''::void[]
+----
+at or near "EOF": syntax error: type void[] does not exist
+DETAIL: source SQL:
+SELECT ''::void[]
+                 ^

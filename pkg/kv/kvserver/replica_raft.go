@@ -452,7 +452,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// other replica is not quiesced, so we don't need to wake the leader.
 		// Note that we avoid campaigning when receiving raft messages, because
 		// we expect the originator to campaign instead.
-		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
+		r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		if req.Message.Type == raftpb.MsgSnap {
 			// Occasionally a snapshot message may arrive under an outdated term,
@@ -480,17 +480,6 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		}
 		return false /* unquiesceAndWakeLeader */, err
 	})
-}
-
-// raftSchedulerCtx annotates a given Raft scheduler context with information
-// about the replica. The method may return a cached instance of this context.
-func (r *Replica) raftSchedulerCtx(schedulerCtx context.Context) context.Context {
-	if v := r.schedulerCtx.Load(); v != nil {
-		return v.(context.Context)
-	}
-	schedulerCtx = r.AnnotateCtx(schedulerCtx)
-	r.schedulerCtx.Store(schedulerCtx)
-	return schedulerCtx
 }
 
 type handleSnapshotStats struct {
@@ -521,8 +510,8 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
-// handleRaftReadyLocked is the same as handleRaftReady but requires that the
-// replica's raftMu be held.
+// handleRaftReadyRaftMuLocked is the same as handleRaftReady but requires that
+// the replica's raftMu be held.
 //
 // The returned string is nonzero whenever an error is returned to give a
 // non-sensitive cue as to what happened.
@@ -1018,11 +1007,13 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(ctx, livenessMap) {
+
+	now := r.store.Clock().NowAsClockTimestamp()
+	if r.maybeQuiesceLocked(ctx, now, livenessMap) {
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update
@@ -1555,19 +1546,18 @@ func (r *Replica) withRaftGroupLocked(
 		// stricter about validating incoming Quiesce requests) but it's good
 		// defense-in-depth.
 		//
-		// Note that unquiesceAndWakeLeaderLocked won't manage to wake up the
-		// leader since it's unknown to this replica, and at the time of writing
-		// the heuristics for campaigning are defensive (won't campaign if there
-		// is a live leaseholder). But if we are trying to unquiesce because
-		// this follower was asked to propose something, then this means that a
-		// request is going to have to wait until the leader next contacts us,
-		// or, in the worst case, an election timeout. This is not ideal - if a
-		// node holds a live lease, we should direct the client to it
-		// immediately.
+		// Note that maybeUnquiesceAndWakeLeaderLocked won't manage to wake up the
+		// leader since it's unknown to this replica, and at the time of writing the
+		// heuristics for campaigning are defensive (won't campaign if there is a
+		// live leaseholder). But if we are trying to unquiesce because this
+		// follower was asked to propose something, then this means that a request
+		// is going to have to wait until the leader next contacts us, or, in the
+		// worst case, an election timeout. This is not ideal - if a node holds a
+		// live lease, we should direct the client to it immediately.
 		unquiesce = true
 	}
 	if unquiesce {
-		r.unquiesceAndWakeLeaderLocked()
+		r.maybeUnquiesceAndWakeLeaderLocked()
 	}
 	return err
 }

@@ -25,11 +25,14 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
-import { SortSetting } from "src/views/shared/components/sortabletable";
-import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
 import { Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
-import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
+import {
+  ColumnsConfig,
+  Table,
+  SortSetting,
+  util,
+} from "@cockroachlabs/cluster-ui";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
@@ -507,7 +510,7 @@ export const liveNodesTableDataSelector = createSelector(
                 nodeId: ns.desc.node_id,
                 nodeName: ns.desc.address.address_field,
                 uptime: moment
-                  .duration(LongToMoment(ns.started_at).diff(moment()))
+                  .duration(util.LongToMoment(ns.started_at).diff(moment()))
                   .humanize(),
                 replicas: ns.metrics[MetricConstants.replicas],
                 usedCapacity,
@@ -592,7 +595,7 @@ export const decommissionedNodesTableDataSelector = createSelector(
         return undefined;
       }
       const deadTime = liveness.expiration.wall_time;
-      return LongToMoment(deadTime);
+      return util.LongToMoment(deadTime);
     };
 
     // DecommissionedNodeList displays 5 most recent nodes.

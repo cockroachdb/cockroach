@@ -10,6 +10,13 @@
 
 package rangefeed
 
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
+
 // NewDBAdapter allows tests to construct a dbAdapter.
 var NewDBAdapter = newDBAdapter
 
@@ -19,7 +26,19 @@ var NewFactoryWithDB = newFactory
 // KVDB forwards the definition of kvDB to tests.
 type KVDB = kvDB
 
-// SetTargetScanBytes is exposed for testing.
-func (dbc *dbAdapter) SetTargetScanBytes(limit int64) {
-	dbc.targetScanBytes = limit
+// ScanConfig forwards the definition of scanConfig to tests.
+type ScanConfig = scanConfig
+
+// ScanWithOptions is exposed for testing in order to call Scan with scanConfig
+// extracted from the specified list of options.
+func (dbc *dbAdapter) ScanWithOptions(
+	ctx context.Context,
+	spans []roachpb.Span,
+	asOf hlc.Timestamp,
+	rowFn func(value roachpb.KeyValue),
+	opts ...Option,
+) error {
+	var c config
+	initConfig(&c, opts)
+	return dbc.Scan(ctx, spans, asOf, rowFn, c.scanConfig)
 }

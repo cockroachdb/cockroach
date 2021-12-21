@@ -38,7 +38,7 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
-import { MilliToSeconds, NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import Long from "long";
@@ -148,7 +148,7 @@ export class LineGraphOld extends React.Component<
     let result: moment.Moment;
     if (datapoints.length) {
       const series: any = datapoints.map((d: any) =>
-        NanoToMilli(d.timestamp_nanos.toNumber()),
+        util.NanoToMilli(d.timestamp_nanos.toNumber()),
       );
 
       const right = d3.bisectRight(series, t);
@@ -356,7 +356,7 @@ function touPlot(
     });
   });
 
-  return [xValuesWithGaps.map(ts => NanoToMilli(ts)), ...yValuesComplete];
+  return [xValuesWithGaps.map(ts => util.NanoToMilli(ts)), ...yValuesComplete];
 }
 
 // TODO (koorosh): the same logic can be achieved with uPlot's series.gaps API starting from 1.6.15 version.
@@ -452,8 +452,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // automatically when a narrower time frame is selected.
   setNewTimeRange(startMillis: number, endMillis: number) {
     if (startMillis === endMillis) return;
-    const start = MilliToSeconds(startMillis);
-    const end = MilliToSeconds(endMillis);
+    const start = util.MilliToSeconds(startMillis);
+    const end = util.MilliToSeconds(endMillis);
     const newTimeWindow: TimeWindow = {
       start: moment.unix(start),
       end: moment.unix(end),

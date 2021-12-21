@@ -322,7 +322,7 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset)
+	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset, 0)
 	return &txn
 }
 
@@ -2639,7 +2639,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	cmd, _ := batcheval.LookupCommand(roachpb.EndTxn)
 	cmd.DeclareKeys(
 		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("e")},
-		roachpb.Header{},
+		&roachpb.Header{},
 		&roachpb.EndTxnRequest{
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
@@ -4549,8 +4549,8 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	// Start a transaction early to get a low timestamp.
-	txn := roachpb.MakeTransaction(
-		"test", keyA, roachpb.NormalUserPriority, tc.Clock().Now(), 0 /* offset */)
+	txn := roachpb.MakeTransaction("test", keyA, roachpb.NormalUserPriority,
+		tc.Clock().Now(), 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */)
 
 	// Write a value outside of the txn to cause a WriteTooOldError later.
 	put := putArgs(keyA, []byte("val1"))
@@ -6116,7 +6116,6 @@ func TestRangeStatsComputation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
-	ctx := context.Background()
 
 	baseStats := tc.repl.GetMVCCStats()
 
@@ -6162,9 +6161,9 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:            101,
+		LiveBytes:            103,
 		KeyBytes:             28,
-		ValBytes:             73,
+		ValBytes:             75,
 		IntentBytes:          23,
 		LiveCount:            2,
 		KeyCount:             2,
@@ -6172,10 +6171,6 @@ func TestRangeStatsComputation(t *testing.T) {
 		IntentCount:          1,
 		SeparatedIntentCount: 1,
 	})
-	if !tc.engine.OverrideTxnDidNotUpdateMetaToFalse(ctx) {
-		expMS.LiveBytes += 2
-		expMS.ValBytes += 2
-	}
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
@@ -8291,7 +8286,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(tc.repl.Desc(), roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
+			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {
@@ -10026,7 +10021,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 
 	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
 		txn := roachpb.MakeTransaction(
-			"test", roachpb.Key(key), roachpb.NormalUserPriority, ts, 0,
+			"test", roachpb.Key(key), roachpb.NormalUserPriority, ts, 0, 0,
 		)
 		return &txn
 	}
@@ -10556,7 +10551,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 
 	// Start a transaction and assign its ReadTimestamp.
 	ts1 := tc.Clock().Now()
-	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0)
+	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0, 0)
 
 	// Write a value outside the transaction.
 	tc.manualClock.Increment(10)

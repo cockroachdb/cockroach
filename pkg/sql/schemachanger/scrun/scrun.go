@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
@@ -131,7 +132,7 @@ func executeStage(
 	deps scexec.Dependencies,
 	p scplan.Plan,
 	stageIdx int,
-	stage scplan.Stage,
+	stage scstage.Stage,
 ) error {
 	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {

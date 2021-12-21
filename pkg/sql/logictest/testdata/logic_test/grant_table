@@ -541,6 +541,9 @@ test           pg_catalog          varchar                                root  
 test           pg_catalog          varchar[]                              admin    ALL
 test           pg_catalog          varchar[]                              public   USAGE
 test           pg_catalog          varchar[]                              root     ALL
+test           pg_catalog          void                                   admin    ALL
+test           pg_catalog          void                                   public   USAGE
+test           pg_catalog          void                                   root     ALL
 test           pg_extension        NULL                                   admin    ALL
 test           pg_extension        NULL                                   root     ALL
 test           pg_extension        geography_columns                      public   SELECT
@@ -636,6 +639,7 @@ test           pg_catalog          varbit          root     ALL
 test           pg_catalog          varbit[]        root     ALL
 test           pg_catalog          varchar         root     ALL
 test           pg_catalog          varchar[]       root     ALL
+test           pg_catalog          void            root     ALL
 test           pg_extension        NULL            root     ALL
 test           public              NULL            root     ALL
 
@@ -1101,6 +1105,7 @@ a              pg_catalog          varbit                           root     ALL
 a              pg_catalog          varbit[]                         root     ALL
 a              pg_catalog          varchar                          root     ALL
 a              pg_catalog          varchar[]                        root     ALL
+a              pg_catalog          void                             root     ALL
 a              pg_extension        NULL                             root     ALL
 a              public              NULL                             root     ALL
 defaultdb      NULL                NULL                             root     ALL
@@ -1184,6 +1189,7 @@ defaultdb      pg_catalog          varbit                           root     ALL
 defaultdb      pg_catalog          varbit[]                         root     ALL
 defaultdb      pg_catalog          varchar                          root     ALL
 defaultdb      pg_catalog          varchar[]                        root     ALL
+defaultdb      pg_catalog          void                             root     ALL
 defaultdb      pg_extension        NULL                             root     ALL
 defaultdb      public              NULL                             root     ALL
 postgres       NULL                NULL                             root     ALL
@@ -1267,6 +1273,7 @@ postgres       pg_catalog          varbit                           root     ALL
 postgres       pg_catalog          varbit[]                         root     ALL
 postgres       pg_catalog          varchar                          root     ALL
 postgres       pg_catalog          varchar[]                        root     ALL
+postgres       pg_catalog          void                             root     ALL
 postgres       pg_extension        NULL                             root     ALL
 postgres       public              NULL                             root     ALL
 system         NULL                NULL                             root     GRANT
@@ -1354,6 +1361,7 @@ system         pg_catalog          varbit                           root     ALL
 system         pg_catalog          varbit[]                         root     ALL
 system         pg_catalog          varchar                          root     ALL
 system         pg_catalog          varchar[]                        root     ALL
+system         pg_catalog          void                             root     ALL
 system         pg_extension        NULL                             root     GRANT
 system         pg_extension        NULL                             root     USAGE
 system         public              NULL                             root     GRANT
@@ -1598,6 +1606,7 @@ test           pg_catalog          varbit                           root     ALL
 test           pg_catalog          varbit[]                         root     ALL
 test           pg_catalog          varchar                          root     ALL
 test           pg_catalog          varchar[]                        root     ALL
+test           pg_catalog          void                             root     ALL
 test           pg_extension        NULL                             root     ALL
 test           public              NULL                             root     ALL
 
@@ -2046,3 +2055,8 @@ GRANT SELECT ON system.lease TO testuser
 
 statement error pq: cannot REVOKE on system object
 REVOKE SELECT ON system.lease FROM testuser
+
+# Postgres does a no-op here, but since the RULE privilege is very legacy,
+# we error explicitly instead of getting 100% compatibility.
+statement error invalid privilege type RULE for table
+GRANT RULE ON t TO testuser

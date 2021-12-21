@@ -54,8 +54,8 @@ func TestAllocateIDs(t *testing.T) {
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
-		ParentID: keys.MinUserDescID,
-		ID:       keys.MinUserDescID + 1,
+		ParentID: descpb.ID(keys.TestingUserDescID(0)),
+		ID:       descpb.ID(keys.TestingUserDescID(1)),
 		Name:     "foo",
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", Type: types.Int},
@@ -66,7 +66,7 @@ func TestAllocateIDs(t *testing.T) {
 			idx := makeIndexDescriptor("c", []string{"a", "b"})
 			idx.StoreColumnNames = []string{"c"}
 			idx.EncodingType = descpb.PrimaryIndexEncoding
-			idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+			idx.Version = descpb.LatestPrimaryIndexDescriptorVersion
 			return idx
 		}(),
 		Indexes: []descpb.IndexDescriptor{
@@ -86,8 +86,8 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := NewBuilder(&descpb.TableDescriptor{
-		ParentID: keys.MinUserDescID,
-		ID:       keys.MinUserDescID + 1,
+		ParentID: descpb.ID(keys.TestingUserDescID(0)),
+		ID:       descpb.ID(keys.TestingUserDescID(1)),
 		Version:  1,
 		Name:     "foo",
 		Columns: []descpb.ColumnDescriptor{
@@ -111,20 +111,20 @@ func TestAllocateIDs(t *testing.T) {
 			StoreColumnIDs:   descpb.ColumnIDs{3},
 			StoreColumnNames: []string{"c"},
 			EncodingType:     descpb.PrimaryIndexEncoding,
-			Version:          descpb.PrimaryIndexWithStoredColumnsVersion},
+			Version:          descpb.LatestPrimaryIndexDescriptorVersion},
 		Indexes: []descpb.IndexDescriptor{
 			{ID: 2, Name: "d", KeyColumnIDs: []descpb.ColumnID{2, 1}, KeyColumnNames: []string{"b", "a"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC,
 					descpb.IndexDescriptor_ASC},
-				Version: descpb.StrictIndexColumnIDGuaranteesVersion},
+				Version: descpb.LatestNonPrimaryIndexDescriptorVersion},
 			{ID: 3, Name: "e", KeyColumnIDs: []descpb.ColumnID{2}, KeyColumnNames: []string{"b"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion},
+				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion},
 			{ID: 4, Name: "f", KeyColumnIDs: []descpb.ColumnID{3}, KeyColumnNames: []string{"c"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion},
+				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion},
 		},
 		Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		NextColumnID:   4,
@@ -371,7 +371,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
-					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					Version:             descpb.LatestPrimaryIndexDescriptorVersion,
 				},
 				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
@@ -526,7 +526,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
-					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					Version:             descpb.LatestPrimaryIndexDescriptorVersion,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{
@@ -536,7 +536,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnNames:      []string{"foo"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 						EncodingType:        descpb.SecondaryIndexEncoding,
-						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+						Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
 					},
 					{
 						ID:                  descpb.IndexID(3),
@@ -545,7 +545,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						KeyColumnNames:      []string{"bar"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 						EncodingType:        descpb.SecondaryIndexEncoding,
-						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+						Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
 					},
 				},
 				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),

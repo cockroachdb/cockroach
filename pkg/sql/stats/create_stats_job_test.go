@@ -13,16 +13,19 @@ package stats_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -56,14 +59,16 @@ func TestCreateStatsControlJob(t *testing.T) {
 	var allowRequest chan struct{}
 
 	var serverArgs base.TestServerArgs
+	idChecker := atomic.Value{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+		TestingRequestFilter: createStatsRequestFilter(&allowRequest, &idChecker),
 	}
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, params)
+	idChecker.Store(tc.Servers[0].SystemIDChecker())
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -131,15 +136,17 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	var allowRequest chan struct{}
 
 	var serverArgs base.TestServerArgs
+	idChecker := atomic.Value{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+		TestingRequestFilter: createStatsRequestFilter(&allowRequest, &idChecker),
 	}
 
 	ctx := context.Background()
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
+	idChecker.Store(tc.Servers[0].SystemIDChecker())
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -301,9 +308,10 @@ func TestCreateStatsProgress(t *testing.T) {
 
 	var allowRequest chan struct{}
 	var serverArgs base.TestServerArgs
+	idChecker := atomic.Value{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+		TestingRequestFilter: createStatsRequestFilter(&allowRequest, &idChecker),
 	}
 	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
 		// Force the stats job to iterate through the input rows instead of reading
@@ -314,6 +322,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	ctx := context.Background()
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
+	idChecker.Store(tc.Servers[0].SystemIDChecker())
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -476,13 +485,21 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 // Create a blocking request filter for the actions related
 // to CREATE STATISTICS, i.e. Scanning a user table. See discussion
 // on jobutils.RunJob for where this might be useful.
-func createStatsRequestFilter(allowProgressIota *chan struct{}) kvserverbase.ReplicaRequestFilter {
+func createStatsRequestFilter(
+	allowProgressIota *chan struct{}, idChecker *atomic.Value,
+) kvserverbase.ReplicaRequestFilter {
 	return func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		if req, ok := ba.GetArg(roachpb.Scan); ok {
 			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
 			// Ensure that the tableID is within the expected range for a table,
 			// but is not a system table.
-			if tableID > 0 && tableID < 100 && !descpb.IsReservedID(descpb.ID(tableID)) {
+
+			var c keys.SystemIDChecker
+			if idChecker.Load() != nil {
+				c = idChecker.Load().(keys.SystemIDChecker)
+			}
+			if tableID > 0 && tableID < 100 && c != nil &&
+				!catalog.IsSystemID(c, descpb.ID(uint32(tableID))) {
 				// Read from the channel twice to allow jobutils.RunJob to complete
 				// even though there is only one ScanRequest.
 				<-*allowProgressIota

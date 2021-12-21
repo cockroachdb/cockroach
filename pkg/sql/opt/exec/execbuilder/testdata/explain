@@ -170,11 +170,88 @@ vectorized: true
 • split
 │ columns: (key, pretty, split_enforced_until)
 │ estimated row count: 10 (missing stats)
+│ index: foo@foo_pkey
+│ expiry: CAST(NULL AS STRING)
 │
 └── • values
       columns: (column1)
       size: 1 column, 1 row
       row 0, expr 0: 42
+
+query T
+EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42) WITH EXPIRATION '2200-01-01 00:00:00.0'
+----
+distribution: local
+vectorized: true
+·
+• split
+│ columns: (key, pretty, split_enforced_until)
+│ estimated row count: 10 (missing stats)
+│ index: foo@foo_pkey
+│ expiry: '2200-01-01 00:00:00.0'
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 1 row
+      row 0, expr 0: 42
+
+query T
+EXPLAIN ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│ index: foo@foo_pkey
+│
+└── • values
+      size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│ columns: (key, pretty)
+│ estimated row count: 10 (missing stats)
+│ index: foo@foo_pkey
+│
+└── • values
+      columns: (column1, column2)
+      size: 2 columns, 1 row
+      row 0, expr 0: ARRAY[1]
+      row 0, expr 1: 1
+
+query T
+EXPLAIN ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│ index: foo@a
+│
+└── • values
+      size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
+----
+distribution: local
+vectorized: true
+·
+• relocate table
+│ columns: (key, pretty)
+│ estimated row count: 10 (missing stats)
+│ index: foo@a
+│
+└── • values
+      columns: (column1, column2)
+      size: 2 columns, 1 row
+      row 0, expr 0: ARRAY[1]
+      row 0, expr 1: 1
 
 query T
 EXPLAIN DROP TABLE foo
@@ -183,6 +260,87 @@ distribution: local
 vectorized: true
 ·
 • drop table
+
+query T
+EXPLAIN ALTER RANGE 20+2 RELOCATE FROM 30+3 TO 40+4
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ replicas: VOTERS
+│ to: 44
+│ from: 33
+│
+└── • values
+      size: 1 column, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER RANGE 20+2 RELOCATE LEASE TO 40+4
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ columns: (range_id, pretty, result)
+│ estimated row count: 10 (missing stats)
+│ replicas: LEASE
+│ to: 44
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 1 row
+      row 0, expr 0: 22
+
+query T
+EXPLAIN (VERBOSE) ALTER RANGE 20+2 RELOCATE FROM 30+3 TO 40+4
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ columns: (range_id, pretty, result)
+│ estimated row count: 10 (missing stats)
+│ replicas: VOTERS
+│ to: 44
+│ from: 33
+│
+└── • values
+      columns: (column1)
+      size: 1 column, 1 row
+      row 0, expr 0: 22
+
+query T
+EXPLAIN ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ replicas: VOTERS
+│ to: 44
+│ from: 33
+│
+└── • values
+      size: 1 column, 1 row
+
+query T
+EXPLAIN (VERBOSE) ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
+----
+distribution: local
+vectorized: true
+·
+• relocate range
+│ columns: (range_id, pretty, result)
+│ estimated row count: 10 (missing stats)
+│ replicas: VOTERS
+│ to: 44
+│ from: 33
+│
+└── • values
+      columns: ("?column?")
+      size: 1 column, 1 row
+      row 0, expr 0: 22
 
 query T
 EXPLAIN SHOW DATABASES
@@ -780,6 +938,43 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: tc@c
           spans: /10-/11
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON tc (a) STORING (b); DROP INDEX tc@c;
+
+# Ensure that the query above no longer has index recommendations if they are
+# disabled.
+statement ok
+SET index_recommendations_enabled = 'false'
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b)
+│ ordering: +b
+│ estimated row count: 10 (missing stats)
+│ order: +b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: tc@tc_pkey
+    │ key columns: rowid
+    │
+    └── • scan
+          columns: (a, rowid)
+          estimated row count: 10 (missing stats)
+          table: tc@c
+          spans: /10-/11
+
+# Reset index_recommendations_enabled to its default setting.
+statement ok
+SET index_recommendations_enabled = 'true'
 
 query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
@@ -847,6 +1042,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
@@ -904,6 +1103,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
@@ -935,6 +1138,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -985,6 +1192,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
@@ -1018,6 +1229,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: tt@tt_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON tt (x) STORING (y); DROP INDEX tt@a;
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT
@@ -1594,7 +1809,7 @@ regions: <hidden>
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~14KB, required=[presentation: info:10])
+memo (optimized, ~11KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])
@@ -1653,7 +1868,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~14KB, required=[presentation: info:10])
+memo (optimized, ~11KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])

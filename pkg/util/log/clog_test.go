@@ -742,9 +742,9 @@ func BenchmarkLogEntry_String(b *testing.B) {
 	entry := &logEntry{
 		idPayload: idPayload{
 			clusterID:     "fooo",
-			nodeID:        10,
+			nodeID:        "10",
 			tenantID:      "12",
-			sqlInstanceID: 9,
+			sqlInstanceID: "9",
 		},
 		ts:         timeutil.Now().UnixNano(),
 		header:     false,

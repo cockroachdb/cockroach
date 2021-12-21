@@ -25,12 +25,12 @@ import (
 //
 // registry should never be mutated after creation (except in tests), as it is
 // read concurrently by different callers.
-var registry = make(map[string]extendedSetting)
+var registry = make(map[string]internalSetting)
 
 // TestingSaveRegistry can be used in tests to save/restore the current
 // contents of the registry.
 func TestingSaveRegistry() func() {
-	var origRegistry = make(map[string]extendedSetting)
+	var origRegistry = make(map[string]internalSetting)
 	for k, v := range registry {
 		origRegistry[k] = v
 	}
@@ -104,6 +104,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.telemetry.query_sampling.qps_threshold":                     {},
 	"sql.telemetry.query_sampling.sample_rate":                       {},
 	"diagnostics.sql_stat_reset.interval":                            {},
+	"changefeed.mem.pushback_enabled":                                {},
 
 	// removed as of 22.1.
 	"sql.defaults.drop_enum_value.enabled":                             {},
@@ -116,7 +117,7 @@ var retiredSettings = map[string]struct{}{
 }
 
 // register adds a setting to the registry.
-func register(key, desc string, s extendedSetting) {
+func register(key, desc string, s internalSetting) {
 	if _, ok := retiredSettings[key]; ok {
 		panic(fmt.Sprintf("cannot reuse previously defined setting name: %s", key))
 	}

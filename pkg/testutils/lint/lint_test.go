@@ -1295,61 +1295,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestMisspell", func(t *testing.T) {
-		skip.IgnoreLint(t, `this lint causes extra rounds through CI for which the cost-
-benefit analysis is not favorable. We could re-instate this as a nightly lint
-instead.
-`)
-		t.Parallel()
-		if pkgSpecified {
-			skip.IgnoreLint(t, "PKG specified")
-		}
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		ignoredRules := []string{
-			"licence",
-			"mitre",     // PostGIS commands spell these as mitre.
-			"analyse",   // required by SQL grammar
-			"seperator", // pkg/ui depends on 3rd party package (rc-calendar) with spelling
-			"strat",     // PostgreSQL has table: pg_amop_fam_strat_index
-		}
-
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`.*\.lock`),
-			stream.GrepNot(`^storage\/rocksdb_error_dict\.go$`),
-			stream.GrepNot(`^workload/geospatial/geospatial.go$`),
-			stream.GrepNot(`^workload/tpcds/tpcds.go$`),
-			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
-			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
-			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
-			stream.GrepNot(`^util/timeutil/lowercase_timezones_generated.go$`),
-			stream.GrepNot(`^cmd/roachtest/tests/ruby_pg_blocklist.go$`),
-			stream.GrepNot(`^cmd/roachtest/tests/asyncpg_blocklist.go$`),
-			stream.Map(func(s string) string {
-				return filepath.Join(pkgDir, s)
-			}),
-			stream.Xargs("misspell", "-locale", "US", "-i", strings.Join(ignoredRules, ",")),
-		), func(s string) {
-			t.Errorf("\n%s", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestGofmtSimplify", func(t *testing.T) {
 		t.Parallel()
 		if pkgSpecified {
@@ -1680,7 +1625,9 @@ instead.
 	t.Run("TestStaticCheck", func(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 68496, "A TON of build errors")
+		if bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "the staticcheck tests are run during the bazel build")
+		}
 
 		cmd, stderr, filter, err := dirCmd(
 			crdb.Dir,

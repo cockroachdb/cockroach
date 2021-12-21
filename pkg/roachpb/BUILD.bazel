@@ -6,6 +6,12 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
+# NB: If you've come here to resolve a build failure due to a missing
+# dependency, the dependency may be missing from the "bootstrap" target rather
+# than the "roachpb" target. Some input source files are duplicated between the
+# two targets, and Gazelle only infers dependencies for "roachpb" rather than
+# "bootstrap". See pkg/roachpb/gen/BUILD.bazel for more detail on why the
+# "bootstrap" target exists.
 go_library(
     name = "roachpb",
     srcs = [
@@ -76,6 +82,7 @@ go_library(
         "metadata_replicas.go",
         "method.go",
         "span_config.go",
+        "tenant.go",
         "version.go",
     ],
     embed = [":roachpb_go_proto"],
@@ -97,6 +104,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timetz",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_aws_aws_sdk_go//aws",
         "@com_github_aws_aws_sdk_go//aws/credentials",

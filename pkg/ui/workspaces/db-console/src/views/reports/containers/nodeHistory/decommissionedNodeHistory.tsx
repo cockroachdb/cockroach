@@ -19,13 +19,16 @@ import { AdminUIState } from "src/redux/state";
 import { nodesSummarySelector, partitionedStatuses } from "src/redux/nodes";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { INodeStatus } from "src/util/proto";
-import { LongToMoment } from "src/util/convert";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LocalSetting } from "src/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
 import { Text } from "src/components";
-import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
+import {
+  ColumnsConfig,
+  Table,
+  SortSetting,
+  util,
+} from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 
 const decommissionedNodesSortSetting = new LocalSetting<
@@ -143,7 +146,7 @@ const decommissionedNodesTableData = createSelector(
         return undefined;
       }
       const deadTime = liveness.expiration.wall_time;
-      return LongToMoment(deadTime);
+      return util.LongToMoment(deadTime);
     };
 
     const data = _.chain(decommissionedStatuses)

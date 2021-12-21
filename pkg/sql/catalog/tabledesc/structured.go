@@ -655,11 +655,10 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	}
 
 	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
-	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
-	// before AllocateIDs.
+	// to pass the table ID check.
 	savedID := desc.ID
 	if desc.ID == 0 {
-		desc.ID = keys.MinUserDescID
+		desc.ID = keys.SystemDatabaseID
 	}
 	err := catalog.ValidateSelf(desc)
 	desc.ID = savedID
@@ -1116,8 +1115,8 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
-	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
-		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	if idx.Version < descpb.LatestPrimaryIndexDescriptorVersion {
+		idx.Version = descpb.LatestPrimaryIndexDescriptorVersion
 		// Populate store columns.
 		names := make(map[string]struct{})
 		for _, name := range idx.KeyColumnNames {
@@ -1560,7 +1559,19 @@ func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
 		// Should never be in this case.
 		panic(err)
 	}
-	return col.IsHidden()
+	if !col.IsHidden() {
+		return false
+	}
+	if !strings.HasPrefix(col.GetName(), "rowid") {
+		return false
+	}
+	if !col.GetType().Equal(types.Int) {
+		return false
+	}
+	if !col.HasDefault() {
+		return false
+	}
+	return col.GetDefaultExpr() == "unique_rowid()"
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
@@ -1696,8 +1707,8 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				} else {
 					primaryIndex.Name = args.NewPrimaryIndexName
 				}
-				if primaryIndex.Version == descpb.StrictIndexColumnIDGuaranteesVersion {
-					primaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+				if primaryIndex.Version == descpb.LatestNonPrimaryIndexDescriptorVersion {
+					primaryIndex.Version = descpb.LatestPrimaryIndexDescriptorVersion
 				}
 				desc.SetPrimaryIndex(primaryIndex)
 			}

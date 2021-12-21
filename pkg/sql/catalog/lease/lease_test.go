@@ -1021,7 +1021,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// The transaction read at one timestamp and wrote at another so it
 	// has to be restarted because the spans read were modified by the backfill.
 	if err := txReadWrite.Commit(); !testutils.IsError(err,
-		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh\\)") {
+		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
+			"due to a conflict: committed value on key /Table/56/1/\"a\"/0\\)") {
 		t.Fatalf("err = %v", err)
 	}
 
@@ -1271,6 +1272,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 
 	params := createTestServerParams()
+	idChecker := atomic.Value{}
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -1280,12 +1282,15 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 					if err != nil {
 						return
 					}
-					if desc.GetID() > keys.MaxReservedDescID {
+					if !catalog.IsSystemDescriptor(desc) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
 				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if id > keys.MaxReservedDescID {
+					if idChecker.Load() == nil {
+						return
+					}
+					if !catalog.IsSystemID(idChecker.Load().(keys.SystemIDChecker), id) {
 						atomic.AddInt32(&testAcquisitionBlockCount, 1)
 					}
 				},
@@ -1301,6 +1306,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 		lease.LeaseDuration.Get(&params.SV))
 
 	t := newLeaseTest(testingT, params)
+	idChecker.Store(t.server.SystemIDChecker())
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -1725,18 +1731,22 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 
 	params := createTestServerParams()
+	idChecker := atomic.Value{}
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
-					if desc.GetID() > keys.MaxReservedDescID {
+					if !catalog.IsSystemDescriptor(desc) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
 				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
-					if id < keys.MaxReservedDescID {
+					if idChecker.Load() == nil {
+						return
+					}
+					if catalog.IsSystemID(idChecker.Load().(keys.SystemIDChecker), id) {
 						return
 					}
 					mu.Lock()
@@ -1744,7 +1754,10 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					releasedIDs[id] = struct{}{}
 				},
 				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if id > keys.MaxReservedDescID {
+					if idChecker.Load() == nil {
+						return
+					}
+					if !catalog.IsSystemID(idChecker.Load().(keys.SystemIDChecker), id) {
 						atomic.AddInt32(&testAcquisitionBlockCount, 1)
 					}
 				},
@@ -1765,6 +1778,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	lease.LeaseRenewalDuration.Override(ctx, &params.SV, 0)
 
 	t := newLeaseTest(testingT, params)
+	idChecker.Store(t.server.SystemIDChecker())
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`

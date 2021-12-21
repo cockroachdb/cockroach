@@ -1256,44 +1256,41 @@ build
 WITH cte AS (SELECT b FROM [INSERT INTO abc VALUES (1) RETURNING *] LIMIT 1) SELECT * FROM abc
 ----
 with &1
- ├── columns: a:12!null b:13 c:14
+ ├── columns: a:11!null b:12 c:13
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
  │    ├── insert-mapping:
- │    │    ├── column1:7 => abc.a:1
- │    │    ├── b_default:8 => abc.b:2
- │    │    └── b_default:8 => abc.c:3
+ │    │    ├── column1:6 => abc.a:1
+ │    │    ├── b_default:7 => abc.b:2
+ │    │    └── b_default:7 => abc.c:3
  │    └── project
- │         ├── columns: b_default:8 column1:7!null
+ │         ├── columns: b_default:7 column1:6!null
  │         ├── project
- │         │    ├── columns: column1:7!null
- │         │    ├── values
- │         │    │    ├── columns: column1:6!null
- │         │    │    └── (1,)
- │         │    └── projections
- │         │         └── assignment-cast: INT8 [as=column1:7]
- │         │              └── column1:6
+ │         │    ├── columns: column1:6!null
+ │         │    └── values
+ │         │         ├── columns: column1:6!null
+ │         │         └── (1,)
  │         └── projections
- │              └── NULL::INT8 [as=b_default:8]
+ │              └── NULL::INT8 [as=b_default:7]
  └── with &2 (cte)
-      ├── columns: abc.a:12!null abc.b:13 abc.c:14
+      ├── columns: abc.a:11!null abc.b:12 abc.c:13
       ├── limit
-      │    ├── columns: b:10
+      │    ├── columns: b:9
       │    ├── project
-      │    │    ├── columns: b:10
+      │    │    ├── columns: b:9
       │    │    ├── limit hint: 1.00
       │    │    └── with-scan &1
-      │    │         ├── columns: a:9!null b:10 c:11
+      │    │         ├── columns: a:8!null b:9 c:10
       │    │         ├── mapping:
-      │    │         │    ├──  abc.a:1 => a:9
-      │    │         │    ├──  abc.b:2 => b:10
-      │    │         │    └──  abc.c:3 => c:11
+      │    │         │    ├──  abc.a:1 => a:8
+      │    │         │    ├──  abc.b:2 => b:9
+      │    │         │    └──  abc.c:3 => c:10
       │    │         └── limit hint: 1.00
       │    └── 1
       └── project
-           ├── columns: abc.a:12!null abc.b:13 abc.c:14
+           ├── columns: abc.a:11!null abc.b:12 abc.c:13
            └── scan abc
-                └── columns: abc.a:12!null abc.b:13 abc.c:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+                └── columns: abc.a:11!null abc.b:12 abc.c:13 crdb_internal_mvcc_timestamp:14 tableoid:15
 
 # Tests for the square bracket syntax.
 build
@@ -1316,31 +1313,24 @@ build
 SELECT * FROM [INSERT INTO abc VALUES (1, 2, 3) RETURNING a]
 ----
 with &1
- ├── columns: a:12!null
+ ├── columns: a:9!null
  ├── project
  │    ├── columns: abc.a:1!null
  │    └── insert abc
  │         ├── columns: abc.a:1!null b:2!null c:3!null
  │         ├── insert-mapping:
- │         │    ├── column1:9 => abc.a:1
- │         │    ├── column2:10 => b:2
- │         │    └── column3:11 => c:3
+ │         │    ├── column1:6 => abc.a:1
+ │         │    ├── column2:7 => b:2
+ │         │    └── column3:8 => c:3
  │         └── project
- │              ├── columns: column1:9!null column2:10!null column3:11!null
- │              ├── values
- │              │    ├── columns: column1:6!null column2:7!null column3:8!null
- │              │    └── (1, 2, 3)
- │              └── projections
- │                   ├── assignment-cast: INT8 [as=column1:9]
- │                   │    └── column1:6
- │                   ├── assignment-cast: INT8 [as=column2:10]
- │                   │    └── column2:7
- │                   └── assignment-cast: INT8 [as=column3:11]
- │                        └── column3:8
+ │              ├── columns: column1:6!null column2:7!null column3:8!null
+ │              └── values
+ │                   ├── columns: column1:6!null column2:7!null column3:8!null
+ │                   └── (1, 2, 3)
  └── with-scan &1
-      ├── columns: a:12!null
+      ├── columns: a:9!null
       └── mapping:
-           └──  abc.a:1 => a:12
+           └──  abc.a:1 => a:9
 
 # Statement inside brackets cannot refer to outer column.
 build
@@ -1453,20 +1443,17 @@ INSERT INTO inaccessible VALUES (1)
 insert inaccessible
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:6 => k:1
- │    └── v_default:7 => v:2
+ │    ├── column1:5 => k:1
+ │    └── v_default:6 => v:2
  └── project
-      ├── columns: v_default:7 column1:6!null
+      ├── columns: v_default:6 column1:5!null
       ├── project
-      │    ├── columns: column1:6!null
-      │    ├── values
-      │    │    ├── columns: column1:5!null
-      │    │    └── (1,)
-      │    └── projections
-      │         └── assignment-cast: INT8 [as=column1:6]
-      │              └── column1:5
+      │    ├── columns: column1:5!null
+      │    └── values
+      │         ├── columns: column1:5!null
+      │         └── (1,)
       └── projections
-           └── NULL::INT8 [as=v_default:7]
+           └── NULL::INT8 [as=v_default:6]
 
 build
 INSERT INTO inaccessible VALUES (1) RETURNING v

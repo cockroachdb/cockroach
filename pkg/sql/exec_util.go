@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -247,7 +248,7 @@ var ReorderJoinsLimitClusterValue = settings.RegisterIntSetting(
 		}
 		return nil
 	},
-)
+).WithPublic()
 
 var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.require_explicit_primary_keys.enabled",
@@ -1157,10 +1158,18 @@ type ExecutorConfig struct {
 	// reconciliation job.
 	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
 
+	// SpanConfigKVAccessor is used when creating and deleting tenant
+	// records.
+	SpanConfigKVAccessor spanconfig.KVAccessor
+
 	// InternalExecutorFactory is used to create an InternalExecutor binded with
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+
+	// SystemIDChecker is used to check whether an ID is part of the
+	// system database.
+	SystemIDChecker *catalog.SystemIDChecker
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -1342,10 +1351,6 @@ type TenantTestingKnobs struct {
 	// OverrideTokenBucketProvider allows a test-only TokenBucketProvider (which
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
-
-	// DisableLogTags can be set to true to cause the tenant server to avoid
-	// setting any global log tags for cluster id or node id.
-	DisableLogTags bool
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
@@ -1568,6 +1573,7 @@ func checkResultType(typ *types.T) error {
 	case types.OidFamily:
 	case types.TupleFamily:
 	case types.EnumFamily:
+	case types.VoidFamily:
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.ArrayFamily {
 			// Technically we could probably return arrays of arrays to a
@@ -2703,6 +2709,10 @@ func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
+}
+
+func (m *sessionDataMutator) SetIndexRecommendationsEnabled(val bool) {
+	m.data.IndexRecommendationsEnabled = val
 }
 
 func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(

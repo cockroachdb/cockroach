@@ -16,7 +16,9 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -59,6 +62,10 @@ const (
 	defaultScanMaxIdleTime   = 1 * time.Second
 
 	DefaultStorePath = "cockroach-data"
+	// DefaultSQLNodeStorePathPrefix is path prefix that is used by default
+	// on tenant sql nodes to separate from server node if running on the
+	// same server without explicit --store location.
+	DefaultSQLNodeStorePathPrefix = "cockroach-data-tenant-"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
@@ -116,6 +123,10 @@ type BaseConfig struct {
 	*base.Config
 
 	Tracer *tracing.Tracer
+
+	// idProvider is an interface that makes the logging package
+	// able to peek into the server IDs defined by this configuration.
+	idProvider *idProvider
 
 	// IDContainer is the Node ID / SQL Instance ID container
 	// that will contain the ID for the server to instantiate.
@@ -177,11 +188,17 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
+	idsProvider := &idProvider{
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	}
+
 	baseCfg := BaseConfig{
 		Tracer:             tr,
-		IDContainer:        &base.NodeIDContainer{},
-		ClusterIDContainer: &base.ClusterIDContainer{},
-		AmbientCtx:         log.AmbientContext{Tracer: tr},
+		idProvider:         idsProvider,
+		IDContainer:        idsProvider.serverID,
+		ClusterIDContainer: idsProvider.clusterID,
+		AmbientCtx:         log.AmbientContext{Tracer: tr, ServerIDs: idsProvider},
 		Config:             new(base.Config),
 		Settings:           st,
 		MaxOffset:          MaxOffsetType(base.DefaultMaxClockOffset),
@@ -759,4 +776,110 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 		}
 	}
 	return roachpb.Attributes{Attrs: filtered}
+}
+
+// idProvider connects the server ID containers in this
+// package to the logging package.
+//
+// For each of the "main" data items, it also memoizes its
+// representation as a string (the one needed by the
+// log.ServerIdentificationPayload interface) as soon as the value is
+// initialized. This saves on conversion costs.
+type idProvider struct {
+	// clusterID contains the cluster ID (initialized late).
+	clusterID *base.ClusterIDContainer
+	// clusterStr is the memoized representation of clusterID, once known.
+	clusterStr atomic.Value
+
+	// tenantID is the tenant ID for this server.
+	tenantID roachpb.TenantID
+	// tenantStr is the memoized representation of tenantID.
+	tenantStr atomic.Value
+
+	// serverID contains the node ID for KV nodes (when tenantID.IsSet() ==
+	// false), or the SQL instance ID for SQL-only servers (when
+	// tenantID.IsSet() == true).
+	serverID *base.NodeIDContainer
+	// serverStr is the memoized representation of serverID.
+	serverStr atomic.Value
+}
+
+var _ log.ServerIdentificationPayload = (*idProvider)(nil)
+
+// ServerIdentityString implements the log.ServerIdentificationPayload interface.
+func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) string {
+	switch key {
+	case log.IdentifyClusterID:
+		c := s.clusterStr.Load()
+		cs, ok := c.(string)
+		if !ok {
+			cid := s.clusterID.Get()
+			if cid != uuid.Nil {
+				cs = cid.String()
+				s.clusterStr.Store(cs)
+			}
+		}
+		return cs
+
+	case log.IdentifyTenantID:
+		t := s.tenantStr.Load()
+		ts, ok := t.(string)
+		if !ok {
+			tid := s.tenantID
+			if tid.IsSet() {
+				ts = strconv.FormatUint(tid.ToUint64(), 10)
+				s.tenantStr.Store(ts)
+			}
+		}
+		return ts
+
+	case log.IdentifyInstanceID:
+		// If tenantID is not set, this is a KV node and it has no SQL
+		// instance ID.
+		if !s.tenantID.IsSet() {
+			return ""
+		}
+		return s.maybeMemoizeServerID()
+
+	case log.IdentifyKVNodeID:
+		// If tenantID is set, this is a SQL-only server and it has no
+		// node ID.
+		if s.tenantID.IsSet() {
+			return ""
+		}
+		return s.maybeMemoizeServerID()
+	}
+
+	return ""
+}
+
+// SetTenant informs the provider that it provides data for
+// a SQL server.
+//
+// Note: this should not be called concurrently with logging which may
+// invoke the method from the log.ServerIdentificationPayload
+// interface.
+func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
+	if !tenantID.IsSet() {
+		panic("programming error: invalid tenant ID")
+	}
+	if s.tenantID.IsSet() {
+		panic("programming error: provider already set for tenant server")
+	}
+	s.tenantID = tenantID
+}
+
+// maybeMemoizeServerID saves the representation of serverID to
+// serverStr if the former is initialized.
+func (s *idProvider) maybeMemoizeServerID() string {
+	si := s.serverStr.Load()
+	sis, ok := si.(string)
+	if !ok {
+		sid := s.serverID.Get()
+		if sid != 0 {
+			sis = strconv.FormatUint(uint64(sid), 10)
+			s.serverStr.Store(sis)
+		}
+	}
+	return sis
 }

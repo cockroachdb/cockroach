@@ -98,6 +98,7 @@ type KVSubscriber struct {
 	started int32    // accessed atomically
 	mu      struct { // serializes between Start and external threads
 		syncutil.RWMutex
+		lastUpdated hlc.Timestamp
 		// internal is the internal spanconfig.Store maintained by the
 		// KVSubscriber. A read-only view over this store is exposed as part of
 		// the interface. When re-subscribing, a fresh spanconfig.Store is
@@ -255,9 +256,11 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			log.Infof(ctx, "received span configuration update for %s (deleted=%t)", entry.Span, deleted)
 		}
 
-		update := spanconfig.Update{Span: entry.Span}
-		if !deleted {
-			update.Config = entry.Config
+		var update spanconfig.Update
+		if deleted {
+			update = spanconfig.Deletion(entry.Span)
+		} else {
+			update = spanconfig.Update(entry)
 		}
 
 		if err := buffer.Add(&bufferEvent{update, ev.Value.Timestamp}); err != nil {
@@ -276,7 +279,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 		log.Fatalf(ctx, "initial scan timestamp (%s) regressed from last recorded frontier (%s)", initialScanTS, s.lastFrontierTS)
 	}
 
-	rangeFeed := s.rangefeedFactory.New("spanconfig-rangefeed", s.spanConfigTableSpan, initialScanTS,
+	rangeFeed := s.rangefeedFactory.New("spanconfig-rangefeed", initialScanTS,
 		onValue,
 		rangefeed.WithInitialScan(func(ctx context.Context) {
 			select {
@@ -309,7 +312,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 			return false
 		}),
 	)
-	if err := rangeFeed.Start(ctx); err != nil {
+	if err := rangeFeed.Start(ctx, []roachpb.Span{s.spanConfigTableSpan}); err != nil {
 		return err
 	}
 	defer rangeFeed.Close()
@@ -340,6 +343,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 				// avoid this mutex.
 				s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 			}
+			s.mu.lastUpdated = frontierTS
 			handlers := s.mu.handlers
 			s.mu.Unlock()
 
@@ -361,6 +365,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 
 			s.mu.Lock()
 			s.mu.internal = freshStore
+			s.mu.lastUpdated = initialScanTS
 			handlers := s.mu.handlers
 			s.mu.Unlock()
 
@@ -390,6 +395,14 @@ func (s *KVSubscriber) Subscribe(fn func(roachpb.Span)) {
 	defer s.mu.Unlock()
 
 	s.mu.handlers = append(s.mu.handlers, handler{fn: fn})
+}
+
+// LastUpdated is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) LastUpdated() hlc.Timestamp {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.lastUpdated
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.

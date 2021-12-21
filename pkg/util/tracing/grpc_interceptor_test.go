@@ -123,7 +123,9 @@ func TestGRPCInterceptors(t *testing.T) {
 	}))
 	conn, err := grpc.DialContext(context.Background(), ln.Addr().String(),
 		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil /* init */)),
+		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
+			func(_ context.Context) bool { return false }, /* compatibilityMode */
+		)),
 		grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
 	)
 	require.NoError(t, err)
@@ -196,7 +198,6 @@ func TestGRPCInterceptors(t *testing.T) {
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			var n int
 			finalRecs := sp.FinishAndGetRecording(tracing.RecordingVerbose)
-			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because

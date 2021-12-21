@@ -343,6 +343,10 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: a@a_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON a (y);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
@@ -1370,6 +1374,10 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: abcd@abcd_pkey
               spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (b) STORING (c);
 
 
 query T
@@ -1438,6 +1446,10 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: abcd@abcd_pkey
           spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON abcd (a DESC, b DESC) STORING (c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a
@@ -1621,6 +1633,10 @@ vectorized: true
       missing stats
       table: a@p
       spans: [/5.000000000000001 - /9.999999999999998] [/20.000000000000004 - /39.99999999999999]
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE UNIQUE INDEX ON a (price) STORING (item); DROP INDEX a@p;
 
 query T
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
@@ -1813,6 +1829,12 @@ vectorized: true
               missing stats
               table: s@s_pkey
               spans: FULL SCAN
+·
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON e (y) STORING (z);
+2. type: index creation
+   SQL command: CREATE INDEX ON s (y) STORING (z);
 
 # Check that we have a sane row count estimate when there are a lot of null
 # values.
@@ -1862,6 +1884,10 @@ vectorized: true
       estimated row count: 11,110,000 (100% of the table; stats collected <hidden> ago)
       table: nulls@nulls_pkey
       spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON nulls (x) STORING (y);
 
 # Test resolution of @primary index hint.
 statement ok

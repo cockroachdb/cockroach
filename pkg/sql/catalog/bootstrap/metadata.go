@@ -126,7 +126,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// objects.
 	{
 		value := roachpb.Value{}
-		value.SetInt(keys.MinUserDescID)
+		value.SetInt(int64(keys.MinUserDescriptorID(bootstrappedSystemIDChecker{ms})))
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
@@ -289,7 +289,7 @@ func createZoneConfigKV(
 ) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
-		panic(errors.AssertionFailedf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not marshal ZoneConfig for ID: %d", keyID))
 	}
 	return roachpb.KeyValue{
 		Key:   codec.ZoneKey(uint32(keyID)),
@@ -375,4 +375,30 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+}
+
+type bootstrappedSystemIDChecker struct {
+	MetadataSchema
+}
+
+var _ keys.SystemIDChecker = bootstrappedSystemIDChecker{}
+
+// IsSystemID implements the keys.SystemIDChecker interface.
+func (b bootstrappedSystemIDChecker) IsSystemID(id uint32) bool {
+	if keys.DeprecatedSystemIDChecker().IsSystemID(id) {
+		return true
+	}
+	for _, desc := range b.descs {
+		if desc.GetID() == descpb.ID(id) {
+			return desc.GetParentID() == keys.SystemDatabaseID
+		}
+	}
+	return false
+}
+
+// BootstrappedSystemIDChecker constructs a keys.SystemIDChecker which is valid
+// for a bootstrapped cluster.
+func BootstrappedSystemIDChecker() keys.SystemIDChecker {
+	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	return bootstrappedSystemIDChecker{MetadataSchema: ms}
 }

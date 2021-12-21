@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -484,7 +485,7 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		testParentID := descpb.ID(keys.MaxReservedDescID + 1)
+		testParentID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(keys.TestingSystemIDChecker()))
 		MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,

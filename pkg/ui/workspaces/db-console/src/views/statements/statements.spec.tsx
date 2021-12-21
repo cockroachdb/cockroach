@@ -17,11 +17,7 @@ import { merge } from "lodash";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
-import {
-  CollectedStatementStatistics,
-  ExecStats,
-  StatementStatistics,
-} from "src/util/appStats";
+import { util } from "@cockroachlabs/cluster-ui";
 import { appAttr, statementAttr } from "src/util/constants";
 import {
   selectStatements,
@@ -32,6 +28,10 @@ import {
 import { selectStatement } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
+
+type CollectedStatementStatistics = util.CollectedStatementStatistics;
+type ExecStats = util.ExecStats;
+type StatementStatistics = util.StatementStatistics;
 
 const INTERNAL_STATEMENT_PREFIX = "$ internal";
 

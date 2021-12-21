@@ -4352,6 +4352,87 @@ func (d *DArray) Append(v Datum) error {
 	return d.Validate()
 }
 
+// DVoid represents a void type.
+type DVoid struct{}
+
+// DVoidDatum is an instance of the DVoid datum.
+var DVoidDatum = &DVoid{}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DVoid) ResolvedType() *types.T {
+	return types.Void
+}
+
+// Compare implements the Datum interface.
+func (d *DVoid) Compare(ctx *EvalContext, other Datum) int {
+	ret, err := d.CompareError(ctx, other)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+// CompareError implements the Datum interface.
+func (d *DVoid) CompareError(ctx *EvalContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+
+	_, ok := UnwrapDatum(ctx, other).(*DVoid)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return 0, nil
+}
+
+// Prev implements the Datum interface.
+func (d *DVoid) Prev(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DVoid) Next(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DVoid) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DVoid) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DVoid) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DVoid) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DVoid) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DVoid) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	if !f.HasFlags(fmtRawStrings) {
+		// void is an empty string.
+		lexbase.EncodeSQLStringWithFlags(buf, "", f.EncodeFlags())
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DVoid) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DEnum represents an ENUM value.
 type DEnum struct {
 	// EnumType is the hydrated type of this enum.
@@ -5431,6 +5512,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.OidFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
 
+	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
 	types.ArrayFamily: {unsafe.Sizeof(DString("")), variableSize},
 

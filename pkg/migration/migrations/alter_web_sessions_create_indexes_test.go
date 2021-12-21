@@ -160,7 +160,7 @@ func getDeprecatedWebSessionsDescriptor() *descpb.TableDescriptor {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
 			},
 			{
 				Name:                "web_sessions_createdAt_idx",
@@ -170,7 +170,7 @@ func getDeprecatedWebSessionsDescriptor() *descpb.TableDescriptor {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
 			},
 		},
 		NextIndexID:    4,

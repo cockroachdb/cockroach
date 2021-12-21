@@ -179,7 +179,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	r.mu.Unlock()
 
 	if err != nil {
-		return truncateDecision{}, errors.Errorf("error retrieving first index for r%d: %s", rangeID, err)
+		return truncateDecision{}, errors.Wrapf(err, "error retrieving first index for r%d", rangeID)
 	}
 
 	if raftStatus == nil {

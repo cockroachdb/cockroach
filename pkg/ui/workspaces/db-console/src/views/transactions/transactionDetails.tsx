@@ -14,19 +14,19 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { refreshStatements } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { aggregatedTsAttr, txnFingerprintIdAttr } from "src/util/constants";
-import { TimestampToString } from "src/util/convert";
 import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
   selectData,
-  selectDateRange,
   selectLastError,
 } from "src/views/transactions/transactionsPage";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import {
   TransactionDetailsStateProps,
   TransactionDetailsDispatchProps,
   TransactionDetailsProps,
   TransactionDetails,
+  util,
 } from "@cockroachlabs/cluster-ui";
 
 export const selectTransaction = createSelector(
@@ -50,7 +50,8 @@ export const selectTransaction = createSelector(
           txnFingerprintId,
       )
       .filter(
-        txn => TimestampToString(txn.stats_data.aggregated_ts) == aggregatedTs,
+        txn =>
+          util.TimestampToString(txn.stats_data.aggregated_ts) == aggregatedTs,
       )[0];
   },
 );
@@ -64,7 +65,7 @@ export default withRouter(
       const transaction = selectTransaction(state, props);
       return {
         aggregatedTs: getMatchParamByName(props.match, aggregatedTsAttr),
-        dateRange: selectDateRange(state),
+        timeScale: statementsTimeScaleLocalSetting.selector(state),
         error: selectLastError(state),
         isTenant: false,
         nodeRegions: nodeRegionsByIDSelector(state),

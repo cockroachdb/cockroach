@@ -17,8 +17,7 @@ import {
   DiagnosticsReportPayload,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
-  CombinedStatementsPayload,
-  SET_COMBINED_STATEMENTS_RANGE,
+  SET_COMBINED_STATEMENTS_TIME_SCALE,
 } from "./statementsActions";
 import { cockroach } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
@@ -30,7 +29,8 @@ import {
   refreshStatements,
 } from "src/redux/apiReducers";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
+import { TimeScale, toDateRange } from "@cockroachlabs/cluster-ui";
 import Long from "long";
 
 export function* createDiagnosticsReportSaga(
@@ -63,16 +63,13 @@ export function* createDiagnosticsReportSaga(
   }
 }
 
-export function* setCombinedStatementsDateRangeSaga(
-  action: PayloadAction<CombinedStatementsPayload>,
+export function* setCombinedStatementsTimeScaleSaga(
+  action: PayloadAction<TimeScale>,
 ) {
-  const { start, end } = action.payload;
-  yield put(
-    statementsDateRangeLocalSetting.set({
-      start: start.unix(),
-      end: end.unix(),
-    }),
-  );
+  const ts = action.payload;
+
+  yield put(statementsTimeScaleLocalSetting.set(ts));
+  const [start, end] = toDateRange(ts);
   const req = new CombinedStatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
@@ -86,8 +83,8 @@ export function* statementsSaga() {
   yield all([
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
     takeLatest(
-      SET_COMBINED_STATEMENTS_RANGE,
-      setCombinedStatementsDateRangeSaga,
+      SET_COMBINED_STATEMENTS_TIME_SCALE,
+      setCombinedStatementsTimeScaleSaga,
     ),
   ]);
 }

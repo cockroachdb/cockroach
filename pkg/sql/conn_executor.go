@@ -2656,6 +2656,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 	case txnCommit:
 		if res.Err() != nil {
+			// See https://github.com/cockroachdb/errors/issues/86.
+			// nolint:errwrap
 			err := errorutil.UnexpectedWithIssueErrorf(
 				26687,
 				"programming error: non-error event %s generated even though res.Err() has been set to: %s",

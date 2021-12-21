@@ -728,11 +728,17 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return result
 
 	case "index-candidates":
-		result := ot.IndexCandidates()
+		result, err := ot.IndexCandidates()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
 		return result
 
 	case "index-recommendations":
-		result := ot.IndexRecommendations()
+		result, err := ot.IndexRecommendations()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
 		return result
 
 	default:
@@ -2020,8 +2026,11 @@ func (ot *OptTester) CheckSize() (string, error) {
 
 // IndexCandidates is used with the index-candidates option. It finds index
 // candidates for the SQL statement and formats them as a sorted string.
-func (ot *OptTester) IndexCandidates() string {
-	expr, _ := ot.OptNorm()
+func (ot *OptTester) IndexCandidates() (string, error) {
+	expr, err := ot.OptNorm()
+	if err != nil {
+		return "", err
+	}
 	indexCandidates := indexrec.FindIndexCandidateSet(expr, expr.(memo.RelExpr).Memo().Metadata())
 
 	// Build a formatted string to output from the map of indexCandidates.
@@ -2053,26 +2062,33 @@ func (ot *OptTester) IndexCandidates() string {
 		tablesOutput = append(tablesOutput, tableSb.String())
 	}
 	sort.Strings(tablesOutput)
-	return strings.Join(tablesOutput, "")
+	return strings.Join(tablesOutput, ""), nil
 }
 
 // IndexRecommendations is used with the index-recommendations option. It
 // determines index recommendations for the SQL statement, if they exist, and
 // formats them as a human-readable string.
-func (ot *OptTester) IndexRecommendations() string {
-	normExpr, _ := ot.OptNorm()
+func (ot *OptTester) IndexRecommendations() (string, error) {
+	normExpr, err := ot.OptNorm()
+	if err != nil {
+		return "", err
+	}
 	md := normExpr.(memo.RelExpr).Memo().Metadata()
 	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
 	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
 
-	optExpr, _ := ot.OptimizeWithTables(hypTables)
-	result := indexrec.FindIndexRecommendationSet(optExpr, optExpr.(memo.RelExpr).Memo().Metadata())
-
-	formattedResult := strings.Replace(strings.TrimSpace(result.String()), "\n\n", "\n", -1)
-	if formattedResult == "" {
-		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr))
+	optExpr, err := ot.OptimizeWithTables(hypTables)
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", formattedResult, ot.FormatExpr(optExpr))
+	md = optExpr.(memo.RelExpr).Memo().Metadata()
+	indexRecommendations := indexrec.FindIndexRecommendationSet(optExpr, md)
+	result := indexRecommendations.Output()
+
+	if result == nil {
+		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr)), nil
+	}
+	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", strings.Join(result, "\n"), ot.FormatExpr(optExpr)), nil
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

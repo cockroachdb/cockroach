@@ -41,7 +41,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_output all --test_arg -test.v
+bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all '--test_filter=TestStartChild*' --test_arg -test.v --test_arg -show-logs --test_output all
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:
@@ -110,7 +110,7 @@ bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
 
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_output streamed
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_arg -test.v --test_output streamed
 ----
 ----
 ==================== Test output for //pkg/util/tracing:tracing_test:

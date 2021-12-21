@@ -65,6 +65,7 @@ force_savepoint_restart                               off
 foreign_key_cascades_limit                            10000
 idle_in_session_timeout                               0
 idle_in_transaction_session_timeout                   0
+index_recommendations_enabled                         on
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
@@ -389,8 +390,10 @@ system.public.descriptor  CREATE TABLE public.descriptor (
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
-table_name  create_statement
-v           CREATE VIEW public.v (id) AS SELECT id FROM system.public.descriptor
+table_name                                    create_statement
+v                                             CREATE VIEW public.v (
+                                              id
+) AS SELECT id FROM system.public.descriptor
 
 
 query TTT colnames

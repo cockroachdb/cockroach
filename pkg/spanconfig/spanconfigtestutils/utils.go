@@ -11,6 +11,7 @@
 package spanconfigtestutils
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // spanRe matches strings of the form "[start, end)", capturing both the "start"
@@ -157,11 +160,11 @@ func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.
 		switch {
 		case strings.HasPrefix(line, deletePrefix):
 			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			updates = append(updates, spanconfig.Update{Span: ParseSpan(t, line)})
+			updates = append(updates, spanconfig.Deletion(ParseSpan(t, line)))
 		case strings.HasPrefix(line, setPrefix):
 			line = strings.TrimPrefix(line, line[:len(setPrefix)])
 			entry := ParseSpanConfigEntry(t, line)
-			updates = append(updates, spanconfig.Update{Span: entry.Span, Config: entry.Config})
+			updates = append(updates, spanconfig.Update(entry))
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
 				line, setPrefix, deletePrefix)
@@ -235,4 +238,89 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	}
 
 	return strings.Join(diffs, " ")
+}
+
+// MaybeLimitAndOffset checks if "offset" and "limit" arguments are provided in
+// the datadriven test, and if so, returns a minification of the given input
+// after having dropped an offset number of lines and limiting the results as
+// need. If lines are dropped on either end, the given separator is used to
+// indicate the omission.
+func MaybeLimitAndOffset(
+	t *testing.T, d *datadriven.TestData, separator string, lines []string,
+) string {
+	var offset, limit int
+	if d.HasArg("offset") {
+		d.ScanArgs(t, "offset", &offset)
+		require.True(t, offset >= 0)
+		require.Truef(t, offset <= len(lines),
+			"offset (%d) larger than number of lines (%d)", offset, len(lines))
+	}
+	if d.HasArg("limit") {
+		d.ScanArgs(t, "limit", &limit)
+		require.True(t, limit >= 0)
+	} else {
+		limit = len(lines)
+	}
+
+	var output strings.Builder
+	if offset > 0 && len(lines) > 0 && separator != "" {
+		output.WriteString(fmt.Sprintf("%s\n", separator)) // print leading separator
+	}
+	lines = lines[offset:]
+	for i, line := range lines {
+		if i == limit {
+			if separator != "" {
+				output.WriteString(fmt.Sprintf("%s\n", separator)) // print trailing separator
+			}
+			break
+		}
+		output.WriteString(fmt.Sprintf("%s\n", line))
+	}
+
+	return strings.TrimSpace(output.String())
+}
+
+// SplitPoint is a unit of what's retrievable from a spanconfig.StoreReader. It
+// captures a single split point, and the config to be applied over the
+// following key span (or at least until the next such SplitPoint).
+//
+// TODO(irfansharif): Find a better name?
+type SplitPoint struct {
+	RKey   roachpb.RKey
+	Config roachpb.SpanConfig
+}
+
+// SplitPoints is a collection of split points.
+type SplitPoints []SplitPoint
+
+func (rs SplitPoints) String() string {
+	var output strings.Builder
+	for _, c := range rs {
+		output.WriteString(fmt.Sprintf("%-42s %s\n", c.RKey.String(),
+			PrintSpanConfigDiffedAgainstDefaults(c.Config)))
+	}
+	return output.String()
+}
+
+// GetSplitPoints returns a list of range split points as suggested by the given
+// StoreReader.
+func GetSplitPoints(ctx context.Context, t *testing.T, reader spanconfig.StoreReader) SplitPoints {
+	var splitPoints []SplitPoint
+	splitKey := roachpb.RKeyMin
+	for {
+		splitKeyConf, err := reader.GetSpanConfigForKey(ctx, splitKey)
+		require.NoError(t, err)
+
+		splitPoints = append(splitPoints, SplitPoint{
+			RKey:   splitKey,
+			Config: splitKeyConf,
+		})
+
+		if !reader.NeedsSplit(ctx, splitKey, roachpb.RKeyMax) {
+			break
+		}
+		splitKey = reader.ComputeSplitKey(ctx, splitKey, roachpb.RKeyMax)
+	}
+
+	return splitPoints
 }

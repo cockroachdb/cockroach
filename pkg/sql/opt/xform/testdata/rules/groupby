@@ -449,7 +449,7 @@ project
 memo
 SELECT min(a) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: min:7])
+memo (optimized, ~6KB, required=[presentation: min:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:7]
  │         ├── best: (scalar-group-by G4 G5 cols=())
@@ -462,7 +462,7 @@ memo (optimized, ~5KB, required=[presentation: min:7])
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1) (top-k G2 &{1 +1})
+ ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1) (top-k G2 &{1 +1 })
  │    └── []
  │         ├── best: (scan abc,cols=(1),lim=1)
  │         └── cost: 5.06
@@ -475,7 +475,7 @@ memo (optimized, ~5KB, required=[presentation: min:7])
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~6KB, required=[presentation: min:7])
+memo (optimized, ~7KB, required=[presentation: min:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:7]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -488,9 +488,9 @@ memo (optimized, ~6KB, required=[presentation: min:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=+2) (top-k G7 &{1 +2})
+ ├── G4: (limit G7 G8 ordering=+2) (top-k G7 &{1 +2 })
  │    └── []
- │         ├── best: (top-k G7 &{1 +2})
+ │         ├── best: (top-k G7 &{1 +2 })
  │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
@@ -511,7 +511,7 @@ memo (optimized, ~6KB, required=[presentation: min:7])
 memo
 SELECT max(a) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: max:7])
+memo (optimized, ~6KB, required=[presentation: max:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:7]
  │         ├── best: (scalar-group-by G4 G5 cols=())
@@ -524,7 +524,7 @@ memo (optimized, ~5KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev)) (top-k G2 &{1 -1})
+ ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev)) (top-k G2 &{1 -1 })
  │    └── []
  │         ├── best: (scan abc,rev,cols=(1),lim=1(rev))
  │         └── cost: 5.06
@@ -537,7 +537,7 @@ memo (optimized, ~5KB, required=[presentation: max:7])
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~6KB, required=[presentation: max:7])
+memo (optimized, ~7KB, required=[presentation: max:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:7]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -550,9 +550,9 @@ memo (optimized, ~6KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2})
+ ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2 })
  │    └── []
- │         ├── best: (top-k G7 &{1 -2})
+ │         ├── best: (top-k G7 &{1 -2 })
  │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
@@ -650,7 +650,7 @@ scalar-group-by
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~6KB, required=[presentation: max:7])
+memo (optimized, ~7KB, required=[presentation: max:7])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:7]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -663,9 +663,9 @@ memo (optimized, ~6KB, required=[presentation: max:7])
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1074.52
  ├── G3: (aggregations G6)
- ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2})
+ ├── G4: (limit G7 G8 ordering=-2) (top-k G7 &{1 -2 })
  │    └── []
- │         ├── best: (top-k G7 &{1 -2})
+ │         ├── best: (top-k G7 &{1 -2 })
  │         └── cost: 1104.37
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
@@ -1575,7 +1575,7 @@ scalar-group-by
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w) GROUP BY u,v
 ----
-memo (optimized, ~8KB, required=[presentation: array_agg:7])
+memo (optimized, ~9KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -1609,7 +1609,7 @@ memo (optimized, ~8KB, required=[presentation: array_agg:7])
 memo
 SELECT sum(w) FROM kuvw GROUP BY u,v,w
 ----
-memo (optimized, ~6KB, required=[presentation: sum:7])
+memo (optimized, ~7KB, required=[presentation: sum:7])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:7]
  │         ├── best: (project G2 G3 sum)
@@ -1640,7 +1640,7 @@ memo (optimized, ~6KB, required=[presentation: sum:7])
 memo
 SELECT sum(w) FROM kuvw GROUP BY v
 ----
-memo (optimized, ~6KB, required=[presentation: sum:7])
+memo (optimized, ~7KB, required=[presentation: sum:7])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:7]
  │         ├── best: (project G2 G3 sum)
@@ -1665,7 +1665,7 @@ memo (optimized, ~6KB, required=[presentation: sum:7])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY u,w) GROUP BY v
 ----
-memo (optimized, ~7KB, required=[presentation: array_agg:7])
+memo (optimized, ~8KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -1693,7 +1693,7 @@ memo (optimized, ~7KB, required=[presentation: array_agg:7])
 memo
 SELECT array_agg(k) FROM (SELECT * FROM kuvw WHERE u=v ORDER BY u) GROUP BY w
 ----
-memo (optimized, ~12KB, required=[presentation: array_agg:7])
+memo (optimized, ~14KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -1766,7 +1766,7 @@ memo (optimized, ~12KB, required=[presentation: array_agg:7])
 memo
 SELECT sum(k) FROM (SELECT * FROM kuvw WHERE u=v) GROUP BY u,w
 ----
-memo (optimized, ~12KB, required=[presentation: sum:7])
+memo (optimized, ~14KB, required=[presentation: sum:7])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:7]
  │         ├── best: (project G2 G3 sum)
@@ -1840,7 +1840,7 @@ memo (optimized, ~12KB, required=[presentation: sum:7])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w DESC) GROUP BY u,v
 ----
-memo (optimized, ~7KB, required=[presentation: array_agg:7])
+memo (optimized, ~8KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -1869,7 +1869,7 @@ memo (optimized, ~7KB, required=[presentation: array_agg:7])
 memo
 SELECT DISTINCT u, v, w FROM kuvw
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2-4)) (distinct-on G2 G3 cols=(2-4),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2-4),ordering=+4,+3,+2) (distinct-on G2 G3 cols=(2-4),ordering=+3,+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2-4),ordering=+2,+3,+4)
@@ -1893,7 +1893,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u, v) u, v, w FROM kuvw
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3]" G3 cols=(2,3),ordering=+2,+3)
@@ -2016,7 +2016,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, v, w
 ----
-memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2),ordering=+3,+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+3,+4 opt(2))
@@ -2047,7 +2047,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
 memo
 SELECT DISTINCT ON (w, u) u, v, w FROM kuvw ORDER BY w, u, v DESC
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
  ├── G1: (distinct-on G2 G3 cols=(2,4),ordering=-3 opt(2,4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4,+2]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(2,4),ordering=-3 opt(2,4))
@@ -2078,7 +2078,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u DESC, v
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
@@ -2108,7 +2108,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w DESC, u DESC, v
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: -4]
  │    │    ├── best: (sort G1)
@@ -2138,7 +2138,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u, v DESC
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=+2,-3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(4),ordering=+2,-3 opt(4))
@@ -2172,7 +2172,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT (SELECT w FROM kuvw WHERE v=1 AND x=u) FROM xyz ORDER BY x+1, x
 ----
-memo (optimized, ~27KB, required=[presentation: w:12] [ordering: +13,+1])
+memo (optimized, ~32KB, required=[presentation: w:12] [ordering: +13,+1])
  ├── G1: (project G2 G3 x)
  │    ├── [presentation: w:12] [ordering: +13,+1]
  │    │    ├── best: (sort G1)
@@ -2246,55 +2246,63 @@ memo (optimized, ~27KB, required=[presentation: w:12] [ordering: +13,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~21KB, required=[])
+memo (optimized, ~25KB, required=[])
  ├── G1: (insert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 xyz)
- │         └── cost: 2219.17
- ├── G2: (upsert-distinct-on G5 G6 cols=(13))
+ │         └── cost: 2188.92
+ ├── G2: (upsert-distinct-on G5 G6 cols=(8)) (upsert-distinct-on G5 G6 cols=(8),ordering=+8 opt(12))
  │    └── []
- │         ├── best: (upsert-distinct-on G5 G6 cols=(13))
- │         └── cost: 2219.16
+ │         ├── best: (upsert-distinct-on G5 G6 cols=(8))
+ │         └── cost: 2188.91
  ├── G3: (unique-checks)
  ├── G4: (f-k-checks)
- ├── G5: (anti-join G7 G8 G9) (lookup-join G7 G10 xyz,keyCols=[13],outCols=(13-16)) (lookup-join G7 G10 xyz@xy,keyCols=[13],outCols=(13-16))
+ ├── G5: (anti-join G7 G8 G9) (merge-join G7 G8 G10 anti-join,+8,+13) (lookup-join G7 G10 xyz,keyCols=[8],outCols=(8,9,12,13)) (lookup-join G7 G10 xyz@xy,keyCols=[8],outCols=(8,9,12,13))
+ │    ├── [ordering: +8 opt(12)]
+ │    │    ├── best: (merge-join G7="[ordering: +8 opt(12)]" G8="[ordering: +13]" G10 anti-join,+8,+13)
+ │    │    └── cost: 2188.88
  │    └── []
- │         ├── best: (anti-join G7 G8 G9)
- │         └── cost: 2219.13
+ │         ├── best: (merge-join G7="[ordering: +8 opt(12)]" G8="[ordering: +13]" G10 anti-join,+8,+13)
+ │         └── cost: 2188.88
  ├── G6: (aggregations G11 G12)
- ├── G7: (project G13 G14)
+ ├── G7: (project G13 G14 v w)
+ │    ├── [ordering: +8 opt(12)]
+ │    │    ├── best: (project G13="[ordering: +8]" G14 v w)
+ │    │    └── cost: 1104.64
  │    └── []
- │         ├── best: (project G13 G14)
- │         └── cost: 1124.64
- ├── G8: (scan xyz,cols=(16)) (scan xyz@xy,cols=(16)) (scan xyz@zyx,cols=(16)) (scan xyz@yy,cols=(16))
+ │         ├── best: (project G13 G14 v w)
+ │         └── cost: 1104.64
+ ├── G8: (scan xyz,cols=(13)) (scan xyz@xy,cols=(13)) (scan xyz@zyx,cols=(13)) (scan xyz@yy,cols=(13))
+ │    ├── [ordering: +13]
+ │    │    ├── best: (scan xyz@xy,cols=(13))
+ │    │    └── cost: 1054.32
  │    └── []
- │         ├── best: (scan xyz@xy,cols=(16))
+ │         ├── best: (scan xyz@xy,cols=(13))
  │         └── cost: 1054.32
  ├── G9: (filters G15)
  ├── G10: (filters)
  ├── G11: (first-agg G16)
  ├── G12: (first-agg G17)
  ├── G13: (scan kuvw,cols=(8,9)) (scan kuvw@uvw,cols=(8,9)) (scan kuvw@wvu,cols=(8,9)) (scan kuvw@vw,cols=(8,9)) (scan kuvw@w,cols=(8,9))
+ │    ├── [ordering: +8]
+ │    │    ├── best: (scan kuvw@vw,cols=(8,9))
+ │    │    └── cost: 1084.62
  │    └── []
  │         ├── best: (scan kuvw,cols=(8,9))
  │         └── cost: 1084.62
- ├── G14: (projections G18 G19 G20)
- ├── G15: (eq G21 G22)
+ ├── G14: (projections G18)
+ ├── G15: (eq G19 G20)
  ├── G16: (variable w)
  ├── G17: (variable "?column?")
- ├── G18: (assignment-cast G23)
- ├── G19: (assignment-cast G24)
- ├── G20: (const 1.0)
- ├── G21: (variable v)
- ├── G22: (variable x)
- ├── G23: (variable kuvw.v)
- └── G24: (variable kuvw.w)
+ ├── G18: (const 1.0)
+ ├── G19: (variable v)
+ └── G20: (variable x)
 
 # Ensure that streaming ensure-upsert-distinct-on will be used.
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~22KB, required=[])
+memo (optimized, ~25KB, required=[])
  ├── G1: (upsert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 G4 xyz)
@@ -3280,7 +3288,7 @@ INDEX gg (g)
 memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e LIMIT 10
 ----
-memo (optimized, ~16KB, required=[presentation: d:1,e:2,count:8])
+memo (optimized, ~18KB, required=[presentation: d:1,e:2,count:8])
  ├── G1: (limit G2 G3) (limit G4 G3) (limit G5 G3) (limit G6 G3)
  │    └── [presentation: d:1,e:2,count:8]
  │         ├── best: (limit G4="[limit hint: 10.00]" G3)
@@ -3439,12 +3447,12 @@ memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY count(*) LIMIT 10
 ----
 memo (optimized, ~5KB, required=[presentation: d:1,e:2,count:8] [ordering: +8])
- ├── G1: (limit G2 G3 ordering=+8) (top-k G2 &{10 +8})
+ ├── G1: (limit G2 G3 ordering=+8) (top-k G2 &{10 +8 })
  │    ├── [presentation: d:1,e:2,count:8] [ordering: +8]
- │    │    ├── best: (top-k G2 &{10 +8})
+ │    │    ├── best: (top-k G2 &{10 +8 })
  │    │    └── cost: 1231.64
  │    └── []
- │         ├── best: (top-k G2 &{10 +8})
+ │         ├── best: (top-k G2 &{10 +8 })
  │         └── cost: 1231.64
  ├── G2: (group-by G4 G5 cols=(1,2)) (group-by G4 G5 cols=(1,2),ordering=+1)
  │    ├── [ordering: +8] [limit hint: 10.00]

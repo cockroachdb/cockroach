@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -33,6 +34,12 @@ const (
 	// OpTxnCoordSender represents a txn coordinator send operation.
 	OpTxnCoordSender = "txn coordinator send"
 )
+
+// DisableCommitSanityCheck allows opting out of a fatal assertion error that was observed in the wild
+// and for which a root cause is not yet available.
+//
+// See: https://github.com/cockroachdb/cockroach/pull/73512.
+var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMIT_SANITY_CHECK", false)
 
 // txnState represents states relating to whether an EndTxn request needs
 // to be sent.
@@ -909,35 +916,60 @@ func (tc *TxnCoordSender) updateStateLocked(
 
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		if errTxn.Status == roachpb.COMMITTED {
-			sanityCheckCommittedErr(ctx, pErr, ba)
+		if err := sanityCheckErrWithTxn(ctx, pErr, ba, &tc.testingKnobs); err != nil {
+			return roachpb.NewError(err)
 		}
 		tc.mu.txn.Update(errTxn)
 	}
 	return pErr
 }
 
-// sanityCheckCommittedErr verifies the circumstances in which we're receiving
-// an error indicating a COMMITTED transaction. Only rollbacks should be
-// encountering such errors. Marking a transaction as explicitly-committed can
-// also encounter these errors, but those errors don't make it to the
-// TxnCoordSender.
-func sanityCheckCommittedErr(ctx context.Context, pErr *roachpb.Error, ba roachpb.BatchRequest) {
-	errTxn := pErr.GetTxn()
-	if errTxn == nil || errTxn.Status != roachpb.COMMITTED {
-		// We shouldn't have been called.
-		return
+// sanityCheckErrWithTxn verifies whether the error (which must have a txn
+// attached) contains a COMMITTED transaction. Only rollbacks should be able to
+// encounter such errors. Marking a transaction as explicitly-committed can also
+// encounter these errors, but those errors don't make it to the TxnCoordSender.
+//
+// Returns the passed-in error or fatals (depending on DisableCommitSanityCheck
+// env var), wrapping the input error in case of an assertion violation.
+//
+// The assertion is known to have failed in the wild, see:
+// https://github.com/cockroachdb/cockroach/issues/67765
+func sanityCheckErrWithTxn(
+	ctx context.Context,
+	pErrWithTxn *roachpb.Error,
+	ba roachpb.BatchRequest,
+	knobs *ClientTestingKnobs,
+) error {
+	txn := pErrWithTxn.GetTxn()
+	if txn.Status != roachpb.COMMITTED {
+		return nil
 	}
 	// The only case in which an error can have a COMMITTED transaction in it is
 	// when the request was a rollback. Rollbacks can race with commits if a
 	// context timeout expires while a commit request is in flight.
 	if ba.IsSingleAbortTxnRequest() {
-		return
+		return nil
 	}
+
 	// Finding out about our transaction being committed indicates a serious bug.
 	// Requests are not supposed to be sent on transactions after they are
 	// committed.
-	log.Fatalf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
+	err := errors.Wrapf(pErrWithTxn.GoError(),
+		"transaction unexpectedly committed, ba: %s. txn: %s",
+		ba, pErrWithTxn.GetTxn(),
+	)
+	err = errors.WithAssertionFailure(
+		errors.WithIssueLink(err, errors.IssueLink{
+			IssueURL: "https://github.com/cockroachdb/cockroach/issues/67765",
+			Detail: "you have encountered a known bug in CockroachDB, please consider " +
+				"reporting on the Github issue or reach out via Support. " +
+				"This assertion can be disabled by setting the environment variable " +
+				"COCKROACH_DISABLE_COMMIT_SANITY_CHECK=true",
+		}))
+	if !DisableCommitSanityCheck && !knobs.DisableCommitSanityCheck {
+		log.Fatalf(ctx, "%s", err)
+	}
+	return err
 }
 
 // setTxnAnchorKey sets the key at which to anchor the transaction record. The

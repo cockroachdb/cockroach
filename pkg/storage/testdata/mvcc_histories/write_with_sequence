@@ -20,7 +20,7 @@ put: batch after write is empty
 txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
-error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 3 missing an intent with lower sequence 1
+error: (*issuelink.withIssueLink:) transaction 00000000-0000-0000-0000-000000000001 with sequence 3 missing an intent with lower sequence 1
 
 run ok
 txn_remove t=t
@@ -71,7 +71,7 @@ put: batch after write is empty
 txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
-error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000003 with sequence 2 has a different value [0 0 0 0 3 118 50] after recomputing from what was written: [0 0 0 0 3 118 49]
+error: (*assert.withAssertionFailure:) transaction 00000000-0000-0000-0000-000000000003 with sequence 2 has a different value [0 0 0 0 3 118 50] after recomputing from what was written: [0 0 0 0 3 118 49]
 
 run ok
 txn_remove t=t
@@ -122,7 +122,7 @@ put: batch after write is empty
 txn: "t" meta={id=00000000 key="k" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
-error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000005 with sequence 3 has a different value [0 0 0 0 3 118 51] after recomputing from what was written: [0 0 0 0 3 118 50]
+error: (*assert.withAssertionFailure:) transaction 00000000-0000-0000-0000-000000000005 with sequence 3 has a different value [0 0 0 0 3 118 51] after recomputing from what was written: [0 0 0 0 3 118 50]
 
 
 run ok

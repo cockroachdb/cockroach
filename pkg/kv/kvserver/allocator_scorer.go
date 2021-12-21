@@ -102,8 +102,8 @@ type scorerOptions interface {
 		ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
 	) bool
 	// balanceScore returns a discrete score (`balanceStatus`) based on whether
-	// the store represented by `sc` classifies as underfull, lessThanEqualToMean,
-	// moreThanMean or overfull relative to all the stores in `sl`.
+	// the store represented by `sc` classifies as underfull, aroundTheMean, or
+	// overfull relative to all the stores in `sl`.
 	balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus
 	// rebalanceFromConvergenceScore assigns a convergence score to the store
 	// referred to by `sc` based on whether moving a replica away from this store
@@ -135,6 +135,9 @@ func (o rangeCountScorerOptions) deterministicForTesting() bool {
 func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	if len(sl.stores) == 0 {
+		return false
+	}
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(o, sl.candidateRanges.mean)))
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
@@ -172,13 +175,10 @@ func (o rangeCountScorerOptions) balanceScore(
 	curRangeCount := float64(sc.RangeCount)
 	if curRangeCount < minRangeCount {
 		return underfull
-	} else if curRangeCount <= sl.candidateRanges.mean {
-		return lessThanEqualToMean
-	} else if curRangeCount < maxRangeCount {
-		return moreThanMean
-	} else {
+	} else if curRangeCount >= maxRangeCount {
 		return overfull
 	}
+	return aroundTheMean
 }
 
 // rebalanceFromConvergesScore returns 1 iff rebalancing a replica away from
@@ -224,6 +224,9 @@ func (o qpsScorerOptions) deterministicForTesting() bool {
 func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	if len(sl.stores) == 0 {
+		return false
+	}
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
 	overfullThreshold := overfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
@@ -271,13 +274,10 @@ func (o qpsScorerOptions) balanceScore(sl StoreList, sc roachpb.StoreCapacity) b
 	curQPS := sc.QueriesPerSecond
 	if curQPS < minQPS {
 		return underfull
-	} else if curQPS <= sl.candidateQueriesPerSecond.mean {
-		return lessThanEqualToMean
-	} else if curQPS < maxQPS {
-		return moreThanMean
-	} else {
+	} else if curQPS >= maxQPS {
 		return overfull
 	}
+	return aroundTheMean
 }
 
 func (o qpsScorerOptions) rebalanceFromConvergesScore(_ StoreList, _ roachpb.StoreCapacity) int {
@@ -415,20 +415,6 @@ func (cl candidateList) String() string {
 	for _, c := range cl {
 		buffer.WriteRune('\n')
 		buffer.WriteString(c.String())
-	}
-	buffer.WriteRune(']')
-	return buffer.String()
-}
-
-func (cl candidateList) compactString(options scorerOptions) string {
-	if len(cl) == 0 {
-		return "[]"
-	}
-	var buffer bytes.Buffer
-	buffer.WriteRune('[')
-	for _, c := range cl {
-		buffer.WriteRune('\n')
-		buffer.WriteString(c.compactString())
 	}
 	buffer.WriteRune(']')
 	return buffer.String()
@@ -768,17 +754,15 @@ func candidateListForRemoval(
 	return candidates
 }
 
-// rebalanceOptions contains two candidate lists:
+// rebalanceOptions contains:
 //
-// 1. a ranked list of existing replicas ordered from best to worst -- i.e.
-// least qualified for rebalancing to most qualified (see `candidateList.best()`
-// and `candidateList.worst()`)
+// 1. an existing replica.
 // 2. a corresponding list of comparable stores that could be legal replacements
-// for the aforementioned existing replicas -- also ordered from `best()` to
+// for the aforementioned existing replica -- ordered from `best()` to
 // `worst()`.
 type rebalanceOptions struct {
-	existingCandidates candidateList
-	candidates         candidateList
+	existing   candidate
+	candidates candidateList
 }
 
 // rankedCandidateListForRebalancing returns a list of `rebalanceOptions`, i.e.
@@ -848,30 +832,35 @@ func rankedCandidateListForRebalancing(
 	// also include node Attributes or store Attributes. We could try to group
 	// stores by attributes as well, but it's simplest to just run this for each
 	// store.
-	type comparableStoreList struct {
-		existing   []roachpb.StoreDescriptor
-		sl         StoreList
-		candidates candidateList
+
+	// equivalenceClass captures the set of "equivalent" replacement candidates
+	// for each existing replica. "equivalent" here means the candidates that are
+	// just as diverse as the existing replica, conform to zone config constraints
+	// on the range and don't have a full disk.
+	// Following are a few examples:
+	// 1. Consider a 3 region cluster with regions A, B and C. Assume there is a
+	// range that has 1 replica in each of those regions. For each existing
+	// replica, its equivalence class would contain all the other stores in its
+	// own region.
+	// 2. Consider a cluster with 10 racks, each with 2 stores (on 2 different
+	// nodes). Assume that racks 1, 2 and 3 each have a replica for a range. For
+	// the existing replica in rack 1, its equivalence class would contain its
+	// neighboring store in rack 1 and all stores in racks 4...10.
+	type equivalenceClass struct {
+		existing    roachpb.StoreDescriptor
+		candidateSL StoreList
+		candidates  candidateList
 	}
-	var comparableStores []comparableStoreList
+	var equivalenceClasses []equivalenceClass
 	var needRebalanceTo bool
 	for _, existing := range existingStores {
-		// If this store is equivalent in both Locality and Node/Store Attributes to
-		// some other existing store, then we can treat them the same. We have to
-		// include Node/Store Attributes because they affect constraints.
-		var matchedOtherExisting bool
-		for i, stores := range comparableStores {
-			if sameLocalityAndAttrs(stores.existing[0], existing.store) {
-				comparableStores[i].existing = append(comparableStores[i].existing, existing.store)
-				matchedOtherExisting = true
-				break
-			}
-		}
-		if matchedOtherExisting {
-			continue
-		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
+			// Only process replacement candidates, not existing stores.
+			if store.StoreID == existing.store.StoreID {
+				continue
+			}
+
 			// Ignore any stores on dead nodes or stores that contain any of the
 			// replicas within `replicasOnExemptedStores`.
 			if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
@@ -941,37 +930,34 @@ func rankedCandidateListForRebalancing(
 		for i := range bestCands {
 			bestStores[i] = bestCands[i].store
 		}
-		comparableStores = append(comparableStores, comparableStoreList{
-			existing:   []roachpb.StoreDescriptor{existing.store},
-			sl:         makeStoreList(bestStores),
-			candidates: bestCands,
-		})
+		equivalenceClasses = append(
+			equivalenceClasses, equivalenceClass{
+				existing:    existing.store,
+				candidateSL: makeStoreList(bestStores),
+				candidates:  bestCands,
+			})
 	}
 
 	// 3. Decide whether we should try to rebalance. Note that for each existing
-	// store, we only compare its fullness stats to the stats of "comparable"
-	// stores, i.e. those stores that are at least as valid, necessary, and
-	// diverse as the existing store.
+	// store, we only compare its fullness stats to the stats of stores within the
+	// same equivalence class i.e. those stores that are at least as valid,
+	// necessary, and diverse as the existing store.
 	needRebalance := needRebalanceFrom || needRebalanceTo
 	var shouldRebalanceCheck bool
 	if !needRebalance {
 		for _, existing := range existingStores {
-			var sl StoreList
+			var candidateSL StoreList
 		outer:
-			for _, comparable := range comparableStores {
-				for _, existingCand := range comparable.existing {
-					if existing.store.StoreID == existingCand.StoreID {
-						sl = comparable.sl
-						break outer
-					}
+			for _, comparable := range equivalenceClasses {
+				if existing.store.StoreID == comparable.existing.StoreID {
+					candidateSL = comparable.candidateSL
+					break outer
 				}
 			}
-			// NB: Due to step 2 from above, we're guaranteed to have a non-empty `sl`
-			// at this point.
-			//
-			// TODO(a-robinson): Some moderate refactoring could extract this logic
-			// out into the loop below, avoiding duplicate balanceScore calculations.
-			if options.shouldRebalanceBasedOnThresholds(ctx, existing.store, sl) {
+			// NB: If we have any candidates that are at least as good as the existing
+			// replicas in terms of diversity and disk fullness, check whether the
+			// existing replicas' stats are divergent enough to justify a rebalance.
+			if options.shouldRebalanceBasedOnThresholds(ctx, existing.store, candidateSL) {
 				shouldRebalanceCheck = true
 				break
 			}
@@ -983,34 +969,29 @@ func rankedCandidateListForRebalancing(
 
 	// 4. Create sets of rebalance options, i.e. groups of candidate stores and
 	// the existing replicas that they could legally replace in the range.  We
-	// have to make a separate set of these for each group of comparableStores.
-	results := make([]rebalanceOptions, 0, len(comparableStores))
-	for _, comparable := range comparableStores {
-		var existingCandidates candidateList
-		var candidates candidateList
-		for _, existingDesc := range comparable.existing {
-			existing, ok := existingStores[existingDesc.StoreID]
-			if !ok {
-				log.Errorf(ctx, "BUG: missing candidate for existing store %+v; stores: %+v",
-					existingDesc, existingStores)
-				continue
-			}
-			if !existing.valid {
-				existing.details = "constraint check fail"
-				existingCandidates = append(existingCandidates, existing)
-				continue
-			}
+	// have to make a separate set of these for each group of equivalenceClasses.
+	results := make([]rebalanceOptions, 0, len(equivalenceClasses))
+	for _, comparable := range equivalenceClasses {
+		existing, ok := existingStores[comparable.existing.StoreID]
+		if !ok {
+			log.Errorf(ctx, "BUG: missing candidate struct for existing store %+v; stores: %+v",
+				comparable.existing, existingStores)
+			continue
+		}
+		if !existing.valid {
+			existing.details = "constraint check fail"
+		} else {
 			// Similarly to in candidateListForRemoval, any replica whose
 			// removal would not converge the range stats to their mean is given a
 			// constraint score boost of 1 to make it less attractive for removal.
-			convergesScore := options.rebalanceFromConvergesScore(comparable.sl, existing.store.Capacity)
-			balanceScore := options.balanceScore(comparable.sl, existing.store.Capacity)
+			convergesScore := options.rebalanceFromConvergesScore(comparable.candidateSL, existing.store.Capacity)
+			balanceScore := options.balanceScore(comparable.candidateSL, existing.store.Capacity)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
 			existing.rangeCount = int(existing.store.Capacity.RangeCount)
-			existingCandidates = append(existingCandidates, existing)
 		}
 
+		var candidates candidateList
 		for _, cand := range comparable.candidates {
 			// We handled the possible candidates for removal above. Don't process
 			// anymore here.
@@ -1022,35 +1003,33 @@ func rankedCandidateListForRebalancing(
 			// rebalance candidates.
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
-			cand.balanceScore = options.balanceScore(comparable.sl, s.Capacity)
-			cand.convergesScore = options.rebalanceToConvergesScore(comparable.sl, s.Capacity)
+			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
+			cand.convergesScore = options.rebalanceToConvergesScore(comparable.candidateSL, s.Capacity)
 			cand.rangeCount = int(s.Capacity.RangeCount)
 			candidates = append(candidates, cand)
 		}
 
-		if len(existingCandidates) == 0 || len(candidates) == 0 {
+		if len(candidates) == 0 {
 			continue
 		}
 
 		if options.deterministicForTesting() {
-			sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
 			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
 		} else {
-			sort.Sort(sort.Reverse(byScore(existingCandidates)))
 			sort.Sort(sort.Reverse(byScore(candidates)))
 		}
 
-		// Only return candidates better than the worst existing replica.
-		improvementCandidates := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
+		// Only return candidates better than the existing replica.
+		improvementCandidates := candidates.betterThan(existing)
 		if len(improvementCandidates) == 0 {
 			continue
 		}
 		results = append(results, rebalanceOptions{
-			existingCandidates: existingCandidates,
-			candidates:         improvementCandidates,
+			existing:   existing,
+			candidates: improvementCandidates,
 		})
 		log.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %s",
-			len(results), results[len(results)-1].candidates, results[len(results)-1].existingCandidates)
+			len(results), results[len(results)-1].candidates, results[len(results)-1].existing)
 	}
 
 	return results
@@ -1062,7 +1041,7 @@ func rankedCandidateListForRebalancing(
 // Returns nil if there are no more targets worth rebalancing to.
 func bestRebalanceTarget(
 	randGen allocatorRand, options []rebalanceOptions,
-) (*candidate, candidateList) {
+) (target, existingCandidate *candidate) {
 	bestIdx := -1
 	var bestTarget *candidate
 	var replaces candidate
@@ -1074,7 +1053,7 @@ func bestRebalanceTarget(
 		if target == nil {
 			continue
 		}
-		existing := option.existingCandidates[len(option.existingCandidates)-1]
+		existing := option.existing
 		if betterRebalanceTarget(target, &existing, bestTarget, &replaces) == target {
 			bestIdx = i
 			bestTarget = target
@@ -1089,7 +1068,7 @@ func bestRebalanceTarget(
 	// to a different candidate than intended due to movement within the slice.
 	copiedTarget := *bestTarget
 	options[bestIdx].candidates = options[bestIdx].candidates.removeCandidate(copiedTarget)
-	return &copiedTarget, options[bestIdx].existingCandidates
+	return &copiedTarget, &options[bestIdx].existing
 }
 
 // betterRebalanceTarget returns whichever of target1 or target2 is a larger
@@ -1139,19 +1118,6 @@ func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicationTarg
 		}
 	}
 	return false
-}
-
-func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
-	if !s1.Locality().Equals(s2.Locality()) {
-		return false
-	}
-	if !s1.Node.Attrs.Equals(s2.Node.Attrs) {
-		return false
-	}
-	if !s1.Attrs.Equals(s2.Attrs) {
-		return false
-	}
-	return true
 }
 
 // constraintsCheckFn determines whether the given store is a valid and/or
@@ -1540,10 +1506,9 @@ func diversityRebalanceFromScore(
 type balanceStatus int
 
 const (
-	overfull            balanceStatus = -2
-	moreThanMean        balanceStatus = -1
-	lessThanEqualToMean balanceStatus = 0
-	underfull           balanceStatus = 1
+	overfull      balanceStatus = -1
+	aroundTheMean balanceStatus = 0
+	underfull     balanceStatus = 1
 )
 
 func overfullRangeThreshold(options rangeCountScorerOptions, mean float64) float64 {

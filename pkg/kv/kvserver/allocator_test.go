@@ -1072,10 +1072,13 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	}
 
 	// Set up a second round of testing where the other two stores in the big
-	// locality actually have fewer replicas, but enough that it still isn't
-	// worth rebalancing to them.
-	stores[1].Capacity.RangeCount = 46
-	stores[2].Capacity.RangeCount = 46
+	// locality actually have fewer replicas, but enough that it still isn't worth
+	// rebalancing to them. We create a situation where the replacement candidates
+	// for s1 (i.e. s2 and s3) have an average of 48 replicas each (leading to an
+	// overfullness threshold of 51, which is greater than the replica count of
+	// s1).
+	stores[1].Capacity.RangeCount = 48
+	stores[2].Capacity.RangeCount = 48
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
 		target, _, details, ok := a.RebalanceVoter(
@@ -3227,39 +3230,35 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 	sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 
 	testCases := []struct {
-		existing []roachpb.StoreID
+		existing roachpb.StoreID
 		excluded []roachpb.StoreID
 		expected []roachpb.StoreID
 	}{
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2},
-			[]roachpb.StoreID{3, 4},
+			existing: 1,
+			excluded: []roachpb.StoreID{2},
+			expected: []roachpb.StoreID{3, 4},
 		},
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2, 3},
-			[]roachpb.StoreID{4},
+			existing: 1,
+			excluded: []roachpb.StoreID{2, 3},
+			expected: []roachpb.StoreID{4},
 		},
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2, 3, 4},
-			[]roachpb.StoreID{},
+			existing: 1,
+			excluded: []roachpb.StoreID{2, 3, 4},
+			expected: []roachpb.StoreID{},
 		},
 		{
-			[]roachpb.StoreID{1},
-			[]roachpb.StoreID{2, 4},
-			[]roachpb.StoreID{3},
+			existing: 1,
+			excluded: []roachpb.StoreID{2, 4},
+			expected: []roachpb.StoreID{3},
 		},
 	}
 
 	for testIdx, tc := range testCases {
-		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
-		for i, storeID := range tc.existing {
-			existingRepls[i] = roachpb.ReplicaDescriptor{
-				NodeID:  roachpb.NodeID(storeID),
-				StoreID: storeID,
-			}
+		existingRepls := []roachpb.ReplicaDescriptor{
+			{NodeID: roachpb.NodeID(tc.existing), StoreID: tc.existing},
 		}
 		// No constraints.
 		conf := roachpb.SpanConfig{}
@@ -3316,11 +3315,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 					candidateStores[i] = cand.store.StoreID
 				}
 				require.ElementsMatch(t, tc.expected, candidateStores)
-				existingStores := make([]roachpb.StoreID, len(rebalanceOpts[0].existingCandidates))
-				for i, cand := range rebalanceOpts[0].existingCandidates {
-					existingStores[i] = cand.store.StoreID
-				}
-				require.ElementsMatch(t, tc.existing, existingStores)
+				require.Equal(t, tc.existing, rebalanceOpts[0].existing.store.StoreID)
 			} else {
 				require.Len(t, rebalanceOpts, 0)
 			}
@@ -4167,7 +4162,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 	// stores would be best to remove if we had to remove one purely on the basis
 	// of constraint-matching and locality diversity.
 	type rebalanceStoreIDs struct {
-		existing   []roachpb.StoreID
+		existing   roachpb.StoreID
 		candidates []roachpb.StoreID
 	}
 	testCases := []struct {
@@ -4200,11 +4195,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 			},
@@ -4215,11 +4210,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{5, 6},
 				},
 			},
@@ -4230,7 +4225,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{5, 6},
 				},
 			},
@@ -4241,15 +4236,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 			},
@@ -4260,11 +4255,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 7, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{8},
+					existing:   8,
 					candidates: []roachpb.StoreID{3, 4, 5, 6},
 				},
 			},
@@ -4281,11 +4276,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{1},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1},
 				},
 			},
@@ -4296,15 +4291,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4315,7 +4310,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{2},
 				},
 			},
@@ -4326,11 +4321,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4341,11 +4336,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{3, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 			},
@@ -4356,11 +4351,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{2},
 				},
 			},
@@ -4377,11 +4372,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{2},
 				},
 			},
@@ -4392,15 +4387,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{3, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 			},
@@ -4423,11 +4418,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4438,15 +4433,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4457,11 +4452,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 			},
@@ -4472,15 +4467,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{2, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{4, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4491,15 +4486,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4522,11 +4517,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4537,15 +4532,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4556,11 +4551,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 			},
@@ -4571,15 +4566,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{2, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{4, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4590,15 +4585,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 4, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{3, 7},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{5, 7},
 				},
 			},
@@ -4621,7 +4616,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3},
 				},
 			},
@@ -4632,11 +4627,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3, 4, 8},
 				},
 			},
@@ -4647,7 +4642,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4658,7 +4653,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4669,7 +4664,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{6, 8},
 				},
 			},
@@ -4680,11 +4675,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{1},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1},
 				},
 			},
@@ -4695,15 +4690,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{5, 6, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 			},
@@ -4714,15 +4709,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{6, 7, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 				{
-					existing:   []roachpb.StoreID{8},
+					existing:   8,
 					candidates: []roachpb.StoreID{1, 3},
 				},
 			},
@@ -4733,11 +4728,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 6, 8},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3},
 				},
 				{
-					existing:   []roachpb.StoreID{8},
+					existing:   8,
 					candidates: []roachpb.StoreID{3},
 				},
 			},
@@ -4748,11 +4743,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4, 6},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4, 8},
 				},
 			},
@@ -4785,11 +4780,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 3},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 			},
@@ -4801,11 +4796,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{2, 3, 4},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{5, 6, 7, 8},
 				},
 			},
@@ -4817,15 +4812,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 2, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{1},
+					existing:   1,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{2},
+					existing:   2,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4837,15 +4832,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{3, 4, 5},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{3},
+					existing:   3,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{4},
+					existing:   4,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2},
 				},
 			},
@@ -4857,11 +4852,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4873,11 +4868,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{1, 5, 6},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{3, 4},
 				},
 			},
@@ -4889,15 +4884,15 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existing:    []roachpb.StoreID{5, 6, 7},
 			expected: []rebalanceStoreIDs{
 				{
-					existing:   []roachpb.StoreID{5},
+					existing:   5,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{6},
+					existing:   6,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 				{
-					existing:   []roachpb.StoreID{7},
+					existing:   7,
 					candidates: []roachpb.StoreID{1, 2, 3, 4},
 				},
 			},
@@ -4946,10 +4941,10 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			match = false
 		} else {
 			sort.Slice(results, func(i, j int) bool {
-				return results[i].existingCandidates[0].store.StoreID < results[j].existingCandidates[0].store.StoreID
+				return results[i].existing.store.StoreID < results[j].existing.store.StoreID
 			})
 			for i := range tc.expected {
-				if !expectedStoreIDsMatch(tc.expected[i].existing, results[i].existingCandidates) ||
+				if tc.expected[i].existing != results[i].existing.store.StoreID ||
 					!expectedStoreIDsMatch(tc.expected[i].candidates, results[i].candidates) {
 					match = false
 					break
@@ -7593,61 +7588,60 @@ func Example_rebalancing() {
 	}
 	table.Render()
 	fmt.Printf("Total bytes=%d, ranges=%d\n", totBytes, totRanges)
-
 	// Output:
 	// +-----+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+
 	// | gen | store 0  | store 1  | store 2  | store 3  | store 4  | store 5  | store 6  | store 7  | store 8  | store 9  | store 10 | store 11 | store 12 | store 13 | store 14 | store 15 | store 16 | store 17 | store 18 | store 19 |
 	// +-----+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+
 	// |   0 |   2 100% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |   2 |   3  77% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   1  22% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
-	// |   4 |   3  35% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   2  27% |   0   0% |   0   0% |   0   0% |   0   0% |   3  30% |   0   0% |   0   0% |   0   0% |   0   0% |   1   5% |   0   0% |   0   0% |
-	// |   6 |   3  20% |   0   0% |   0   0% |   0   0% |   1   5% |   1   3% |   0   0% |   3  15% |   0   0% |   0   0% |   1   6% |   0   0% |   3  24% |   2   5% |   0   0% |   2  10% |   0   0% |   3   9% |   0   0% |   0   0% |
-	// |   8 |   4  10% |   0   0% |   0   0% |   0   0% |   3  10% |   3   7% |   0   0% |   4   8% |   0   0% |   0   0% |   3   7% |   1   3% |   4  14% |   4   5% |   0   0% |   4  10% |   1   3% |   4  11% |   1   3% |   1   3% |
-	// |  10 |   5   6% |   5  10% |   0   0% |   1   1% |   4   6% |   4   4% |   1   0% |   5   3% |   0   0% |   2   1% |   4   5% |   3   4% |   5  13% |   5   4% |   0   0% |   5  11% |   3   4% |   5   7% |   3   7% |   3   5% |
-	// |  12 |   6   6% |   6   8% |   6   8% |   3   1% |   5   4% |   5   3% |   3   2% |   6   1% |   4   4% |   4   3% |   5   3% |   5   5% |   6   9% |   6   4% |   3   1% |   6   8% |   5   5% |   6   4% |   5   7% |   5   6% |
-	// |  14 |   8   5% |   8   7% |   8   8% |   5   2% |   7   5% |   7   4% |   5   3% |   8   1% |   6   4% |   6   3% |   7   3% |   7   4% |   8   9% |   8   4% |   5   3% |   8   7% |   7   4% |   8   4% |   7   6% |   7   4% |
-	// |  16 |  10   5% |  10   8% |  10   8% |   7   2% |   9   4% |   9   4% |   7   3% |  10   2% |   8   4% |   8   3% |   9   3% |   9   5% |  10   7% |  10   4% |   7   3% |  10   7% |   9   4% |  10   4% |   9   5% |   9   3% |
-	// |  18 |  12   5% |  12   7% |  12   7% |   9   3% |  11   5% |  11   4% |   9   4% |  12   3% |  10   5% |  10   3% |  11   3% |  11   4% |  12   6% |  12   5% |   9   3% |  12   6% |  11   5% |  12   4% |  11   5% |  11   3% |
-	// |  20 |  14   5% |  14   6% |  14   7% |  11   3% |  13   4% |  13   5% |  11   3% |  14   3% |  12   5% |  12   3% |  13   3% |  13   4% |  14   6% |  14   5% |  11   3% |  14   6% |  13   5% |  14   5% |  13   6% |  13   4% |
-	// |  22 |  16   5% |  16   6% |  16   7% |  13   3% |  15   4% |  15   4% |  13   4% |  16   3% |  14   4% |  14   4% |  15   3% |  15   5% |  16   5% |  16   5% |  13   3% |  16   6% |  15   5% |  16   5% |  15   5% |  15   4% |
-	// |  24 |  18   5% |  18   6% |  18   7% |  15   3% |  17   4% |  17   4% |  15   4% |  18   4% |  16   4% |  16   4% |  17   3% |  17   5% |  18   5% |  18   5% |  15   4% |  18   5% |  17   5% |  18   4% |  17   5% |  17   4% |
-	// |  26 |  20   5% |  20   5% |  20   6% |  17   3% |  19   4% |  19   4% |  17   3% |  20   3% |  18   4% |  18   4% |  19   3% |  19   5% |  20   5% |  20   5% |  17   4% |  20   5% |  19   5% |  20   4% |  19   5% |  19   4% |
-	// |  28 |  22   5% |  22   6% |  22   6% |  19   4% |  21   4% |  21   4% |  19   4% |  22   4% |  20   5% |  20   4% |  21   3% |  21   5% |  22   5% |  22   6% |  19   4% |  22   5% |  21   5% |  22   4% |  21   5% |  21   4% |
-	// |  30 |  24   6% |  24   5% |  24   6% |  21   4% |  23   4% |  23   5% |  21   4% |  24   4% |  22   4% |  22   4% |  23   3% |  23   5% |  24   5% |  24   5% |  21   3% |  24   5% |  23   5% |  24   4% |  23   5% |  23   4% |
-	// |  32 |  26   6% |  26   5% |  26   6% |  23   4% |  25   4% |  25   5% |  23   4% |  26   4% |  24   5% |  24   4% |  25   3% |  25   5% |  26   5% |  26   5% |  23   4% |  26   5% |  25   5% |  26   4% |  25   5% |  25   4% |
-	// |  34 |  28   5% |  28   5% |  28   6% |  25   4% |  27   4% |  27   5% |  25   4% |  28   4% |  26   5% |  26   4% |  27   3% |  27   5% |  28   5% |  28   5% |  25   4% |  28   5% |  27   5% |  28   4% |  27   5% |  27   4% |
-	// |  36 |  30   5% |  30   5% |  30   6% |  27   4% |  29   4% |  29   5% |  27   4% |  30   4% |  28   5% |  28   4% |  29   4% |  29   5% |  30   5% |  30   5% |  27   4% |  30   5% |  29   5% |  30   4% |  29   5% |  29   4% |
-	// |  38 |  32   5% |  32   5% |  32   6% |  29   5% |  31   4% |  31   5% |  29   4% |  32   4% |  30   5% |  30   4% |  31   4% |  31   5% |  32   5% |  32   5% |  29   4% |  32   5% |  31   5% |  32   4% |  31   5% |  31   4% |
-	// |  40 |  34   5% |  34   5% |  34   6% |  31   5% |  33   4% |  33   4% |  31   4% |  34   4% |  32   4% |  32   4% |  33   4% |  33   4% |  34   5% |  34   5% |  31   4% |  34   5% |  33   5% |  34   4% |  33   4% |  33   4% |
-	// |  42 |  36   5% |  36   5% |  36   6% |  33   5% |  35   3% |  35   4% |  33   4% |  36   4% |  34   5% |  34   4% |  35   4% |  35   5% |  36   5% |  36   5% |  33   4% |  36   5% |  35   5% |  36   4% |  35   4% |  35   4% |
-	// |  44 |  38   5% |  38   5% |  38   6% |  35   5% |  37   4% |  37   4% |  35   4% |  38   4% |  36   5% |  36   4% |  37   4% |  37   5% |  38   5% |  38   5% |  35   4% |  38   5% |  37   5% |  38   4% |  37   4% |  37   4% |
-	// |  46 |  40   5% |  40   5% |  40   5% |  37   4% |  39   4% |  39   4% |  37   4% |  40   4% |  38   5% |  38   4% |  39   4% |  39   5% |  40   5% |  40   4% |  37   4% |  40   5% |  39   5% |  40   4% |  39   4% |  39   4% |
-	// |  48 |  42   5% |  42   5% |  42   6% |  39   5% |  41   4% |  41   4% |  39   4% |  42   4% |  40   5% |  40   4% |  41   4% |  41   5% |  42   5% |  42   5% |  39   4% |  42   5% |  41   5% |  42   4% |  41   4% |  41   4% |
-	// |  50 |  44   5% |  44   5% |  44   5% |  41   4% |  43   4% |  43   4% |  41   4% |  44   4% |  42   5% |  42   4% |  43   4% |  43   5% |  44   5% |  44   5% |  41   4% |  44   5% |  43   5% |  44   4% |  43   4% |  43   4% |
-	// |  52 |  46   5% |  46   5% |  46   5% |  43   4% |  45   4% |  45   4% |  43   4% |  46   4% |  44   5% |  44   4% |  45   4% |  45   5% |  46   5% |  46   5% |  43   4% |  46   5% |  45   5% |  46   4% |  45   5% |  45   4% |
-	// |  54 |  48   5% |  48   5% |  48   5% |  45   4% |  47   4% |  47   4% |  45   4% |  48   4% |  46   5% |  46   4% |  47   4% |  47   5% |  48   5% |  48   5% |  45   4% |  48   5% |  47   5% |  48   4% |  47   5% |  47   4% |
-	// |  56 |  50   5% |  50   5% |  50   5% |  47   4% |  49   4% |  49   4% |  47   4% |  50   4% |  48   5% |  48   4% |  49   4% |  49   5% |  50   5% |  50   5% |  47   4% |  50   5% |  49   5% |  50   4% |  49   5% |  49   4% |
-	// |  58 |  52   5% |  52   5% |  52   5% |  49   4% |  51   4% |  51   4% |  49   4% |  52   5% |  50   4% |  50   4% |  51   4% |  51   5% |  52   5% |  52   4% |  49   4% |  52   5% |  51   5% |  52   4% |  51   5% |  51   4% |
-	// |  60 |  54   5% |  54   5% |  54   5% |  51   4% |  53   4% |  53   4% |  51   4% |  54   5% |  52   4% |  52   4% |  53   4% |  53   5% |  54   5% |  54   5% |  51   4% |  54   5% |  53   5% |  54   4% |  53   5% |  53   4% |
-	// |  62 |  56   5% |  56   5% |  56   5% |  53   4% |  55   4% |  55   4% |  53   4% |  56   5% |  54   4% |  54   4% |  55   4% |  55   5% |  56   5% |  56   5% |  53   4% |  56   5% |  55   5% |  56   4% |  55   5% |  55   4% |
-	// |  64 |  58   5% |  58   5% |  58   5% |  55   4% |  57   4% |  57   4% |  55   4% |  58   4% |  56   4% |  56   4% |  57   4% |  57   5% |  58   5% |  58   4% |  55   4% |  58   5% |  57   5% |  58   4% |  57   5% |  57   4% |
-	// |  66 |  60   5% |  60   5% |  60   5% |  57   4% |  59   4% |  59   4% |  57   4% |  60   4% |  58   4% |  58   4% |  59   4% |  59   5% |  60   5% |  60   4% |  57   5% |  60   4% |  59   5% |  60   4% |  59   5% |  59   4% |
-	// |  68 |  62   5% |  62   5% |  62   5% |  59   4% |  61   4% |  61   4% |  59   4% |  62   4% |  60   4% |  60   4% |  61   4% |  61   5% |  62   5% |  62   4% |  59   5% |  62   5% |  61   5% |  62   4% |  61   5% |  61   4% |
-	// |  70 |  64   5% |  64   5% |  64   5% |  61   4% |  63   4% |  63   5% |  61   4% |  64   4% |  62   4% |  62   4% |  63   4% |  63   5% |  64   5% |  64   4% |  61   5% |  64   5% |  63   5% |  64   4% |  63   5% |  63   4% |
-	// |  72 |  66   5% |  66   5% |  66   5% |  63   4% |  65   4% |  65   4% |  63   4% |  66   4% |  64   4% |  64   4% |  65   4% |  65   5% |  66   5% |  66   4% |  63   5% |  66   4% |  65   5% |  66   4% |  65   5% |  65   4% |
-	// |  74 |  68   5% |  68   5% |  68   5% |  65   4% |  67   4% |  67   4% |  65   4% |  68   4% |  66   5% |  66   4% |  67   4% |  67   5% |  68   5% |  68   4% |  65   5% |  68   4% |  67   5% |  68   4% |  67   5% |  67   4% |
-	// |  76 |  70   5% |  70   5% |  70   5% |  67   4% |  69   4% |  69   4% |  67   4% |  70   4% |  68   5% |  68   4% |  69   4% |  69   5% |  70   5% |  70   4% |  67   4% |  70   5% |  69   5% |  70   4% |  69   5% |  69   4% |
-	// |  78 |  72   5% |  72   5% |  72   5% |  69   4% |  71   4% |  71   4% |  69   4% |  72   4% |  70   5% |  70   4% |  71   4% |  71   5% |  72   5% |  72   4% |  69   4% |  72   5% |  71   5% |  72   4% |  71   5% |  71   4% |
-	// |  80 |  74   5% |  74   5% |  74   5% |  71   5% |  73   4% |  73   4% |  71   5% |  74   4% |  72   5% |  72   4% |  73   4% |  73   5% |  74   5% |  74   4% |  71   4% |  74   5% |  73   5% |  74   4% |  73   4% |  73   4% |
-	// |  82 |  76   5% |  76   5% |  76   5% |  73   5% |  75   4% |  75   4% |  73   5% |  76   4% |  74   5% |  74   4% |  75   4% |  75   5% |  76   5% |  76   4% |  73   4% |  76   5% |  75   5% |  76   4% |  75   4% |  75   4% |
-	// |  84 |  78   5% |  78   5% |  78   5% |  75   5% |  77   4% |  77   4% |  75   5% |  78   4% |  76   4% |  76   4% |  77   4% |  77   5% |  78   5% |  78   4% |  75   4% |  78   5% |  77   5% |  78   4% |  77   4% |  77   4% |
-	// |  86 |  80   5% |  80   5% |  80   5% |  77   4% |  79   4% |  79   4% |  77   5% |  80   4% |  78   5% |  78   4% |  79   4% |  79   5% |  80   5% |  80   4% |  77   4% |  80   5% |  79   5% |  80   4% |  79   4% |  79   4% |
-	// |  88 |  82   5% |  82   5% |  82   5% |  79   4% |  81   4% |  81   4% |  79   5% |  82   4% |  80   5% |  80   4% |  81   4% |  81   5% |  82   5% |  82   4% |  79   4% |  82   5% |  81   5% |  82   4% |  81   4% |  81   4% |
-	// |  90 |  84   5% |  84   5% |  84   5% |  81   4% |  83   4% |  83   4% |  81   5% |  84   4% |  82   5% |  82   4% |  83   4% |  83   5% |  84   5% |  84   4% |  81   4% |  84   5% |  83   5% |  84   4% |  83   4% |  83   4% |
-	// |  92 |  86   5% |  86   5% |  86   5% |  83   4% |  85   4% |  85   4% |  83   5% |  86   4% |  84   5% |  84   4% |  85   4% |  85   5% |  86   5% |  86   5% |  83   4% |  86   5% |  85   5% |  86   4% |  85   4% |  85   4% |
-	// |  94 |  88   5% |  88   5% |  88   5% |  85   4% |  87   4% |  87   4% |  85   5% |  88   4% |  86   5% |  86   4% |  87   4% |  87   5% |  88   5% |  88   4% |  85   4% |  88   5% |  87   5% |  88   4% |  87   4% |  87   4% |
-	// |  96 |  90   5% |  90   5% |  90   5% |  87   5% |  89   4% |  89   4% |  87   5% |  90   4% |  88   4% |  88   4% |  89   4% |  89   5% |  90   5% |  90   4% |  87   4% |  90   5% |  89   5% |  90   4% |  89   4% |  89   4% |
-	// |  98 |  92   5% |  92   5% |  92   5% |  89   5% |  91   4% |  91   4% |  89   5% |  92   4% |  90   4% |  90   4% |  91   4% |  91   5% |  92   5% |  92   4% |  89   4% |  92   5% |  91   5% |  92   4% |  91   4% |  91   4% |
+	// |   2 |   3  54% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   2  45% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
+	// |   4 |   3  35% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   2  20% |   1   8% |   3  20% |   0   0% |   0   0% |   0   0% |   0   0% |   1  15% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |   0   0% |
+	// |   6 |   3   9% |   0   0% |   0   0% |   1   8% |   0   0% |   1   3% |   3   9% |   3  12% |   3  12% |   0   0% |   1   7% |   0   0% |   2   5% |   3  23% |   0   0% |   0   0% |   2   6% |   0   0% |   0   0% |   0   0% |
+	// |   8 |   4   5% |   2   5% |   0   0% |   3   9% |   0   0% |   3   5% |   4   9% |   4   5% |   4   7% |   0   0% |   3   7% |   1   3% |   4  10% |   4  11% |   0   0% |   0   0% |   4  11% |   1   3% |   1   3% |   0   0% |
+	// |  10 |   5   7% |   3   5% |   1   0% |   4   7% |   3   3% |   4   3% |   5   5% |   5   6% |   5   6% |   2   1% |   4   7% |   3   5% |   5   7% |   5   7% |   2   4% |   2   0% |   5   8% |   3   5% |   3   5% |   1   0% |
+	// |  12 |   7   6% |   5   5% |   3   2% |   6   7% |   5   3% |   6   3% |   7   5% |   7   4% |   7   5% |   4   2% |   6   6% |   5   4% |   7   7% |   7   7% |   4   4% |   4   1% |   7   8% |   5   4% |   5   4% |   3   3% |
+	// |  14 |   9   5% |   7   5% |   5   2% |   8   6% |   7   4% |   8   5% |   9   5% |   9   5% |   9   5% |   6   3% |   8   5% |   7   3% |   9   6% |   9   6% |   6   4% |   6   3% |   9   7% |   7   5% |   7   4% |   5   3% |
+	// |  16 |  11   4% |   9   5% |   7   2% |  10   6% |   9   5% |  10   5% |  11   4% |  11   4% |  11   5% |   8   3% |  10   5% |   9   4% |  11   6% |  11   6% |   8   4% |   8   3% |  11   6% |   9   5% |   9   5% |   7   3% |
+	// |  18 |  13   4% |  11   5% |   9   1% |  12   6% |  11   5% |  12   5% |  13   5% |  13   5% |  13   5% |  10   4% |  12   5% |  11   4% |  13   5% |  13   5% |  10   4% |  10   3% |  13   6% |  11   5% |  11   5% |   9   4% |
+	// |  20 |  15   5% |  13   5% |  11   2% |  14   5% |  13   4% |  14   5% |  15   4% |  15   4% |  15   5% |  12   4% |  14   5% |  13   5% |  15   5% |  15   5% |  12   4% |  12   3% |  15   6% |  13   4% |  13   5% |  11   4% |
+	// |  22 |  17   5% |  15   5% |  13   3% |  16   5% |  15   4% |  16   5% |  17   4% |  17   4% |  17   5% |  14   4% |  16   5% |  15   4% |  17   5% |  17   4% |  14   5% |  14   3% |  17   6% |  15   4% |  15   4% |  13   4% |
+	// |  24 |  19   5% |  17   5% |  15   3% |  18   5% |  17   4% |  18   5% |  19   4% |  19   4% |  19   5% |  16   4% |  18   5% |  17   4% |  19   5% |  19   4% |  16   5% |  16   3% |  19   6% |  17   5% |  17   5% |  15   4% |
+	// |  26 |  21   4% |  19   5% |  17   3% |  20   6% |  19   4% |  20   5% |  21   4% |  21   4% |  21   4% |  18   4% |  20   5% |  19   4% |  21   5% |  21   4% |  18   5% |  18   3% |  21   6% |  19   4% |  19   5% |  17   4% |
+	// |  28 |  23   4% |  21   5% |  19   3% |  22   6% |  21   4% |  22   5% |  23   4% |  23   4% |  23   5% |  20   4% |  22   5% |  21   4% |  23   5% |  23   4% |  20   5% |  20   3% |  23   6% |  21   4% |  21   4% |  19   4% |
+	// |  30 |  25   4% |  23   5% |  21   3% |  24   6% |  23   4% |  24   5% |  25   5% |  25   4% |  25   5% |  22   4% |  24   5% |  23   4% |  25   5% |  25   4% |  22   5% |  22   3% |  25   6% |  23   4% |  23   4% |  21   5% |
+	// |  32 |  27   4% |  25   5% |  23   3% |  26   6% |  25   4% |  26   5% |  27   5% |  27   4% |  27   5% |  24   4% |  26   5% |  25   4% |  27   5% |  27   4% |  24   4% |  24   3% |  27   6% |  25   4% |  25   5% |  23   4% |
+	// |  34 |  29   4% |  27   5% |  25   4% |  28   6% |  27   4% |  28   5% |  29   5% |  29   4% |  29   5% |  26   4% |  28   5% |  27   5% |  29   5% |  29   4% |  26   5% |  26   4% |  29   6% |  27   4% |  27   4% |  25   5% |
+	// |  36 |  31   4% |  29   4% |  27   4% |  30   5% |  29   4% |  30   5% |  31   5% |  31   4% |  31   5% |  28   4% |  30   5% |  29   4% |  31   5% |  31   4% |  28   5% |  28   4% |  31   5% |  29   4% |  29   5% |  27   5% |
+	// |  38 |  33   4% |  31   5% |  29   3% |  32   5% |  31   4% |  32   5% |  33   5% |  33   4% |  33   5% |  30   4% |  32   5% |  31   4% |  33   5% |  33   5% |  30   4% |  30   4% |  33   5% |  31   4% |  31   4% |  29   5% |
+	// |  40 |  35   4% |  33   4% |  31   3% |  34   5% |  33   4% |  34   5% |  35   5% |  35   4% |  35   5% |  32   4% |  34   5% |  33   4% |  35   5% |  35   5% |  32   4% |  32   4% |  35   5% |  33   4% |  33   5% |  31   5% |
+	// |  42 |  37   4% |  35   4% |  33   4% |  36   5% |  35   4% |  36   5% |  37   5% |  37   4% |  37   4% |  34   4% |  36   5% |  35   5% |  37   5% |  37   5% |  34   5% |  34   4% |  37   5% |  35   4% |  35   5% |  33   5% |
+	// |  44 |  39   4% |  37   4% |  35   4% |  38   5% |  37   4% |  38   5% |  39   5% |  39   4% |  39   4% |  36   4% |  38   5% |  37   5% |  39   5% |  39   5% |  36   5% |  36   4% |  39   5% |  37   4% |  37   5% |  35   5% |
+	// |  46 |  41   4% |  39   4% |  37   3% |  40   5% |  39   4% |  40   5% |  41   5% |  41   4% |  41   4% |  38   4% |  40   5% |  39   5% |  41   5% |  41   5% |  38   5% |  38   4% |  41   5% |  39   4% |  39   5% |  37   5% |
+	// |  48 |  43   4% |  41   4% |  39   3% |  42   5% |  41   4% |  42   5% |  43   5% |  43   4% |  43   4% |  40   4% |  42   5% |  41   4% |  43   5% |  43   5% |  40   5% |  40   4% |  43   5% |  41   4% |  41   5% |  39   5% |
+	// |  50 |  45   4% |  43   4% |  41   4% |  44   5% |  43   4% |  44   5% |  45   5% |  45   4% |  45   4% |  42   4% |  44   5% |  43   4% |  45   5% |  45   5% |  42   5% |  42   4% |  45   5% |  43   5% |  43   5% |  41   5% |
+	// |  52 |  47   4% |  45   4% |  43   3% |  46   5% |  45   4% |  46   5% |  47   5% |  47   4% |  47   4% |  44   4% |  46   5% |  45   5% |  47   5% |  47   5% |  44   5% |  44   4% |  47   5% |  45   5% |  45   5% |  43   5% |
+	// |  54 |  49   4% |  47   4% |  45   3% |  48   5% |  47   4% |  48   5% |  49   5% |  49   4% |  49   4% |  46   4% |  48   5% |  47   4% |  49   5% |  49   5% |  46   5% |  46   4% |  49   5% |  47   5% |  47   5% |  45   5% |
+	// |  56 |  51   4% |  49   5% |  47   3% |  50   5% |  49   4% |  50   5% |  51   5% |  51   4% |  51   4% |  48   4% |  50   5% |  49   4% |  51   5% |  51   5% |  48   5% |  48   4% |  51   5% |  49   5% |  49   4% |  47   5% |
+	// |  58 |  53   4% |  51   5% |  49   3% |  52   5% |  51   4% |  52   5% |  53   5% |  53   4% |  53   4% |  50   4% |  52   5% |  51   4% |  53   5% |  53   4% |  50   5% |  50   4% |  53   5% |  51   5% |  51   4% |  49   5% |
+	// |  60 |  55   4% |  53   5% |  51   3% |  54   5% |  53   4% |  54   5% |  55   5% |  55   4% |  55   4% |  52   4% |  54   5% |  53   4% |  55   5% |  55   4% |  52   5% |  52   4% |  55   5% |  53   5% |  53   4% |  51   5% |
+	// |  62 |  57   4% |  55   5% |  53   3% |  56   5% |  55   4% |  56   5% |  57   5% |  57   4% |  57   4% |  54   4% |  56   5% |  55   4% |  57   5% |  57   4% |  54   5% |  54   4% |  57   5% |  55   5% |  55   4% |  53   4% |
+	// |  64 |  59   4% |  57   5% |  55   4% |  58   5% |  57   4% |  58   5% |  59   5% |  59   4% |  59   4% |  56   4% |  58   5% |  57   4% |  59   5% |  59   4% |  56   5% |  56   4% |  59   5% |  57   5% |  57   4% |  55   5% |
+	// |  66 |  61   4% |  59   5% |  57   4% |  60   5% |  59   4% |  60   5% |  61   5% |  61   4% |  61   4% |  58   4% |  60   5% |  59   4% |  61   5% |  61   4% |  58   5% |  58   4% |  61   5% |  59   5% |  59   4% |  57   5% |
+	// |  68 |  63   4% |  61   5% |  59   4% |  62   5% |  61   4% |  62   5% |  63   5% |  63   4% |  63   4% |  60   4% |  62   5% |  61   4% |  63   5% |  63   4% |  60   5% |  60   4% |  63   5% |  61   5% |  61   4% |  59   5% |
+	// |  70 |  65   4% |  63   5% |  61   4% |  64   5% |  63   4% |  64   5% |  65   5% |  65   4% |  65   5% |  62   4% |  64   5% |  63   4% |  65   5% |  65   4% |  62   5% |  62   5% |  65   5% |  63   5% |  63   4% |  61   5% |
+	// |  72 |  67   4% |  65   5% |  63   4% |  66   5% |  65   4% |  66   5% |  67   5% |  67   4% |  67   5% |  64   4% |  66   5% |  65   4% |  67   5% |  67   4% |  64   5% |  64   5% |  67   5% |  65   5% |  65   4% |  63   5% |
+	// |  74 |  69   4% |  67   5% |  65   4% |  68   5% |  67   4% |  68   5% |  69   5% |  69   4% |  69   4% |  66   4% |  68   5% |  67   5% |  69   5% |  69   4% |  66   5% |  66   5% |  69   5% |  67   5% |  67   4% |  65   5% |
+	// |  76 |  71   4% |  69   5% |  67   4% |  70   5% |  69   4% |  70   5% |  71   5% |  71   4% |  71   4% |  68   4% |  70   5% |  69   5% |  71   5% |  71   4% |  68   5% |  68   4% |  71   5% |  69   5% |  69   4% |  67   5% |
+	// |  78 |  73   4% |  71   5% |  69   4% |  72   5% |  71   4% |  72   5% |  73   5% |  73   4% |  73   4% |  70   4% |  72   5% |  71   5% |  73   5% |  73   4% |  70   5% |  70   4% |  73   5% |  71   5% |  71   4% |  69   5% |
+	// |  80 |  75   4% |  73   4% |  71   4% |  74   5% |  73   4% |  74   5% |  75   5% |  75   4% |  75   4% |  72   5% |  74   5% |  73   4% |  75   5% |  75   4% |  72   5% |  72   4% |  75   5% |  73   5% |  73   4% |  71   5% |
+	// |  82 |  77   4% |  75   4% |  73   4% |  76   5% |  75   4% |  76   5% |  77   5% |  77   4% |  77   4% |  74   5% |  76   4% |  75   5% |  77   5% |  77   4% |  74   5% |  74   4% |  77   5% |  75   4% |  75   4% |  73   5% |
+	// |  84 |  79   4% |  77   4% |  75   4% |  78   5% |  77   4% |  78   5% |  79   5% |  79   4% |  79   4% |  76   5% |  78   5% |  77   4% |  79   5% |  79   4% |  76   5% |  76   4% |  79   5% |  77   5% |  77   5% |  75   5% |
+	// |  86 |  81   4% |  79   4% |  77   4% |  80   5% |  79   4% |  80   5% |  81   5% |  81   4% |  81   4% |  78   5% |  80   5% |  79   5% |  81   5% |  81   4% |  78   5% |  78   4% |  81   5% |  79   4% |  79   4% |  77   5% |
+	// |  88 |  83   4% |  81   4% |  79   4% |  82   5% |  81   5% |  82   5% |  83   5% |  83   4% |  83   4% |  80   5% |  82   4% |  81   5% |  83   5% |  83   4% |  80   5% |  80   4% |  83   5% |  81   4% |  81   4% |  79   5% |
+	// |  90 |  85   4% |  83   4% |  81   4% |  84   5% |  83   5% |  84   5% |  85   5% |  85   4% |  85   4% |  82   5% |  84   4% |  83   5% |  85   5% |  85   5% |  82   5% |  82   4% |  85   5% |  83   4% |  83   5% |  81   5% |
+	// |  92 |  87   4% |  85   4% |  83   4% |  86   5% |  85   5% |  86   5% |  87   5% |  87   4% |  87   4% |  84   5% |  86   5% |  85   5% |  87   5% |  87   5% |  84   5% |  84   4% |  87   5% |  85   4% |  85   4% |  83   5% |
+	// |  94 |  89   4% |  87   4% |  85   4% |  88   5% |  87   5% |  88   5% |  89   5% |  89   4% |  89   4% |  86   5% |  88   5% |  87   4% |  89   5% |  89   5% |  86   5% |  86   4% |  89   5% |  87   4% |  87   4% |  85   5% |
+	// |  96 |  91   4% |  89   4% |  87   4% |  90   5% |  89   5% |  90   5% |  91   5% |  91   4% |  91   4% |  88   5% |  90   4% |  89   4% |  91   5% |  91   5% |  88   5% |  88   4% |  91   5% |  89   4% |  89   4% |  87   5% |
+	// |  98 |  93   4% |  91   4% |  89   4% |  92   5% |  91   5% |  92   5% |  93   5% |  93   4% |  93   4% |  90   5% |  92   4% |  91   4% |  93   5% |  93   5% |  90   5% |  90   4% |  93   5% |  91   5% |  91   4% |  89   5% |
 	// +-----+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+
-	// Total bytes=957538798, ranges=1840
+	// Total bytes=968307769, ranges=1850
 }

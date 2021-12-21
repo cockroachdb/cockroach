@@ -109,7 +109,7 @@ var testCases = []testCase{
 			}),
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx.tc.Server(0).Clock().Now(), "", nil, tableSpan(42))
-				rec.ID = pickOneRecord(tCtx)
+				rec.ID = pickOneRecord(tCtx).GetBytes()
 				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					return tCtx.pts.Protect(ctx, txn, &rec)
 				})
@@ -375,7 +375,7 @@ type protectOp struct {
 func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	rec := newRecord(tCtx.tc.Server(0).Clock().Now(), p.metaType, p.meta, p.spans...)
 	if p.idFunc != nil {
-		rec.ID = p.idFunc(tCtx)
+		rec.ID = p.idFunc(tCtx).GetBytes()
 	}
 	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return tCtx.pts.Protect(ctx, txn, &rec)
@@ -457,7 +457,7 @@ func (test testCase) run(t *testing.T) {
 		for _, r := range tCtx.state.Records {
 			var rec *ptpb.Record
 			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				rec, err = pts.GetRecord(ctx, txn, r.ID)
+				rec, err = pts.GetRecord(ctx, txn, r.ID.GetUUID())
 				return err
 			}))
 			require.EqualValues(t, &r, rec)
@@ -483,7 +483,7 @@ func pickOneRecord(tCtx *testContext) uuid.UUID {
 	if numRecords == 0 {
 		panic(fmt.Errorf("cannot pick one from zero records: %+v", tCtx))
 	}
-	return tCtx.state.Records[rand.Intn(numRecords)].ID
+	return tCtx.state.Records[rand.Intn(numRecords)].ID.GetUUID()
 }
 
 func tableSpan(tableID uint32) roachpb.Span {
@@ -503,7 +503,7 @@ func tableSpans(tableIDs ...uint32) []roachpb.Span {
 
 func newRecord(ts hlc.Timestamp, metaType string, meta []byte, spans ...roachpb.Span) ptpb.Record {
 	return ptpb.Record{
-		ID:        uuid.MakeV4(),
+		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: ts,
 		Mode:      ptpb.PROTECT_AFTER,
 		MetaType:  metaType,
@@ -560,7 +560,7 @@ func TestCorruptData(t *testing.T) {
 		msg := regexp.MustCompile("failed to unmarshal spans for " + rec.ID.String() + ": ")
 		require.Regexp(t, msg,
 			s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				got, err = pts.GetRecord(ctx, txn, rec.ID)
+				got, err = pts.GetRecord(ctx, txn, rec.ID.GetUUID())
 				return err
 			}).Error())
 		require.Nil(t, got)
@@ -611,7 +611,7 @@ func TestCorruptData(t *testing.T) {
 			": logical part has too many digits")
 		require.Regexp(t, msg,
 			s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				got, err = pts.GetRecord(ctx, txn, rec.ID)
+				got, err = pts.GetRecord(ctx, txn, rec.ID.GetUUID())
 				return err
 			}))
 		require.Nil(t, got)
@@ -651,14 +651,14 @@ func TestErrorsFromSQL(t *testing.T) {
 		return pts.Protect(ctx, txn, &rec)
 	}), fmt.Sprintf("failed to write record %v: boom", rec.ID))
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := pts.GetRecord(ctx, txn, rec.ID)
+		_, err := pts.GetRecord(ctx, txn, rec.ID.GetUUID())
 		return err
 	}), fmt.Sprintf("failed to read record %v: boom", rec.ID))
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return pts.MarkVerified(ctx, txn, rec.ID)
+		return pts.MarkVerified(ctx, txn, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to mark record %v as verified: boom", rec.ID))
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return pts.Release(ctx, txn, rec.ID)
+		return pts.Release(ctx, txn, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to release record %v: boom", rec.ID))
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := pts.GetMetadata(ctx, txn)

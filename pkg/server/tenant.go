@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -64,6 +65,10 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
+
+	// Inform the server identity provider that we're operating
+	// for a tenant server.
+	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
 
 	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
@@ -262,17 +267,6 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	if knobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); !ok || !knobs.DisableLogTags {
-		// Register the server's identifiers so that log events are
-		// decorated with the server's identity. This helps when gathering
-		// log events from multiple servers into the same log collector.
-		//
-		// We do this only here, as the identifiers may not be known before this point.
-		clusterID := args.rpcContext.ClusterID.Get().String()
-		log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
-		log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
-	}
-
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
 		userTimeMillis, _, err := status.GetCPUTime(ctx)
 		if err != nil {
@@ -447,7 +441,7 @@ func makeTenantSQLServerArgs(
 	)
 	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
-	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, rangeFeedKnobs)
+	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, st, rangeFeedKnobs)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
@@ -509,7 +503,8 @@ func makeTenantSQLServerArgs(
 			externalStorageFromURI: externalStorageFromURI,
 			// Set instance ID to 0 and node ID to nil to indicate
 			// that the instance ID will be bound later during preStart.
-			nodeIDContainer: instanceIDContainer,
+			nodeIDContainer:      instanceIDContainer,
+			spanConfigKVAccessor: spanconfigkvaccessor.IllegalKVAccessor,
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect: tenantConnect,

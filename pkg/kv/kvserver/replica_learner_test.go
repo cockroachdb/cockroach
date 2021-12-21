@@ -778,6 +778,8 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 				return err
 			}
 			if !strings.Contains(processErr.Error(), `descriptor changed`) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
 			}
 			formattedTrace := trace.String()
@@ -898,7 +900,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 
 	check := func() {
 		ts := tc.Server(0).Clock().Now()
-		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0)
+		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()))
 		req := roachpb.BatchRequest{Header: roachpb.Header{
 			RangeID:   scratchDesc.RangeID,
 			Timestamp: ts,
@@ -917,6 +919,8 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 			_, pErr := repl.Send(sendCtx, req)
 			err := pErr.GoError()
 			if !testutils.IsError(err, `not lease holder`) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
 			}
 			const msg = `cannot serve follower reads`

@@ -11,10 +11,12 @@ package changefeedccl
 import (
 	"bufio"
 	"bytes"
+	"cloud.google.com/go/pubsub"
 	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -46,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -1442,6 +1443,91 @@ func (f *webhookFeed) Close() error {
 	return nil
 }
 
+type mockPubsubMessage struct {
+	data string
+	// TODO: implement error injection
+	// err error
+}
+type mockPubsubMessageBuffer struct {
+	mu   syncutil.Mutex
+	rows []mockPubsubMessage
+}
+
+func (p *mockPubsubMessageBuffer) pop() *mockPubsubMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.rows) == 0 {
+		return nil
+	} else {
+		var head mockPubsubMessage
+		head, p.rows = p.rows[0], p.rows[1:]
+		return &head
+	}
+}
+
+func (p *mockPubsubMessageBuffer) push(m mockPubsubMessage) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rows = append(p.rows, m)
+}
+
+type fakePubsubClient struct {
+	buffer *mockPubsubMessageBuffer
+}
+
+func (p *fakePubsubClient) openTopics(withTopicName string) error {
+	return nil
+}
+
+func (p *fakePubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
+	return nil, nil
+}
+
+func (p *fakePubsubClient) closeTopics(withTopicName string) {
+	return
+}
+
+// sendMessage sends a message to the topic
+func (p *fakePubsubClient) sendMessage(m []byte, _ descpb.ID, _ string) error {
+	message := mockPubsubMessage{data: string(m)}
+	p.buffer.push(message)
+	return nil
+}
+
+func (p *fakePubsubClient) sendMessageToAllTopics(m []byte, _ string) error {
+	message := mockPubsubMessage{data: string(m)}
+	p.buffer.push(message)
+	return nil
+}
+
+func (p *fakePubsubClient) getTopicName(topicID descpb.ID) string {
+	return ""
+}
+
+func (p *fakePubsubClient) flushTopics() {
+	return
+}
+
+type fakePubsubSink struct {
+	Sink
+	client *fakePubsubClient
+	sync   *sinkSynchronizer
+}
+
+var _ Sink = (*fakePubsubSink)(nil)
+
+func (p *fakePubsubSink) Dial() error {
+	s := p.Sink.(*pubsubSink)
+	s.client = p.client
+	s.setupWorkers()
+	return nil
+}
+
+func (p *fakePubsubSink) Flush(ctx context.Context) error {
+	defer p.sync.addFlush()
+	return p.Sink.Flush(ctx)
+}
+
 type pubsubFeedFactory struct {
 	enterpriseFeedFactory
 }
@@ -1469,35 +1555,33 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	// creates a uuid as the url so that each testfeed object has a unique sink
-	// tests like TestManyChangefeedsOneTable require testfeeds to receive their own messages
-	// regardless of what the topic is
-	memPubsubURL := fmt.Sprintf("%s://%s", memScheme, uuid.NewString())
-
 	if createStmt.SinkURI == nil {
-		createStmt.SinkURI = tree.NewStrVal(
-			memPubsubURL)
+		createStmt.SinkURI = tree.NewStrVal("gcppubsub://testfeed")
 	}
 
-	sinkDest, err := cdctest.MakeMockPubsubSink(memPubsubURL)
 	if err != nil {
 		return nil, err
 	}
-
 	ss := &sinkSynchronizer{}
+
+	client := &fakePubsubClient{buffer: &mockPubsubMessageBuffer{rows: make([]mockPubsubMessage, 0)}}
+
 	wrapSink := func(s Sink) Sink {
-		return &notifyFlushSink{Sink: s, sync: ss}
+		return &fakePubsubSink{
+			Sink:   s,
+			client: client,
+			sync:   ss,
+		}
 	}
 
 	c := &pubsubFeed{
 		jobFeed:        newJobFeed(p.db, wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
-		mockSink:       sinkDest,
+		client:         client,
 	}
-	err = c.mockSink.Dial()
+
 	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
-		sinkDest.Close()
 		return nil, err
 	}
 
@@ -1515,8 +1599,8 @@ func (p *pubsubFeedFactory) Server() serverutils.TestServerInterface {
 type pubsubFeed struct {
 	*jobFeed
 	seenTrackerMap
-	ss       *sinkSynchronizer
-	mockSink *cdctest.MockPubsubSink
+	ss     *sinkSynchronizer
+	client *fakePubsubClient
 }
 
 var _ cdctest.TestFeed = (*pubsubFeed)(nil)
@@ -1551,19 +1635,16 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 // Next implements TestFeed
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
-		select {
-		case msg := <-p.mockSink.MessageChan:
-			log.Info(context.Background(), "next loop start")
-			if msg.Err != nil {
-				return nil, msg.Err
-			}
+		msg := p.client.buffer.pop()
+		log.Info(context.Background(), "next loop start")
+		if msg != nil {
 			log.Info(context.Background(), "there is message")
 			m := &cdctest.TestFeedMessage{}
-			resolved, err := isResolvedTimestamp([]byte(msg.Message))
+			resolved, err := isResolvedTimestamp([]byte(msg.data))
 			if err != nil {
 				return nil, err
 			}
-			msgBytes := []byte(msg.Message)
+			msgBytes := []byte(msg.data)
 			if resolved {
 				m.Resolved = msgBytes
 			} else {
@@ -1576,6 +1657,8 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 				}
 			}
 			return m, nil
+		}
+		select {
 		case <-p.ss.eventReady():
 			log.Info(context.Background(), "eventReady")
 			println("eventReady")
@@ -1591,6 +1674,5 @@ func (p *pubsubFeed) Close() error {
 	if err != nil {
 		return err
 	}
-	p.mockSink.Close()
 	return nil
 }

@@ -128,8 +128,20 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
-	"number of AddSSTable requests a store will handle concurrently before queuing",
+	"number of concurrent AddSSTable requests per store before queueing",
 	1,
+	settings.PositiveInt,
+)
+
+// addSSTableAsWritesRequestLimit limits concurrent AddSSTable requests with
+// IngestAsWrites set. These are smaller (kv.bulk_io_write.small_write_size),
+// and will end up in the Pebble memtable (default 64 MB) before flushing to
+// disk, so we can allow a greater amount of concurrency than regular AddSSTable
+// requests. Applied independently of concurrent_addsstable_requests.
+var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
+	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
+	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
+	10,
 	settings.PositiveInt,
 )
 
@@ -459,7 +471,8 @@ these operations at some point will
 - update the RangeDescriptor (for example, to reflect a split, or a change
 to the Replicas comprising the members of the Range)
 
-- update the meta ranges (which form a search index used for request routing)
+- update the meta ranges (which form a search index used for request routing, see
+  kv.RangeLookup and updateRangeAddressing for details)
 
 - commit with a roachpb.InternalCommitTrigger.
 
@@ -479,7 +492,8 @@ ResolveIntent acting on the RangeDescriptor.
 
 INVARIANT: A Store never contains two Replicas from the same Range, nor do the
 key ranges for any two of its Replicas overlap. (Note that there is no
-requirement that these Replicas come from a consistent set of Ranges).
+requirement that these Replicas come from a consistent set of Ranges; the
+RangeDescriptor.Generation orders overlapping descriptors).
 
 To illustrate this last invariant, consider a split of a Replica [a-z) into two
 Replicas, [a-c) and [c,z). The Store will never contain both; it has to swap
@@ -516,39 +530,43 @@ straightforward but when Ranges are being reconfigured, an understanding the
 Replica Lifecycle becomes important and upholding the Store's invariants becomes
 more complex.
 
-A first phenomenon to understand is that of uninitialized Replicas. Such a
-Replica corresponds to a State Machine that has yet to apply any entries, and in
-particular has no notion of an active RangeDescriptor yet. This state exists for
-various reasons:
+A first phenomenon to understand is that of uninitialized Replicas, which is the
+State Machine at applied index zero, i.e. has an empty state. In CockroachDB, an
+uninitialized Replica can only advance to a nonzero log position ("become
+initialized") via a Raft snapshot (this is because we initialize all Ranges in
+the system at log index raftInitialLogIndex which allows us to write arbitrary
+amounts of data into the initial state without having to worry about the size
+of individual log entries; see WriteInitialReplicaState).
 
-- A newly added voter already needs to be able to cast a vote even before it has
-had time to be caught up by other nodes. In the extreme case, the very first
-Raft message received at a Store leading to the creation of an (uninitialized)
-Replica may be a request for a vote that is required for quorum. In practice we
-mostly sidestep this voting requirement by adding new members through an
-intermediate state (see roachpb.LEARNER) that allows them to catch up and become
-initialized before making them voters, but at the protocol level this still
-relies on the concept of a Replica without state that can act as a Raft peer.
+An uninitialized Replica has no notion of its active RangeDescriptor yet, has no
+data, and should be thought of as a pure raft peer that can react to incoming
+messages (it can't send messages, as it is unaware of who the other members of
+the group are; its configuration is zero, consistent with the configuration
+represented by "no RangeDescriptor"); in particular it may be asked to cast a
+vote to determine Raft leadership. (This should not be required in CockroachDB
+today since we always add an uninitialized Replica as a roachpb.LEARNER first
+and only promote it after it has successfully received a Raft snapshot; we don't
+rely on this fact today)
 
-- For practical reasons, we don't preserve the entire committed replicated log
-for eternity. It will periodically get truncated, i.e. a prefix discarded, and
-this leads to followers occasionally being forced to catch up on the log via a
-Raft Snapshot, i.e. a copy of the replicated data in the State Machine as of
-some log position, from which the recipient Replica can then continue to receive
-and apply log entries.
+Uninitialized Replicas should be viewed as an implementation detail that is (or
+should be!) invisible to most access to a Store in the context of processing
+requests coming from the KV API, as uninitialized Replicas cannot serve such
+requests. At the time of writing, uninitialized Replicas need to be handled
+in many code paths that should never encounter them in the first place. We
+will be addressing this with #72374.
 
-- In CockroachDB, a newly created Range (say at cluster bootstrap, or during a
-Range split) is never empty - it has to contain at least the RangeDescriptor.
-For the split case, indeed it contains around half of the data originally housed
-in the pre-split Range, and it is burdensome to distribute potentially hundreds
-of megabytes through the Raft log. So what we do in CockroachDB is to never use
-Raft entries zero through nine (see raftInitialLogIndex), which means that a
-newly added Replica will need a first Snapshot to obtain access to the log.
-
-Externally, uninitialized Replicas should be viewed as an implementation
-detail that is (or should be!) invisible to most access to a Store in the
-context of processing requests coming from the KV API, as uninitialized
-Replicas cannot serve such requests.
+Raft snapshots can also be directed at initialized Replicas. For practical
+reasons, we cannot preserve the entire committed replicated log forever and
+periodically purge a prefix that is known to be durably applied on a quorum of
+peers. Under certain circumstances (see newTruncateDecision) this may cut a
+follower off from the log, and this follower will require a Raft snapshot before
+being able to resume replication. Another (rare) source of snapshots occurs
+around Range splits. During a split, the involved Replicas shrink and
+simultaneously instantiate the right-hand side Replica, but since Replicas carry
+out this operation at different times, a "faster" initialized right-hand side
+might contact a "slow" store on which the right-hand side has not yet been
+instantiated, leading to the creation of an uninitialized Replica that may
+request a snapshot. See maybeDelaySplitToAvoidSnapshot.
 
 The diagram is a lot to take in. The various transitions are discussed in
 prose below, and the source .dot file is in store_doc_replica_lifecycle.dot.
@@ -589,7 +607,6 @@ prose below, and the source .dot file is in store_doc_replica_lifecycle.dot.
                                 |                                                                                             | <-------------------------------+
                                 +---------------------------------------------------------------------------------------------+
 
-
 When a Store starts, it iterates through all RangeDescriptors it can find on its
 Engine. Finding a RangeDescriptor by definition implies that the Replica is
 initialized. Raft state (a raftpb.HardState) for uninitialized Replicas may
@@ -626,7 +643,7 @@ ReplicaID, the uninitialized Replica is removed. There is currently no
 general-purpose mechanism to determine whether an uninitialized Replica is
 outdated; an uninitialized Replica could in principle leak "forever" if the
 Range quickly changes its members such that the triggers mentioned here don't
-apply A full scan of meta2 would be required as there is no RangeID-keyed index
+apply. A full scan of meta2 would be required as there is no RangeID-keyed index
 on the RangeDescriptors (the meta ranges are keyed on the EndKey, which allows
 routing requests based on the key ranges they touch). The fact that
 uninitialized Replicas can be removed has to be taken into account by splits as
@@ -656,13 +673,32 @@ co-located on the same Stores as well as are all initialized.
 
 INVARIANT: An initialized Replica's RangeDescriptor always includes it as a member.
 
-INVARIANT: A Replica's ReplicaID is constant.
+INVARIANT: RangeDescriptor.StartKey is immutable (splits and merges mutate the
+EndKey only). In particular, an initialized Replica's StartKey is immutable.
 
-Together, these invariants significantly reduce complexity since we do not need
-to handle the excluded situations. Particularly a changing replicaID is
-bug-inducing since at the Replication layer a change in replica ID is a complete
-change of identity, and re-use of in-memory structures poses the threat of
-erroneously re-using cached information.
+INVARIANT: A Replica's ReplicaID is constant.
+NOTE: the way to read this is that a Replica object will not be re-used for
+multiple ReplicaIDs. Instead, the existing Replica will be destroyed and a new
+Replica instantiated.
+
+These invariants significantly reduce complexity since we do not need to handle
+the excluded situations. Particularly a changing replicaID is bug-inducing since
+at the Replication layer a change in replica ID is a complete change of
+identity, and re-use of in-memory structures poses the threat of erroneously
+re-using cached information.
+
+INVARIANT: for each key `k` in the replicated key space, the Generation of the
+RangeDescriptor containing is strictly increasing over time (see
+RangeDescriptor.Generation).
+NOTE: we rely on this invariant for cache coherency in `kvcoord`; it currently
+plays no role in `kvserver` though we could use it to improve the handling of
+snapshot overlaps; see Store.checkSnapshotOverlapLocked.
+NOTE: a key may be owned by different RangeIDs at different points in time due
+to Range splits and merges.
+
+INVARIANT: on each Store and for each RangeID, the ReplicaID is strictly
+increasing over time (see Replica.setTombstoneKey).
+NOTE: to the best of our knowledge, we don't rely on this invariant.
 */
 type Store struct {
 	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
@@ -694,6 +730,11 @@ type Store struct {
 	sstSnapshotStorage SSTSnapshotStorage
 	protectedtsCache   protectedts.Cache
 	ctSender           *sidetransport.Sender
+
+	// systemRangeStartUpperBound is a precomputed value used by a replica to
+	// determine if its key range overlaps the system range.
+	// TODO(postamar): stop special-casing the system range
+	systemRangeStartUpperBound roachpb.Key
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -1103,6 +1144,9 @@ func NewStore(
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender: cfg.ClosedTimestampSender,
+		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(
+			keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker()),
+		),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(
@@ -1198,7 +1242,15 @@ func NewStore(
 		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
 	)
 	addSSTableRequestLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		s.limiters.ConcurrentAddSSTableRequests.SetLimit(int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
+		s.limiters.ConcurrentAddSSTableRequests.SetLimit(
+			int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
+	})
+	s.limiters.ConcurrentAddSSTableAsWritesRequests = limit.MakeConcurrentRequestLimiter(
+		"addSSTableAsWritesRequestLimiter", int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)),
+	)
+	addSSTableAsWritesRequestLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		s.limiters.ConcurrentAddSSTableAsWritesRequests.SetLimit(
+			int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
 		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
@@ -2060,7 +2112,7 @@ func (s *Store) GetConfReader() (spanconfig.StoreReader, error) {
 	}
 
 	if s.cfg.SpanConfigsEnabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return spanconfigstore.NewShadowReader(s.cfg.SpanConfigSubscriber, sysCfg), nil
+		return s.cfg.SpanConfigSubscriber, nil
 	}
 
 	return sysCfg, nil

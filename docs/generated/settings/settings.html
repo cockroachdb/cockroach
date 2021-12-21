@@ -115,6 +115,7 @@
 <tr><td><code>sql.defaults.override_multi_region_zone_config.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database</td></tr>
 <tr><td><code>sql.defaults.prefer_lookup_joins_for_fks.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible</td></tr>
 <tr><td><code>sql.defaults.primary_region</code></td><td>string</td><td><code></code></td><td>if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION</td></tr>
+<tr><td><code>sql.defaults.reorder_joins_limit</code></td><td>integer</td><td><code>8</code></td><td>default number of joins to reorder</td></tr>
 <tr><td><code>sql.defaults.require_explicit_primary_keys.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for requiring explicit primary keys in CREATE TABLE statements</td></tr>
 <tr><td><code>sql.defaults.results_buffer.size</code></td><td>byte size</td><td><code>16 KiB</code></td><td>default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.</td></tr>
 <tr><td><code>sql.defaults.serial_normalization</code></td><td>enumeration</td><td><code>rowid</code></td><td>default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3, unordered_rowid = 4]</td></tr>
@@ -173,6 +174,6 @@
 <tr><td><code>trace.jaeger.agent</code></td><td>string</td><td><code></code></td><td>the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.</td></tr>
 <tr><td><code>trace.opentelemetry.collector</code></td><td>string</td><td><code></code></td><td>address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.</td></tr>
-<tr><td><code>version</code></td><td>version</td><td><code>21.2-26</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
+<tr><td><code>version</code></td><td>version</td><td><code>21.2-34</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
 </tbody>
 </table>

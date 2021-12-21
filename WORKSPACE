@@ -338,10 +338,11 @@ c_deps()
 # aforementioned PRs.
 http_archive(
     name = "rules_foreign_cc",
-    sha256 = "45d48c71f1b1eadc33a5ad15bbeca8ce42f9ef5ab5d7ee519fc4991e6a9e93d2",
-    strip_prefix = "cockroachdb-rules_foreign_cc-f1cff45",
+    sha256 = "272ac2cde4efd316c8d7c0140dee411c89da104466701ac179286ef5a89c7b58",
+    strip_prefix = "cockroachdb-rules_foreign_cc-6f7f1b1",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-master20210730-1-gf1cff45.zip",
+        # As of commit 6f7f1b1c6f911db5706c2fcbb3d5669d95974a34 (release 0.7.0 plus a couple patches)
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-6f7f1b1.tar.gz",
     ],
 )
 
@@ -369,6 +370,7 @@ register_toolchains(
     "//build/toolchains:cross_linux_arm_toolchain",
     "//build/toolchains:cross_macos_toolchain",
     "//build/toolchains:cross_windows_toolchain",
+    "//build/toolchains:dev_darwin_x86_64_toolchain",
 )
 
 http_archive(

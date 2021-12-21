@@ -29,13 +29,6 @@ import {
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
-  combineStatementStats,
-  ExecutionStatistics,
-  flattenStatementStats,
-  statementKey,
-  StatementStatistics,
-} from "src/util/appStats";
-import {
   aggregatedTsAttr,
   aggregationIntervalAttr,
   appAttr,
@@ -52,14 +45,19 @@ import {
   StatementDetailsStateProps,
   StatementDetailsProps,
   AggregateStatistics,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementDetailsSubnavSelectionAction,
 } from "src/redux/analyticsActions";
-import { selectDateRange } from "src/views/statements/statementsPage";
+
+const { combineStatementStats, flattenStatementStats, statementKey } = util;
+type ExecutionStatistics = util.ExecutionStatistics;
+type StatementStatistics = util.StatementStatistics;
 
 interface Fraction {
   numerator: number;
@@ -226,7 +224,7 @@ const mapStateToProps = (
   return {
     statement,
     statementsError: state.cachedData.statements.lastError,
-    dateRange: selectDateRange(state),
+    timeScale: statementsTimeScaleLocalSetting.selector(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
