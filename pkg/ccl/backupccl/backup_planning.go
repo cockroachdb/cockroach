@@ -780,7 +780,7 @@ func backupPlanHook(
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
-			initialDetails.SpecificTenantIds = []uint64{backupStmt.Targets.Tenant.ToUint64()}
+			initialDetails.SpecificTenantIds = []roachpb.TenantID{backupStmt.Targets.Tenant}
 		}
 
 		// TODO(dt): move this to job execution phase.
@@ -1502,7 +1502,7 @@ func getBackupDetailAndManifest(
 	} else if len(initialDetails.SpecificTenantIds) > 0 {
 		for _, id := range initialDetails.SpecificTenantIds {
 			tenantInfo, err := retrieveSingleTenantMetadata(
-				ctx, execCfg.InternalExecutor, txn, roachpb.MakeTenantID(id),
+				ctx, execCfg.InternalExecutor, txn, id,
 			)
 			if err != nil {
 				return jobspb.BackupDetails{}, BackupManifest{}, err
