@@ -144,7 +144,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
 		Mode:      ptpb.PROTECT_AFTER,
-		Spans: []roachpb.Span{
+		DeprecatedSpans: []roachpb.Span{
 			{
 				Key:    startKey,
 				EndKey: startKey.PrefixEnd(),

@@ -336,8 +336,8 @@ func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		}
 		tCtx.state.Version++
 		tCtx.state.NumRecords--
-		tCtx.state.NumSpans -= uint64(len(rec.Spans))
-		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: rec.Spans})
+		tCtx.state.NumSpans -= uint64(len(rec.DeprecatedSpans))
+		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: rec.DeprecatedSpans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes -= uint64(len(encoded) + len(rec.Meta) + len(rec.MetaType))
 	}
@@ -392,7 +392,7 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tCtx.state.Records = append(tCtx.state.Records, tail...)
 		tCtx.state.Version++
 		tCtx.state.NumRecords++
-		tCtx.state.NumSpans += uint64(len(rec.Spans))
+		tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
 		encoded, err := protoutil.Marshal(&ptstorage.Spans{Spans: p.spans})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
@@ -503,12 +503,12 @@ func tableSpans(tableIDs ...uint32) []roachpb.Span {
 
 func newRecord(ts hlc.Timestamp, metaType string, meta []byte, spans ...roachpb.Span) ptpb.Record {
 	return ptpb.Record{
-		ID:        uuid.MakeV4().GetBytes(),
-		Timestamp: ts,
-		Mode:      ptpb.PROTECT_AFTER,
-		MetaType:  metaType,
-		Meta:      meta,
-		Spans:     spans,
+		ID:              uuid.MakeV4().GetBytes(),
+		Timestamp:       ts,
+		Mode:            ptpb.PROTECT_AFTER,
+		MetaType:        metaType,
+		Meta:            meta,
+		DeprecatedSpans: spans,
 	}
 }
 
