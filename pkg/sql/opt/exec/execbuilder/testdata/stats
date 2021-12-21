@@ -50,10 +50,6 @@ vectorized: true
       estimated row count: 1 (12% of the table; stats collected <hidden> ago)
       table: uv@uv_v_idx
       spans: /1-/2
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uv (u, v);
 
 # Verify that injecting different statistics changes the plan.
 statement ok
@@ -88,10 +84,6 @@ vectorized: true
       estimated row count: 1 (1.0% of the table; stats collected <hidden> ago)
       table: uv@uv_u_idx
       spans: /1-/2
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uv (u, v);
 
 # Verify that injecting different statistics with null counts
 # changes the plan.
@@ -129,10 +121,6 @@ vectorized: true
       estimated row count: 5 (5.0% of the table; stats collected <hidden> ago)
       table: uv@uv_u_idx
       spans: /1-/2
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uv (u, v);
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[
@@ -168,10 +156,6 @@ vectorized: true
       estimated row count: 1 (1.1% of the table; stats collected <hidden> ago)
       table: uv@uv_v_idx
       spans: /1-/2
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uv (u, v);
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[
