@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -419,7 +419,16 @@ func makeRandomKey(
 	r *rand.Rand, config randomStreamConfig, tableDesc *tabledesc.Mutable,
 ) roachpb.KeyValue {
 	// Create a key holding a random integer.
-	k, err := randgen.TestingMakePrimaryIndexKey(tableDesc, r.Intn(config.valueRange))
+	keyDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
+
+	index := tableDesc.GetPrimaryIndex()
+	// Create the ColumnID to index in datums slice map needed by
+	// MakeIndexKeyPrefix.
+	var colIDToRowIndex catalog.TableColMap
+	colIDToRowIndex.Set(index.GetKeyColumnID(0), 0)
+
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, index.GetID())
+	k, _, err := rowenc.EncodeIndexKey(tableDesc, index, colIDToRowIndex, tree.Datums{keyDatum}, keyPrefix)
 	if err != nil {
 		panic(err)
 	}

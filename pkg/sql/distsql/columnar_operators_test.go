@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -1439,10 +1440,10 @@ func generateWindowFrame(
 				colEncoding = descpb.DatumEncoding_DESCENDING_KEY
 			}
 			offsetType := colexecwindow.GetOffsetTypeFromOrderColType(t, inputTypes[colIdx])
-			startOffset := colexecwindow.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
-			endOffset := colexecwindow.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
-			frame.Bounds.Start.TypedOffset = colexecwindow.EncodeWindowFrameOffset(t, startOffset)
-			frame.Bounds.End.TypedOffset = colexecwindow.EncodeWindowFrameOffset(t, endOffset)
+			startOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
+			endOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
+			frame.Bounds.Start.TypedOffset = colexectestutils.EncodeWindowFrameOffset(t, startOffset)
+			frame.Bounds.End.TypedOffset = colexectestutils.EncodeWindowFrameOffset(t, endOffset)
 			frame.Bounds.Start.OffsetType = execinfrapb.DatumInfo{Encoding: colEncoding, Type: offsetType}
 			frame.Bounds.End.OffsetType = execinfrapb.DatumInfo{Encoding: colEncoding, Type: offsetType}
 		}
