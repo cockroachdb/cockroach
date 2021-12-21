@@ -1,12 +1,10 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package backupccl
 
@@ -74,7 +72,6 @@ func generateMockSSTs(
 			sst:            sst,
 			revStart:       hlc.Timestamp{},
 			completedSpans: 0,
-			atKeyBoundary:  false,
 			skipWrite:      true,
 		}
 		returnedSSTs <- retSST
@@ -168,8 +165,6 @@ func TestBackupSSTSinkFlushBehavior(t *testing.T) {
 		}
 	}
 
-	//sqlDB.Exec(t, `SELECT crdb_internal.set_vmodule('backup_sst_sink=2');`)
-	// Try 16, 64, 256, 1024
 	for _, bufferSize := range []string{"64"} {
 		log.Infof(ctx, "merge_file_buffer_size  = %s MiB;\n\n", bufferSize)
 		sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '%sMiB'`, bufferSize))

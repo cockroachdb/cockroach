@@ -230,10 +230,16 @@ type returnedSST struct {
 	sst            []byte
 	revStart       hlc.Timestamp
 	completedSpans int32
-	atKeyBoundary  bool
+	// endKeyTS is the timestamp upto which the EndKey of the span covered by this
+	// SST has been backed up.
+	endKeyTS hlc.Timestamp
 	// skipWrite is set when we want the sstSink to skip writing the SST file.
 	// This is a testing only knob.
 	skipWrite bool
+}
+
+func (r *returnedSST) atKeyBoundary() bool {
+	return r.endKeyTS.IsEmpty()
 }
 
 func runBackupProcessor(
@@ -498,7 +504,7 @@ func runBackupProcessor(
 							f.StartTime = span.start
 							f.EndTime = span.end
 						}
-						ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime, atKeyBoundary: file.EndKeyTS.IsEmpty()}
+						ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime, endKeyTS: file.EndKeyTS}
 						// If multiple files were returned for this span, only one -- the
 						// last -- should count as completing the requested span.
 						if i == len(res.Files)-1 {
@@ -632,9 +638,15 @@ func (s *sstSink) Close() error {
 }
 
 // Less implements the btree.Item interface.
-func (ret *returnedSST) Less(thanItem btree.Item) bool {
+func (r *returnedSST) Less(thanItem btree.Item) bool {
 	than := thanItem.(*returnedSST)
-	return ret.f.Span.Key.Compare(than.f.Span.Key) < 0
+	// In the case of an ExportRequest being paginated mid-key we want to
+	// differentiate the entries based on the timestamp up to which the
+	// returnedSST covers.
+	if r.f.Span.Key.Compare(than.f.Span.Key) == 0 {
+		return r.endKeyTS.Less(than.endKeyTS)
+	}
+	return r.f.Span.Key.Compare(than.f.Span.Key) < 0
 }
 
 // push pushes one returned backup file into the sink. Returned files can arrive
@@ -651,7 +663,8 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 	replaced := s.tree.ReplaceOrInsert(&resp)
 	if replaced != nil {
 		r := replaced.(*returnedSST)
-		return errors.AssertionFailedf("programming error: returnedSST: %+v replaces an already existing sst: %+v in btree", resp, *r)
+		return errors.AssertionFailedf("programming error: returnedSST span: %s replaces an already existing sst span: %s in btree",
+			resp.f.Span.String(), r.f.Span.String())
 	}
 	s.bufferedSSTSize += len(resp.sst)
 
@@ -686,26 +699,16 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 		for _, del := range deleteEntries {
 			foo := s.tree.Delete(&returnedSST{f: BackupManifest_File{Span: del}})
 			if foo == nil {
-				return errors.AssertionFailedf("programming error: returnedSST: %+v not found in btree", del)
+				return errors.AssertionFailedf("programming error: returnedSST span: %s not found in btree", del.String())
 			}
 		}
 	}
 
+	// At this point, given the entries in our buffer, we have tried to add as
+	// many spans as we can to the underlying SST file. The buffer should now only
+	// contain spans with a Key < EndKey of the underlying SST file. We drain half
+	// the tree expecting to incur an out-of-order flush of the SST file.
 	if s.bufferedSSTSize >= int(smallFileBuffer.Get(s.conf.settings)) {
-		// TODO(adityamaru): Delete before merge.
-		// Sanity check that the only time we come here is when the tree has only
-		// elements that have a Key < EndKey of the underlying SST file.
-		if len(s.flushedFiles) > 0 {
-			var lessCounter int
-			s.tree.DescendLessOrEqual(&returnedSST{f: BackupManifest_File{Span: s.flushedFiles[len(s.flushedFiles)-1].Span}}, func(i btree.Item) bool {
-				lessCounter++
-				return true
-			})
-			if lessCounter != s.tree.Len() {
-				panic("unexpected entry when draining tree")
-			}
-		}
-		// Drain the first half.
 		drain := s.tree.Len() / 2
 		if drain < 1 {
 			drain = 1
@@ -875,7 +878,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 
 	// If our accumulated SST is now big enough, and we are positioned at the end
 	// of a range flush it.
-	if s.flushedSize > targetFileSize.Get(s.conf.settings) && resp.atKeyBoundary {
+	if s.flushedSize > targetFileSize.Get(s.conf.settings) && resp.atKeyBoundary() {
 		s.stats.sizeFlushes++
 		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
 		if err := s.flushFile(ctx); err != nil {
