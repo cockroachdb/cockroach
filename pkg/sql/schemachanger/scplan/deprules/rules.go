@@ -164,23 +164,6 @@ func init() {
 			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
 		),
 	)
-
-	register(
-		"secondary index depends on column",
-		scgraph.Precedence,
-		columnNode, indexNode,
-		screl.MustQuery(
-			column.Type((*scpb.Column)(nil)),
-			index.Type((*scpb.SecondaryIndex)(nil)),
-
-			id.Entities(screl.DescID, column, index),
-
-			rel.Filter("columnInIndex", column, index)(columnInIndex),
-
-			joinTargetNode(column, columnTarget, columnNode, add, public),
-			joinTargetNode(index, indexTarget, indexNode, add, validated),
-		),
-	)
 }
 
 func init() {

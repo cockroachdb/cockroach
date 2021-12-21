@@ -489,8 +489,6 @@ func (noopIndexValidator) ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil
@@ -500,7 +498,6 @@ func (noopIndexValidator) ValidateInvertedIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil

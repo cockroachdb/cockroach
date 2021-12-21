@@ -1418,12 +1418,29 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 
 	if len(forwardIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
-			return ValidateForwardIndexes(ctx, tableDesc, forwardIndexes, runHistoricalTxn, true /* withFirstMutationPubic */, false /* gatherAllInvalid */, sessiondata.InternalExecutorOverride{})
+			return ValidateForwardIndexes(
+				ctx,
+				tableDesc,
+				forwardIndexes,
+				runHistoricalTxn,
+				true,  /* withFirstMutationPubic */
+				false, /* gatherAllInvalid */
+				sessiondata.InternalExecutorOverride{},
+			)
 		})
 	}
 	if len(invertedIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
-			return ValidateInvertedIndexes(ctx, sc.execCfg.Codec, tableDesc, invertedIndexes, runHistoricalTxn, false /* gatherAllInvalid */, sessiondata.InternalExecutorOverride{})
+			return ValidateInvertedIndexes(
+				ctx,
+				sc.execCfg.Codec,
+				tableDesc,
+				invertedIndexes,
+				runHistoricalTxn,
+				true,  /* withFirstMutationPublic */
+				false, /* gatherAllInvalid */
+				sessiondata.InternalExecutorOverride{},
+			)
 		})
 	}
 	if err := grp.Wait(); err != nil {
@@ -1455,6 +1472,7 @@ func ValidateInvertedIndexes(
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
 ) error {
@@ -1519,11 +1537,22 @@ func ValidateInvertedIndexes(
 
 		grp.GoCtx(func(ctx context.Context) error {
 			defer close(countReady[i])
+			desc := tableDesc
+			if withFirstMutationPublic {
+				// Make the mutations public in an in-memory copy of the descriptor and
+				// add it to the Collection's synthetic descriptors, so that we can use
+				// SQL below to perform the validation.
+				fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+				if err != nil {
+					return err
+				}
+				desc = fakeDesc
+			}
 
 			start := timeutil.Now()
 
 			colID := idx.InvertedColumnID()
-			col, err := tableDesc.FindColumnWithID(colID)
+			col, err := desc.FindColumnWithID(colID)
 			if err != nil {
 				return err
 			}
@@ -1549,12 +1578,12 @@ func ValidateInvertedIndexes(
 				if geoindex.IsEmptyConfig(&geoConfig) {
 					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%s, %d)), 0) FROM [%d AS t]`,
-						colNameOrExpr, idx.GetVersion(), tableDesc.GetID(),
+						colNameOrExpr, idx.GetVersion(), desc.GetID(),
 					)
 				} else {
 					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %s)), 0) FROM [%d AS t]`,
-						tableDesc.GetID(), idx.GetID(), colNameOrExpr, tableDesc.GetID(),
+						desc.GetID(), idx.GetID(), colNameOrExpr, desc.GetID(),
 					)
 				}
 				// If the index is a partial index the predicate must be added
@@ -1562,7 +1591,7 @@ func ValidateInvertedIndexes(
 				if idx.IsPartial() {
 					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
 				}
-				return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
+				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
 					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, execOverride, stmt)
 					if err != nil {
 						return err
@@ -1577,7 +1606,7 @@ func ValidateInvertedIndexes(
 				return err
 			}
 			log.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
-				tableDesc.GetName(), colNameOrExpr, expectedCount[i], timeutil.Since(start))
+				desc.GetName(), colNameOrExpr, expectedCount[i], timeutil.Since(start))
 			return nil
 		})
 	}
@@ -1663,16 +1692,16 @@ func ValidateForwardIndexes(
 				}
 			}
 
-			var desc catalog.TableDescriptor = tableDesc
+			desc := tableDesc
 			if withFirstMutationPublic {
 				// Make the mutations public in an in-memory copy of the descriptor and
 				// add it to the Collection's synthetic descriptors, so that we can use
 				// SQL below to perform the validation.
-				var err error
-				desc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+				fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 				if err != nil {
 					return err
 				}
+				desc = fakeDesc
 			}
 
 			// Retrieve the row count in the index.
@@ -1754,17 +1783,17 @@ func ValidateForwardIndexes(
 		var tableRowCountTime time.Duration
 		start := timeutil.Now()
 
-		var desc catalog.TableDescriptor = tableDesc
+		desc := tableDesc
 		if withFirstMutationPublic {
 			// The query to count the expected number of rows can reference columns
 			// added earlier in the same mutation. Make the mutations public in an
 			// in-memory copy of the descriptor and add it to the Collection's synthetic
 			// descriptors, so that we can use SQL below to perform the validation.
-			descI, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
+			fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
 			if err != nil {
 				return err
 			}
-			desc = descI.(*tabledesc.Mutable)
+			desc = fakeDesc
 		}
 
 		// Count the number of rows in the table.
