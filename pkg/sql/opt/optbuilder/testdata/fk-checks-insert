@@ -15,12 +15,10 @@ insert child
  │    ├── column1:5 => c:1
  │    └── column2:6 => child.p:2
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:5!null column2:6!null
- │    └── values
- │         ├── columns: column1:5!null column2:6!null
- │         ├── (100, 1)
- │         └── (200, 1)
+ │    ├── (100, 1)
+ │    └── (200, 1)
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -49,12 +47,10 @@ insert child
  │    ├── grouping columns: column1:5!null
  │    ├── anti-join (hash)
  │    │    ├── columns: column1:5!null column2:6!null
- │    │    ├── project
+ │    │    ├── values
  │    │    │    ├── columns: column1:5!null column2:6!null
- │    │    │    └── values
- │    │    │         ├── columns: column1:5!null column2:6!null
- │    │    │         ├── (100, 1)
- │    │    │         └── (200, 1)
+ │    │    │    ├── (100, 1)
+ │    │    │    └── (200, 1)
  │    │    ├── scan child
  │    │    │    └── columns: c:7!null child.p:8!null
  │    │    └── filters
@@ -91,10 +87,8 @@ insert child
  ├── input binding: &1
  ├── project
  │    ├── columns: x:5 y:6
- │    └── project
- │         ├── columns: x:5 y:6
- │         └── scan xy
- │              └── columns: x:5 y:6 rowid:7!null xy.crdb_internal_mvcc_timestamp:8 xy.tableoid:9
+ │    └── scan xy
+ │         └── columns: x:5 y:6 rowid:7!null xy.crdb_internal_mvcc_timestamp:8 xy.tableoid:9
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -123,12 +117,10 @@ insert child_nullable
  │    ├── column1:5 => c:1
  │    └── column2:6 => child_nullable.p:2
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:5!null column2:6
- │    └── values
- │         ├── columns: column1:5!null column2:6
- │         ├── (100, 1)
- │         └── (200, NULL::INT8)
+ │    ├── (100, 1)
+ │    └── (200, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
@@ -157,12 +149,10 @@ insert child_nullable
  │    ├── column1:5 => c:1
  │    └── column2:6 => child_nullable.p:2
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:5!null column2:6!null
- │    └── values
- │         ├── columns: column1:5!null column2:6!null
- │         ├── (100, 1)
- │         └── (200, 1)
+ │    ├── (100, 1)
+ │    └── (200, 1)
  └── f-k-checks
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
@@ -204,12 +194,10 @@ insert child_nullable
  │    └── p_default:6 => p:2
  └── project
       ├── columns: p_default:6 column1:5!null
-      ├── project
+      ├── values
       │    ├── columns: column1:5!null
-      │    └── values
-      │         ├── columns: column1:5!null
-      │         ├── (100,)
-      │         └── (200,)
+      │    ├── (100,)
+      │    └── (200,)
       └── projections
            └── NULL::INT8 [as=p_default:6]
 
@@ -228,12 +216,10 @@ insert child_nullable_full
  │    ├── column1:5 => c:1
  │    └── column2:6 => child_nullable_full.p:2
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:5!null column2:6
- │    └── values
- │         ├── columns: column1:5!null column2:6
- │         ├── (100, 1)
- │         └── (200, NULL::INT8)
+ │    ├── (100, 1)
+ │    └── (200, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: child_nullable_full(p) -> parent(p)
            └── anti-join (hash)
@@ -262,12 +248,10 @@ insert child_nullable_full
  │    └── p_default:6 => p:2
  └── project
       ├── columns: p_default:6 column1:5!null
-      ├── project
+      ├── values
       │    ├── columns: column1:5!null
-      │    └── values
-      │         ├── columns: column1:5!null
-      │         ├── (100,)
-      │         └── (200,)
+      │    ├── (100,)
+      │    └── (200,)
       └── projections
            └── NULL::INT8 [as=p_default:6]
 
@@ -296,12 +280,10 @@ insert multi_col_child
  │    ├── column3:9 => multi_col_child.q:3
  │    └── column4:10 => multi_col_child.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8 column3:9 column4:10
- │    └── values
- │         ├── columns: column1:7!null column2:8 column3:9 column4:10
- │         ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
- │         └── (5, 1, 2, 3)
+ │    ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    └── (5, 1, 2, 3)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -337,12 +319,10 @@ insert multi_col_child
  │    ├── column3:9 => multi_col_child.q:3
  │    └── column4:10 => multi_col_child.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8 column3:9 column4:10!null
- │    └── values
- │         ├── columns: column1:7!null column2:8 column3:9 column4:10!null
- │         ├── (2, NULL::INT8, 20, 20)
- │         └── (3, 20, NULL::INT8, 20)
+ │    ├── (2, NULL::INT8, 20, 20)
+ │    └── (3, 20, NULL::INT8, 20)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -377,11 +357,9 @@ insert multi_col_child
  │    ├── column3:9 => multi_col_child.q:3
  │    └── column4:10 => multi_col_child.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │    └── values
- │         ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │         └── (1, 10, 10, 10)
+ │    └── (1, 10, 10, 10)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -436,12 +414,10 @@ insert multi_col_child_full
  │    ├── column3:9 => multi_col_child_full.q:3
  │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8 column3:9 column4:10
- │    └── values
- │         ├── columns: column1:7!null column2:8 column3:9 column4:10
- │         ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
- │         └── (5, 1, 2, 3)
+ │    ├── (4, NULL::INT8, NULL::INT8, NULL::INT8)
+ │    └── (5, 1, 2, 3)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -475,12 +451,10 @@ insert multi_col_child_full
  │    ├── column3:9 => multi_col_child_full.q:3
  │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8 column3:9 column4:10!null
- │    └── values
- │         ├── columns: column1:7!null column2:8 column3:9 column4:10!null
- │         ├── (2, NULL::INT8, 20, 20)
- │         └── (3, 20, NULL::INT8, 20)
+ │    ├── (2, NULL::INT8, 20, 20)
+ │    └── (3, 20, NULL::INT8, 20)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -510,11 +484,9 @@ insert multi_col_child_full
  │    ├── column3:9 => multi_col_child_full.q:3
  │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │    └── values
- │         ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
- │         └── (1, 10, 10, 10)
+ │    └── (1, 10, 10, 10)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -562,11 +534,9 @@ insert multi_col_child_full
  │    ├── column3:9 => multi_col_child_full.q:3
  │    └── column4:10 => multi_col_child_full.r:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8 column3:9!null column4:10
- │    └── values
- │         ├── columns: column1:7!null column2:8 column3:9!null column4:10
- │         └── (1, NULL::INT8, 2, NULL::INT8)
+ │    └── (1, NULL::INT8, 2, NULL::INT8)
  └── f-k-checks
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
@@ -614,13 +584,11 @@ insert multi_ref_child
  │    ├── column3:9 => multi_ref_child.b:3
  │    └── column4:10 => multi_ref_child.c:4
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:7!null column2:8 column3:9 column4:10
- │    └── values
- │         ├── columns: column1:7!null column2:8 column3:9 column4:10
- │         ├── (1, 1, NULL::INT8, NULL::INT8)
- │         ├── (2, NULL::INT8, 2, NULL::INT8)
- │         └── (3, NULL::INT8, NULL::INT8, 3)
+ │    ├── (1, 1, NULL::INT8, NULL::INT8)
+ │    ├── (2, NULL::INT8, 2, NULL::INT8)
+ │    └── (3, NULL::INT8, NULL::INT8, 3)
  └── f-k-checks
       ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join (hash)
@@ -682,12 +650,10 @@ insert child
  │    ├── column1:5 => c:1
  │    └── column2:6 => child.p:2
  ├── input binding: &1
- ├── project
+ ├── values
  │    ├── columns: column1:5!null column2:6!null
- │    └── values
- │         ├── columns: column1:5!null column2:6!null
- │         ├── (100, 1)
- │         └── (200, 1)
+ │    ├── (100, 1)
+ │    └── (200, 1)
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)

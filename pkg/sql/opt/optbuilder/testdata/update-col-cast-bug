@@ -2,6 +2,8 @@ exec-ddl
 create table t (a int2, b int2, c int2 as (a + b) virtual)
 ----
 
+# TODO(mgartner): An assignment cast should be added so that the type of the
+# insert column for c is int2, not int.
 build format=show-types
 update t set a = (with cte as (select 1:::int8) select t.c from cte limit 1)
 ----
@@ -19,7 +21,7 @@ with &1 (cte)
       │    ├── a_new:16 => a:1
       │    └── c_comp:17 => t.c:3
       └── project
-           ├── columns: c_comp:17(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
+           ├── columns: c_comp:17(int) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
            ├── project
            │    ├── columns: a_new:16(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
            │    ├── project
@@ -28,9 +30,9 @@ with &1 (cte)
            │    │    │    ├── columns: a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
            │    │    │    └── computed column expressions
            │    │    │         └── t.c:9
-           │    │    │              └── (a:7::INT8 + b:8::INT8)::INT2 [type=int2]
+           │    │    │              └── a:7::INT8 + b:8::INT8 [type=int]
            │    │    └── projections
-           │    │         └── (a:7::INT8 + b:8::INT8)::INT2 [as=t.c:9, type=int2]
+           │    │         └── a:7::INT8 + b:8::INT8 [as=t.c:9, type=int]
            │    └── projections
            │         └── subquery [as=a_new:16, type=int2]
            │              └── max1-row
@@ -49,4 +51,4 @@ with &1 (cte)
            │                        │         └── t.c:9 [as=c:15, type=int2]
            │                        └── 1 [type=int]
            └── projections
-                └── (a_new:16::INT8 + b:8::INT8)::INT2 [as=c_comp:17, type=int2]
+                └── a_new:16::INT8 + b:8::INT8 [as=c_comp:17, type=int]

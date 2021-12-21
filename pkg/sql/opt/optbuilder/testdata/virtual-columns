@@ -100,11 +100,9 @@ insert t
  │    └── v_comp:8 => v:3
  └── project
       ├── columns: v_comp:8!null column1:6!null column2:7!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null column2:7!null
-      │    └── values
-      │         ├── columns: column1:6!null column2:7!null
-      │         └── (1, 1)
+      │    └── (1, 1)
       └── projections
            └── column1:6 + column2:7 [as=v_comp:8]
 
@@ -121,11 +119,9 @@ insert t
       ├── columns: v_comp:8 column1:6!null b_default:7
       ├── project
       │    ├── columns: b_default:7 column1:6!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:6!null
-      │    │    └── values
-      │    │         ├── columns: column1:6!null
-      │    │         └── (1,)
+      │    │    └── (1,)
       │    └── projections
       │         └── NULL::INT8 [as=b_default:7]
       └── projections
@@ -149,11 +145,9 @@ project
       │    └── v_comp:8 => v:3
       └── project
            ├── columns: v_comp:8!null column1:6!null column2:7!null
-           ├── project
+           ├── values
            │    ├── columns: column1:6!null column2:7!null
-           │    └── values
-           │         ├── columns: column1:6!null column2:7!null
-           │         └── (1, 1)
+           │    └── (1, 1)
            └── projections
                 └── column1:6 + column2:7 [as=v_comp:8]
 
@@ -168,11 +162,9 @@ insert t_idx
  │    └── v_comp:8 => v:3
  └── project
       ├── columns: v_comp:8!null column1:6!null column2:7!null
-      ├── project
+      ├── values
       │    ├── columns: column1:6!null column2:7!null
-      │    └── values
-      │         ├── columns: column1:6!null column2:7!null
-      │         └── (1, 1)
+      │    └── (1, 1)
       └── projections
            └── column1:6 + column2:7 [as=v_comp:8]
 
@@ -191,11 +183,9 @@ insert t_check
       ├── columns: check1:11!null check2:12!null column1:7!null column2:8!null v_comp:9!null w_comp:10!null
       ├── project
       │    ├── columns: v_comp:9!null w_comp:10!null column1:7!null column2:8!null
-      │    ├── project
+      │    ├── values
       │    │    ├── columns: column1:7!null column2:8!null
-      │    │    └── values
-      │    │         ├── columns: column1:7!null column2:8!null
-      │    │         └── (1, 1)
+      │    │    └── (1, 1)
       │    └── projections
       │         ├── column1:7 + column2:8 [as=v_comp:9]
       │         └── column1:7 * column2:8 [as=w_comp:10]
@@ -842,11 +832,9 @@ project
            │    ├── columns: column1:6!null column2:7!null v_comp:8!null
            │    ├── project
            │    │    ├── columns: v_comp:8!null column1:6!null column2:7!null
-           │    │    ├── project
+           │    │    ├── values
            │    │    │    ├── columns: column1:6!null column2:7!null
-           │    │    │    └── values
-           │    │    │         ├── columns: column1:6!null column2:7!null
-           │    │    │         └── (1, 1)
+           │    │    │    └── (1, 1)
            │    │    └── projections
            │    │         └── column1:6 + column2:7 [as=v_comp:8]
            │    ├── project
@@ -885,11 +873,9 @@ insert t_idx2
       │    ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
       │    ├── project
       │    │    ├── columns: v_comp:11!null w_comp:12!null column1:8!null column2:9!null column3:10!null
-      │    │    ├── project
+      │    │    ├── values
       │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    └── values
-      │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │         └── (1, 1, 1)
+      │    │    │    └── (1, 1, 1)
       │    │    └── projections
       │    │         ├── column1:8 + column2:9 [as=v_comp:11]
       │    │         └── column3:10 + 1 [as=w_comp:12]
@@ -941,11 +927,9 @@ insert t_idx2
       │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null v_comp:11!null w_comp:12!null
       │    │    │    ├── project
       │    │    │    │    ├── columns: v_comp:11!null w_comp:12!null column1:8!null column2:9!null column3:10!null
-      │    │    │    │    ├── project
+      │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    │    └── values
-      │    │    │    │    │         ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    │    │    │         └── (1, 1, 1)
+      │    │    │    │    │    └── (1, 1, 1)
       │    │    │    │    └── projections
       │    │    │    │         ├── column1:8 + column2:9 [as=v_comp:11]
       │    │    │    │         └── column3:10 + 1 [as=w_comp:12]

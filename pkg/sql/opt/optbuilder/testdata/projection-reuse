@@ -91,11 +91,9 @@ insert ab
  │    └── rowid_default:8 => rowid:3
  └── project
       ├── columns: rowid_default:8 column1:6 column2:7
-      ├── project
+      ├── values
       │    ├── columns: column1:6 column2:7
-      │    └── values
-      │         ├── columns: column1:6 column2:7
-      │         └── (random(), random())
+      │    └── (random(), random())
       └── projections
            └── unique_rowid() [as=rowid_default:8]
 
@@ -117,11 +115,9 @@ insert abcd
  │    └── rowid_default:12 => rowid:5
  └── project
       ├── columns: c_default:10 d_default:11 rowid_default:12 column1:8!null column2:9!null
-      ├── project
+      ├── values
       │    ├── columns: column1:8!null column2:9!null
-      │    └── values
-      │         ├── columns: column1:8!null column2:9!null
-      │         └── (1.0, 1.0)
+      │    └── (1.0, 1.0)
       └── projections
            ├── random() [as=c_default:10]
            ├── random() [as=d_default:11]
@@ -140,11 +136,9 @@ insert abcd
  │    └── rowid_default:12 => rowid:5
  └── project
       ├── columns: c_default:10 d_default:11 rowid_default:12 column1:8 column2:9
-      ├── project
+      ├── values
       │    ├── columns: column1:8 column2:9
-      │    └── values
-      │         ├── columns: column1:8 column2:9
-      │         └── (random(), random())
+      │    └── (random(), random())
       └── projections
            ├── random() [as=c_default:10]
            ├── random() [as=d_default:11]
