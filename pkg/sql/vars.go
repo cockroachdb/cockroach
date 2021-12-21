@@ -586,9 +586,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().PartiallyDistributedPlansDisabled), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -686,9 +684,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().TestingVectorizeInjectPanics), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -991,9 +987,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(sd.IsSuperuser)
 		},
 		GetStringVal: makePostgresBoolGetStringValFn("is_superuser"),
-		GlobalDefault: func(sv *settings.Values) string {
-			return "off"
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -1512,9 +1506,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(true), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(true)
-		},
+		GlobalDefault: globalTrue,
 	},
 
 	// CockroachDB extension.
@@ -1684,9 +1676,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().NullOrderedLast), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	`propagate_input_ordering`: {
