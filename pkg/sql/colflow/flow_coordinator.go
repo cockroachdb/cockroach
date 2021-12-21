@@ -26,8 +26,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// FlowCoordinator is the execinfra.Processor that is responsible for shutting
-// down the vectorized flow on the gateway node.
+// FlowCoordinator is the execinfra.Processor that is responsible for running
+// the vectorized flow that has another execinfra.Processor as its root.
 type FlowCoordinator struct {
 	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
@@ -39,8 +39,9 @@ type FlowCoordinator struct {
 	row  rowenc.EncDatumRow
 	meta *execinfrapb.ProducerMetadata
 
-	// cancelFlow cancels the context of the flow.
-	cancelFlow context.CancelFunc
+	// onClose will be called exactly once at the end of lifetime of the flow
+	// coordinator.
+	onClose func()
 }
 
 var flowCoordinatorPool = sync.Pool{
@@ -51,18 +52,18 @@ var flowCoordinatorPool = sync.Pool{
 
 // NewFlowCoordinator creates a new FlowCoordinator processor that is the root
 // of the vectorized flow.
-// - cancelFlow is the cancellation function of the flow's context (i.e. it is
-// Flow.ctxCancel).
+// - onClose is a non-nil function that will be called exactly once at the end
+// of lifetime of the flow coordinator.
 func NewFlowCoordinator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
-	cancelFlow context.CancelFunc,
+	onClose func(),
 ) *FlowCoordinator {
 	f := flowCoordinatorPool.Get().(*FlowCoordinator)
 	f.input = input
-	f.cancelFlow = cancelFlow
+	f.onClose = onClose
 	f.Init(
 		f,
 		flowCtx,
@@ -156,7 +157,7 @@ func (f *FlowCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 func (f *FlowCoordinator) close() {
 	if f.InternalClose() {
-		f.cancelFlow()
+		f.onClose()
 	}
 }
 
@@ -178,9 +179,9 @@ func (f *FlowCoordinator) Release() {
 
 // BatchFlowCoordinator is a component that is responsible for running the
 // vectorized flow (by receiving the batches from the root operator and pushing
-// them to the batch receiver) and shutting down the whole flow when done. It
-// can only be planned on the gateway node when colexecop.Operator is the root
-// of the tree and the consumer is an execinfra.BatchReceiver.
+// them to the batch receiver). It can only be planned on the gateway node when
+// colexecop.Operator is the root of the tree and the consumer is an
+// execinfra.BatchReceiver.
 type BatchFlowCoordinator struct {
 	colexecop.OneInputNode
 	colexecop.NonExplainable
@@ -194,8 +195,9 @@ type BatchFlowCoordinator struct {
 	// for that call to be wrapped in the panic-catcher.
 	batch coldata.Batch
 
-	// cancelFlow cancels the context of the flow.
-	cancelFlow context.CancelFunc
+	// onClose will be called exactly once at the end of lifetime of the flow
+	// coordinator.
+	onClose func()
 }
 
 var batchFlowCoordinatorPool = sync.Pool{
@@ -206,14 +208,14 @@ var batchFlowCoordinatorPool = sync.Pool{
 
 // NewBatchFlowCoordinator creates a new BatchFlowCoordinator operator that is
 // the root of the vectorized flow.
-// - cancelFlow is the cancellation function of the flow's context (i.e. it is
-// Flow.ctxCancel).
+// - onClose is a non-nil function that will be called exactly once at the end
+// of lifetime of the flow coordinator.
 func NewBatchFlowCoordinator(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input colexecargs.OpWithMetaInfo,
 	output execinfra.BatchReceiver,
-	cancelFlow context.CancelFunc,
+	onClose func(),
 ) *BatchFlowCoordinator {
 	f := batchFlowCoordinatorPool.Get().(*BatchFlowCoordinator)
 	*f = BatchFlowCoordinator{
@@ -222,7 +224,7 @@ func NewBatchFlowCoordinator(
 		processorID:  processorID,
 		input:        input,
 		output:       output,
-		cancelFlow:   cancelFlow,
+		onClose:      onClose,
 	}
 	return f
 }
@@ -326,10 +328,9 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	}
 }
 
-// close cancels the flow and closes all colexecop.Closers the coordinator is
-// responsible for.
+// close closes all colexecop.Closers the coordinator is responsible for.
 func (f *BatchFlowCoordinator) close() error {
-	f.cancelFlow()
+	f.onClose()
 	var lastErr error
 	for _, toClose := range f.input.ToClose {
 		if err := toClose.Close(); err != nil {

@@ -136,7 +136,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	for run := 0; run < 10; run++ {
 		for _, scenario := range testScenarios {
 			t.Run(fmt.Sprintf("testScenario=%s", scenario.string), func(t *testing.T) {
-				ctxLocal, cancelLocal := context.WithCancel(context.Background())
+				ctxLocal := context.Background()
 				ctxRemote, cancelRemote := context.WithCancel(context.Background())
 				// Linter says there is a possibility of "context leak" because
 				// cancelRemote variable may not be used, so we defer the call to it.
@@ -172,6 +172,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes              = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh    = make([]chan error, numInboxes+1)
 					synchronizerInputs   = make([]colexecargs.OpWithMetaInfo, 0, numInboxes)
+					syncConsumerClosedCh = make(chan struct{})
 					streamID             = 0
 					addAnotherRemote     = rng.Float64() < 0.5
 				)
@@ -218,7 +219,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
-					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
+					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID), ctxLocal.Done())
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					synchronizerInputs = append(
@@ -229,7 +230,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						},
 					)
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizerWithConsumerClosedCh(synchronizerInputs, &wg, syncConsumerClosedCh)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
@@ -247,6 +248,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []colexecop.MetadataSource,
+					afterRun func(),
 				) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
@@ -279,6 +281,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							flowCtxCancel,
 							0, /* connectionTimeout */
 						)
+						if afterRun != nil {
+							afterRun()
+						}
 						wg.Done()
 					}(id)
 
@@ -304,7 +309,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxRemote)
 					if i < numHashRouterOutputs {
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, []colexecop.MetadataSource{hashRouterOutputs[i]})
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, []colexecop.MetadataSource{hashRouterOutputs[i]}, nil /* afterRun */)
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
@@ -319,18 +324,20 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							inboxes[i],
 							streamID,
 							[]colexecop.MetadataSource{createMetadataSourceForID(streamID)},
+							nil, /* afterRun */
 						)
 					}
 					streamID++
 				}
 
 				var input colexecop.Operator
+				onConsumerClosed := func() { close(syncConsumerClosedCh) }
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
-					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
+					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID), ctxAnotherRemote.Done())
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -343,7 +350,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						inbox,
 						streamID,
 						[]colexecop.MetadataSource{inputMetadataSource, createMetadataSourceForID(streamID)},
+						onConsumerClosed,
 					)
+					// We have moved the synchronizer to another remote node, so
+					// we have to move the responsibility of shutting down the
+					// channel to another remote node as well. The flow
+					// coordinator will then call noop.
+					onConsumerClosed = func() {}
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
@@ -378,7 +391,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						1, /* processorID */
 						materializer,
 						nil, /* output */
-						cancelLocal,
+						onConsumerClosed,
 					)
 					coordinator.Start(ctxLocal)
 
@@ -433,7 +446,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						1, /* processorID */
 						inputInfo,
 						recv,
-						cancelLocal,
+						onConsumerClosed,
 					)
 					coordinator.Run(ctxLocal)
 					checkMetadata(recv.receivedMeta)
@@ -449,9 +462,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				for i := range inboxes {
 					err = <-handleStreamErrCh[i]
-					// We either should get no error or a context cancellation error.
+					// We either should get no error or a cancellation error.
 					if err != nil {
-						require.True(t, testutils.IsError(err, "context canceled"), err)
+						require.True(t, testutils.IsError(err, "canceled"), err)
 					}
 				}
 				wg.Wait()

@@ -455,8 +455,6 @@ type flowCreatorHelper interface {
 	addFlowCoordinator(coordinator *FlowCoordinator)
 	// getCtxDone returns done channel of the context of this flow.
 	getFlowCtxDone() <-chan struct{}
-	// getCancelFlowFn returns a flow cancellation function.
-	getCancelFlowFn() context.CancelFunc
 }
 
 type admissionOptions struct {
@@ -477,6 +475,7 @@ type remoteComponentCreator interface {
 		allocator *colmem.Allocator,
 		typs []*types.T,
 		streamID execinfrapb.StreamID,
+		consumerClosedCh <-chan struct{},
 		flowCtxDone <-chan struct{},
 		admissionOpts admissionOptions,
 	) (*colrpc.Inbox, error)
@@ -497,11 +496,12 @@ func (vectorizedRemoteComponentCreator) newInbox(
 	allocator *colmem.Allocator,
 	typs []*types.T,
 	streamID execinfrapb.StreamID,
+	consumerClosedCh <-chan struct{},
 	flowCtxDone <-chan struct{},
 	admissionOpts admissionOptions,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInboxWithAdmissionControl(
-		allocator, typs, streamID, flowCtxDone,
+		allocator, typs, streamID, consumerClosedCh, flowCtxDone,
 		admissionOpts.admissionQ, admissionOpts.admissionInfo,
 	)
 }
@@ -545,6 +545,43 @@ type vectorizedFlowCreator struct {
 	// have been drained. When numOutboxesDrained equals numOutboxes, flow-level
 	// metadata is added to a flow-level span on the non-gateway nodes.
 	numOutboxesDrained int32
+
+	// consumerClosedCh will be closed whenever the last consumer of the flow on
+	// this node exits. If this node is the gateway, then this will be closed by
+	// the flow coordinator right before exiting; if this is a remote node, then
+	// it'll be closed by the outbox that exits last.
+	//
+	// This channel can be shared among multiple sub-flows (i.e. subtrees of
+	// operators rooted in different outboxes and/or flow coordinator) because
+	// Flow.Cleanup will wait for all goroutines to exit.
+	// TODO(yuzefovich): think a bit more whether this is right. An alternative
+	// is to give a separate channel to each subtree of operators, but the
+	// tracking of which channel to give to a particular operator might be
+	// annoying.
+	//
+	// Generally speaking, the flow can be shutdown either gracefully or
+	// ungracefully. The latter is the case when any error is encountered
+	// (logical error, retryable error, network error, etc), and in this case we
+	// want to propagate this error throughout the whole physical plan as
+	// quickly as possible. We do this by canceling the flow context on the node
+	// that encounters the error and then completing the FlowStream RPC
+	// ungracefully as well which indicates the ungraceful shutdown to the
+	// remote nodes, etc.
+	//
+	// The case of the graceful shutdown is more interesting because here we
+	// have a couple of modes to support. One is simply exhausting the flow
+	// which means consuming all of the data the flow produces and then draining
+	// the flow. Another is "premature" stop (e.g. this could be the case when
+	// the consumer satisfied its limit and no longer needs any more data from
+	// the flow although the flow still can produce more). This "premature" stop
+	// mode is what this channel is needed for - we need to have a way to tell
+	// some of the producing goroutines that they should exit gracefully.
+	//
+	// Previously, we were relying on the flow context cancellation for this,
+	// but that led to very subtle bugs where the graceful cancellation of the
+	// flow on this node would get treated as an ungraceful completion of the
+	// FlowStream RPC on another node.
+	consumerClosedCh chan struct{}
 
 	// procIdxQueue is a queue of indices into processorSpecs (the argument to
 	// setupFlow), for topologically ordered processing.
@@ -611,6 +648,7 @@ func newVectorizedFlowCreator(
 		exprHelper:             creator.exprHelper,
 		typeResolver:           typeResolver,
 		admissionInfo:          admissionInfo,
+		consumerClosedCh:       make(chan struct{}),
 		procIdxQueue:           creator.procIdxQueue,
 		opChains:               creator.opChains,
 		releasables:            creator.releasables,
@@ -697,15 +735,12 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
 		// When the last Outbox on this node exits, we want to make sure that
-		// everything is shutdown; namely, we need to call cancelFn if:
-		// - it is the last Outbox
-		// - the node is not the gateway (there is a flow coordinator on the
-		// gateway that will take care of the cancellation itself)
-		// - cancelFn is non-nil (it can be nil in tests).
-		// Calling cancelFn will cancel the context that all infrastructure on this
-		// node is listening on, so it will shut everything down.
-		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode && flowCtxCancel != nil {
-			flowCtxCancel()
+		// nothing is blocked waiting for a flow context cancellation or for a
+		// drain request. We have to close the consumer closed channel, but only
+		// on the remote nodes because on the gateway the flow coordinator is
+		// responsible for doing that.
+		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode {
+			s.onConsumerClosed()
 		}
 	}
 	s.accumulateAsyncComponent(run)
@@ -855,6 +890,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 				input.ColumnTypes,
 				inputStream.StreamID,
+				s.consumerClosedCh,
 				s.flowCreatorHelper.getFlowCtxDone(),
 				admissionOptions{
 					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
@@ -913,7 +949,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// Note that if we have opt == flowinfra.FuseAggressively, then we
 			// must use the serial unordered sync above in order to remove any
 			// concurrency.
-			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+			sync := colexec.NewParallelUnorderedSynchronizerWithConsumerClosedCh(inputStreamOps, s.waitGroup, s.consumerClosedCh)
 			sync.LocalPlan = flowCtx.Local
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
@@ -946,6 +982,10 @@ func (s *vectorizedFlowCreator) setupInput(
 		}
 	}
 	return opWithMetaInfo, nil
+}
+
+func (s *vectorizedFlowCreator) onConsumerClosed() {
+	close(s.consumerClosedCh)
 }
 
 // setupOutput sets up any necessary infrastructure according to the output spec
@@ -1004,7 +1044,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				pspec.ProcessorID,
 				opWithMetaInfo,
 				s.batchReceiver,
-				s.getCancelFlowFn(),
+				s.onConsumerClosed,
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, s.batchFlowCoordinator)
@@ -1032,7 +1072,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				pspec.ProcessorID,
 				input,
 				s.rowReceiver,
-				s.getCancelFlowFn(),
+				s.onConsumerClosed,
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, f)
@@ -1293,10 +1333,6 @@ func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return r.f.GetCtxDone()
 }
 
-func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
-	return r.f.GetCancelFlowFn()
-}
-
 func (r *vectorizedFlowCreatorHelper) Release() {
 	// Note that processors here can only be of 0 or 1 length, but always of
 	// 1 capacity (only the flow coordinator can be appended to this slice).
@@ -1349,10 +1385,6 @@ func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
 
 func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
-	return nil
-}
-
-func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
 }
 

@@ -104,6 +104,10 @@ type ParallelUnorderedSynchronizer struct {
 	batchCh           chan *unorderedSynchronizerMsg
 	errCh             chan error
 
+	// consumerClosedCh will be closed on a graceful shutdown of the flow. See
+	// more detailed comment on colflow.vectorizedFlowCreator.
+	consumerClosedCh chan struct{}
+
 	// bufferedMeta is the metadata buffered during a
 	// ParallelUnorderedSynchronizer run.
 	bufferedMeta []execinfrapb.ProducerMetadata
@@ -157,6 +161,17 @@ func NewParallelUnorderedSynchronizer(
 		// the Next goroutine will read an error and panic anyway.
 		errCh: make(chan error, 1),
 	}
+}
+
+// NewParallelUnorderedSynchronizerWithConsumerClosedCh is the same as
+// NewParallelUnorderedSynchronizer when consumerClosedCh is available and must
+// be used.
+func NewParallelUnorderedSynchronizerWithConsumerClosedCh(
+	inputs []colexecargs.OpWithMetaInfo, wg *sync.WaitGroup, consumerClosedCh chan struct{},
+) *ParallelUnorderedSynchronizer {
+	s := NewParallelUnorderedSynchronizer(inputs, wg)
+	s.consumerClosedCh = consumerClosedCh
+	return s
 }
 
 // Init is part of the colexecop.Operator interface.
@@ -304,6 +319,9 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				case <-s.Ctx.Done():
 					sendErr(s.Ctx.Err())
 					return
+				case <-s.consumerClosedCh:
+					// This is a graceful shutdown, so simply exit.
+					return
 				case s.batchCh <- msg:
 				}
 
@@ -318,6 +336,9 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				case <-s.readNextBatch[inputIdx]:
 				case <-s.Ctx.Done():
 					sendErr(s.Ctx.Err())
+					return
+				case <-s.consumerClosedCh:
+					// This is a graceful shutdown, so simply exit.
 					return
 				}
 			}

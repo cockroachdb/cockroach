@@ -596,6 +596,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 				select {
 				case <-r.unblockedEventsChan:
 					r.numBlockedOutputs--
+					// TODO: we might need to check consumerClosedCh.
 				case <-ctx.Done():
 					r.cancelOutputs(ctx, ctx.Err())
 					return
