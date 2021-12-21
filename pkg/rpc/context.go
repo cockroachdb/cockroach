@@ -785,6 +785,7 @@ func (rpcCtx *Context) grpcDialOptions(
 ) ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
 	if rpcCtx.Config.Insecure {
+		//lint:ignore SA1019 grpc.WithInsecure is deprecated
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 	} else {
 		var tlsConfig *tls.Config

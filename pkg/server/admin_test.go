@@ -2307,6 +2307,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for server to lose cluster access")
 
 	// Set up an admin client.
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(decomSrv.ServingRPCAddr(), grpc.WithInsecure())
 	require.NoError(t, err)
 	defer func() {

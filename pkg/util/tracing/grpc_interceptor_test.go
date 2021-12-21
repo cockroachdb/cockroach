@@ -122,6 +122,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		}
 	}))
 	conn, err := grpc.DialContext(context.Background(), ln.Addr().String(),
+		//lint:ignore SA1019 grpc.WithInsecure is deprecated
 		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
 			func(_ context.Context) bool { return false }, /* compatibilityMode */

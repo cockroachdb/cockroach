@@ -126,6 +126,7 @@ func (d *MockDialer) DialNoBreaker(
 		return d.mu.conn, nil
 	}
 	var err error
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	d.mu.conn, err = grpc.Dial(d.Addr.String(), grpc.WithInsecure(), grpc.WithBlock())
 	return d.mu.conn, err
 }
