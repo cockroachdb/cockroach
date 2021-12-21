@@ -17,7 +17,6 @@ go_library(
         "//pkg/col/coldata",  # keep
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colconv",  # keep
         "//pkg/sql/colexec/colexecagg",  # keep
@@ -30,20 +29,17 @@ go_library(
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/memsize",  # keep
-        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/builtins",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/duration",  # keep
-        "//pkg/util/encoding",
         "//pkg/util/json",  # keep
         "//pkg/util/mon",  # keep
         "//pkg/util/timeutil/pgdate",  # keep
         "@com_github_cockroachdb_apd_v2//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",  # keep
         "@com_github_marusama_semaphore//:semaphore",  # keep
-        "@com_github_stretchr_testify//require",
     ],
 )
 

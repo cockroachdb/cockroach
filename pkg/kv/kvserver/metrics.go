@@ -744,27 +744,27 @@ difficult to meaningfully interpret this metric.`,
 	}
 
 	// Replica queue metrics.
-	metaGCQueueSuccesses = metric.Metadata{
+	metaMVCCGCQueueSuccesses = metric.Metadata{
 		Name:        "queue.gc.process.success",
-		Help:        "Number of replicas successfully processed by the GC queue",
+		Help:        "Number of replicas successfully processed by the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueueFailures = metric.Metadata{
+	metaMVCCGCQueueFailures = metric.Metadata{
 		Name:        "queue.gc.process.failure",
-		Help:        "Number of replicas which failed processing in the GC queue",
+		Help:        "Number of replicas which failed processing in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueuePending = metric.Metadata{
+	metaMVCCGCQueuePending = metric.Metadata{
 		Name:        "queue.gc.pending",
-		Help:        "Number of pending replicas in the GC queue",
+		Help:        "Number of pending replicas in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueueProcessingNanos = metric.Metadata{
+	metaMVCCGCQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.gc.processingnanos",
-		Help:        "Nanoseconds spent processing replicas in the GC queue",
+		Help:        "Nanoseconds spent processing replicas in the MVCC GC queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -1357,10 +1357,10 @@ type StoreMetrics struct {
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
 	// Replica queue metrics.
-	GCQueueSuccesses                          *metric.Counter
-	GCQueueFailures                           *metric.Counter
-	GCQueuePending                            *metric.Gauge
-	GCQueueProcessingNanos                    *metric.Counter
+	MVCCGCQueueSuccesses                      *metric.Counter
+	MVCCGCQueueFailures                       *metric.Counter
+	MVCCGCQueuePending                        *metric.Gauge
+	MVCCGCQueueProcessingNanos                *metric.Counter
 	MergeQueueSuccesses                       *metric.Counter
 	MergeQueueFailures                        *metric.Counter
 	MergeQueuePending                         *metric.Gauge
@@ -1797,10 +1797,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
 
 		// Replica queue metrics.
-		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),
-		GCQueueFailures:                           metric.NewCounter(metaGCQueueFailures),
-		GCQueuePending:                            metric.NewGauge(metaGCQueuePending),
-		GCQueueProcessingNanos:                    metric.NewCounter(metaGCQueueProcessingNanos),
+		MVCCGCQueueSuccesses:                      metric.NewCounter(metaMVCCGCQueueSuccesses),
+		MVCCGCQueueFailures:                       metric.NewCounter(metaMVCCGCQueueFailures),
+		MVCCGCQueuePending:                        metric.NewGauge(metaMVCCGCQueuePending),
+		MVCCGCQueueProcessingNanos:                metric.NewCounter(metaMVCCGCQueueProcessingNanos),
 		MergeQueueSuccesses:                       metric.NewCounter(metaMergeQueueSuccesses),
 		MergeQueueFailures:                        metric.NewCounter(metaMergeQueueFailures),
 		MergeQueuePending:                         metric.NewGauge(metaMergeQueuePending),

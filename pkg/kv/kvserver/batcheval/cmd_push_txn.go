@@ -98,9 +98,9 @@ func declareKeysPushTransaction(
 // If the pushee is aborted, its timestamp will be forwarded to match
 // its last client activity timestamp (i.e. last heartbeat), if available.
 // This is done so that the updated timestamp populates the AbortSpan when
-// the pusher proceeds to resolve intents, allowing the GC queue to purge
-// records for which the transaction coordinator must have found out via
-// its heartbeats that the transaction has failed.
+// the pusher proceeds to resolve intents, allowing the MVCC GC queue to
+// purge records for which the transaction coordinator must have found out
+// via its heartbeats that the transaction has failed.
 func PushTxn(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {

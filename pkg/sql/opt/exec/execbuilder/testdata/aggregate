@@ -1191,10 +1191,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: kv@kv_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v);
 
 query T
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
@@ -1219,10 +1215,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: kv@kv_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v);
 
 query T
 EXPLAIN (TYPES) SELECT v, count(NULL) FROM kv GROUP BY v ORDER BY count(1)
@@ -1257,10 +1249,6 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: kv@kv_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v);
 
 # Check that filters propagate through no-op aggregation.
 query T
@@ -1291,10 +1279,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: kv@kv_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v);
 
 # Verify that FILTER works.
 
@@ -1335,10 +1319,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: filter_test@filter_test_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON filter_test (v) STORING (k);
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
@@ -1368,10 +1348,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: filter_test@filter_test_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON filter_test (v) STORING (k);
 
 # Tests with * inside GROUP BY.
 query T
@@ -1828,10 +1804,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: kv@kv_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v);
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
@@ -1853,10 +1825,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: kv@kv_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (s);
 
 query T
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
@@ -1898,10 +1866,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: kv@kv_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (s);
 
 query T
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
@@ -2055,10 +2019,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON string_agg_test (company_id) STORING (employee);
 
 query T
 EXPLAIN (VERBOSE)
@@ -2098,10 +2058,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON string_agg_test (company_id) STORING (employee);
 
 query T
 EXPLAIN (VERBOSE)
@@ -2141,10 +2097,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON string_agg_test (company_id) STORING (employee);
 
 query T
 EXPLAIN (VERBOSE)
@@ -2184,7 +2136,3 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON string_agg_test (company_id) STORING (employee);

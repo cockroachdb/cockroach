@@ -41,9 +41,9 @@ func declareKeysGC(
 			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key}, header.Timestamp)
 		}
 	}
-	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
-	// request first to bump the thresholds, and then another one that actually does work
-	// but can avoid declaring these keys below.
+	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
+	// send an empty request first to bump the thresholds, and then another one
+	// that actually does work but can avoid declaring these keys below.
 	if !gcr.Threshold.IsEmpty() {
 		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
 	}
@@ -100,8 +100,8 @@ func GC(
 		updated := newThreshold.Forward(args.Threshold)
 
 		// Don't write the GC threshold key unless we have to. We also don't
-		// declare the key unless we have to (to allow the GC queue to batch
-		// requests more efficiently), and we must honor what we declare.
+		// declare the key unless we have to (to allow the MVCC GC queue to
+		// batch requests more efficiently), and we must honor what we declare.
 		if updated {
 			if err := MakeStateLoader(cArgs.EvalCtx).SetGCThreshold(
 				ctx, readWriter, cArgs.Stats, &newThreshold,

@@ -719,7 +719,7 @@ type Store struct {
 	replRankings       *replicaRankings
 	storeRebalancer    *StoreRebalancer
 	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
-	gcQueue            *gcQueue                    // Garbage collection queue
+	mvccGCQueue        *mvccGCQueue                // MVCC GC queue
 	mergeQueue         *mergeQueue                 // Range merging queue
 	splitQueue         *splitQueue                 // Range splitting queue
 	replicateQueue     *replicateQueue             // Replication queue
@@ -843,7 +843,7 @@ type Store struct {
 	//   only needs to be held during splitTrigger, not all triggers.
 	//
 	// * baseQueue.mu: The mutex contained in each of the store's queues (such
-	//   as the replicate queue, replica GC queue, GC queue, ...). The mutex is
+	//   as the replicate queue, replica GC queue, MVCC GC queue, ...). The mutex is
 	//   typically acquired when deciding whether to add a replica to the respective
 	//   queue.
 	//
@@ -1292,7 +1292,7 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.gcQueue = newGCQueue(s)
+		s.mvccGCQueue = newMVCCGCQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
 		s.replicateQueue = newReplicateQueue(s, s.allocator)
@@ -1304,7 +1304,7 @@ func NewStore(
 		// queues on the EnqueueRange debug page as defined in
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
 		s.scanner.AddQueues(
-			s.gcQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
+			s.mvccGCQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
 			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
 		tsDS := s.cfg.TimeSeriesDataStore
 		if s.cfg.TestingKnobs.TimeSeriesDataStore != nil {

@@ -178,9 +178,9 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	return err
 }
 
-// ManualGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualGC(repl *Replica) error {
-	return manualQueue(s, s.gcQueue, repl)
+// ManualMVCCGC processes the specified replica using the store's MVCC GC queue.
+func (s *Store) ManualMVCCGC(repl *Replica) error {
+	return manualQueue(s, s.mvccGCQueue, repl)
 }
 
 // ManualReplicaGC processes the specified replica using the store's replica

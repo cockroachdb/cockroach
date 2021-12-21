@@ -23,7 +23,7 @@ import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;
 
 const QUEUES = [
   "replicate",
-  "gc",
+  "mvccGC",
   "merge",
   "split",
   "replicaGC",
@@ -88,6 +88,12 @@ export class EnqueueRange extends React.Component<
     nodeID: number,
     skipShouldQueue: boolean,
   ) => {
+    // Handle mixed-version clusters across the "gc" to "mvccGC" queue rename.
+    // TODO(nvanbenschoten): remove this in v22.2. The server logic will continue
+    // to map "gc" to "mvccGC" until v23.1.
+    if (queue === "mvccGC") {
+      queue = "gc";
+    }
     const req = new EnqueueRangeRequest({
       queue: queue,
       range_id: rangeID,
