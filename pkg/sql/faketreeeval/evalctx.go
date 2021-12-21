@@ -85,7 +85,7 @@ func (so *DummySequenceOperators) HasPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	kind privilege.Kind,
+	priv privilege.Priv,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalPlanner)
 }
@@ -305,7 +305,7 @@ func (ep *DummyEvalPlanner) HasPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	kind privilege.Kind,
+	priv privilege.Priv,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalPlanner)
 }
