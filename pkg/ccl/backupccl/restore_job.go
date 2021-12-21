@@ -1913,7 +1913,15 @@ func revalidateIndexes(
 			}
 		}
 		if len(forward) > 0 {
-			if err := sql.ValidateForwardIndexes(ctx, tableDesc.MakePublic(), forward, runner, false, true, sessiondata.InternalExecutorOverride{}); err != nil {
+			if err := sql.ValidateForwardIndexes(
+				ctx,
+				tableDesc.MakePublic(),
+				forward,
+				runner,
+				false, /* withFirstMutationPublic */
+				true,  /* gatherAllInvalid */
+				sessiondata.InternalExecutorOverride{},
+			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = invalid.Indexes
 				} else {
@@ -1922,7 +1930,16 @@ func revalidateIndexes(
 			}
 		}
 		if len(inverted) > 0 {
-			if err := sql.ValidateInvertedIndexes(ctx, execCfg.Codec, tableDesc.MakePublic(), inverted, runner, true, sessiondata.InternalExecutorOverride{}); err != nil {
+			if err := sql.ValidateInvertedIndexes(
+				ctx,
+				execCfg.Codec,
+				tableDesc.MakePublic(),
+				inverted,
+				runner,
+				false, /* withFirstMutationPublic */
+				true,  /* gatherAllInvalid */
+				sessiondata.InternalExecutorOverride{},
+			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
 				} else {

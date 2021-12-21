@@ -833,8 +833,6 @@ func (s *TestState) ValidateForwardIndexes(
 	_ context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	_ bool,
-	_ bool,
 	_ sessiondata.InternalExecutorOverride,
 ) error {
 	ids := make([]descpb.IndexID, len(indexes))
@@ -850,7 +848,6 @@ func (s *TestState) ValidateInvertedIndexes(
 	_ context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	_ bool,
 	_ sessiondata.InternalExecutorOverride,
 ) error {
 	ids := make([]descpb.IndexID, len(indexes))
