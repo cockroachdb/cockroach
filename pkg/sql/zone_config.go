@@ -348,6 +348,31 @@ func GetHydratedZoneConfigForTable(
 	return zone, nil
 }
 
+// GetHydratedZoneConfigForDatabase returns a fully hydrated zone config for a
+// given database ID.
+func GetHydratedZoneConfigForDatabase(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+) (*zonepb.ZoneConfig, error) {
+	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		return kv.Value, nil
+	}
+	zoneID, zone, _, _, err := getZoneConfig(
+		codec, id, getKey, false /* getInheritedDefault */, true, /* mayBeTable */
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+		return nil, err
+	}
+
+	return zone, nil
+}
+
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	if zs.NamedZone != "" {
 		return pgerror.Newf(

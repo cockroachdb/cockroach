@@ -12,26 +12,23 @@ initialize tenant=11
 ----
 
 # Before kicking starting off tenant reconciliation, we should find seed
-# configs for the newly initialized tenants. As yet, there are no (additional)
-# differences between the subsystems.
-configs version=current offset=37
+# configs for the newly initialized tenants. As yet, there are no differences
+# between the subsystems.
+configs version=current offset=43
 ----
 ...
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 
-diff offset=24
+diff
 ----
---- gossiped system config span (legacy)
-+++ span config infrastructure (current)
-...
 
 reconcile tenant=11
 ----
 
 # As soon as tenant-11 starts reconciling, we should observe more fine-grained
 # span configs within its keyspan. This isn't true for the legacy system.
-configs version=current offset=37 limit=5
+configs version=current offset=43 limit=5
 ----
 ...
 /Tenant/10                                 range default
@@ -47,12 +44,11 @@ configs version=legacy offset=43
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 
-diff offset=24 limit=10
+diff limit=10
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
-...
-@@ -44,3 +38,36 @@
+@@ -44,3 +44,36 @@
  /Tenant/10                                 range default
  /Tenant/11                                 range default
 +/Tenant/11/Table/4                         range default
@@ -73,12 +69,11 @@ CREATE TABLE db.t2();
 ALTER TABLE db.t1 CONFIGURE ZONE using num_replicas = 42, gc.ttlseconds = 1000;
 ----
 
-diff offset=24
+diff
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
-...
-@@ -44,3 +38,38 @@
+@@ -44,3 +44,38 @@
  /Tenant/10                                 range default
  /Tenant/11                                 range default
 +/Tenant/11/Table/4                         range default

@@ -73,6 +73,7 @@ func (s *SQLTranslator) Translate(
 		// IDs that have span configurations associated for them. We also
 		// de-duplicate leaf IDs to not generate redundant entries.
 		seen := make(map[descpb.ID]struct{})
+		addedPseudoTableSpans := false
 		var leafIDs descpb.IDs
 		for _, id := range ids {
 			descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, txn, descsCol)
@@ -84,6 +85,53 @@ func (s *SQLTranslator) Translate(
 					seen[descendantLeafID] = struct{}{}
 					leafIDs = append(leafIDs, descendantLeafID)
 				}
+			}
+
+			if (id == keys.SystemDatabaseID || id == keys.RootNamespaceID) && s.codec.ForSystemTenant() {
+				// We have special handling for the system database (and RANGE
+				// DEFAULT, which the system database inherits from). The system
+				// config span infrastructure generates splits along (empty)
+				// pseudo table boundaries[1] -- we do the same. Not doing so is
+				// safe, but this helps reduce the differences between the two
+				// subsystems which has practical implications for our bootstrap
+				// code and tests that bake in assumptions about these splits.
+				// While the two systems exist side-by-side, it's easier to just
+				// minimize these differences (it also removes the tiny
+				// re-splitting costs when switching between them). We can get
+				// rid of this special handling once the system config span is
+				// removed (#70560).
+				//
+				// [2]: Consider the liveness range [/System/NodeLiveness,
+				//      /System/NodeLivenessMax). It's identified using the
+				//      pseudo ID 22 (i.e. keys.LivenessRangesID). Because we're
+				//      using a pseudo ID, what of [/Table/22-/Table/23)? This
+				//      is a keyspan with no contents, yet one the system config
+				//      span splits along to create an empty range. It's
+				//      precisely this "feature" we're looking to emulate. As
+				//      for what config to apply over said range -- we do as the
+				//      system config span does, applying the config for the
+				//      system database.
+				if addedPseudoTableSpans {
+					continue // nothing to do
+				}
+				for _, pseudoTableID := range keys.PseudoTableIDs {
+					zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.SystemDatabaseID)
+					if err != nil {
+						return err
+					}
+
+					tableStartKey := s.codec.TablePrefix(pseudoTableID)
+					tableEndKey := tableStartKey.PrefixEnd()
+					tableSpanConfig := zone.AsSpanConfig()
+					entries = append(entries, roachpb.SpanConfigEntry{
+						Span: roachpb.Span{
+							Key:    tableStartKey,
+							EndKey: tableEndKey,
+						},
+						Config: tableSpanConfig,
+					})
+				}
+				addedPseudoTableSpans = true
 			}
 		}
 
