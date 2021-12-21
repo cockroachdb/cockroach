@@ -22,15 +22,20 @@ upsert /Table/1{2-3}                       range system
 upsert /Table/1{3-4}                       range system
 upsert /Table/1{4-5}                       range system
 upsert /Table/1{5-6}                       range system
+upsert /Table/1{6-7}                       range system
+upsert /Table/1{7-8}                       range system
+upsert /Table/1{8-9}                       range system
 upsert /Table/{19-20}                      range system
 upsert /Table/2{0-1}                       range system
 upsert /Table/2{1-2}                       range system
+upsert /Table/2{2-3}                       range system
 upsert /Table/2{3-4}                       range system
 upsert /Table/2{4-5}                       range system
 upsert /Table/2{5-6}                       ttl_seconds=600 num_replicas=5
 upsert /Table/2{6-7}                       range system
 upsert /Table/2{7-8}                       ttl_seconds=600 num_replicas=5
 upsert /Table/2{8-9}                       range system
+upsert /{Table/29-NamespaceTable/30}       range system
 upsert /NamespaceTable/{30-Max}            range system
 upsert /{NamespaceTable/Max-Table/32}      range system
 upsert /Table/3{2-3}                       range system
@@ -39,6 +44,7 @@ upsert /Table/3{4-5}                       range system
 upsert /Table/3{5-6}                       range system
 upsert /Table/3{6-7}                       range system
 upsert /Table/3{7-8}                       range system
+upsert /Table/3{8-9}                       range system
 upsert /Table/{39-40}                      range system
 upsert /Table/4{0-1}                       range system
 upsert /Table/4{1-2}                       range system
@@ -74,7 +80,7 @@ upsert /Table/5{6-7}                       num_replicas=7 num_voters=5
 delete /Table/5{7-8}
 upsert /Table/5{7-8}                       num_replicas=7
 
-state offset=41
+state offset=47
 ----
 ...
 /Table/5{6-7}                              num_replicas=7 num_voters=5
@@ -106,12 +112,20 @@ delete /Table/1{4-5}
 upsert /Table/1{4-5}                       ttl_seconds=100 num_replicas=5
 delete /Table/1{5-6}
 upsert /Table/1{5-6}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{6-7}
+upsert /Table/1{6-7}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{7-8}
+upsert /Table/1{7-8}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{8-9}
+upsert /Table/1{8-9}                       ttl_seconds=100 num_replicas=5
 delete /Table/{19-20}
 upsert /Table/{19-20}                      ttl_seconds=100 num_replicas=5
 delete /Table/2{0-1}
 upsert /Table/2{0-1}                       ttl_seconds=100 num_replicas=5
 delete /Table/2{1-2}
 upsert /Table/2{1-2}                       ttl_seconds=100 num_replicas=5
+delete /Table/2{2-3}
+upsert /Table/2{2-3}                       ttl_seconds=100 num_replicas=5
 delete /Table/2{3-4}
 upsert /Table/2{3-4}                       ttl_seconds=100 num_replicas=5
 delete /Table/2{4-5}
@@ -120,6 +134,8 @@ delete /Table/2{6-7}
 upsert /Table/2{6-7}                       ttl_seconds=100 num_replicas=5
 delete /Table/2{8-9}
 upsert /Table/2{8-9}                       ttl_seconds=100 num_replicas=5
+delete /{Table/29-NamespaceTable/30}
+upsert /{Table/29-NamespaceTable/30}       ttl_seconds=100 num_replicas=5
 delete /NamespaceTable/{30-Max}
 upsert /NamespaceTable/{30-Max}            ttl_seconds=100 num_replicas=5
 delete /{NamespaceTable/Max-Table/32}
@@ -136,6 +152,8 @@ delete /Table/3{6-7}
 upsert /Table/3{6-7}                       ttl_seconds=100 num_replicas=5
 delete /Table/3{7-8}
 upsert /Table/3{7-8}                       ttl_seconds=100 num_replicas=5
+delete /Table/3{8-9}
+upsert /Table/3{8-9}                       ttl_seconds=100 num_replicas=5
 delete /Table/{39-40}
 upsert /Table/{39-40}                      ttl_seconds=100 num_replicas=5
 delete /Table/4{0-1}
@@ -153,7 +171,7 @@ upsert /Table/4{6-7}                       ttl_seconds=100 num_replicas=5
 delete /Table/4{7-8}
 upsert /Table/4{7-8}                       ttl_seconds=100 num_replicas=5
 
-state offset=5 limit=36
+state offset=5 limit=42
 ----
 ...
 /Table/{SystemConfigSpan/Start-4}          ttl_seconds=100 num_replicas=5
@@ -166,15 +184,20 @@ state offset=5 limit=36
 /Table/1{3-4}                              ttl_seconds=100 num_replicas=5
 /Table/1{4-5}                              ttl_seconds=100 num_replicas=5
 /Table/1{5-6}                              ttl_seconds=100 num_replicas=5
+/Table/1{6-7}                              ttl_seconds=100 num_replicas=5
+/Table/1{7-8}                              ttl_seconds=100 num_replicas=5
+/Table/1{8-9}                              ttl_seconds=100 num_replicas=5
 /Table/{19-20}                             ttl_seconds=100 num_replicas=5
 /Table/2{0-1}                              ttl_seconds=100 num_replicas=5
 /Table/2{1-2}                              ttl_seconds=100 num_replicas=5
+/Table/2{2-3}                              ttl_seconds=100 num_replicas=5
 /Table/2{3-4}                              ttl_seconds=100 num_replicas=5
 /Table/2{4-5}                              ttl_seconds=100 num_replicas=5
 /Table/2{5-6}                              ttl_seconds=600 num_replicas=5
 /Table/2{6-7}                              ttl_seconds=100 num_replicas=5
 /Table/2{7-8}                              ttl_seconds=600 num_replicas=5
 /Table/2{8-9}                              ttl_seconds=100 num_replicas=5
+/{Table/29-NamespaceTable/30}              ttl_seconds=100 num_replicas=5
 /NamespaceTable/{30-Max}                   ttl_seconds=100 num_replicas=5
 /{NamespaceTable/Max-Table/32}             ttl_seconds=100 num_replicas=5
 /Table/3{2-3}                              ttl_seconds=100 num_replicas=5
@@ -183,6 +206,7 @@ state offset=5 limit=36
 /Table/3{5-6}                              ttl_seconds=100 num_replicas=5
 /Table/3{6-7}                              ttl_seconds=100 num_replicas=5
 /Table/3{7-8}                              ttl_seconds=100 num_replicas=5
+/Table/3{8-9}                              ttl_seconds=100 num_replicas=5
 /Table/{39-40}                             ttl_seconds=100 num_replicas=5
 /Table/4{0-1}                              ttl_seconds=100 num_replicas=5
 /Table/4{1-2}                              ttl_seconds=100 num_replicas=5

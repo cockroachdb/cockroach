@@ -99,19 +99,18 @@ type KVSubscriber interface {
 // 		Table/5{3-4}                  num_replicas=7 num_voters=5
 type SQLTranslator interface {
 	// Translate generates the span configuration state given a list of
-	// {descriptor, named zone} IDs. No entry is returned for an ID if it
-	// doesn't exist or if it's dropped. The timestamp at which the translation
-	// is valid is also returned.
+	// {descriptor, named zone} IDs. Entries are unique, and are omitted for IDs
+	// that don't exist. The timestamp at which the translation is valid is also
+	// returned.
 	//
 	// For every ID we first descend the zone configuration hierarchy with the
 	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
 	// tables and named zones (other than RANGE DEFAULT) which have actual span
 	// configurations associated with them (as opposed to non-leaf nodes that
 	// only serve to hold zone configurations for inheritance purposes). Then,
-	// for each one of these accumulated IDs, we generate <span, span
-	// config> tuples by following up the inheritance chain to fully hydrate the
-	// span configuration. Translate also accounts for and negotiates subzone
-	// spans.
+	// for each one of these accumulated IDs, we generate <span, config> tuples
+	// by following up the inheritance chain to fully hydrate the span
+	// configuration. Translate also accounts for and negotiates subzone spans.
 	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
 }
 
