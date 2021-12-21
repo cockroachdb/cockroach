@@ -11,24 +11,18 @@
 package colexecwindow
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
-	"github.com/stretchr/testify/require"
 )
 
 // WindowArgs extracts common arguments to window operators.
@@ -221,45 +215,6 @@ func NormalizeWindowFrame(frame *execinfrapb.WindowerSpec_Frame) *execinfrapb.Wi
 		}
 	}
 	return frame
-}
-
-// EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
-// use in testing window functions in RANGE mode with offsets.
-func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
-	var encoded, scratch []byte
-	encoded, err := rowenc.EncodeTableValue(
-		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
-	require.NoError(t, err)
-	return encoded
-}
-
-// MakeRandWindowFrameRangeOffset returns a valid offset of the given type for
-// use in testing window functions in RANGE mode with offsets.
-func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) tree.Datum {
-	isNegative := func(val tree.Datum) bool {
-		switch datumTyp := val.(type) {
-		case *tree.DInt:
-			return int64(*datumTyp) < 0
-		case *tree.DFloat:
-			return float64(*datumTyp) < 0
-		case *tree.DDecimal:
-			return datumTyp.Negative
-		case *tree.DInterval:
-			return false
-		default:
-			t.Errorf("unexpected error: %v", errors.AssertionFailedf("unsupported datum: %v", datumTyp))
-			return false
-		}
-	}
-
-	for {
-		val := randgen.RandDatumSimple(rng, typ)
-		if isNegative(val) {
-			// Offsets must be non-null and non-negative.
-			continue
-		}
-		return val
-	}
 }
 
 // GetOffsetTypeFromOrderColType returns the correct offset type for the given
