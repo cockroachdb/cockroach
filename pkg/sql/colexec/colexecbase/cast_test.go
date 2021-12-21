@@ -45,6 +45,12 @@ func TestRandomizedCast(t *testing.T) {
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
+			if from.String() == "void" && to.String() == "char" {
+				// Skip the cast from void to char because such setup would get
+				// stuck forever in the datum generation (due to the TODO
+				// below).
+				continue
+			}
 			if _, ok := tree.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
@@ -68,6 +74,7 @@ func TestRandomizedCast(t *testing.T) {
 				fromDatum, toDatum tree.Datum
 				err                error
 			)
+			// Datum generation. The loop exists only because of the TODO below.
 			for {
 				// We don't allow any NULL datums to be generated, so disable
 				// this ability in the RandDatum function.
@@ -77,7 +84,9 @@ func TestRandomizedCast(t *testing.T) {
 					// There is currently a problem when converting an empty
 					// string datum to a physical representation, so we skip
 					// such a datum and retry generation.
-					// TODO(yuzefovich): figure it out.
+					// TODO(yuzefovich): figure it out. When removing this
+					// check, remove the special casing for 'void -> char' cast
+					// above.
 					continue
 				}
 				break
