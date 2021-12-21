@@ -6,11 +6,13 @@ go_library(
         "geoprojbase.go",
         "projections.go",
     ],
+    embedsrcs = ["data/proj.json.gz"],
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geoprojbase",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
+        "//pkg/geo/geoprojbase/embeddedproj",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
