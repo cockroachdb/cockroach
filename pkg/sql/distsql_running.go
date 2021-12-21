@@ -1100,6 +1100,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
+	var alreadyAccountedFor int64
 	switch subqueryPlan.execMode {
 	case rowexec.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know if there is at least one row.
@@ -1110,18 +1111,33 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		for rows.Len() > 0 {
 			row := rows.At(0)
 			rows.PopFirst(ctx)
+			var toAppend tree.Datum
 			if row.Len() == 1 {
 				// This seems hokey, but if we don't do this then the subquery expands
 				// to a tuple of tuples instead of a tuple of values and an expression
 				// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
 				// a single value against a tuple.
-				result.D = append(result.D, row[0])
+				toAppend = row[0]
 			} else {
-				result.D = append(result.D, &tree.DTuple{D: row})
+				toAppend = &tree.DTuple{D: row}
 			}
+			// Perform memory accounting for this datum. We do this in an
+			// incremental fashion since we might be materializing a lot of data
+			// into a single result tuple, and the memory accounting below might
+			// come too late.
+			size := int64(toAppend.Size())
+			alreadyAccountedFor += size
+			if err = subqueryResultMemAcc.Grow(ctx, size); err != nil {
+				return err
+			}
+			result.D = append(result.D, toAppend)
 		}
 
 		if subqueryPlan.execMode == rowexec.SubqueryExecModeAllRowsNormalized {
+			// During the normalization, we will remove duplicate elements which
+			// we've already accounted for. That's ok because below we will
+			// reconcile the incremental accounting with the final result's
+			// memory footprint.
 			result.Normalize(&evalCtx.EvalContext)
 		}
 		subqueryPlans[planIdx].result = &result
@@ -1146,8 +1162,16 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	}
 	// Account for the result of the subquery using the separate memory account
 	// since it outlives the execution of the subquery itself.
-	if err := subqueryResultMemAcc.Grow(ctx, int64(subqueryPlans[planIdx].result.Size())); err != nil {
-		return err
+	actualSize := int64(subqueryPlans[planIdx].result.Size())
+	if actualSize >= alreadyAccountedFor {
+		if err := subqueryResultMemAcc.Grow(ctx, actualSize-alreadyAccountedFor); err != nil {
+			return err
+		}
+	} else {
+		// We've accounted for more than the actual result needs. For example,
+		// this could occur in rowexec.SubqueryExecModeAllRowsNormalized mode
+		// with many duplicate elements.
+		subqueryResultMemAcc.Shrink(ctx, alreadyAccountedFor-actualSize)
 	}
 	return nil
 }
