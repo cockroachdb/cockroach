@@ -506,7 +506,8 @@ func (s *Store) canAcceptSnapshotLocked(
 
 // checkSnapshotOverlapLocked returns an error if the snapshot overlaps an
 // existing replica or placeholder. Any replicas that do overlap have a good
-// chance of being abandoned, so they're proactively handed to the GC queue .
+// chance of being abandoned, so they're proactively handed to the replica GC
+// queue.
 func (s *Store) checkSnapshotOverlapLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) error {
@@ -542,16 +543,16 @@ func (s *Store) checkSnapshotOverlapLocked(
 				// stops sending this replica heartbeats.
 				return !r.CurrentLeaseStatus(ctx).IsValid()
 			}
-			// We unconditionally send this replica through the GC queue. It's
-			// reasonably likely that the GC queue will do nothing because the replica
-			// needs to split instead, but better to err on the side of queueing too
-			// frequently. Blocking Raft snapshots for too long can wedge a cluster,
-			// and if the replica does need to be GC'd, this might be the only code
-			// path that notices in a timely fashion.
+			// We unconditionally send this replica through the replica GC queue. It's
+			// reasonably likely that the replica GC queue will do nothing because the
+			// replica needs to split instead, but better to err on the side of
+			// queueing too frequently. Blocking Raft snapshots for too long can wedge
+			// a cluster, and if the replica does need to be GC'd, this might be the
+			// only code path that notices in a timely fashion.
 			//
-			// We're careful to avoid starving out other replicas in the GC queue by
-			// queueing at a low priority unless we can prove that the range is
-			// inactive and thus unlikely to be about to process a split.
+			// We're careful to avoid starving out other replicas in the replica GC
+			// queue by queueing at a low priority unless we can prove that the range
+			// is inactive and thus unlikely to be about to process a split.
 			gcPriority := replicaGCPriorityDefault
 			if inactive(exReplica) {
 				gcPriority = replicaGCPrioritySuspect

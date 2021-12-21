@@ -288,12 +288,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (x) STORING (y);
 
 # No need to plan checks for w since it's always null.
 # We still plan checks for x,y since neither column is null in all rows.
@@ -329,10 +323,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (x, y);
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
 # conflict columns.
@@ -399,12 +389,6 @@ vectorized: true
                       row 0, expr 2: 3
                       row 0, expr 3: 4
                       row 0, expr 4: 5
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (x, y);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
 
 # Insert with non-constant input.
 query T
@@ -521,12 +505,6 @@ vectorized: true
             └── • scan buffer
                   estimated row count: 2
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_overlaps_pk (b, c, a, d);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_overlaps_pk (c) STORING (d);
 
 # Insert with non-constant input.
 # Add inequality filters for the hidden primary key column.
@@ -651,12 +629,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (a);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (b, c, rowid);
 
 # Combine unique checks with foreign keys. There should be two foreign key
 # checks and one uniqueness check.
@@ -725,14 +697,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 3
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_child (c);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (b, c);
-3. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (a);
 
 # Test that we use the index when available for the insert checks.
 query T
@@ -1066,12 +1030,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (a, b);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # No need to plan checks for a since it's always null.
 query T
@@ -1113,10 +1071,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
 # conflict columns.
@@ -1217,12 +1171,6 @@ vectorized: true
                                       estimated row count: 1 (missing stats)
                                       table: uniq_partial@uniq_partial_pkey
                                       spans: /1/0
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (a, b);
 
 # Insert with non-constant input.
 query T
@@ -1287,10 +1235,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b) STORING (a);
 
 # No need to build uniqueness checks when the primary key columns are a subset
 # of the partial unique constraint columns.
@@ -1349,10 +1293,6 @@ vectorized: true
                       missing stats
                       table: uniq_partial_hidden_pk@uniq_partial_hidden_pk_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_hidden_pk (c) STORING (b);
 
 # Test that we use the partial index when available for the insert checks.
 query T
@@ -1437,10 +1377,6 @@ vectorized: true
                                 └── • scan buffer
                                       columns: (column1, column2, column3, column4, check1, partial_index_put1)
                                       label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_enum (b, a) STORING (c);
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
 # CONFLICT DO NOTHING rows before inserting.
@@ -1548,10 +1484,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_computed_pk (d);
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
@@ -1588,10 +1520,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id2);
 
 # The default value of id1 is gen_random_uuid(), so we don't need to plan checks
 # for it. But the default value of id2 is '00000000-0000-0000-0000-000000000000',
@@ -1629,10 +1557,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id2);
 
 # We can also detect gen_random_uuid() when it is a projection.
 query T
@@ -1726,12 +1650,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id1);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id2);
 
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false
@@ -1795,10 +1713,6 @@ vectorized: true
                   missing stats
                   table: uniq@uniq_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
 
 # No need to plan checks for x,y since x is always null.
 # Also update the primary key.
@@ -1840,10 +1754,6 @@ vectorized: true
                   missing stats
                   table: uniq@uniq_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
 
 # No need to plan checks since none of the columns requiring checks are updated.
 query T
@@ -1933,10 +1843,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_overlaps_pk (c);
 
 statement ok
 ALTER TABLE uniq_overlaps_pk VALIDATE CONSTRAINT unique_a
@@ -2011,10 +1917,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_overlaps_pk (c);
 
 # Update with non-constant input.
 # No need to add a check for b,c since those columns weren't updated.
@@ -2181,10 +2083,6 @@ vectorized: true
                   missing stats
                   table: uniq_fk_parent@uniq_fk_parent_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (a);
 
 # Combine unique checks with foreign keys.
 # There should be one fk check and one uniqueness check.
@@ -2241,12 +2139,6 @@ vectorized: true
                   missing stats
                   table: uniq_fk_parent@uniq_fk_parent_pkey
                   spans: FULL SCAN
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_child (c);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (b, c);
 
 # Test that we use the index when available for the update checks.
 query T
@@ -2444,10 +2336,6 @@ vectorized: true
                       missing stats
                       table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b) STORING (a);
 
 # No need to plan checks for a since a is always null.
 # Also update the primary key.
@@ -2495,10 +2383,6 @@ vectorized: true
                       missing stats
                       table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # No need to plan checks since none of the columns requiring checks are updated.
 query T
@@ -2587,10 +2471,6 @@ vectorized: true
                       missing stats
                       table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b) STORING (a);
 
 # Test that we use the index when available for the update checks.
 query T
@@ -2675,10 +2555,6 @@ vectorized: true
                                 └── • scan buffer
                                       columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
                                       label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_enum (a) STORING (b, c);
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
@@ -2720,10 +2596,6 @@ vectorized: true
                   missing stats
                   table: uniq_uuid@uniq_uuid_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id1);
 
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
@@ -2783,10 +2655,6 @@ vectorized: true
                   missing stats
                   table: uniq_uuid@uniq_uuid_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id1);
 
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false
@@ -2853,12 +2721,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (x) STORING (y);
 
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
 # x or y. Therefore, we could avoid planning checks for (x,y) (see #58300).
@@ -2922,12 +2784,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (x) STORING (y);
 
 # TODO(rytaft): No need to plan checks for w since it's always NULL (see
 # #58300).
@@ -2991,12 +2847,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (x) STORING (y);
 
 # On conflict do update with constant input.
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
@@ -3061,12 +2911,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (x) STORING (y);
 
 # On conflict do update with non-constant input.
 # TODO(rytaft): The default value for x is NULL, and we're not updating either
@@ -3139,12 +2983,6 @@ vectorized: true
                   missing stats
                   table: uniq@uniq_pkey
                   spans: FULL SCAN
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON other (v) STORING (k);
-2. type: index replacement
-   SQL commands: CREATE UNIQUE INDEX ON uniq (v) STORING (w, x, y); DROP INDEX uniq@uniq_v_key;
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
@@ -3210,12 +3048,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq (w) STORING (x, y);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq (x) STORING (y);
 
 # Upsert with non-constant input.
 # Add inequality filters for the primary key columns that are not part of each
@@ -3437,14 +3269,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 3
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_child (a);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (a);
-3. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (b, c, rowid);
 
 # Combine unique checks with foreign keys.
 query T
@@ -3512,14 +3336,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 3
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_child (c);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (b, c);
-3. type: index creation
-   SQL command: CREATE INDEX ON uniq_fk_parent (a);
 
 # Test that we use the index when available for the upsert checks.
 query T
@@ -3846,12 +3662,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (a, b);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
 # it. Therefore, we could avoid planning checks for (b) (see #58300).
@@ -3927,12 +3737,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (a, b);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # No need to plan checks for a since it's always NULL.
 query T
@@ -3974,10 +3778,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # On conflict do update with constant input.
 # TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
@@ -4066,12 +3866,6 @@ vectorized: true
                 │
                 └── • scan buffer
                       label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (a, b);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b);
 
 # On conflict do update with non-constant input.
 # TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
@@ -4160,10 +3954,6 @@ vectorized: true
                       missing stats
                       table: uniq_partial@uniq_partial_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial (b) STORING (a);
 
 # No need to build uniqueness checks when the primary key columns are a subset
 # of the partial unique constraint columns.
@@ -4224,10 +4014,6 @@ vectorized: true
                       missing stats
                       table: uniq_partial_hidden_pk@uniq_partial_hidden_pk_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_hidden_pk (c) STORING (b);
 
 # Test that we use the index when available for the upsert checks.
 query T
@@ -4422,10 +4208,6 @@ vectorized: true
                               row 1, expr 1: 2
                               row 1, expr 2: 2
                               row 1, expr 3: 'bar'
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_partial_enum (b) STORING (c);
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
@@ -4462,10 +4244,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id2);
 
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
@@ -4521,12 +4299,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id1);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniq_uuid (id2);
 
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false

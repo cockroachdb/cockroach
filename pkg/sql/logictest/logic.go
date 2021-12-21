@@ -1364,6 +1364,12 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
 		t.Fatal(err)
 	}
+	// The default setting for index_recommendations_enabled is true. We do not
+	// want to display index recommendations in logic tests, so we disable them
+	// here.
+	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
 	t.clients[user] = db
 	t.db = db
 	t.user = user

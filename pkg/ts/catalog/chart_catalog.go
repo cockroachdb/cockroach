@@ -724,7 +724,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Organization: [][]string{{KVTransactionLayer, "MVCC Garbage Collection (GC)", "Keys"}},
 		Charts: []chartDescription{
 			{
 				Title: "AbortSpan",
