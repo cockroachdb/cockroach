@@ -534,6 +534,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
 		{sessionSetting: "intervalstyle_enabled", clusterSetting: intervalStyleEnabled, convFunc: boolToOnOff},
 		{sessionSetting: "datestyle_enabled", clusterSetting: dateStyleEnabled, convFunc: boolToOnOff},
+		{sessionSetting: "index_recommendations_enabled", clusterSetting: indexRecommendationsEnabled, convFunc: boolToOnOff},
 		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
 		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},

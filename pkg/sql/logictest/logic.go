@@ -1591,6 +1591,12 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 			t.Fatal(err)
 		}
 
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.defaults.index_recommendations.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		if cfg.overrideDistSQLMode != "" {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,

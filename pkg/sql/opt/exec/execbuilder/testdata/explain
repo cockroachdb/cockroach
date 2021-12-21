@@ -938,15 +938,10 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: tc@c
           spans: /10-/11
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: CREATE INDEX ON tc (a) STORING (b); DROP INDEX tc@c;
 
-# Ensure that the query above no longer has index recommendations if they are
-# disabled.
+# Ensure that the query above has index recommendations if they are enabled.
 statement ok
-SET index_recommendations_enabled = 'false'
+SET index_recommendations_enabled = 'true'
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
@@ -971,10 +966,14 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: tc@c
           spans: /10-/11
+·
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON tc (a) STORING (b); DROP INDEX tc@c;
 
-# Reset index_recommendations_enabled to its default setting.
+# Reset index_recommendations_enabled to its default test setting.
 statement ok
-SET index_recommendations_enabled = 'true'
+SET index_recommendations_enabled = 'false'
 
 query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
@@ -1042,10 +1041,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
@@ -1103,10 +1098,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
@@ -1138,10 +1129,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -1192,10 +1179,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@t_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (v);
 
 query T
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
@@ -1229,10 +1212,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: tt@tt_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: CREATE INDEX ON tt (x) STORING (y); DROP INDEX tt@a;
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT
@@ -1809,7 +1788,7 @@ regions: <hidden>
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~11KB, required=[presentation: info:10])
+memo (optimized, ~16KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])
@@ -1868,7 +1847,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~11KB, required=[presentation: info:10])
+memo (optimized, ~16KB, required=[presentation: info:10])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7])
  │    └── [presentation: info:10]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7]" [presentation: a:1,b:2,k:6,v:7])

@@ -301,10 +301,6 @@ vectorized: true
                           estimated row count: 1,000 (missing stats)
                           table: kv@kv_pkey
                           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v, d);
 
 query T
 EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
@@ -338,10 +334,6 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: kv@kv_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v, d);
 
 # Partition
 

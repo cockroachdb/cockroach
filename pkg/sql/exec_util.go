@@ -363,6 +363,17 @@ var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+// indexRecommendationsEnabled controls the cluster default for the output
+// of index recommendations in EXPLAIN. If enabled, index recommendations will
+// be displayed after the query plan in the EXPLAIN output. Otherwise, no index
+// recommendations will be given.
+var indexRecommendationsEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.index_recommendations.enabled",
+	"default value for index_recommendations_enabled session setting; "+
+		"enables index recommendations in the EXPLAIN output by default",
+	true,
+).WithPublic()
+
 var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.insert_fast_path.enabled",
 	"default value for enable_insert_fast_path session setting; enables a specialized insert path",

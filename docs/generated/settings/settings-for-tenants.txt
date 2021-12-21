@@ -98,6 +98,7 @@ sql.defaults.foreign_key_cascades_limit	integer	10000	default value for foreign_
 sql.defaults.idle_in_session_timeout	duration	0s	default value for the idle_in_session_timeout; default value for the idle_in_session_timeout session setting; controls the duration a session is permitted to idle before the session is terminated; if set to 0, there is no timeout
 sql.defaults.idle_in_transaction_session_timeout	duration	0s	default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
 sql.defaults.implicit_select_for_update.enabled	boolean	true	default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements
+sql.defaults.index_recommendations.enabled	boolean	true	default value for index_recommendations_enabled session setting; enables index recommendations in the EXPLAIN output by default
 sql.defaults.insert_fast_path.enabled	boolean	true	default value for enable_insert_fast_path session setting; enables a specialized insert path
 sql.defaults.intervalstyle	enumeration	postgres	default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
 sql.defaults.intervalstyle.enabled	boolean	false	default value for intervalstyle_enabled session setting

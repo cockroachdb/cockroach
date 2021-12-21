@@ -510,7 +510,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().IndexRecommendationsEnabled), nil
 		},
-		GlobalDefault: globalTrue,
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(indexRecommendationsEnabled.Get(sv))
+		},
 	},
 
 	// CockroachDB extension.
