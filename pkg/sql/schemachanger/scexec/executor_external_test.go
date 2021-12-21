@@ -69,6 +69,7 @@ func (ti testInfra) newExecDeps(
 		noopIndexValidator{}, /* indexValidator */
 		noopPartitioner{},    /* partitioner */
 		noopEventLogger{},    /* eventLogger */
+		1,                    /* schemaChangerJobID */
 		nil,                  /* statements */
 	)
 }
@@ -99,7 +100,7 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 	type testCase struct {
 		name      string
 		orig, exp func() catalog.TableDescriptor
-		ops       func() scop.Ops
+		ops       func() []scop.Op
 	}
 	var table *tabledesc.Mutable
 	makeTable := func(f func(mutable *tabledesc.Mutable)) func() catalog.TableDescriptor {
@@ -164,7 +165,7 @@ CREATE TABLE db.t (
 
 	indexToAdd := descpb.IndexDescriptor{
 		ID:                2,
-		Name:              "foo",
+		Name:              tabledesc.IndexNamePlaceholder(2),
 		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
 		CreatedExplicitly: true,
 		KeyColumnIDs:      []descpb.ColumnID{1},
@@ -191,17 +192,16 @@ CREATE TABLE db.t (
 				})
 				mutable.NextMutationID++
 			}),
-			ops: func() scop.Ops {
-				return scop.MakeOps(
+			ops: func() []scop.Op {
+				return []scop.Op{
 					&scop.MakeAddedIndexDeleteOnly{
 						TableID:             table.ID,
 						IndexID:             indexToAdd.ID,
-						IndexName:           indexToAdd.Name,
 						KeyColumnIDs:        indexToAdd.KeyColumnIDs,
 						KeyColumnDirections: indexToAdd.KeyColumnDirections,
 						SecondaryIndex:      true,
 					},
-				)
+				}
 			},
 		},
 		{
@@ -218,8 +218,8 @@ CREATE TABLE db.t (
 					Hidden:              false,
 				})
 			}),
-			ops: func() scop.Ops {
-				return scop.MakeOps(
+			ops: func() []scop.Op {
+				return []scop.Op{
 					&scop.AddCheckConstraint{
 						TableID:     table.GetID(),
 						Name:        "check_foo",
@@ -228,7 +228,7 @@ CREATE TABLE db.t (
 						Unvalidated: false,
 						Hidden:      false,
 					},
-				)
+				}
 			},
 		},
 	} {
@@ -354,7 +354,7 @@ func TestSchemaChanger(t *testing.T) {
 				stages := sc.StagesForCurrentPhase()
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
-					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 					ts = s.After
 				}
 			}
@@ -365,9 +365,9 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
-			for _, s := range sc.StagesForCurrentPhase() {
+			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 				after = s.After
 			}
 			return nil
@@ -430,7 +430,7 @@ func TestSchemaChanger(t *testing.T) {
 					sc := sctestutils.MakePlan(t, outputNodes, phase)
 					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn, descriptors)
-						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 						ts = s.After
 					}
 				}
@@ -441,9 +441,9 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
-			for _, s := range sc.StagesForCurrentPhase() {
+			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 			}
 			return nil
 		}))

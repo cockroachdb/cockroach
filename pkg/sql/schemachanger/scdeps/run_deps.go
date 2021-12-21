@@ -90,12 +90,13 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	) error {
 		return fn(ctx, &execDeps{
 			txnDeps: txnDeps{
-				txn:             txn,
-				codec:           d.codec,
-				descsCollection: descriptors,
-				jobRegistry:     d.jobRegistry,
-				indexValidator:  d.indexValidator,
-				eventLogger:     d.eventLoggerBuilder(txn),
+				txn:                txn,
+				codec:              d.codec,
+				descsCollection:    descriptors,
+				jobRegistry:        d.jobRegistry,
+				indexValidator:     d.indexValidator,
+				eventLogger:        d.eventLoggerBuilder(txn),
+				schemaChangerJobID: d.job.ID(),
 			},
 			indexBackfiller: d.indexBackfiller,
 			statements:      d.statements,

@@ -19,21 +19,22 @@ import (
 )
 
 // ExecuteStage executes the provided ops. The ops must all be of the same type.
-func ExecuteStage(ctx context.Context, deps Dependencies, ops scop.Ops) error {
+func ExecuteStage(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	// It is perfectly valid to have empty stage after optimizations /
 	// transformations.
-	if ops == nil {
+	if len(ops) == 0 {
 		log.Infof(ctx, "skipping execution, no operations in this stage")
 		return nil
 	}
-	log.Infof(ctx, "executing %d ops of type %s", len(ops.Slice()), ops.Type().String())
-	switch typ := ops.Type(); typ {
+	typ := ops[0].Type()
+	log.Infof(ctx, "executing %d ops of type %s", len(ops), typ)
+	switch typ {
 	case scop.MutationType:
-		return executeDescriptorMutationOps(ctx, deps, ops.Slice())
+		return executeDescriptorMutationOps(ctx, deps, ops)
 	case scop.BackfillType:
-		return executeBackfillOps(ctx, deps, ops.Slice())
+		return executeBackfillOps(ctx, deps, ops)
 	case scop.ValidationType:
-		return executeValidationOps(ctx, deps, ops.Slice())
+		return executeValidationOps(ctx, deps, ops)
 	default:
 		return errors.AssertionFailedf("unknown ops type %d", typ)
 	}

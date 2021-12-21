@@ -106,11 +106,11 @@ CREATE INDEX id4
       family: IntFamily
       oid: 23
       width: 32
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: t1_pkey
     tableId: 54
 - ADD IndexName:{DescID: 54, IndexID: 3, Name: id4}
   state: ABSENT

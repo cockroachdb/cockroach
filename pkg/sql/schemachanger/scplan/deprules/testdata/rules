@@ -23,7 +23,7 @@ rules
   from: index-node
   to: column-node
   query:
-    - $index-status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
+    - $status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
     - $direction = ADD
     - $column[Type] = '*scpb.Column'
     - $index[Type] = '*scpb.PrimaryIndex'
@@ -32,8 +32,8 @@ rules
     - columnInIndex(*scpb.Column, scpb.Element)($column, $index)
     - $column-target[Direction] = $direction
     - $index-target[Direction] = $direction
-    - $column-node[Status] = $index-status
-    - $index-node[Status] = $index-status
+    - $column-node[Status] = $status
+    - $index-node[Status] = $status
     - $column-target[Type] = '*scpb.Target'
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
@@ -42,7 +42,7 @@ rules
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-- name: index depends on column
+- name: index existence depends on column existence
   from: column-node
   to: index-node
   query:
@@ -63,6 +63,27 @@ rules
     - $index-node[Target] = $index-target
     - $index-target[Direction] = ADD
     - $index-node[Status] = DELETE_ONLY
+- name: secondary index depends on column
+  from: column-node
+  to: index-node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $index[Type] = '*scpb.SecondaryIndex'
+    - $column[DescID] = $id
+    - $index[DescID] = $id
+    - columnInIndex(*scpb.Column, scpb.Element)($column, $index)
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*scpb.Node'
+    - $column-node[Target] = $column-target
+    - $column-target[Direction] = ADD
+    - $column-node[Status] = PUBLIC
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*scpb.Node'
+    - $index-node[Target] = $index-target
+    - $index-target[Direction] = ADD
+    - $index-node[Status] = VALIDATED
 - name: primary index add depends on drop
   from: drop-idx-node
   to: add-idx-node
@@ -83,7 +104,7 @@ rules
     - $drop-idx-node[Type] = '*scpb.Node'
     - $drop-idx-node[Target] = $drop-idx-target
     - $drop-idx-target[Direction] = DROP
-    - $drop-idx-node[Status] = DELETE_AND_WRITE_ONLY
+    - $drop-idx-node[Status] = VALIDATED
 - name: partitioning information needs the basic index as created
   from: add-idx-node
   to: partitioning-node
@@ -208,7 +229,7 @@ rules
     - $dep-node[Target] = $dep-target
     - $dep-target[Direction] = DROP
     - $dep-node[Status] = ABSENT
-- name: column name is assigned once the column is created
+- name: column named after column existence
   from: column-node
   to: column-name-node
   query:
@@ -218,19 +239,19 @@ rules
     - $column-name[DescID] = $desc-id
     - $column[ColumnID] = $column-id
     - $column-name[ColumnID] = $column-id
-    - $column-name-target[Type] = '*scpb.Target'
-    - $column-name-target[Element] = $column-name
-    - $column-name-node[Type] = '*scpb.Node'
-    - $column-name-node[Target] = $column-name-target
-    - $column-name-target[Direction] = ADD
-    - $column-name-node[Status] = PUBLIC
     - $column-target[Type] = '*scpb.Target'
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
     - $column-target[Direction] = ADD
     - $column-node[Status] = DELETE_ONLY
-- name: column needs a name to be assigned
+    - $column-name-target[Type] = '*scpb.Target'
+    - $column-name-target[Element] = $column-name
+    - $column-name-node[Type] = '*scpb.Node'
+    - $column-name-node[Target] = $column-name-target
+    - $column-name-target[Direction] = ADD
+    - $column-name-node[Status] = PUBLIC
+- name: column named right before column becomes public
   from: column-name-node
   to: column-node
   query:
@@ -251,8 +272,52 @@ rules
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
     - $column-target[Direction] = ADD
+    - $column-node[Status] = PUBLIC
+- name: column unnamed after column no longer public
+  from: column-node
+  to: column-name-node
+  query:
+    - $column-name[Type] = '*scpb.ColumnName'
+    - $column[Type] = '*scpb.Column'
+    - $column[DescID] = $desc-id
+    - $column-name[DescID] = $desc-id
+    - $column[ColumnID] = $column-id
+    - $column-name[ColumnID] = $column-id
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*scpb.Node'
+    - $column-node[Target] = $column-target
+    - $column-target[Direction] = DROP
     - $column-node[Status] = DELETE_AND_WRITE_ONLY
-- name: index name is assigned once the index is created
+    - $column-name-target[Type] = '*scpb.Target'
+    - $column-name-target[Element] = $column-name
+    - $column-name-node[Type] = '*scpb.Node'
+    - $column-name-node[Target] = $column-name-target
+    - $column-name-target[Direction] = DROP
+    - $column-name-node[Status] = ABSENT
+- name: column unnamed before column no longer exists
+  from: column-name-node
+  to: column-node
+  query:
+    - $column-name[Type] = '*scpb.ColumnName'
+    - $column[Type] = '*scpb.Column'
+    - $column[DescID] = $desc-id
+    - $column-name[DescID] = $desc-id
+    - $column[ColumnID] = $column-id
+    - $column-name[ColumnID] = $column-id
+    - $column-name-target[Type] = '*scpb.Target'
+    - $column-name-target[Element] = $column-name
+    - $column-name-node[Type] = '*scpb.Node'
+    - $column-name-node[Target] = $column-name-target
+    - $column-name-target[Direction] = DROP
+    - $column-name-node[Status] = ABSENT
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*scpb.Node'
+    - $column-node[Target] = $column-target
+    - $column-target[Direction] = DROP
+    - $column-node[Status] = ABSENT
+- name: index named after index existence
   from: index-node
   to: index-name-node
   query:
@@ -262,19 +327,19 @@ rules
     - $index-name[DescID] = $desc-id
     - $index[IndexID] = $index-id
     - $index-name[IndexID] = $index-id
-    - $index-name-target[Type] = '*scpb.Target'
-    - $index-name-target[Element] = $index-name
-    - $index-name-node[Type] = '*scpb.Node'
-    - $index-name-node[Target] = $index-name-target
-    - $index-name-target[Direction] = ADD
-    - $index-name-node[Status] = PUBLIC
     - $index-target[Type] = '*scpb.Target'
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
     - $index-target[Direction] = ADD
     - $index-node[Status] = DELETE_ONLY
-- name: index needs a name to be assigned
+    - $index-name-target[Type] = '*scpb.Target'
+    - $index-name-target[Element] = $index-name
+    - $index-name-node[Type] = '*scpb.Node'
+    - $index-name-node[Target] = $index-name-target
+    - $index-name-target[Direction] = ADD
+    - $index-name-node[Status] = PUBLIC
+- name: index named right before index becomes public
   from: index-name-node
   to: index-node
   query:
@@ -295,7 +360,51 @@ rules
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
     - $index-target[Direction] = ADD
-    - $index-node[Status] = DELETE_AND_WRITE_ONLY
+    - $index-node[Status] = PUBLIC
+- name: index unnamed after index no longer public
+  from: index-node
+  to: index-name-node
+  query:
+    - $index-name[Type] = '*scpb.IndexName'
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $index[DescID] = $desc-id
+    - $index-name[DescID] = $desc-id
+    - $index[IndexID] = $index-id
+    - $index-name[IndexID] = $index-id
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*scpb.Node'
+    - $index-node[Target] = $index-target
+    - $index-target[Direction] = DROP
+    - $index-node[Status] IN [VALIDATED, BACKFILLED, DELETE_AND_WRITE_ONLY]
+    - $index-name-target[Type] = '*scpb.Target'
+    - $index-name-target[Element] = $index-name
+    - $index-name-node[Type] = '*scpb.Node'
+    - $index-name-node[Target] = $index-name-target
+    - $index-name-target[Direction] = DROP
+    - $index-name-node[Status] = ABSENT
+- name: index unnamed before index no longer exists
+  from: index-name-node
+  to: index-node
+  query:
+    - $index-name[Type] = '*scpb.IndexName'
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $index[DescID] = $desc-id
+    - $index-name[DescID] = $desc-id
+    - $index[IndexID] = $index-id
+    - $index-name[IndexID] = $index-id
+    - $index-name-target[Type] = '*scpb.Target'
+    - $index-name-target[Element] = $index-name
+    - $index-name-node[Type] = '*scpb.Node'
+    - $index-name-node[Target] = $index-name-target
+    - $index-name-target[Direction] = DROP
+    - $index-name-node[Status] = ABSENT
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*scpb.Node'
+    - $index-node[Target] = $index-target
+    - $index-target[Direction] = DROP
+    - $index-node[Status] = ABSENT
 - name: type ref drop is no-op if ref is being added
   from: type-ref-drop-node
   to: type-ref-drop-node
@@ -322,7 +431,7 @@ rules
   from: table-drop-node
   to: dep-drop-node
   query:
-    - $dep-drop[Type] IN ['*scpb.Owner', '*scpb.UserPrivileges']
+    - $dep-drop[Type] IN ['*scpb.Owner', '*scpb.UserPrivileges', '*scpb.Locality']
     - $table-drop[Type] IN ['*scpb.Table', '*scpb.Sequence', '*scpb.View']
     - $table-drop[DescID] = $table-id
     - $dep-drop[DescID] = $table-id

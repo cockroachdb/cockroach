@@ -31,11 +31,8 @@ import (
 // execution time (scop.StatementPhase).
 func RunStatementPhase(
 	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.State,
-) (scpb.State, error) {
-	after, _, err := runTransactionPhase(ctx, knobs, deps, state, scplan.Params{
-		ExecutionPhase: scop.StatementPhase,
-	})
-	return after, err
+) (scpb.State, jobspb.JobID, error) {
+	return runTransactionPhase(ctx, knobs, deps, state, scop.StatementPhase)
 }
 
 // RunPreCommitPhase executes in-transaction schema changes for the targeted
@@ -45,15 +42,7 @@ func RunStatementPhase(
 func RunPreCommitPhase(
 	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.State,
 ) (scpb.State, jobspb.JobID, error) {
-	var jobID jobspb.JobID
-	after, jobID, err := runTransactionPhase(ctx, knobs, deps, state, scplan.Params{
-		ExecutionPhase: scop.PreCommitPhase,
-		JobIDGenerator: deps.TransactionalJobCreator().MakeJobID,
-	})
-	if err != nil {
-		return scpb.State{}, 0, err
-	}
-	return after, jobID, nil
+	return runTransactionPhase(ctx, knobs, deps, state, scop.PreCommitPhase)
 }
 
 func runTransactionPhase(
@@ -61,25 +50,28 @@ func runTransactionPhase(
 	knobs *TestingKnobs,
 	deps scexec.Dependencies,
 	state scpb.State,
-	params scplan.Params,
+	phase scop.Phase,
 ) (scpb.State, jobspb.JobID, error) {
 	if len(state.Nodes) == 0 {
-		return scpb.State{}, 0, nil
+		return scpb.State{}, jobspb.InvalidJobID, nil
 	}
-	sc, err := scplan.MakePlan(state, params)
+	sc, err := scplan.MakePlan(state, scplan.Params{
+		ExecutionPhase:             phase,
+		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
+	})
 	if err != nil {
-		return scpb.State{}, 0, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
+		return scpb.State{}, jobspb.InvalidJobID, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 	after := state
 	stages := sc.StagesForCurrentPhase()
 	for i := range stages {
 		if err := executeStage(ctx, knobs, deps, sc, i, stages[i]); err != nil {
-			return scpb.State{}, 0, err
+			return scpb.State{}, jobspb.InvalidJobID, err
 		}
 		after = stages[i].After
 	}
 	if len(after.Nodes) == 0 {
-		return scpb.State{}, 0, nil
+		return scpb.State{}, jobspb.InvalidJobID, nil
 	}
 	return after, sc.JobID, nil
 }
@@ -105,24 +97,21 @@ func RunSchemaChangesInJob(
 		jobProgress.Authorization,
 		rollback)
 	sc, err := scplan.MakePlan(state, scplan.Params{
-		ExecutionPhase: scop.PostCommitPhase,
-		JobIDGenerator: func() jobspb.JobID { return jobID },
+		ExecutionPhase:             scop.PostCommitPhase,
+		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 	})
 	if err != nil {
 		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 
-	stages := sc.StagesForCurrentPhase()
-
-	for i := range stages {
+	for i := range sc.Stages {
 		// Execute each stage in its own transaction.
 		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
-			return executeStage(ctx, knobs, td, sc, i, stages[i])
+			return executeStage(ctx, knobs, td, sc, i, sc.Stages[i])
 		}); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -139,7 +128,7 @@ func executeStage(
 			return err
 		}
 	}
-	err := scexec.ExecuteStage(ctx, deps, stage.Ops)
+	err := scexec.ExecuteStage(ctx, deps, stage.Ops())
 	if err != nil {
 		err = errors.Wrapf(err, "error executing %s", stage.String())
 		return scgraphviz.DecorateErrorWithPlanDetails(err, p)

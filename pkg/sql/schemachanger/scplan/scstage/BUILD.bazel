@@ -4,17 +4,12 @@ go_library(
     name = "scstage",
     srcs = [
         "build.go",
-        "collapse.go",
-        "job_augmentation.go",
         "stage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/security",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",

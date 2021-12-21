@@ -11,7 +11,6 @@
 package scop
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -44,7 +43,6 @@ type MakeAddedIndexDeleteOnly struct {
 	// index descriptor.
 	PrimaryIndex        descpb.IndexID
 	IndexID             descpb.IndexID
-	IndexName           string
 	Unique              bool
 	KeyColumnIDs        []descpb.ColumnID
 	KeyColumnDirections []descpb.IndexDescriptor_Direction
@@ -352,13 +350,15 @@ type AddJobReference struct {
 // declarative schema changer post-commit phases.
 type CreateDeclarativeSchemaChangerJob struct {
 	mutationOp
-	Record jobs.Record
+	JobID jobspb.JobID
+	State scpb.State
 }
 
-// UpdateSchemaChangeJobProgress is used to update the progress of the schema
-// change job.
-type UpdateSchemaChangeJobProgress struct {
+// UpdateSchemaChangerJob is used to update the progress and payload of the
+// schema changer job.
+type UpdateSchemaChangerJob struct {
 	mutationOp
-	JobID    jobspb.JobID
-	Statuses []scpb.Status
+	JobID           jobspb.JobID
+	Statuses        []scpb.Status
+	IsNonCancelable bool
 }

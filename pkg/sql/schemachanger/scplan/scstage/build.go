@@ -11,8 +11,8 @@
 package scstage
 
 import (
-	"sort"
-
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -21,247 +21,424 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// BuildStages builds the plan's stages.
-func BuildStages(init scpb.State, phase scop.Phase, g *scgraph.Graph) (stages []Stage) {
-	b := makeBuildContext(init, phase, g)
-	// Build stages for this phase and all subsequent phases.
-	for b.phase <= scop.PostCommitPhase {
-		// Note that the current nodes are fulfilled for the sake of dependency
-		// checking.
-		for _, ts := range b.state.Nodes {
-			b.fulfilled[ts] = struct{}{}
+// BuildStages builds the plan's stages for this and all subsequent phases.
+func BuildStages(
+	init scpb.State, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
+) []Stage {
+	newBuildState := func(isRevertibilityIgnored bool) *buildState {
+		b := buildState{
+			g:                      g,
+			phase:                  phase,
+			state:                  shallowCopy(init),
+			fulfilled:              make(map[*scpb.Node]struct{}, g.Order()),
+			scJobIDSupplier:        scJobIDSupplier,
+			isRevertibilityIgnored: isRevertibilityIgnored,
 		}
-
-		// Extract the set of op edges for the current stage.
-		var opEdges []*scgraph.OpEdge
-		for _, t := range b.state.Nodes {
-			// TODO(ajwerner): improve the efficiency of this lookup.
-			// Look for an opEdge from this node. Then, for the other side
-			// of the opEdge, look for dependencies.
-			if oe, ok := b.g.GetOpEdgeFrom(t); ok {
-				opEdges = append(opEdges, oe)
-			}
+		for _, n := range init.Nodes {
+			b.fulfilled[n] = struct{}{}
 		}
-
-		if s := b.tryBuildStage(opEdges); s != nil {
-			stages = append(stages, *s)
-			b.state = s.After
-			b.isRevertiblePreferred = b.isRevertiblePreferred && s.Revertible
-		} else {
-			// No further progress is possible in this phase, move on to the next one.
-			b.phase++
-		}
+		return &b
 	}
 
+	// Try building stages while ignoring revertibility constraints.
+	// This is fine as long as there are no post-commit stages.
+	stages := buildStages(newBuildState(true /* isRevertibilityIgnored */))
+	if n := len(stages); n > 0 && stages[n-1].Phase > scop.PreCommitPhase {
+		stages = buildStages(newBuildState(false /* isRevertibilityIgnored */))
+	}
 	return decorateStages(stages)
 }
 
-// buildCtx contains the necessary context for building a stage.
-// When building a stage, this struct is read-only.
-type buildCtx struct {
-	g                     *scgraph.Graph
-	nodeRanks             map[*scpb.Node]int
-	state                 scpb.State
-	phase                 scop.Phase
-	isRevertiblePreferred bool
-	fulfilled             map[*scpb.Node]struct{}
+func buildStages(b *buildState) (stages []Stage) {
+	// Build stages until reaching the terminal state.
+	for !b.isStateTerminal(b.state) {
+		// Generate a stage builder which can make progress.
+		sb := b.makeStageBuilder()
+		for !sb.canMakeProgress() {
+			// When no further progress is possible, move to the next phase and try
+			// again, until progress is possible. We haven't reached the terminal
+			// state yet, so this is guaranteed (barring any horrible bugs).
+			if b.phase == scop.PreCommitPhase {
+				// This is a special case.
+				// We need to move to the post-commit phase, but this will require
+				// creating a schema changer job, which in turn will require this
+				// otherwise-empty pre-commit stage.
+				break
+			}
+			if b.phase == scop.LatestPhase {
+				// This should never happen, we should always be able to make forward
+				// progress because we haven't reached the terminal state yet.
+				panic(errors.AssertionFailedf("unable to make progress"))
+			}
+			b.phase++
+			sb = b.makeStageBuilder()
+		}
+		// Build the stage.
+		stages = append(stages, sb.build())
+		// Update the build state with this stage's progress.
+		for n := range sb.fulfilling {
+			b.fulfilled[n] = struct{}{}
+		}
+		b.state = sb.after()
+		switch b.phase {
+		case scop.StatementPhase, scop.PreCommitPhase:
+			// These phases can only have at most one stage each.
+			b.phase++
+		}
+	}
+	return stages
 }
 
-// makeBuildContext is the constructor for buildCtx.
-func makeBuildContext(init scpb.State, phase scop.Phase, g *scgraph.Graph) buildCtx {
-	// Fetch the ranks of the nodes, which will be used to evaluate edges
-	// in topological order.
-	nodeRanks, err := g.GetNodeRanks()
-	if err != nil {
-		panic(err)
-	}
-	return buildCtx{
-		g:                     g,
-		phase:                 phase,
-		isRevertiblePreferred: true,
-		nodeRanks:             nodeRanks,
-		// TODO(ajwerner): deal with the case where the target status was
-		// fulfilled by something that preceded the initial state.
-		state:     init,
-		fulfilled: make(map[*scpb.Node]struct{}, len(nodeRanks)),
-	}
+// buildState contains the global build state for building the stages.
+// Only the buildStages function mutates it, it's read-only everywhere else.
+type buildState struct {
+	g                      *scgraph.Graph
+	scJobIDSupplier        func() jobspb.JobID
+	isRevertibilityIgnored bool
+
+	state     scpb.State
+	phase     scop.Phase
+	fulfilled map[*scpb.Node]struct{}
 }
 
-// tryBuildStage tries to build a stage using the provided op-edges.
-// This is done on a best-effort basis, if not possible nil is returned.
-func (b buildCtx) tryBuildStage(edges []*scgraph.OpEdge) *Stage {
-	// Group the op edges a per-type basis.
-	opTypes := make(map[scop.Type][]*scgraph.OpEdge)
-	for _, oe := range edges {
-		opTypes[oe.Type()] = append(opTypes[oe.Type()], oe)
-	}
-
-	// Greedily attempt to find a stage which can be executed. This is sane
-	// because once a dependency is met, it never becomes unmet.
-	for _, typ := range []scop.Type{
-		scop.MutationType,
-		scop.BackfillType,
-		scop.ValidationType,
-	} {
-		if filteredEdges := b.filterUnsatisfiedEdges(opTypes[typ]); len(filteredEdges) > 0 {
-			s := b.makeStage(filteredEdges)
-			return &s
+// isStateTerminal returns true iff the state is terminal, according to the
+// graph.
+func (b buildState) isStateTerminal(state scpb.State) bool {
+	for _, n := range state.Nodes {
+		if _, found := b.g.GetOpEdgeFrom(n); found {
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
-func (b buildCtx) filterUnsatisfiedEdges(edges []*scgraph.OpEdge) []*scgraph.OpEdge {
-	for len(edges) > 0 {
-		failed := b.collectFailedEdges(edges)
-		if len(failed) == 0 {
-			return edges
-		}
-
-		// Remove all failed edges from the edges slice.
-		filtered := edges[:0]
-		for _, e := range edges {
-			if _, found := failed[e]; !found {
-				filtered = append(filtered, e)
-			}
-		}
-		edges = filtered
+// makeStageBuilder returns a stage builder with an operation type for which
+// progress can be made. Defaults to the mutation type if none make progress.
+func (b buildState) makeStageBuilder() (sb stageBuilder) {
+	opTypes := []scop.Type{scop.BackfillType, scop.ValidationType, scop.MutationType}
+	switch b.phase {
+	case scop.StatementPhase, scop.PreCommitPhase:
+		// We don't allow expensive operations pre-commit.
+		opTypes = []scop.Type{scop.MutationType}
 	}
-	return nil
-}
-
-func (b buildCtx) collectFailedEdges(
-	edges []*scgraph.OpEdge,
-) (failed map[*scgraph.OpEdge]struct{}) {
-	candidates := make(map[*scpb.Node]*scgraph.OpEdge)
-	for _, e := range edges {
-		candidates[e.To()] = e
-	}
-	// Check to see if the current set of edges will have their dependencies met
-	// if they are all run. Any which will not must be pruned. This greedy
-	// algorithm works, but a justification is in order.
-	failed = make(map[*scgraph.OpEdge]struct{}, len(edges))
-	for _, e := range edges {
-		if !e.IsPhaseSatisfied(b.phase) {
-			failed[e] = struct{}{}
-		}
-	}
-	for _, e := range edges {
-		if err := b.g.ForEachDepEdgeTo(e.To(), func(de *scgraph.DepEdge) error {
-			if _, isFulfilled := b.fulfilled[de.From()]; isFulfilled {
-				// Dependency source node has already been fulfilled in an earlier
-				// stage.
-				if de.Kind() == scgraph.SameStagePrecedence {
-					// This is bad, the dependency requires the destination node to be
-					// fulfilled in the same stage, which is impossible in this case.
-					return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
-						screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
-				}
-				return nil
-			}
-			if _, isCandidate := candidates[de.From()]; isCandidate {
-				// Dependency source and destination nodes will both be fulfilled in the
-				// same stage.
-				return nil
-			}
-			// The candidate op edge must be rejected.
-			failed[e] = struct{}{}
-			return iterutil.StopIteration()
-		}); err != nil {
-			panic(err)
-		}
-	}
-	// Ensure that all SameStagePrecedence DepEdges are met appropriately.
-	for _, e := range edges {
-		if err := b.g.ForEachDepEdgeFrom(e.To(), func(de *scgraph.DepEdge) error {
-			if de.Kind() != scgraph.SameStagePrecedence {
-				// Only look at same-stage dependency edges.
-				return nil
-			}
-			if _, isFulfilled := b.fulfilled[de.To()]; isFulfilled {
-				// This is bad, the dependency requires the source node to be
-				// fulfilled in the same stage as the destination, which is impossible
-				// in this case because the destination has already been fulfilled.
-				return errors.AssertionFailedf("failed to satisfy %v->%v (%s) dependency",
-					screl.NodeString(de.From()), screl.NodeString(de.To()), de.Name())
-			}
-			toCandidate, toIsCandidate := candidates[de.To()]
-			if !toIsCandidate {
-				// The candidate op edge is rejected because the dependency destination
-				// node will not be fulfilled in this stage, due to the op edge leading
-				// to it not being in the set of candidate op edges for this stage.
-				//
-				// As a result the dependency source node, which is also the candidate
-				// edge destination node, cannot possibly be fulfilled in this stage
-				// either.
-				failed[e] = struct{}{}
-				return iterutil.StopIteration()
-			}
-			_, toIsFailed := failed[toCandidate]
-			if toIsFailed {
-				// The candidate op edge is rejected because the dependency destination
-				// node will not be fulfilled in this stage, due to the op edge leading
-				// to it being a candidate op edge which has been rejected.
-				//
-				// As a result the dependency source node, which is also the candidate
-				// edge destination node, cannot possibly be fulfilled in this stage
-				// either.
-				failed[e] = struct{}{}
-				return iterutil.StopIteration()
-			}
-			if _, eIsFailed := failed[e]; eIsFailed {
-				// If the candidate op edge has already been rejected due to unmet phase
-				// or precedence requirements, then the op edge leading to the
-				// dependency destination node must also be rejected because the
-				// same-stage constraint cannot possibly be satisfied.
-				failed[toCandidate] = struct{}{}
-			}
-			return nil
-		}); err != nil {
-			panic(err)
-		}
-	}
-	return failed
-}
-
-func (b buildCtx) makeStage(filteredEdges []*scgraph.OpEdge) Stage {
-	sort.SliceStable(filteredEdges,
-		func(i, j int) bool {
-			// Higher ranked edges should go first.
-			return b.nodeRanks[filteredEdges[i].To()] > b.nodeRanks[filteredEdges[j].To()]
-		})
-
-	s := Stage{
-		Before: b.state,
-		After:  shallowCopy(b.state),
-		Phase:  b.phase,
-	}
-	var ops []scop.Op
-	for _, s.Revertible = range []bool{true, false} {
-		if s.Revertible && !b.isRevertiblePreferred {
-			continue
-		}
-		hasTransitions := false
-		for _, e := range filteredEdges {
-			for i, ts := range b.state.Nodes {
-				if e.From() == ts && (!s.Revertible || e.Revertible()) {
-					s.After.Nodes[i] = e.To()
-					hasTransitions = true
-					// If this edge has been marked as a no-op, then a state transition
-					// can happen without executing anything.
-					if !b.g.IsOpEdgeOptimizedOut(e) {
-						ops = append(ops, e.Op()...)
-					}
-					break
-				}
-			}
-		}
-		if hasTransitions {
+	for _, opType := range opTypes {
+		sb = b.makeStageBuilderForType(opType)
+		if sb.canMakeProgress() {
 			break
 		}
 	}
-	s.Ops = scop.MakeOps(ops...)
+	return sb
+}
+
+// makeStageBuilderForType creates and populates a stage builder for the given
+// op type.
+func (b buildState) makeStageBuilderForType(opType scop.Type) stageBuilder {
+	sb := stageBuilder{
+		bs:         b,
+		opType:     opType,
+		current:    make([]currentTargetState, len(b.state.Nodes)),
+		fulfilling: map[*scpb.Node]struct{}{},
+	}
+	for i, n := range b.state.Nodes {
+		t := sb.makeCurrentTargetState(n)
+		sb.current[i] = t
+	}
+	// Greedily try to make progress by going down op edges when possible.
+	for isDone := false; !isDone; {
+		isDone = true
+		for i, t := range sb.current {
+			if t.e == nil {
+				continue
+			}
+			if sb.hasUnmetInboundDeps(t.e.To()) {
+				continue
+			}
+			if sb.hasUnmeetableOutboundDeps(t.e.To()) {
+				continue
+			}
+			sb.opEdges = append(sb.opEdges, t.e)
+			sb.fulfilling[t.e.To()] = struct{}{}
+			sb.current[i] = sb.nextTargetState(t)
+			isDone = false
+		}
+	}
+	return sb
+}
+
+// stageBuilder contains the state for building one stage.
+type stageBuilder struct {
+	bs         buildState
+	opType     scop.Type
+	current    []currentTargetState
+	fulfilling map[*scpb.Node]struct{}
+	opEdges    []*scgraph.OpEdge
+}
+
+type currentTargetState struct {
+	n *scpb.Node
+	e *scgraph.OpEdge
+
+	// hasOpEdgeWithOps is true iff this stage already includes an op edge with
+	// ops for this target.
+	hasOpEdgeWithOps bool
+}
+
+func (sb stageBuilder) makeCurrentTargetState(n *scpb.Node) currentTargetState {
+	e, found := sb.bs.g.GetOpEdgeFrom(n)
+	if !found || !sb.isOutgoingOpEdgeAllowed(e) {
+		return currentTargetState{n: n}
+	}
+	return currentTargetState{
+		n:                n,
+		e:                e,
+		hasOpEdgeWithOps: !sb.bs.g.IsNoOp(e),
+	}
+}
+
+// isOutgoingOpEdgeAllowed returns false iff there is something preventing using
+// that op edge in this current stage.
+func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
+	if _, isFulfilled := sb.bs.fulfilled[e.To()]; isFulfilled {
+		panic(errors.AssertionFailedf(
+			"node %s is unexpectedly already fulfilled in a previous stage",
+			screl.NodeString(e.To())))
+	}
+	if _, isCandidate := sb.fulfilling[e.To()]; isCandidate {
+		panic(errors.AssertionFailedf(
+			"node %s is unexpectedly already scheduled to be fulfilled in the upcoming stage",
+			screl.NodeString(e.To())))
+	}
+	if e.Type() != sb.opType {
+		return false
+	}
+	if !e.IsPhaseSatisfied(sb.bs.phase) {
+		return false
+	}
+	if !sb.bs.isRevertibilityIgnored && sb.bs.phase == scop.PostCommitPhase && !e.Revertible() {
+		return false
+	}
+	return true
+}
+
+// canMakeProgress returns true if the stage built by this builder will make
+// progress.
+func (sb stageBuilder) canMakeProgress() bool {
+	return len(sb.opEdges) > 0
+}
+
+func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState {
+	next := sb.makeCurrentTargetState(t.e.To())
+	if t.hasOpEdgeWithOps {
+		if next.hasOpEdgeWithOps {
+			// Prevent having more than one non-no-op op edge per target in a
+			// stage. This upholds the 2-version invariant.
+			// TODO(postamar): uphold the 2-version invariant using dep rules instead.
+			next.e = nil
+		} else {
+			next.hasOpEdgeWithOps = true
+		}
+	}
+	return next
+}
+
+func (sb stageBuilder) hasUnmetInboundDeps(n *scpb.Node) (ret bool) {
+	_ = sb.bs.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
+		if sb.isUnmetInboundDep(de) {
+			ret = true
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return ret
+}
+
+func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
+	_, fromIsFulfilled := sb.bs.fulfilled[de.From()]
+	_, fromIsCandidate := sb.fulfilling[de.From()]
+	switch de.Kind() {
+	case scgraph.Precedence:
+		// True iff the source node has not been fulfilled in an earlier stage
+		// and also iff it's not (yet?) scheduled to be fulfilled in this stage.
+		return !fromIsFulfilled && !fromIsCandidate
+
+	case scgraph.SameStagePrecedence:
+		if fromIsFulfilled {
+			// The dependency requires the source node to be fulfilled in the same
+			// stage as the destination, which is impossible at this point because
+			// it has already been fulfilled in an earlier stage.
+			// This should never happen.
+			break
+		}
+		// True iff the source node has not been fulfilled in an earlier stage and
+		// and also iff it's not (yet?) scheduled to be fulfilled in this stage.
+		return !fromIsCandidate
+
+	default:
+		panic(errors.AssertionFailedf("unknown dep edge kind %q", de.Kind()))
+	}
+	// The dependency constraint is somehow unsatisfiable.
+	panic(errors.AssertionFailedf("failed to satisfy %s rule %q",
+		de.String(), de.Name()))
+}
+
+func (sb stageBuilder) hasUnmeetableOutboundDeps(n *scpb.Node) (ret bool) {
+	candidates := make(map[*scpb.Node]int, len(sb.current))
+	for i, t := range sb.current {
+		if t.e != nil {
+			candidates[t.e.To()] = i
+		}
+	}
+	visited := make(map[*scpb.Node]bool)
+	var visit func(n *scpb.Node)
+	visit = func(n *scpb.Node) {
+		if ret || visited[n] {
+			return
+		}
+		visited[n] = true
+		if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
+			// This should never happen.
+			panic(errors.AssertionFailedf("%s should not yet be fulfilled",
+				screl.NodeString(n)))
+		}
+		if _, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
+			// This should never happen.
+			panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
+				screl.NodeString(n)))
+		}
+		if _, isCandidate := candidates[n]; !isCandidate {
+			ret = true
+			return
+		}
+		_ = sb.bs.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
+			if ret {
+				return iterutil.StopIteration()
+			}
+			if visited[de.From()] {
+				return nil
+			}
+			if !sb.isUnmetInboundDep(de) {
+				return nil
+			}
+			if de.Kind() == scgraph.SameStagePrecedence {
+				visit(de.From())
+			} else {
+				ret = true
+			}
+			return nil
+		})
+		_ = sb.bs.g.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
+			if ret {
+				return iterutil.StopIteration()
+			}
+			if visited[de.To()] {
+				return nil
+			}
+			if de.Kind() == scgraph.SameStagePrecedence {
+				visit(de.To())
+			}
+			return nil
+		})
+	}
+	visit(n)
+	return ret
+}
+
+func (sb stageBuilder) build() Stage {
+	s := Stage{
+		Before: sb.bs.state,
+		After:  sb.after(),
+		Phase:  sb.bs.phase,
+	}
+	for _, e := range sb.opEdges {
+		if sb.bs.g.IsNoOp(e) {
+			continue
+		}
+		s.EdgeOps = append(s.EdgeOps, e.Op()...)
+	}
+	// Decorate stage with job-related operations.
+	// TODO(ajwerner): Rather than adding this above the opgen layer, it'd be
+	// better to do it as part of graph generation. We could treat the job as
+	// and the job references as elements and track their relationships. The
+	// oddity here is that the job gets both added and removed. In practice, this
+	// may prove to be a somewhat common pattern in other cases: consider the
+	// intermediate index needed when adding and dropping columns as part of the
+	// same transaction.
+	switch s.Phase {
+	case scop.PreCommitPhase:
+		// If this pre-commit stage is non-terminal, this means there will be at
+		// least one post-commit stage, so we need to create a schema changer job
+		// and update references for the affected descriptors.
+		if !sb.bs.isStateTerminal(s.After) {
+			s.ExtraOps = append(sb.addJobReferenceOps(s.After), sb.createSchemaChangeJobOp(s.After))
+		}
+	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
+		if sb.opType == scop.MutationType {
+			if sb.bs.isStateTerminal(s.After) {
+				// The terminal mutation stage needs to remove references to the schema
+				// changer job in the affected descriptors.
+				s.ExtraOps = sb.removeJobReferenceOps(s.After)
+			}
+			// Post-commit mutation stages all update the progress of the schema
+			// changer job.
+			s.ExtraOps = append(s.ExtraOps, sb.updateJobProgressOp(s.After))
+		}
+	}
 	return s
+}
+
+func (sb stageBuilder) after() scpb.State {
+	state := shallowCopy(sb.bs.state)
+	for i, t := range sb.current {
+		state.Nodes[i] = t.n
+	}
+	return state
+}
+
+func (sb stageBuilder) createSchemaChangeJobOp(state scpb.State) scop.Op {
+	return &scop.CreateDeclarativeSchemaChangerJob{
+		JobID: sb.bs.scJobIDSupplier(),
+		State: shallowCopy(state),
+	}
+}
+
+func (sb stageBuilder) addJobReferenceOps(state scpb.State) []scop.Op {
+	jobID := sb.bs.scJobIDSupplier()
+	return generateOpsForJobIDs(
+		screl.GetDescIDs(state),
+		jobID,
+		func(descID descpb.ID, id jobspb.JobID) scop.Op {
+			return &scop.AddJobReference{DescriptorID: descID, JobID: jobID}
+		},
+	)
+}
+
+func (sb stageBuilder) updateJobProgressOp(state scpb.State) scop.Op {
+	return &scop.UpdateSchemaChangerJob{
+		JobID:           sb.bs.scJobIDSupplier(),
+		Statuses:        state.Statuses(),
+		IsNonCancelable: sb.bs.phase >= scop.PostCommitNonRevertiblePhase,
+	}
+}
+
+func (sb stageBuilder) removeJobReferenceOps(state scpb.State) []scop.Op {
+	jobID := sb.bs.scJobIDSupplier()
+	return generateOpsForJobIDs(
+		screl.GetDescIDs(state),
+		jobID,
+		func(descID descpb.ID, id jobspb.JobID) scop.Op {
+			return &scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
+		},
+	)
+}
+
+func generateOpsForJobIDs(
+	descIDs []descpb.ID, jobID jobspb.JobID, f func(descID descpb.ID, id jobspb.JobID) scop.Op,
+) []scop.Op {
+	ops := make([]scop.Op, len(descIDs))
+	for i, descID := range descIDs {
+		ops[i] = f(descID, jobID)
+	}
+	return ops
 }
 
 // shallowCopy creates a shallow copy of the passed state. Importantly, it
@@ -279,4 +456,23 @@ func shallowCopy(cur scpb.State) scpb.State {
 		),
 		Authorization: cur.Authorization,
 	}
+}
+
+// decorateStages decorates stages with position in plan.
+func decorateStages(stages []Stage) []Stage {
+	if len(stages) == 0 {
+		return nil
+	}
+	phaseMap := map[scop.Phase][]int{}
+	for i, s := range stages {
+		phaseMap[s.Phase] = append(phaseMap[s.Phase], i)
+	}
+	for _, indexes := range phaseMap {
+		for i, j := range indexes {
+			s := &stages[j]
+			s.Ordinal = i + 1
+			s.StagesInPhase = len(indexes)
+		}
+	}
+	return stages
 }

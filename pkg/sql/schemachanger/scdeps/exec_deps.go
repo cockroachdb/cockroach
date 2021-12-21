@@ -53,16 +53,18 @@ func NewExecutorDependencies(
 	indexValidator scexec.IndexValidator,
 	partitioner scmutationexec.Partitioner,
 	eventLogger scexec.EventLogger,
+	schemaChangerJobID jobspb.JobID,
 	statements []string,
 ) scexec.Dependencies {
 	return &execDeps{
 		txnDeps: txnDeps{
-			txn:             txn,
-			codec:           codec,
-			descsCollection: descsCollection,
-			jobRegistry:     jobRegistry,
-			indexValidator:  indexValidator,
-			eventLogger:     eventLogger,
+			txn:                txn,
+			codec:              codec,
+			descsCollection:    descsCollection,
+			jobRegistry:        jobRegistry,
+			indexValidator:     indexValidator,
+			eventLogger:        eventLogger,
+			schemaChangerJobID: schemaChangerJobID,
 		},
 		indexBackfiller: indexBackfiller,
 		statements:      statements,
@@ -79,16 +81,24 @@ type txnDeps struct {
 	indexValidator     scexec.IndexValidator
 	eventLogger        scexec.EventLogger
 	deletedDescriptors catalog.DescriptorIDSet
+	schemaChangerJobID jobspb.JobID
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
-	ctx context.Context, id jobspb.JobID, fn scexec.JobProgressUpdateFunc,
+	ctx context.Context, id jobspb.JobID, callback scexec.JobUpdateCallback,
 ) error {
 	const useReadLock = false
 	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
-		return fn(md, ju.UpdateProgress)
+		setNonCancelable := func() {
+			payload := *md.Payload
+			if !payload.Noncancelable {
+				payload.Noncancelable = true
+				ju.UpdatePayload(&payload)
+			}
+		}
+		return callback(md, ju.UpdateProgress, setNonCancelable)
 	})
 }
 
@@ -228,13 +238,20 @@ func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	return nil
 }
 
-var _ scexec.TransactionalJobCreator = (*txnDeps)(nil)
+var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
 
 func (d *txnDeps) MakeJobID() jobspb.JobID {
 	return d.jobRegistry.MakeJobID()
 }
 
-// CreateJob implements the scexec.TransactionalJobCreator interface.
+func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {
+	if d.schemaChangerJobID == 0 {
+		d.schemaChangerJobID = d.jobRegistry.MakeJobID()
+	}
+	return d.schemaChangerJobID
+}
+
+// CreateJob implements the scexec.TransactionalJobRegistry interface.
 func (d *txnDeps) CreateJob(ctx context.Context, record jobs.Record) error {
 	_, err := d.jobRegistry.CreateJobWithTxn(ctx, record, record.JobID, d.txn)
 	return err
@@ -322,7 +339,7 @@ func (d *execDeps) JobProgressTracker() scexec.JobProgressTracker {
 }
 
 // TransactionalJobCreator implements the scexec.Dependencies interface.
-func (d *execDeps) TransactionalJobCreator() scexec.TransactionalJobCreator {
+func (d *execDeps) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	return d
 }
 

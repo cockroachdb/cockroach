@@ -28,7 +28,6 @@ func init() {
 		),
 		drop(
 			to(scpb.Status_TXN_DROPPED,
-				minPhase(scop.StatementPhase),
 				emit(func(this *scpb.Schema) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
 						DescID: this.SchemaID,

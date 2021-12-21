@@ -23,11 +23,11 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     columnId: 2
     name: j
     tableId: 54
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: foo_pkey
     tableId: 54
 - ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
@@ -82,11 +82,11 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     columnId: 2
     name: j
     tableId: 54
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: foo_pkey
     tableId: 54
 - ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
@@ -161,11 +161,11 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     columnId: 3
     name: k
     tableId: 54
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: foo_pkey
     tableId: 54
 - ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
@@ -221,11 +221,11 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     columnId: 2
     name: a
     tableId: 54
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: foo_pkey
     tableId: 54
 - ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
@@ -302,17 +302,17 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     columnId: 3
     name: b
     tableId: 55
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: foo_pkey
     tableId: 54
-- ADD IndexName:{DescID: 55, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 55, IndexID: 2, Name: bar_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: bar_pkey
     tableId: 55
 - ADD PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT

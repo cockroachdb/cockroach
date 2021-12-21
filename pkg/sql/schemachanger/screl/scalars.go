@@ -11,6 +11,7 @@
 package screl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/errors"
@@ -27,4 +28,17 @@ func GetDescID(e scpb.Element) descpb.ID {
 		))
 	}
 	return id.(descpb.ID)
+}
+
+// GetDescIDs returns the descriptor IDs referenced in the state's elements.
+func GetDescIDs(s scpb.State) descpb.IDs {
+	descIDSet := catalog.MakeDescriptorIDSet()
+	for i := range s.Nodes {
+		// Depending on the element type either a single descriptor ID
+		// will exist or multiple (i.e. foreign keys).
+		if id := GetDescID(s.Nodes[i].Element()); id != descpb.InvalidID {
+			descIDSet.Add(id)
+		}
+	}
+	return descIDSet.Ordered()
 }
