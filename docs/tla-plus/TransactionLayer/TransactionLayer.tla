@@ -12,7 +12,6 @@ CONSTANTS Nil
 CONSTANTS MaxAttempt
 
 
-
 \* Multi-version value of key.
 VARIABLES MVCCData
 \* Intent write of key.
