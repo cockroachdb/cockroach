@@ -21,6 +21,7 @@ import (
 // payload in an AddSSTable request.
 var IngestBatchSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
+		settings.TenantWritable,
 		"kv.bulk_ingest.batch_size",
 		"the maximum size of the payload in an AddSSTable request",
 		16<<20,

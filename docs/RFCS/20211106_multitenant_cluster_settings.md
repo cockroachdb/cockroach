@@ -215,11 +215,11 @@ following guidelines:
 
  - control settings relevant to tenant-specific internal implementation (like
    tenant throttling) that we want to be able to control per-tenant should be
-   `system`.
+   `tenant-ro`.
 
- - when in doubt the first choice to consider should be `tenant-ro`.
+ - when in doubt the first choice to consider should be `tenant-rw`.
 
- - `System` should be used with caution - we have to be sure that there is no
+ - `system` should be used with caution - we have to be sure that there is no
    internal code running on the tenant that needs to consult them.
 
 We fully hide `system` settings from non-system tenants. The cluster settings

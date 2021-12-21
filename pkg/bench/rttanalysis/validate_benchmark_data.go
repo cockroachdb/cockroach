@@ -319,7 +319,10 @@ func (b benchmarkExpectations) find(name string) (benchmarkExpectation, bool) {
 }
 
 func (e benchmarkExpectation) matches(roundTrips int) bool {
-	return e.min <= roundTrips && roundTrips <= e.max
+	// Either the value falls within the expected range, or
+	return (e.min <= roundTrips && roundTrips <= e.max) ||
+		// the expectation isn't a range, so give it a leeway of one.
+		e.min == e.max && (roundTrips == e.min-1 || roundTrips == e.min+1)
 }
 
 func (e benchmarkExpectation) String() string {

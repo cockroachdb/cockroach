@@ -31,10 +31,11 @@ import (
 // infrastructure. It has no effect unless COCKROACH_EXPERIMENTAL_SPAN_CONFIGS
 // is set.
 var EnabledSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
 	"spanconfig.experimental_store.enabled",
 	`use the span config infrastructure in KV instead of the system config span`,
 	false,
-).WithSystemOnly()
+)
 
 // Store is an in-memory data structure to store and retrieve span configs.
 // Internally it makes use of an interval tree to store non-overlapping span

@@ -36,6 +36,7 @@ import (
 // LockTableLivenessPushDelay sets the delay before pushing in order to detect
 // coordinator failures of conflicting transactions.
 var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.lock_table.coordinator_liveness_push_delay",
 	"the delay before pushing in order to detect coordinator failures of conflicting transactions",
 	// This is set to a short duration to ensure that we quickly detect failed
@@ -67,6 +68,7 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 // LockTableDeadlockDetectionPushDelay sets the delay before pushing in order to
 // detect dependency cycles between transactions.
 var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.lock_table.deadlock_detection_push_delay",
 	"the delay before pushing in order to detect dependency cycles between transactions",
 	// This is set to a medium duration to ensure that deadlock caused by

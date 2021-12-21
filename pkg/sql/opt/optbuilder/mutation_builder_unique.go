@@ -25,6 +25,7 @@ import (
 // UniquenessChecksForGenRandomUUIDClusterMode controls the cluster setting for
 // enabling uniqueness checks for UUID columns set to gen_random_uuid().
 var UniquenessChecksForGenRandomUUIDClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled",
 	"if enabled, uniqueness checks may be planned for mutations of UUID columns updated with"+
 		" gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability",

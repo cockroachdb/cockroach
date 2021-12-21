@@ -35,12 +35,14 @@ import (
 
 // Timeout is a cluster setting used for cloud storage interactions.
 var Timeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"cloudstorage.timeout",
 	"the timeout for import/export storage operations",
 	10*time.Minute,
 ).WithPublic()
 
 var httpCustomCA = settings.RegisterStringSetting(
+	settings.TenantWritable,
 	"cloudstorage.http.custom_ca",
 	"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 	"",

@@ -286,9 +286,9 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 
 	// Display the tags if set.
 	buf.Write(cp[ttycolor.Blue])
-	if entry.tags != nil {
+	if entry.payload.tags != nil {
 		buf.WriteByte('[')
-		buf.WriteString(renderTagsAsString(entry.tags, entry.payload.redactable))
+		entry.payload.tags.formatToBuffer(buf)
 		buf.WriteByte(']')
 	} else {
 		buf.WriteString("[-]")

@@ -36,11 +36,13 @@ import (
 )
 
 var pollingInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second)
 
 var bundleChunkSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.stmt_diagnostics.bundle_chunk_size",
 	"chunk size for statement diagnostic bundles",
 	1024*1024,

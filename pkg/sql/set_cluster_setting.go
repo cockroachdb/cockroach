@@ -96,7 +96,7 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	if setting.SystemOnly() && !p.execCfg.Codec.ForSystemTenant() {
+	if setting.Class() == settings.SystemOnly && !p.execCfg.Codec.ForSystemTenant() {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"setting %s is only settable in the system tenant", name)
 	}

@@ -509,6 +509,7 @@ const joinReaderOrderingStrategyBatchSizeDefault = 10 << 10 /* 10 KiB */
 // JoinReaderOrderingStrategyBatchSize determines the size of input batches used
 // to construct a single lookup KV batch by joinReaderOrderingStrategy.
 var JoinReaderOrderingStrategyBatchSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.distsql.join_reader_ordering_strategy.batch_size",
 	"size limit on the input rows to construct a single lookup KV batch",
 	joinReaderOrderingStrategyBatchSizeDefault,

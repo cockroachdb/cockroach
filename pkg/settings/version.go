@@ -165,14 +165,6 @@ func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global
 // registry.
-func RegisterVersionSetting(key, desc string, setting *VersionSetting) {
-	register(key, desc, setting)
-}
-
-// TestingRegisterVersionSetting is like RegisterVersionSetting,
-// but it takes a VersionSettingImpl.
-func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *VersionSetting {
-	setting := MakeVersionSetting(impl)
-	register(key, desc, &setting)
-	return &setting
+func RegisterVersionSetting(class Class, key, desc string, setting *VersionSetting) {
+	register(class, key, desc, setting)
 }

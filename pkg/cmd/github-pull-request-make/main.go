@@ -294,6 +294,11 @@ func main() {
 					}
 				}
 				args = append(args, "--")
+				if target == "stressrace" {
+					args = append(args, "--config=race")
+				} else {
+					args = append(args, "--test_sharding_strategy=disabled")
+				}
 				var filters []string
 				for _, test := range pkg.tests {
 					filters = append(filters, "^"+test+"$")
@@ -304,11 +309,6 @@ func main() {
 				// Give the entire test 1 more minute than the duration to wrap up.
 				args = append(args, fmt.Sprintf("--test_timeout=%d", int((duration+1*time.Minute).Seconds())))
 				args = append(args, "--run_under", fmt.Sprintf("%s -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, duration, parallelism))
-				if target == "stressrace" {
-					args = append(args, "--config=race")
-				} else {
-					args = append(args, "--test_sharding_strategy=disabled")
-				}
 				// NB: bazci is expected to be put in `PATH` by the caller.
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout

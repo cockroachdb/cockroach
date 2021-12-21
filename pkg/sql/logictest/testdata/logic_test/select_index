@@ -254,7 +254,7 @@ statement ok
 CREATE TABLE str (k INT PRIMARY KEY, v STRING, INDEX(v))
 
 statement ok
-INSERT INTO str VALUES (1, 'A'), (4, 'AB'), (2, 'ABC'), (5, 'ABCD'), (3, 'ABCDEZ'), (9, 'ABD')
+INSERT INTO str VALUES (1, 'A'), (4, 'AB'), (2, 'ABC'), (5, 'ABCD'), (3, 'ABCDEZ'), (9, 'ABD'), (10, '\CBA'), (11, 'A%'), (12, 'CAB.*'), (13, 'CABD')
 
 query IT rowsort
 SELECT k, v FROM str WHERE v LIKE 'ABC%'
@@ -264,7 +264,37 @@ SELECT k, v FROM str WHERE v LIKE 'ABC%'
 3  ABCDEZ
 
 query IT rowsort
+SELECT k, v FROM str WHERE v LIKE '\ABC%'
+----
+2  ABC
+5  ABCD
+3  ABCDEZ
+
+statement error LIKE regexp compilation failed: LIKE pattern must not end with escape character
+SELECT k, v FROM str WHERE v LIKE 'ABC\'
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE '\\CBA%'
+----
+10 \CBA
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE 'A\%'
+----
+11  A%
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE 'CAB.*'
+----
+12  CAB.*
+
+query IT rowsort
 SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
+----
+3  ABCDEZ
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE '\ABCDE_'
 ----
 3  ABCDEZ
 

@@ -37,6 +37,7 @@ import (
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 

@@ -15,7 +15,6 @@ fi
 bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 ARTIFACTS_DIR=/artifacts
-GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 
 # Query to list all affected tests.
 PKG=${PKG#"./"}
@@ -34,6 +33,7 @@ do
         continue
     fi
     exit_status=0
+    GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/$(echo "$test" | cut -d: -f2).test.json.txt
     $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci test "$test" -- \
                                           --test_env=COCKROACH_NIGHTLY_STRESS=true \
                                           --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \

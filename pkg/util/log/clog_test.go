@@ -651,7 +651,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	fs := &fileSink{}
 	l := &loggerT{sinkInfos: []*sinkInfo{{
 		sink:        fs,
-		editor:      func(r redactablePackage) redactablePackage { return r },
+		editor:      getEditor(SelectEditMode(false /* redact */, true /* redactable */)),
 		criticality: true,
 	}}}
 	fs.mu.file = &syncBuffer{
@@ -738,7 +738,7 @@ func TestLogEntryPropagation(t *testing.T) {
 }
 
 func BenchmarkLogEntry_String(b *testing.B) {
-	tagbuf := logtags.SingleTagBuffer("foo", "bar")
+	ctxtags := logtags.AddTag(context.Background(), "foo", "bar")
 	entry := &logEntry{
 		idPayload: idPayload{
 			clusterID:     "fooo",
@@ -754,10 +754,10 @@ func BenchmarkLogEntry_String(b *testing.B) {
 		file:       "foo.go",
 		line:       192,
 		counter:    12,
-		tags:       tagbuf,
 		stacks:     nil,
 		structured: false,
 		payload: entryPayload{
+			tags:       makeFormattableTags(ctxtags, false),
 			redactable: false,
 			message:    "hello there",
 		},
