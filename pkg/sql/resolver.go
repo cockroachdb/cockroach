@@ -304,13 +304,21 @@ func (p *planner) HasPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	kind privilege.Kind,
+	priv privilege.Priv,
 ) (bool, error) {
 	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
 		ctx,
 		specifier,
 	)
 	if err != nil {
+		return false, err
+	}
+
+	err = p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, priv.GrantOption)
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -326,7 +334,7 @@ func (p *planner) HasPrivilege(
 		return true, nil
 	}
 
-	if kind == privilege.RULE {
+	if priv.Kind == privilege.RULE {
 		// RULE was only added for compatibility with Postgres, and Postgres
 		// never allows RULE to be granted, even if the user has ALL privileges.
 		// See https://www.postgresql.org/docs/8.1/sql-grant.html
@@ -340,7 +348,7 @@ func (p *planner) HasPrivilege(
 	if hasPrivilege {
 		return true, nil
 	}
-	return hasPrivilegeFunc(kind)
+	return hasPrivilegeFunc(priv.Kind)
 }
 
 // ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
