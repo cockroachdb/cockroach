@@ -342,11 +342,7 @@ func (r *Registry) WaitForJobs(
 		if j.Payload().Error != "" {
 			return errors.Newf("job %d failed with error: %s", jobs[i], j.Payload().Error)
 		}
-		st, err := j.CurrentStatus(ctx, nil)
-		if err != nil {
-			return err
-		}
-		if st == StatusPaused {
+		if j.Status() == StatusPaused {
 			if reason := j.Payload().PauseReason; reason != "" {
 				return errors.Newf("job %d was paused before it completed with reason: %s", jobs[i], reason)
 			}
@@ -382,6 +378,7 @@ func (r *Registry) newJob(record Record) *Job {
 	}
 	job.mu.payload = r.makePayload(&record)
 	job.mu.progress = r.makeProgress(&record)
+	job.mu.status = StatusRunning
 	return job
 }
 
