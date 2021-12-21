@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.kv.kvserver.loqrecovery.loqrecoverypb;
 option go_package = "loqrecoverypb";
 
-import "roachpb/api.proto";
 import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
