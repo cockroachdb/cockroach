@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -279,9 +280,9 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// and compatibility with PostgreSQL, we must do this before
 	// processing the CHECK constraints.
 	if err := enforceLocalColumnConstraints(
+		params.EvalContext(),
 		u.run.updateValues,
 		u.run.tu.ru.UpdateCols,
-		true, /* isUpdate */
 	); err != nil {
 		return err
 	}
@@ -417,20 +418,34 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 // enforceLocalColumnConstraints asserts the column constraints that do not
 // require data validation from other sources than the row data itself. This
 // currently only includes checking for null values in non-nullable columns.
-func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column, isUpdate bool) error {
+func enforceLocalColumnConstraints(
+	evalCtx *tree.EvalContext, row tree.Datums, cols []catalog.Column,
+) error {
 	for i, col := range cols {
 		if !col.IsNullable() && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.GetName())
 		}
-		if isUpdate {
-			// TODO(mgartner): Remove this once assignment casts are supported
-			// for UPSERTs and UPDATEs.
-			outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
-			if err != nil {
-				return err
-			}
-			row[i] = outVal
+		// Assignment casts should ensure that values fit within the target
+		// column type. Since assignment casts are a new feature and have a high
+		// risk of causing regressions, we still adjust values here to be safe.
+		// This only partially protects regressions: we might write incorrect
+		// values for computed columns expressions because their expressions
+		// will be evaluated before this adjustment (see #69665).
+		//
+		// TODO(mgartner): Remove this once we build high confidence in
+		// assignment casts.
+		outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
+		if err != nil {
+			return err
 		}
+		if buildutil.CrdbTestBuild && outVal.Compare(evalCtx, row[i]) != 0 {
+			return errors.AssertionFailedf(
+				"expected %s to be adjusted by assignment casts to fit in %s",
+				row[i].String(),
+				col.GetType().SQLString(),
+			)
+		}
+		row[i] = outVal
 	}
 	return nil
 }

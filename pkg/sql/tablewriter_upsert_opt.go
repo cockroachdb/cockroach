@@ -48,7 +48,8 @@ import (
 type optTableUpserter struct {
 	tableWriterBase
 
-	ri row.Inserter
+	evalCtx *tree.EvalContext
+	ri      row.Inserter
 
 	// Should we collect the rows for a RETURNING clause?
 	rowsNeeded bool
@@ -101,6 +102,7 @@ func (tu *optTableUpserter) init(
 	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
 ) error {
 	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv)
+	tu.evalCtx = evalCtx
 
 	// rowsNeeded, set upon initialization, indicates pkg/sql/backfill.gowhether or not we want
 	// rows returned from the operation.
@@ -269,9 +271,9 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// - for the fetched part, we assume that the data in the table is
 	//   correct already.
 	if err := enforceLocalColumnConstraints(
+		tu.evalCtx,
 		updateValues,
 		tu.updateCols,
-		true, /* isUpdate */
 	); err != nil {
 		return err
 	}

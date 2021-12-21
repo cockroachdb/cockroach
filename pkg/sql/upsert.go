@@ -138,9 +138,9 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 // The table writer is in charge of accumulating the result rows.
 func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
 	if err := enforceLocalColumnConstraints(
+		params.EvalContext(),
 		rowVals,
 		n.run.insertCols,
-		true, /* isUpdate */
 	); err != nil {
 		return err
 	}
