@@ -3553,8 +3553,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				if ptr == nil {
 					return errors.Errorf("expected protected timestamp")
 				}
-				require.Equal(t, len(ptr.Spans), len(expectedKeys), ptr.Spans, expectedKeys)
-				for _, s := range ptr.Spans {
+				require.Equal(t, len(ptr.DeprecatedSpans), len(expectedKeys), ptr.DeprecatedSpans, expectedKeys)
+				for _, s := range ptr.DeprecatedSpans {
 					require.Contains(t, expectedKeys, string(s.Key))
 				}
 				return nil
