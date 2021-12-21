@@ -73,6 +73,13 @@ type BulkAdderOptions struct {
 // indicate that the SSTBatcher should not issue explicit splits.
 const DisableExplicitSplits = -1
 
+// WriteAtRequestTime is an HLC timestamp that, if passed to a BulkAdder as the
+// write timestamp, will in addition to be being the timestamp used in the keys
+// in the produced sstables, cause that BulkAdder to send those SSTables to KV
+// with the WriteAtRequestTimestmap flag enabled, causing it to be replaced when
+// they are ingested with their request timestamp. See AddSSTableRequest.
+var WriteAtRequestTime = hlc.Timestamp{WallTime: 0xeffffffffffffff}
+
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
 	ctx context.Context, db *kv.DB, timestamp hlc.Timestamp, opts BulkAdderOptions,

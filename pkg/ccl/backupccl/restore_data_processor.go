@@ -101,6 +101,12 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var restoreAtNow = settings.RegisterBoolSetting(
+	"bulkio.restore_at_current_time.enabled",
+	"write restored data at the current timestamp",
+	false,
+)
+
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -384,8 +390,13 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// this comes at the cost of said overlap check, but in the common case of
 	// non-overlapping ingestion into empty spans, that is just one seek.
 	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return rd.flushBytes }, disallowShadowingBelow)
+	batcher, err := bulk.MakeSSTBatcher(ctx,
+		db,
+		evalCtx.Settings,
+		func() int64 { return rd.flushBytes },
+		disallowShadowingBelow,
+		restoreAtNow.Get(&evalCtx.Settings.SV),
+	)
 	if err != nil {
 		return summary, err
 	}

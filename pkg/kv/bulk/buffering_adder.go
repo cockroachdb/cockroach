@@ -109,6 +109,7 @@ func MakeBulkAdder(
 			disallowShadowingBelow: opts.DisallowShadowingBelow,
 			splitAfter:             opts.SplitAndScatterAfter,
 			batchTS:                opts.BatchTimestamp,
+			writeAtNow:             timestamp.Equal(kvserverbase.WriteAtRequestTime),
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,

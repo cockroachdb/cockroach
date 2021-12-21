@@ -90,6 +90,12 @@ var importBufferIncrementSize = func() *settings.ByteSizeSetting {
 	return s
 }()
 
+var importAtNow = settings.RegisterBoolSetting(
+	"bulkio.import_at_current_time.enabled",
+	"write imported data at the current timestamp, when each batch is flushed",
+	false,
+)
+
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
 // BulkAdder buffer used in import.
 func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64, int64) {
@@ -314,6 +320,9 @@ func ingestKvs(
 	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
+	if importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
+		writeTS = kvserverbase.WriteAtRequestTime
+	}
 
 	flushSize := func() int64 { return storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings) }
 
