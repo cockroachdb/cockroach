@@ -3013,7 +3013,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			quiescentCount++
 		}
 
-		uninitializedCount = int64(len(s.mu.uninitReplicas))
+		if rep.IsInitialized() {
+			uninitializedCount++
+		}
 
 		if metrics.RangeCounter {
 			rangeCount++
