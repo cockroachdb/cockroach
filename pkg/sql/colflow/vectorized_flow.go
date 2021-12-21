@@ -532,10 +532,6 @@ type vectorizedFlowCreator struct {
 	// numOutboxes counts how many colrpc.Outbox'es have been set up on this
 	// node. It must be accessed atomically.
 	numOutboxes int32
-	// numOutboxesExited is an atomic that keeps track of how many outboxes have
-	// exited. When numOutboxesExited equals numOutboxes, the cancellation
-	// function for the flow is called on the non-gateway nodes.
-	numOutboxesExited int32
 	// numOutboxesDrained is an atomic that keeps track of how many outboxes
 	// have been drained. When numOutboxesDrained equals numOutboxes, flow-level
 	// metadata is added to a flow-level span on the non-gateway nodes.
@@ -746,17 +742,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			flowCtxCancel,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
-		// When the last Outbox on this node exits, we want to make sure that
-		// everything is shutdown; namely, we need to call cancelFn if:
-		// - it is the last Outbox
-		// - the node is not the gateway (there is a flow coordinator on the
-		// gateway that will take care of the cancellation itself)
-		// - cancelFn is non-nil (it can be nil in tests).
-		// Calling cancelFn will cancel the context that all infrastructure on this
-		// node is listening on, so it will shut everything down.
-		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode && flowCtxCancel != nil {
-			flowCtxCancel()
-		}
 	}
 	s.accumulateAsyncComponent(run)
 	return outbox, nil
