@@ -292,7 +292,7 @@ func (r *Registry) WaitForJobs(
 	// populate the crdb_internal.jobs vtable.
 	query := fmt.Sprintf(
 		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
-       AND (status != $1 AND status != $2 AND status != $3 AND status != $4)`,
+       AND (status != $1 AND status != $2 AND status != $3 AND status != $4 AND status != $5)`,
 		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
@@ -312,6 +312,7 @@ func (r *Registry) WaitForJobs(
 			StatusFailed,
 			StatusCanceled,
 			StatusRevertFailed,
+			StatusPaused,
 		)
 		if err != nil {
 			return errors.Wrap(err, "polling for queued jobs to complete")
@@ -340,6 +341,16 @@ func (r *Registry) WaitForJobs(
 		}
 		if j.Payload().Error != "" {
 			return errors.Newf("job %d failed with error: %s", jobs[i], j.Payload().Error)
+		}
+		st, err := j.CurrentStatus(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if st == StatusPaused {
+			if reason := j.Payload().PauseReason; reason != "" {
+				return errors.Newf("job %d was paused before it completed with reason: %s", jobs[i], reason)
+			}
+			return errors.Newf("job %d was paused before it completed", jobs[i])
 		}
 	}
 	return nil
@@ -1478,7 +1489,7 @@ func (r *Registry) CheckPausepoint(name string) error {
 	}
 	for _, point := range strings.Split(s, ",") {
 		if name == point {
-			return MarkPauseRequestError(errors.Newf("pause point hit: %s", name))
+			return MarkPauseRequestError(errors.Newf("pause point %q hit", name))
 		}
 	}
 	return nil
