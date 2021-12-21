@@ -63,6 +63,20 @@ func TestDiagnosticsRequest(t *testing.T) {
 		require.True(t, completed)
 		require.True(t, traceID.Valid)
 	}
+	// checkMaybeCompleted returns an error if 'completed' value for the given
+	// request is different from expectedCompleted.
+	checkMaybeCompleted := func(reqID int64, expectedCompleted bool) error {
+		var completed bool
+		var traceID gosql.NullInt64
+		traceRow := db.QueryRow(completedQuery, reqID)
+		require.NoError(t, traceRow.Scan(&completed, &traceID))
+		if completed != expectedCompleted {
+			return errors.Newf("expected completed to be %t, but found %t", expectedCompleted, completed)
+		}
+		// traceID is NULL when the request hasn't been completed yet.
+		require.True(t, traceID.Valid == expectedCompleted)
+		return nil
+	}
 
 	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	var minExecutionLatency, expiresAfter time.Duration
@@ -183,6 +197,95 @@ func TestDiagnosticsRequest(t *testing.T) {
 		// collected.
 		wg.Wait()
 		checkCompleted(reqID)
+	})
+
+	// Verify that an error is returned when attempting to cancel non-existent
+	// request.
+	t.Run("cancel non-existent request", func(t *testing.T) {
+		require.NotNil(t, registry.CancelRequest(ctx, "foo"))
+	})
+
+	// Verify that if a request (either conditional or unconditional, w/ or w/o
+	// expiration) is canceled, the bundle for it is not created afterwards.
+	t.Run("request canceled", func(t *testing.T) {
+		const fprint = "SELECT pg_sleep(_)"
+		for _, conditional := range []bool{false, true} {
+			t.Run(fmt.Sprintf("conditional=%t", conditional), func(t *testing.T) {
+				var minExecutionLatency time.Duration
+				if conditional {
+					minExecutionLatency = 100 * time.Millisecond
+				}
+				for _, expiresAfter := range []time.Duration{0, time.Second} {
+					t.Run(fmt.Sprintf("expiresAfter=%s", expiresAfter), func(t *testing.T) {
+						// TODO(yuzefovich): for some reason occasionally the
+						// bundle for the request is collected, so we use
+						// SucceedsSoon. Figure it out.
+						testutils.SucceedsSoon(t, func() error {
+							reqID, err := registry.InsertRequestInternal(
+								ctx, fprint, minExecutionLatency, expiresAfter,
+							)
+							require.NoError(t, err)
+							checkNotCompleted(reqID)
+
+							err = registry.CancelRequest(ctx, fprint)
+							require.NoError(t, err)
+							checkNotCompleted(reqID)
+
+							// Run the query that is slow enough to satisfy the
+							// conditional request.
+							_, err = db.Exec("SELECT pg_sleep(0.2)")
+							require.NoError(t, err)
+							return checkMaybeCompleted(reqID, false /* expectedCompleted */)
+						})
+					})
+				}
+			})
+		}
+	})
+
+	// Verify that if a request (either conditional or unconditional) is
+	// canceled, the ongoing bundle for it is still created.
+	t.Run("ongoing request canceled", func(t *testing.T) {
+		const fprint = "SELECT pg_sleep(_)"
+		for _, conditional := range []bool{false, true} {
+			t.Run("conditional", func(t *testing.T) {
+				// There is a possibility that the request is canceled before
+				// the query starts, so we allow for SucceedsSoon on this test.
+				testutils.SucceedsSoon(t, func() error {
+					var minExecutionLatency time.Duration
+					if conditional {
+						minExecutionLatency = 100 * time.Millisecond
+					}
+					reqID, err := registry.InsertRequestInternal(
+						ctx, fprint, minExecutionLatency, expiresAfter,
+					)
+					require.NoError(t, err)
+					checkNotCompleted(reqID)
+
+					// waitCh is used to block the cancellation goroutine before
+					// the query starts executing.
+					waitCh := make(chan struct{})
+
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						<-waitCh
+						err := registry.CancelRequest(ctx, fprint)
+						require.NoError(t, err)
+					}()
+
+					// Now run the query that is slow enough to satisfy the
+					// conditional request.
+					close(waitCh)
+					_, err = db.Exec("SELECT pg_sleep(0.2)")
+					require.NoError(t, err)
+
+					wg.Wait()
+					return checkMaybeCompleted(reqID, true /* expectedCompleted */)
+				})
+			})
+		}
 	})
 }
 
