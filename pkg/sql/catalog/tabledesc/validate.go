@@ -42,6 +42,16 @@ func (desc *wrapper) ValidateTxnCommit(
 		vea.Report(unimplemented.NewWithIssue(48026,
 			"primary key dropped without subsequent addition of new primary key in same transaction"))
 	}
+	// Check that the mutation ID values are appropriately set when a declarative
+	// schema change is underway.
+	if n := len(desc.Mutations); n > 0 && desc.NewSchemaChangeJobID != 0 {
+		lastMutationID := desc.Mutations[n-1].MutationID
+		if lastMutationID != desc.NextMutationID {
+			vea.Report(errors.AssertionFailedf(
+				"expected next mutation ID to be %d in table undergoing declarative schema change, found %d instead",
+				lastMutationID, desc.NextMutationID))
+		}
+	}
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
@@ -435,7 +445,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// of the descriptor, in both the new and old schema change jobs.)
 	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
 		vea.Report(errors.AssertionFailedf(
-			"invalid concurrent new-style schema change job %d and old-style schema change jobs %v",
+			"invalid concurrent declarative schema change job %d and legacy schema change jobs %v",
 			desc.NewSchemaChangeJobID, desc.MutationJobs))
 	}
 
