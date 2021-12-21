@@ -11,6 +11,7 @@
 package rpc
 
 import (
+	"errors"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,22 +41,37 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 		// Only verify-full and verify-ca should be doing certificate verification.
 		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
 			if caCertPath == "" {
-				// Fetch CA cert. This is required to exist, so try to load it. Because
-				// the certs dir could not be loaded from options we check from the context.
-				// GetCertificateManager checks that the SecurityContext has a certificate
-				// manager with certs in the certsDir.
-				if _, err := ctx.GetCertificateManager(); err == nil {
-					// If GetCertificateManager successfully retrieves certs, then we can
-					// just set the caCertPath option to the SecurityContext cert path.
-					// Otherwise, we simply continue with no error and no caCertPath set.
-					// Go will find the the server certificates within the OS
-					// trust store, using CertificateManager's lazy initialization which uses
-					// tls.Config from the crypto/tls package to load Server CA's from the OS
-					// if they are not specified.
-					// Documentation of tls.Config: https://pkg.go.dev/crypto/tls#Config
-					caCertPath = ctx.CACertPath()
+				// We need a CA certificate.
+				// Try to use the cert manager to find one, and if that fails,
+				// assume that the Go TLS code will fall back to a OS-level
+				// common trust store.
+
+				// First, initialize the cert manager.
+				cm, err := ctx.GetCertificateManager()
+				if err != nil {
+					// The SecurityContext was unable to get a cert manager. We
+					// can further distinguish between:
+					// - cert manager initialized OK, but contains no certs.
+					// - cert manager did not initialize (bad certs dir, file access error etc).
+					// The former case is legitimate and we will fall back below.
+					// The latter case is a real problem and needs to pop up to the user.
+					if !errors.Is(err, errNoCertificatesFound) {
+						// The certificate manager could not load properly. Let
+						// the user know.
+						return err
+					}
+					// Fall back: cert manager initialized OK, but no certs found.
+				}
+				if ourCACert := cm.CACert(); ourCACert != nil {
+					// The CM has a CA cert. Use that.
+					caCertPath = cm.FullPath(ourCACert)
 				}
 			}
+			// Fallback: if caCertPath was not assigned above, either
+			// we did not have a certs dir, or it did not contain
+			// a CA cert. In that case, we rely on the OS trust store.
+			// Documentation of tls.Config:
+			//     https://pkg.go.dev/crypto/tls#Config
 		}
 
 		// (Re)populate the transport information.
