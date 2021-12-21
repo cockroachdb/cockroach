@@ -45,6 +45,48 @@ const (
 	RULE       Kind = 12
 )
 
+// Priv represents a privilege parsed from an Access Privilege Inquiry
+// Function's privilege string argument. The structure is distinct from
+// privilege.Kind due to differences in how PostgreSQL and CockroachDB
+// handle the GRANT privilege.
+//
+// In PostgreSQL, each privilege (SELECT, INSERT, etc.) has an optional
+// "grant option" bit associated with it. A role can only grant a privilege
+// on an object to others if it is the owner of the object or if it itself
+// holds that privilege **with grant option** on the object. With this
+// construction, there is no need for a separate GRANT privilege.
+//
+// In CockroachDB, there exists a distinct GRANT privilege and no concept of
+// a "grant option" on other privileges. A role can only grant a privilege
+// on an object to others if it is the owner of the object or if it itself
+// holds both (1) that privilege on the object and (2) the GRANT privilege
+// on the object. However, this behavior may change in the future, see
+// https://github.com/cockroachdb/cockroach/issues/67410.
+//
+// For the sake of parsing the privilege argument of these builtins, it is
+// helpful to represent privileges more closely to how they are represented
+// in PostgreSQL. This allows us to represent a single Priv with a fake
+// "grant option", which is later computed as a conjunction between that
+// Priv's Kind and the GRANT privilege, while also computing a disjunction
+// across all comma-separated privilege strings.
+//
+// For instance, consider the following argument string:
+//
+//  arg = "SELECT, UPDATE WITH GRANT OPTION, DELETE"
+//
+// This would be represented as the following list of Priv structs:
+//
+//  privs = []Priv{{SELECT, false}, {UPDATE, true}, {DELETE, false}}
+//
+// Which would be evaluated as:
+//
+//  res = check(SELECT) || (check(UPDATE) && check(GRANT)) || check(DELETE)
+//
+type Priv struct {
+	Kind        Kind
+	GrantOption bool
+}
+
 // ObjectType represents objects that can have privileges.
 type ObjectType string
 

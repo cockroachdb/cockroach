@@ -492,50 +492,8 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 	}
 }
 
-// priv represents a privilege parsed from an Access Privilege Inquiry
-// Function's privilege string argument. The structure is distinct from
-// privilege.Kind due to differences in how PostgreSQL and CockroachDB
-// handle the GRANT privilege.
-//
-// In PostgreSQL, each privilege (SELECT, INSERT, etc.) has an optional
-// "grant option" bit associated with it. A role can only grant a privilege
-// on an object to others if it is the owner of the object or if it itself
-// holds that privilege **with grant option** on the object. With this
-// construction, there is no need for a separate GRANT privilege.
-//
-// In CockroachDB, there exists a distinct GRANT privilege and no concept of
-// a "grant option" on other privileges. A role can only grant a privilege
-// on an object to others if it is the owner of the object or if it itself
-// holds both (1) that privilege on the object and (2) the GRANT privilege
-// on the object. However, this behavior may change in the future, see
-// https://github.com/cockroachdb/cockroach/issues/67410.
-//
-// For the sake of parsing the privilege argument of these builtins, it is
-// helpful to represent privileges more closely to how they are represented
-// in PostgreSQL. This allows us to represent a single priv with a fake
-// "grant option", which is later computed as a conjunction between that
-// priv's kind and the GRANT privilege, while also computing a disjunction
-// across all comma-separated privilege strings.
-//
-// For instance, consider the following argument string:
-//
-//  arg = "SELECT, UPDATE WITH GRANT OPTION, DELETE"
-//
-// This would be represented as the following list of priv structs:
-//
-//  privs = []priv{{SELECT, false}, {UPDATE, true}, {DELETE, false}}
-//
-// Which would be evaluated as:
-//
-//  res = check(SELECT) || (check(UPDATE) && check(GRANT)) || check(DELETE)
-//
-type priv struct {
-	kind        privilege.Kind
-	grantOption bool
-}
-
-// privMap maps a privilege string to a priv.
-type privMap map[string]priv
+// privMap maps a privilege string to a Priv.
+type privMap map[string]privilege.Priv
 
 // parsePrivilegeStr recognizes privilege strings for has_foo_privilege
 // builtins, which are known as Access Privilege Inquiry Functions.
@@ -544,10 +502,10 @@ type privMap map[string]priv
 // names, producing a list of privileges. It is liberal about whitespace between
 // items, not so much about whitespace within items. The allowed privilege names
 // and their corresponding privileges are given as a privMap.
-func parsePrivilegeStr(arg tree.Datum, m privMap) ([]priv, error) {
+func parsePrivilegeStr(arg tree.Datum, m privMap) ([]privilege.Priv, error) {
 	argStr := string(tree.MustBeDString(arg))
 	privStrs := strings.Split(argStr, ",")
-	res := make([]priv, len(privStrs))
+	res := make([]privilege.Priv, len(privStrs))
 	for i, privStr := range privStrs {
 		// Privileges are case-insensitive.
 		privStr = strings.ToUpper(privStr)
@@ -568,7 +526,7 @@ func parsePrivilegeStr(arg tree.Datum, m privMap) ([]priv, error) {
 // If any of the checks return True or NULL, the function short-circuits with
 // that result. Otherwise, it returns False.
 func runPrivilegeChecks(
-	privs []priv, check func(privilege.Kind) (tree.Datum, error),
+	privs []privilege.Priv, check func(privilege.Priv) (tree.Datum, error),
 ) (tree.Datum, error) {
 	for _, p := range privs {
 		d, err := runSinglePrivilegeCheck(p, check)
@@ -583,22 +541,22 @@ func runPrivilegeChecks(
 }
 
 // runSinglePrivilegeCheck runs the provided check function for the privilege.
-// If the privilege has the grantOption flag set to true, it also runs the
+// If the privilege has the GrantOption flag set to true, it also runs the
 // provided function with the GRANT privilege and only returns True if both
-// calls returns True. See the comment on priv for justification.
+// calls returns True. See the comment on Priv for justification.
 func runSinglePrivilegeCheck(
-	priv priv, check func(privilege.Kind) (tree.Datum, error),
+	priv privilege.Priv, check func(privilege.Priv) (tree.Datum, error),
 ) (tree.Datum, error) {
-	d, err := check(priv.kind)
+	d, err := check(priv)
 	if err != nil {
 		return nil, err
 	}
 	switch d {
 	case tree.DBoolFalse, tree.DNull:
 	case tree.DBoolTrue:
-		if priv.grantOption {
-			// grantOption is set, so AND the result with check(GRANT).
-			d, err = check(privilege.GRANT)
+		if true { //todo
+			// GrantOption is set, so AND the result with check(GRANT).
+			d, err = check(privilege.Priv{Kind: privilege.GRANT})
 			if err != nil {
 				return nil, err
 			}
@@ -1488,19 +1446,19 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"SELECT":                       {privilege.SELECT, false},
-				"SELECT WITH GRANT OPTION":     {privilege.SELECT, true},
-				"INSERT":                       {privilege.INSERT, false},
-				"INSERT WITH GRANT OPTION":     {privilege.INSERT, true},
-				"UPDATE":                       {privilege.UPDATE, false},
-				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, true},
-				"REFERENCES":                   {privilege.SELECT, false},
-				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
+				"SELECT":                       {Kind: privilege.SELECT},
+				"SELECT WITH GRANT OPTION":     {Kind: privilege.SELECT, GrantOption: true},
+				"INSERT":                       {Kind: privilege.INSERT},
+				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
+				"UPDATE":                       {Kind: privilege.UPDATE},
+				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.SELECT},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
 				return hasPrivilege(ctx, specifier, user, priv)
 			})
 		},
@@ -1531,19 +1489,19 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[2], privMap{
-				"SELECT":                       {privilege.SELECT, false},
-				"SELECT WITH GRANT OPTION":     {privilege.SELECT, true},
-				"INSERT":                       {privilege.INSERT, false},
-				"INSERT WITH GRANT OPTION":     {privilege.INSERT, true},
-				"UPDATE":                       {privilege.UPDATE, false},
-				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, true},
-				"REFERENCES":                   {privilege.SELECT, false},
-				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
+				"SELECT":                       {Kind: privilege.SELECT},
+				"SELECT WITH GRANT OPTION":     {Kind: privilege.SELECT, GrantOption: true},
+				"INSERT":                       {Kind: privilege.INSERT},
+				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
+				"UPDATE":                       {Kind: privilege.UPDATE},
+				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.SELECT},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
 				return hasPrivilege(ctx, specifier, user, priv)
 			})
 		},
@@ -1572,14 +1530,14 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"CREATE":                      {privilege.CREATE, false},
-				"CREATE WITH GRANT OPTION":    {privilege.CREATE, true},
-				"CONNECT":                     {privilege.CONNECT, false},
-				"CONNECT WITH GRANT OPTION":   {privilege.CONNECT, true},
-				"TEMPORARY":                   {privilege.CREATE, false},
-				"TEMPORARY WITH GRANT OPTION": {privilege.CREATE, true},
-				"TEMP":                        {privilege.CREATE, false},
-				"TEMP WITH GRANT OPTION":      {privilege.CREATE, true},
+				"CREATE":                      {Kind: privilege.CREATE},
+				"CREATE WITH GRANT OPTION":    {Kind: privilege.CREATE, GrantOption: true},
+				"CONNECT":                     {Kind: privilege.CONNECT},
+				"CONNECT WITH GRANT OPTION":   {Kind: privilege.CONNECT, GrantOption: true},
+				"TEMPORARY":                   {Kind: privilege.CREATE},
+				"TEMPORARY WITH GRANT OPTION": {Kind: privilege.CREATE, GrantOption: true},
+				"TEMP":                        {Kind: privilege.CREATE},
+				"TEMP WITH GRANT OPTION":      {Kind: privilege.CREATE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1588,9 +1546,9 @@ SELECT description
 				return tree.DNull, nil
 			}
 			databasePrivilegePred := fmt.Sprintf("database_name = '%s'", db)
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
 				return evalPrivilegeCheck(ctx, `"".crdb_internal`, "cluster_database_privileges",
-					user, databasePrivilegePred, priv)
+					user, databasePrivilegePred, priv.Kind)
 			})
 		},
 	),
@@ -1618,8 +1576,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE, false},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
+				"USAGE":                   {Kind: privilege.USAGE},
+				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1667,8 +1625,8 @@ SELECT description
 				// TODO(nvanbenschoten): this privilege is incorrect, but we don't
 				// currently have an EXECUTE privilege and we aren't even checking
 				// this down below, so it's fine for now.
-				"EXECUTE":                   {privilege.USAGE, false},
-				"EXECUTE WITH GRANT OPTION": {privilege.USAGE, true},
+				"EXECUTE":                   {Kind: privilege.USAGE},
+				"EXECUTE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1705,8 +1663,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE, false},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
+				"USAGE":                   {Kind: privilege.USAGE},
+				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1747,10 +1705,10 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"CREATE":                   {privilege.CREATE, false},
-				"CREATE WITH GRANT OPTION": {privilege.CREATE, true},
-				"USAGE":                    {privilege.USAGE, false},
-				"USAGE WITH GRANT OPTION":  {privilege.USAGE, true},
+				"CREATE":                   {Kind: privilege.CREATE},
+				"CREATE WITH GRANT OPTION": {Kind: privilege.CREATE, GrantOption: true},
+				"USAGE":                    {Kind: privilege.USAGE},
+				"USAGE WITH GRANT OPTION":  {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1760,9 +1718,9 @@ SELECT description
 			}
 			pred := fmt.Sprintf("table_catalog = '%s' AND table_schema = '%s'",
 				ctx.SessionData().Database, schema)
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
 				return evalPrivilegeCheck(ctx, "information_schema", "schema_privileges",
-					user, pred, priv)
+					user, pred, priv.Kind)
 			})
 		},
 	),
@@ -1805,12 +1763,12 @@ SELECT description
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				// Sequences and other table objects cannot be given a USAGE privilege,
 				// so we check for SELECT here instead. See privilege.TablePrivileges.
-				"USAGE":                    {privilege.SELECT, false},
-				"USAGE WITH GRANT OPTION":  {privilege.SELECT, true},
-				"SELECT":                   {privilege.SELECT, false},
-				"SELECT WITH GRANT OPTION": {privilege.SELECT, true},
-				"UPDATE":                   {privilege.UPDATE, false},
-				"UPDATE WITH GRANT OPTION": {privilege.UPDATE, true},
+				"USAGE":                    {Kind: privilege.SELECT},
+				"USAGE WITH GRANT OPTION":  {Kind: privilege.SELECT, GrantOption: true},
+				"SELECT":                   {Kind: privilege.SELECT},
+				"SELECT WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"UPDATE":                   {Kind: privilege.UPDATE},
+				"UPDATE WITH GRANT OPTION": {Kind: privilege.UPDATE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1818,9 +1776,9 @@ SELECT description
 			if retNull {
 				return tree.DNull, nil
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
 				return evalPrivilegeCheck(ctx, "information_schema", "table_privileges",
-					user, pred, priv)
+					user, pred, priv.Kind)
 			})
 		},
 	),
@@ -1848,8 +1806,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE, false},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
+				"USAGE":                   {Kind: privilege.USAGE},
+				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1874,27 +1832,27 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"SELECT":                       {privilege.SELECT, false},
-				"SELECT WITH GRANT OPTION":     {privilege.SELECT, true},
-				"INSERT":                       {privilege.INSERT, false},
-				"INSERT WITH GRANT OPTION":     {privilege.INSERT, true},
-				"UPDATE":                       {privilege.UPDATE, false},
-				"UPDATE WITH GRANT OPTION":     {privilege.UPDATE, true},
-				"DELETE":                       {privilege.DELETE, false},
-				"DELETE WITH GRANT OPTION":     {privilege.DELETE, true},
-				"TRUNCATE":                     {privilege.DELETE, false},
-				"TRUNCATE WITH GRANT OPTION":   {privilege.DELETE, true},
-				"REFERENCES":                   {privilege.SELECT, false},
-				"REFERENCES WITH GRANT OPTION": {privilege.SELECT, true},
-				"TRIGGER":                      {privilege.CREATE, false},
-				"TRIGGER WITH GRANT OPTION":    {privilege.CREATE, true},
-				"RULE":                         {privilege.RULE, false},
-				"RULE WITH GRANT OPTION":       {privilege.RULE, true},
+				"SELECT":                       {Kind: privilege.SELECT},
+				"SELECT WITH GRANT OPTION":     {Kind: privilege.SELECT, GrantOption: true},
+				"INSERT":                       {Kind: privilege.INSERT},
+				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
+				"UPDATE":                       {Kind: privilege.UPDATE},
+				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
+				"DELETE":                       {Kind: privilege.DELETE},
+				"DELETE WITH GRANT OPTION":     {Kind: privilege.DELETE, GrantOption: true},
+				"TRUNCATE":                     {Kind: privilege.DELETE},
+				"TRUNCATE WITH GRANT OPTION":   {Kind: privilege.DELETE, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.SELECT},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"TRIGGER":                      {Kind: privilege.CREATE},
+				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.CREATE, GrantOption: true},
+				"RULE":                         {Kind: privilege.RULE},
+				"RULE WITH GRANT OPTION":       {Kind: privilege.RULE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
 				return hasPrivilege(ctx, specifier, user, priv)
 			})
 		},
@@ -1923,8 +1881,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"CREATE":                   {privilege.CREATE, false},
-				"CREATE WITH GRANT OPTION": {privilege.CREATE, true},
+				"CREATE":                   {Kind: privilege.CREATE},
+				"CREATE WITH GRANT OPTION": {Kind: privilege.CREATE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -1969,8 +1927,8 @@ SELECT description
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				"USAGE":                   {privilege.USAGE, false},
-				"USAGE WITH GRANT OPTION": {privilege.USAGE, true},
+				"USAGE":                   {Kind: privilege.USAGE},
+				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
 				return nil, err
@@ -2016,12 +1974,12 @@ SELECT description
 				// the role are accessible (hasPrivsOfRole), CREATE to denote whether
 				// the user is a member of the role (isMemberOfRole), and GRANT to
 				// denote whether the user is an admin of the role (isAdminOfRole).
-				"USAGE":                    {privilege.USAGE, false},
-				"MEMBER":                   {privilege.CREATE, false},
-				"USAGE WITH GRANT OPTION":  {privilege.GRANT, false},
-				"USAGE WITH ADMIN OPTION":  {privilege.GRANT, false},
-				"MEMBER WITH GRANT OPTION": {privilege.GRANT, false},
-				"MEMBER WITH ADMIN OPTION": {privilege.GRANT, false},
+				"USAGE":                    {Kind: privilege.USAGE},
+				"MEMBER":                   {Kind: privilege.CREATE},
+				"USAGE WITH GRANT OPTION":  {Kind: privilege.GRANT},
+				"USAGE WITH ADMIN OPTION":  {Kind: privilege.GRANT},
+				"MEMBER WITH GRANT OPTION": {Kind: privilege.GRANT},
+				"MEMBER WITH ADMIN OPTION": {Kind: privilege.GRANT},
 			})
 			if err != nil {
 				return nil, err
@@ -2029,8 +1987,8 @@ SELECT description
 			if retNull {
 				return tree.DNull, nil
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Kind) (tree.Datum, error) {
-				switch priv {
+			return runPrivilegeChecks(privs, func(priv privilege.Priv) (tree.Datum, error) {
+				switch priv.Kind {
 				case privilege.USAGE:
 					return hasPrivsOfRole(ctx, user, role)
 				case privilege.CREATE:
@@ -2460,13 +2418,13 @@ func hasPrivilege(
 	ctx *tree.EvalContext,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	kind privilege.Kind,
+	priv privilege.Priv,
 ) (tree.Datum, error) {
 	ret, err := ctx.Planner.HasPrivilege(
 		ctx.Context,
 		specifier,
 		user,
-		kind,
+		priv,
 	)
 	if err != nil {
 		// When an OID is specified and the relation is not found, we return NULL.
