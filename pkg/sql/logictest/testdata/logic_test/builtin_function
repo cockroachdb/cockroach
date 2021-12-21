@@ -3131,4 +3131,3 @@ NULL  NULL  NULL
 
 statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
 SELECT hmac('dog', 'key', 'made up alg')
-

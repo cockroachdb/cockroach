@@ -408,9 +408,11 @@ func BenchmarkAggregation(b *testing.B) {
 		execinfrapb.Max,
 		execinfrapb.Min,
 		execinfrapb.Stddev,
+		execinfrapb.StddevPop,
 		execinfrapb.Sum,
 		execinfrapb.SumInt,
 		execinfrapb.Variance,
+		execinfrapb.VarPop,
 		execinfrapb.XorAgg,
 	}
 
@@ -538,9 +540,11 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 		execinfrapb.Max,
 		execinfrapb.Min,
 		execinfrapb.Stddev,
+		execinfrapb.StddevPop,
 		execinfrapb.Sum,
 		execinfrapb.SumInt,
 		execinfrapb.Variance,
+		execinfrapb.VarPop,
 		execinfrapb.XorAgg,
 	}
 
