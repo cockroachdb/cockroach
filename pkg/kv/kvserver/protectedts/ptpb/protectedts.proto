@@ -17,6 +17,7 @@ import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
+import "sql/catalog/descpb/structured.proto";
 
 
 // TODO(ajwerner): Consider splitting up Record into two pieces. It would
@@ -86,6 +87,18 @@ message Metadata {
    uint64 total_bytes = 4;
 }
 
+message SchemaObjectsTarget {
+  // IDs are the descriptor IDs of the schema objects in this target.
+  // egs: tables, databases.
+  repeated uint32 ids = 1 [(gogoproto.customname) = "IDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+message TenantsTarget {
+  // IDs are the tenant IDs in this target.
+  repeated roachpb.TenantID ids = 1 [(gogoproto.customname) = "IDs"];
+}
+
 // Record corresponds to a protected timestamp.
 message Record {
 
@@ -119,8 +132,18 @@ message Record {
   // change the Version of the subsystem.
   bool verified = 6;
   
-  // Spans are the spans which this Record protects.
-  repeated roachpb.Span spans = 7 [(gogoproto.nullable) = false];
+  // DeprecatedSpans are the spans which this Record protects.
+  repeated roachpb.Span deprecated_spans = 7 [(gogoproto.nullable) = false];
+
+  // Target holds information about the objects on which the protected timestamp
+  // record applies.
+  oneof target {
+    SchemaObjectsTarget schema_objects = 8;
+    TenantsTarget tenants = 9;
+    bool cluster = 10;
+  }
+
+  // next ID: 11
 }
 
 // State is the complete system state.
