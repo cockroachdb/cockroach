@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import _ from "lodash";
@@ -30,6 +30,7 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
+import { syncHistory } from "../util";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -46,6 +47,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //   interface DatabasesPageData {
 //     loading: boolean;
 //     loaded: boolean;
+//     sortSetting: SortSetting;
 //     databases: { // DatabasesPageDataDatabase[]
 //       loading: boolean;
 //       loaded: boolean;
@@ -64,6 +66,7 @@ export interface DatabasesPageData {
   loading: boolean;
   loaded: boolean;
   databases: DatabasesPageDataDatabase[];
+  sortSetting: SortSetting;
   showNodeRegionsColumn?: boolean;
 }
 
@@ -97,13 +100,19 @@ export interface DatabasesPageActions {
   refreshDatabaseDetails: (database: string) => void;
   refreshTableStats: (database: string, table: string) => void;
   refreshNodes?: () => void;
+  onSortingChange?: (
+    name: string,
+    columnTitle: string,
+    ascending: boolean,
+  ) => void;
 }
 
-export type DatabasesPageProps = DatabasesPageData & DatabasesPageActions;
+export type DatabasesPageProps = DatabasesPageData &
+  DatabasesPageActions &
+  RouteComponentProps<unknown>;
 
 interface DatabasesPageState {
   pagination: ISortedTablePagination;
-  sortSetting: SortSetting;
 }
 
 class DatabasesSortedTable extends SortedTable<DatabasesPageDataDatabase> {}
@@ -120,22 +129,33 @@ export class DatabasesPage extends React.Component<
         current: 1,
         pageSize: 20,
       },
-      sortSetting: {
-        ascending: true,
-        columnTitle: null,
-      },
     };
+
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting = this.props.sortSetting;
+
+    if (
+      this.props.onSortingChange &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.onSortingChange("Databases", columnTitle, ascending);
+    }
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refresh();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refresh();
   }
 
-  private refresh() {
+  private refresh(): void {
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
     }
@@ -157,13 +177,22 @@ export class DatabasesPage extends React.Component<
     });
   }
 
-  private changePage(current: number) {
+  changePage = (current: number): void => {
     this.setState({ pagination: { ...this.state.pagination, current } });
-  }
+  };
 
-  private changeSortSetting(sortSetting: SortSetting) {
-    this.setState({ sortSetting });
-  }
+  changeSortSetting = (ss: SortSetting): void => {
+    syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Databases", ss.columnTitle, ss.ascending);
+    }
+  };
 
   private columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
     {
@@ -244,7 +273,7 @@ export class DatabasesPage extends React.Component<
     },
   ];
 
-  render() {
+  render(): React.ReactElement {
     this.columns.find(
       c => c.name === "nodeRegions",
     ).showByDefault = this.props.showNodeRegionsColumn;
@@ -273,8 +302,8 @@ export class DatabasesPage extends React.Component<
             className={cx("databases-table")}
             data={this.props.databases}
             columns={displayColumns}
-            sortSetting={this.state.sortSetting}
-            onChangeSortSetting={this.changeSortSetting.bind(this)}
+            sortSetting={this.props.sortSetting}
+            onChangeSortSetting={this.changeSortSetting}
             pagination={this.state.pagination}
             loading={this.props.loading}
             renderNoResult={
@@ -292,7 +321,7 @@ export class DatabasesPage extends React.Component<
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
           total={this.props.databases.length}
-          onChange={this.changePage.bind(this)}
+          onChange={this.changePage}
         />
       </div>
     );

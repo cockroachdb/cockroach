@@ -20,6 +20,9 @@ import {
 } from "src/storybook/fixtures";
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 
+import * as H from "history";
+const history = H.createHashHistory();
+
 const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: randomName(),
@@ -36,6 +39,14 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     loaded: false,
     sizeInBytes: 0,
     rangeCount: 0,
+  },
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
   },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
@@ -79,6 +90,14 @@ const withData: DatabaseTablePageProps = {
     rangeCount: 4200,
     nodesByRegionString:
       "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
+  },
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
   },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
