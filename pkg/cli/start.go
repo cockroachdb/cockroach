@@ -699,6 +699,8 @@ If problems persist, please see %s.`
 	// decommission`, or a signal.
 
 	// We'll want to log any shutdown activity against a separate span.
+	// We cannot use s.AnnotateCtx here because s might not have
+	// been assigned yet (the goroutine above runs asynchronously).
 	shutdownCtx, shutdownSpan := ambientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
 	defer shutdownSpan.Finish()
 
