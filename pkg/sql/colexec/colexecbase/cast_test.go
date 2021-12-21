@@ -45,6 +45,11 @@ func TestRandomizedCast(t *testing.T) {
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
+			if from.String() == "void" && to.String() == "char" {
+				// Skip the cast from void to char because of the TODO below the
+				// datum generation below will be stuck forever.
+				continue
+			}
 			if _, ok := tree.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
