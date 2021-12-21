@@ -304,7 +304,9 @@ func (p *gcpPubsubClient) getTopicClient(topicID descpb.ID) (*pubsub.Topic, erro
 	return nil, errors.New("topic client does not exist")
 }
 
-func (p *pubsubSink) getTopicsMap(targets jobspb.ChangefeedTargets, pubsubTopicName string) map[descpb.ID]*topicStruct {
+func (p *pubsubSink) getTopicsMap(
+	targets jobspb.ChangefeedTargets, pubsubTopicName string,
+) map[descpb.ID]*topicStruct {
 	topics := make(map[descpb.ID]*topicStruct)
 
 	//creates a topic for each target
@@ -469,6 +471,9 @@ func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
 	}
 	if !topicExist {
 		t, err = p.client.CreateTopic(p.ctx, topicName)
+		if err != nil {
+			return nil, err
+		}
 	}
 	t.EnableMessageOrdering = true
 	return t, nil
@@ -498,6 +503,9 @@ func (p *gcpPubsubClient) sendMessage(m []byte, topicID descpb.ID, key string) e
 	// The Get method blocks until a server-generated ID or
 	// an error is returned for the published message.
 	_, err = res.Get(p.ctx)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -11,12 +11,10 @@ package changefeedccl
 import (
 	"bufio"
 	"bytes"
-	"cloud.google.com/go/pubsub"
 	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -34,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1458,11 +1457,10 @@ func (p *mockPubsubMessageBuffer) pop() *mockPubsubMessage {
 	defer p.mu.Unlock()
 	if len(p.rows) == 0 {
 		return nil
-	} else {
-		var head mockPubsubMessage
-		head, p.rows = p.rows[0], p.rows[1:]
-		return &head
 	}
+	var head mockPubsubMessage
+	head, p.rows = p.rows[0], p.rows[1:]
+	return &head
 }
 
 func (p *mockPubsubMessageBuffer) push(m mockPubsubMessage) {
@@ -1475,16 +1473,11 @@ type fakePubsubClient struct {
 	buffer *mockPubsubMessageBuffer
 }
 
-func (p *fakePubsubClient) openTopics(withTopicName string) error {
+func (p *fakePubsubClient) openTopics(_ string) error {
 	return nil
 }
 
-func (p *fakePubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
-	return nil, nil
-}
-
-func (p *fakePubsubClient) closeTopics(withTopicName string) {
-	return
+func (p *fakePubsubClient) closeTopics(_ string) {
 }
 
 // sendMessage sends a message to the topic
@@ -1500,12 +1493,11 @@ func (p *fakePubsubClient) sendMessageToAllTopics(m []byte, _ string) error {
 	return nil
 }
 
-func (p *fakePubsubClient) getTopicName(topicID descpb.ID) string {
+func (p *fakePubsubClient) getTopicName(_ descpb.ID) string {
 	return ""
 }
 
 func (p *fakePubsubClient) flushTopics() {
-	return
 }
 
 type fakePubsubSink struct {
