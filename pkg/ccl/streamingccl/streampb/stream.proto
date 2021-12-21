@@ -12,8 +12,6 @@ package cockroach.ccl.streamingccl;
 option go_package = "streampb";
 
 
-import "jobs/jobspb/jobs.proto";
-import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
