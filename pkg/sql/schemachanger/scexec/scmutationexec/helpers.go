@@ -104,3 +104,31 @@ func MakeColumnIDMutationSelector(columnID descpb.ColumnID) MutationSelector {
 		return mut.AsColumn().GetID() == columnID
 	}
 }
+
+func enqueueAddColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescriptor) error {
+	tbl.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueDropColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescriptor) error {
+	tbl.AddColumnMutation(col, descpb.DescriptorMutation_DROP)
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueAddIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
+	if err := tbl.AddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
+		return err
+	}
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
+	if err := tbl.AddIndexMutation(idx, descpb.DescriptorMutation_DROP); err != nil {
+		return err
+	}
+	tbl.NextMutationID--
+	return nil
+}

@@ -188,9 +188,9 @@ CREATE TABLE db.t (
 					},
 					State:      descpb.DescriptorMutation_DELETE_ONLY,
 					Direction:  descpb.DescriptorMutation_ADD,
-					MutationID: mutable.NextMutationID,
+					MutationID: 1,
 				})
-				mutable.NextMutationID++
+				mutable.NextMutationID = 1
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{

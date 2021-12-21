@@ -381,12 +381,12 @@ func (p *planner) initiateDropTable(
 		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
 	}
 
-	// Exit early with an error if the table is undergoing a new-style schema
+	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
 	if tableDesc.NewSchemaChangeJobID != 0 {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
+			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
 			tableDesc.GetName(),
 		)
 	}
