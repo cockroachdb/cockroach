@@ -178,10 +178,6 @@ vectorized: true
                       estimated row count: 1,000 (missing stats)
                       table: abc@abc_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (c) STORING (b);
 
 # IN expression transformed into semi-join.
 query T
@@ -217,10 +213,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: abc@abc_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (b);
 
 query T
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
@@ -302,10 +294,6 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: tab4@tab4_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON tab4 (col0) STORING (col3, col4);
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.

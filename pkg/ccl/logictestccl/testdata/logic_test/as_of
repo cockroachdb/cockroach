@@ -174,7 +174,7 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2 AND i = 1
 ----
-memo (optimized, ~5KB, required=[presentation: info:6])
+memo (optimized, ~8KB, required=[presentation: info:6])
  ├── G1: (explain G2 [presentation: i:1,j:2,k:3])
  │    └── [presentation: info:6]
  │         ├── best: (explain G2="[presentation: i:1,j:2,k:3]" [presentation: i:1,j:2,k:3])

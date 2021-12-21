@@ -221,10 +221,6 @@ vectorized: true
               missing stats
               table: y@y_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON x (a);
 
 query T
 EXPLAIN
@@ -239,7 +235,3 @@ vectorized: true
 │
 └── • values
       size: 1 column, 3 rows
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON y (a);

@@ -34,10 +34,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: kv@kv_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC);
 
 # Use explicit target columns (which can use blind KV Put).
 query T
@@ -67,10 +63,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: kv@kv_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC);
 
 # Add RETURNING clause (should still use blind KV Put).
 query T
@@ -100,10 +92,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: kv@kv_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC);
 
 # Use subset of explicit target columns (which cannot use blind KV Put).
 query T
@@ -151,10 +139,6 @@ vectorized: true
                       estimated row count: 1,000 (missing stats)
                       table: kv@kv_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON kv (v DESC);
 
 # Use Upsert with indexed table, default columns, computed columns, and check
 # columns.

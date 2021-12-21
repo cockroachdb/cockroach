@@ -34,10 +34,6 @@ vectorized: true
   missing stats
   table: abcd@abcd_pkey
   spans: [/20 - /30]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (a DESC) STORING (b, c, d);
 
 # Force primary
 query T
@@ -319,10 +315,6 @@ vectorized: true
       missing stats
       table: abcd@cd
       spans: [/10 - /10]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (b, d);
 
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
@@ -337,10 +329,6 @@ vectorized: true
       missing stats
       table: abcd@abcd_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (b, d);
 
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10

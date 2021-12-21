@@ -23,12 +23,6 @@ vectorized: true
       missing stats
       table: uniontest@uniontest_pkey
       spans: FULL SCAN
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON uniontest (v);
-2. type: index creation
-   SQL command: CREATE INDEX ON uniontest (k);
 
 query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
@@ -99,10 +93,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: abc@abc_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (a) STORING (b);
 
 # Regression test for #32723.
 query T
@@ -206,10 +196,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: uniontest@uniontest_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON uniontest (k);
 
 statement ok
 CREATE TABLE ab (a INT NOT NULL, b INT, INDEX(a, b), INDEX (b, a))
@@ -484,12 +470,6 @@ vectorized: true
               spans: /1-/2
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykku-L2k4Qxt9__4phXunXOWJ-HWVB2LuaowGbXBP7iyISs8MR8BK7WeGK-L8XE8HTalrbN4GdmWc-T57dDdbflygw-PI4uQsj6I3DdJp-mBB8CpL7OA36kAaT4O0U_oeHJH4Pvf0xI1gQ5ASKgNtWtsgVw8cojCM4TOXN4MlUHz6_C5IAejmMwO7DXTSGnoIRcB_iZBwkcP8VMiQsK8VR9sw1im9o44xwpauc67rSu9KmGQjVC4ohYVGu1mZXnhHmlWYUGzSFWTIKnGaLJSecKdbWEAkVm6xYNmsbR7L5zhfzfK7mPC_UCxKmq6ysBVj2jeXgbEtYrc0BUZvsiVHYW_pzGw_F0rBmbdnHHtq6AOnBCKR_EeZcA0srbVhbzjFK2gMkjNdGgLRJuiQdkh51QN1roK-Dds8FvdLFc6Z_HOK9uQj2_ipa73y0PenuHpsQIoymb_Zvbp93_6IF_6KFA7nSijWrX2Im6QxIugOS3oCkP8DZ9ozvcVGbosyN5Z8uaG7G_c3l3F6TUcL1qiprPiJd2jzcuWX1xO3f1tVa5_yoq7zBtMe40TUFxbVpu3Z7CMu2tTP4Wmx3ip1usdMp9o_E9qnY7RR73WTvX8h-p_j2hDzb_vczAAD__6qVwrQ=
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c) STORING (b, d, e);
-2. type: index creation
-   SQL command: CREATE INDEX ON abcde (b) STORING (c, d, e);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT  a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
@@ -529,10 +509,6 @@ vectorized: true
           spans: /1-/2
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkm-L2kAQxt_3UwzzSuscukmEsiDsXc3RgE2u0f6jiMTscARsYndXOBC_ezER_MPF1vZNYGfmmeeXZ3eL9tcKJYbfnib3UQydcTSdTT9NCL6E6UMyDbswDSfh-xm8hcc0-QidwzEjWBLkBJqAm1a2zDXD5zhKYjhO5fXgxVQXvn4I0xA6OYxAdOE-HkNHwwi4C0k6DlN4-H6ynyBDwrLSHGc_2aL8gQLnhGtT5WxtZfalbT0Q6ReUA8KiXG_cvjwnzCvDKLfoCrdilDjLlitOOdNs-gMk1OyyYlWvrelU_V0sF_lCL3hR6BcknK6z0kroi7u-h_MdYbVxRwvrsmdGKXb09xiPxcqxYdMX5wxNXYIKYARqiITJxklQgpRPyiMVkBq2Ini3IJwm4d2YxF0rgv9PKfivp9BR_v6NSCmjePbu8FQO0XRbEYJWhKNzZTQb1ue2yuuR8nukgh4p0SM17OF89wr3uLCuKHPXDy4WiPqO_D9c0_CWjFK266q0fObUtnmwp2X9zM3f2mpjcn4yVV7bNMek1tUFzdY1XdEcorJp7QFPxeKqODgTi0uxd1XsX3f2_8c5uCoeXjjPd29-BwAA__-0e5X_
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c, d, e, b);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
@@ -572,10 +548,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskN1q20AQhe_7FMNcSe0GW5YCZcEgp95QgSqlkvtH0cVGOwSBolV319Bi_O7FUiFRiE3S5HJ-znznzA7trxY5iu9X6SrJwFsn5ab8nDL4KoqLvBQ-lCIVHzbwFi6L_BN401Je14rgS5bkGazSFB6Z-vDtoygEeDUsIfBhla3BU7AE8iEv1qKAix8gkWGnFWXylizynxhgxbA3uiZrtTm0dsNCon4jnzNsun7rDu2KYa0NId-ha1xLyHEjr1sqSCoyszkyVORk0w5nB0dxb5pbaf4gw7KXneVwhtWeod66u6PWyRtCHuzZ08GXTevIkJkFU-rY5-DF4eEHnPMk27z_94o4giXE5_5RC4vnWLifffHC7OF_ZQ9fM3t01MIdWRtFhtQUGwfvsNo_4jPTZ7qfRZPtY_T5cx5QkO11Z-mJlyuGpG5ojGL11tR0ZXQ9YMYyH3RDQ5F14zQYi6QbRweD98XBSXE0EQcPxYuT4vA0OXwJOTopPn9ArvZv_gYAAP__aIR-OA==
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c) STORING (b, d, e);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
@@ -615,10 +587,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskG9rm1AUxt_vUxzOq7ickhgtjAsB08UywWmn2T-GiPEeiuC87l4DhZDvPqKD1tKEdu0b4TzH5zy_--zR_KlRoP_jJlwFEUzWQbpJv4QE3_zkKk59C1I_9D9u4D1cJ_FnmIzHYltKhq9REEewCkN4YmvB909-4sOkhCXYFqyiNUwkLIEtiJO1n8DVT9gSlASSgAkKJGyU5Kj4zQbFL7QxI2y1KtkYpY_Svv8hkHco5oRV0-66o5wRlkozij12VVczCtwU25oTLiTr2RwJJXdFVfdnezqv_-bbvMxlznkl75AwbYvGCLjA7ECodt39edMVt4zCPtDzEa6rumPNemaP8wddwMRzjs0IIYJo8-FfQZ4LS_AurZMIi5cgPGxh8WYtOP_VgvOWLbgnEe6TlZasWY5jvcWUPGdKnjslz55idniCOVIXqp25I-cpkvlLykjYtKox_MzLGSHLWx6eZdROl3yjVdnHDGPc-3pBsumGrT0MQTOsjoAPzfZZszsy24_Ni7Nm53yy85pk96z58lFydnj3NwAA__-m3oqG
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c, d, e) STORING (b);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d, e FROM (SELECT b, c, d, e FROM abcde INTERSECT SELECT b, c, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b
@@ -658,10 +626,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF-L2kAUxd_7KS73KcEpbv7olgFhdmuWBlyzTUL_UERi5tYG0iSdjLBF_O4lSdtVu6Z12b4Ic2Z-95x7kGyx_pYjR-_D3ezKn4Mx9aM4ejtj8M4Lr4PIMyHyZt7rGFYMUgaSAcFNGNyCcUJPVqkk8OexF0bNfd8zE96_8UIPjBQmYJlwNZ-CIWECZEIQTr0Qrj_CChkWpaR58pVq5J_QwgXDSpUp1XWpGmnbPvDlPfILhllRbXQjLximpSLkW9SZzgk5xskqp5ASSWp4gQwl6STL27FtItH-LlfLdCmXtMzkPTKMqqSoObxEhsFGcxA2Ew4TLhMjXOwYlhv94FjrZE3IrR3791Q3Wa5JkRpah5E6nYMh7KYgzrk_j1_97Ek4MAHhmicj2OdE2C_G_p_FOE8qxnnOYtxzIkyzWmdFqofuYQRhsV_rNusrSYokh0Z2TjqPnuQ8egbn8UnnB8NNUXbDDvwWDfm3J4_EvyW1poh0UA3HhwvE3yvie5-Iq9kMGeb0WRvCGjDhDJiwB0y4A3OisvWXP-Xff7i9Kk5tfnlO5yHVVVnUdNzAo5MvmrVJrqmrsS43KqU7VaatTXcMWq4VJNW6u7W6g190V03AfdjqhUf9sN0LO_2w0wu7_bDbC48PYOsYHp0B28fwuBe-PIq92L34EQAA___LAyzi
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c, d, e) STORING (b);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d, e FROM (SELECT b, c, d, e FROM abcde EXCEPT SELECT b, c, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e
@@ -701,10 +665,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9q20wQxe-_pxjmSsL74eiPnbJg2CRWqMGxUkm0KcUYWTt1BaqkrtaQEvzuRVLT2G6k1iG9MezZ_c05czB6wOpbhhy9u9v5xWwBxnQWRuG7OYP3XnDph54JoTf3riJYM0gYSAYE14F_A0aHHq8TSeDdXXm3URfbvDHhw1sv8MBIYAKWCReLKRgSJkAm-MHUC-Dy4x6JDPNC0iL-ShXyT2jhkmGpioSqqlC19NA8mMl75GcM07zc6lpeMkwKRcgfUKc6I-QYxeuMAoolqeEZMpSk4zRrxjbRRPO7Wq-SlVzRKpX3yDAs47zi8D8y9Leag7CZcJhwmRjhcsew2Oonx0rHG0Ju7djfp7pOM02K1NA6jNTqHAxh101xzmeL6M3PwoQDExCu2RnBPiXCfjH2vyzGeVExzmsW454SYZpWOs0TPXQPIwiLPa5br68kKZIcatnpdB69yHn0Cs7jTucnw21etMMO_JY1-acnz8S_IbWhkLRfDseHC0TfS-KPH4qL-RwZZvRZG8IaMOEMmLAHTLgDc6LSzZff5V__tr0eutY-P6XwgKqyyCs6Xv_ZyWf1ziQ31HZYFVuV0K0qksamPfoN1wiSKt3eWu1hlrdXdcB92OqF3X7Y7oWdftjphUf9sNsLjw9g6xgenQDbx_C4Fz4_ir3c_fcjAAD__7UjLSI=
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c, d, e) STORING (b);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde EXCEPT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
@@ -744,10 +704,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskm-L2kAQxt_3UwzzKqlbNH-EsiCsd-ao4BmbhPZK8UUuO7WBXJLurtBD_O4lSeGMqK3tvZyZ_c0zz5PsUP8okGPwsFpM50uwZvM4iT8uGHwKopswDmyIg0Vwm8BbuIvCe7D6ZfqYSYLg4TZYJTBdLODE2IbPH4IoACuDCTg2TJczsCRMgGwIo1kQwc0XSJFhWUlapk-kkX9FB9cMa1VlpHWlmtaufTCXP5GPGOZlvTVNe80wqxQh36HJTUHIMUkfC4oolaSGI2QoyaR50a5tLxK1yp9S9YwM4zotNYd3uN4zrLbmZak26YaQO3v298J3eWFIkRo6fdWuz8ESXpMB53y-TN7_jkL4MAExts-e4F5zwqF39z-9e__k3XtN7_7ZE16Ut2WlJCmSPeF1Q_7pyQkf96Q2FJMJ66Hfd5I818QPfnZkWNA3YwlnwIQ7YMIbMOEPmBgP7InKN99Pj5BhuDUchMOEy4THhM_E-GwC42s-QkS6rkpNx0mc3Dxq7JPcUBenrrYqo5WqslamK8OWaxuStOmmTlfMy27UHHgIOxdhvwc7x7B7EfYuK3tXKLvHsH8RHh8pr_dvfgUAAP__ApejQg==
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c) STORING (b, d, e);
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde INTERSECT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
@@ -787,10 +743,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9uLm1AQxt_7VwzzpM2UjZdAORA42calQjZuVXqhhGA801Swao8GtoT870Ut7BqStCn7EpjLN993fsE91j9zFOh9fljM_CUYcz-Kow8Lgo9eeBtEngmRt_DexfAa7sLgHoxhmWxSxeAvYy-M2vZssYATGyZ8eu-FHhgpTMEyYbacg6FgCmxCEM69EG6_wIYgJVAETJAgYVEqXiY_uEbxFS1cEVa6TLmuS9229t2Crx5RjAmzoto1bXtFmJaaUeyxyZqcUWCcbHIOOVGsb8ZIqLhJsrw726WT3e96s07Xas3rTD0iYVQlRS3gDa4OhOWueTpfN8mWUVgH-vcId1nesGZ9Yw39-74AQzotGSGEv4zf_gEkXZiCnJhnI9jXRHhOwX4xCs5_UXBekoJ7NsKT864otWLNamC8apV_WznxjnvWW464Caobd_iS-FfFYvg9IGHO3xpD2iOS7oikNSLpjEhORuZUZ9vvp0dIGOwaAdIiaZN0SLokJ2chTK75H0Kuq7Ko-RjGycvjlgCrLfdE63KnU37QZdrZ9GXQ6bqG4rrpp1Zf-EU_agM-F1sXxe5AbB-L7Yti57Kzc4WzdSx2L4onR86rw6vfAQAA___SLa8C
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcde (c, d, e) STORING (b);
 
 # Regression test for #64181. Ensure that a projection on top of an ordered
 # UNION ALL correctly projects away ordering columns.
@@ -1079,10 +1031,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckm9r2zAQxt_vU4h71dIrie28EgzUPx4E0jqzw-gYJijWxTE4lifJ0BLy3YdtSmuv6cjeCHS6537Pc-gA9ncJHMKn5eJm_sgu7ufJKvm-QPYjjG-jJLxkSbgI71aMkG2R5ch27FscPTDa5jsWPt2Fy9Vri0S2QZYhU32L3GSKRfF9GLPbn90AQKi0oke5Jwv8F3iQItRGZ2StNm3p0DXM1TPwKUJR1Y1ryylCpg0BP4ArXEnAYSU3JcUkFZnJFBAUOVmU3djWm6hNsZfmBRCSWlaWs2tIjwi6cW8zrZM5AfeO-H9cb8htA4v2WMv1Zp2tC_X8Ho8QNY4z4aHwUQQoZicd-ec4SrRxZCb-0IzwrlD4VyiCaxSzK0DYS5ftWEkVZ8FJcnCS_AZsKm0UGVIDYtoq_9Xygf0HMjkl5KJ6EgwjrF5q4q-f7GaxAISStu5iFO3yqyny3d_lcxY-O2fhMdlaV5bG8T-cPG0zk8qp36HVjcloaXTWYfpr1Om6giLr-tegv8yr7qn7o-_F3qdifyCejsX-GWR_LA4-Fc9G5PT45U8AAAD__ySlYvg=
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (a, b, c, d);
 
 # Regression test for #68702. Ensure correct behavior when a column is projected
 # twice on the left side.
