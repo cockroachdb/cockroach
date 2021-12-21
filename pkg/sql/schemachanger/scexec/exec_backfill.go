@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
@@ -50,7 +50,7 @@ func executeIndexBackfillOp(ctx context.Context, deps Dependencies, op *scop.Bac
 	if !ok {
 		return catalog.WrapTableDescRefErr(desc.GetID(), catalog.NewDescriptorTypeError(desc))
 	}
-	mut, err := descriptorutils.FindMutation(table, descriptorutils.MakeIndexIDMutationSelector(op.IndexID))
+	mut, err := scmutationexec.FindMutation(table, scmutationexec.MakeIndexIDMutationSelector(op.IndexID))
 	if err != nil {
 		return err
 	}

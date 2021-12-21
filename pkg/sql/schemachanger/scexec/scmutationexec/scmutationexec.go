@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -245,9 +244,8 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 		return err
 	}
 	return mutationStateChange(
-		ctx,
 		tbl,
-		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
+		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	)
@@ -508,9 +506,8 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 		return err
 	}
 	mut, err := removeMutation(
-		ctx,
 		tbl,
-		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
+		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	)
 	if err != nil {
@@ -584,9 +581,8 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 		return err
 	}
 	return mutationStateChange(
-		ctx,
 		tbl,
-		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
+		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
@@ -598,9 +594,8 @@ func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent
 		return err
 	}
 	mut, err := removeMutation(
-		ctx,
 		tbl,
-		descriptorutils.MakeColumnIDMutationSelector(op.ColumnID),
+		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
 	if err != nil {
@@ -619,9 +614,8 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 		return err
 	}
 	return mutationStateChange(
-		ctx,
 		tbl,
-		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
+		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	)
@@ -715,9 +709,8 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 		return err
 	}
 	return mutationStateChange(
-		ctx,
 		tbl,
-		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
+		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
@@ -858,9 +851,8 @@ func (m *visitor) MakeAddedPrimaryIndexPublic(
 	}
 	indexDesc := index.IndexDescDeepCopy()
 	if _, err := removeMutation(
-		ctx,
 		tbl,
-		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
+		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	); err != nil {
 		return err
@@ -874,9 +866,9 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 	if err != nil {
 		return err
 	}
-	_, err = removeMutation(ctx,
+	_, err = removeMutation(
 		tbl,
-		descriptorutils.MakeIndexIDMutationSelector(op.IndexID),
+		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
 	return err
@@ -959,7 +951,7 @@ func asEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		mutation, err := descriptorutils.FindMutation(tbl, descriptorutils.MakeColumnIDMutationSelector(e.ColumnID))
+		mutation, err := FindMutation(tbl, MakeColumnIDMutationSelector(e.ColumnID))
 		if err != nil {
 			return nil, err
 		}
@@ -972,7 +964,7 @@ func asEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		mutation, err := descriptorutils.FindMutation(tbl, descriptorutils.MakeIndexIDMutationSelector(e.IndexID))
+		mutation, err := FindMutation(tbl, MakeIndexIDMutationSelector(e.IndexID))
 		if err != nil {
 			return nil, err
 		}
