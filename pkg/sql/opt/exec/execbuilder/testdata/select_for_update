@@ -729,10 +729,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
@@ -762,10 +758,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
@@ -794,10 +786,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@t_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
@@ -827,10 +815,6 @@ vectorized: true
               table: t@t_pkey
               spans: FULL SCAN
               locking strength: for update
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b);
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
