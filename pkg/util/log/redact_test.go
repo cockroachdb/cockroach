@@ -154,14 +154,14 @@ func TestRedactedDecodeFile(t *testing.T) {
 			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
-			info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
+			debugSink := debugLog.getFileSink()
+			info, ok := debugSink.mu.file.(*syncBuffer)
 			if !ok {
 				t.Fatalf("buffer wasn't created")
 			}
+
 			// Ensure our log message above made it to the file.
-			if err := info.Flush(); err != nil {
-				t.Fatal(err)
-			}
+			debugSink.flushAndMaybeSyncLocked(false)
 
 			// Prepare reading the entries from the file.
 			infoName := filepath.Base(info.file.Name())
