@@ -1265,11 +1265,9 @@ with &1
  │    │    └── b_default:7 => abc.c:3
  │    └── project
  │         ├── columns: b_default:7 column1:6!null
- │         ├── project
+ │         ├── values
  │         │    ├── columns: column1:6!null
- │         │    └── values
- │         │         ├── columns: column1:6!null
- │         │         └── (1,)
+ │         │    └── (1,)
  │         └── projections
  │              └── NULL::INT8 [as=b_default:7]
  └── with &2 (cte)
@@ -1322,11 +1320,9 @@ with &1
  │         │    ├── column1:6 => abc.a:1
  │         │    ├── column2:7 => b:2
  │         │    └── column3:8 => c:3
- │         └── project
+ │         └── values
  │              ├── columns: column1:6!null column2:7!null column3:8!null
- │              └── values
- │                   ├── columns: column1:6!null column2:7!null column3:8!null
- │                   └── (1, 2, 3)
+ │              └── (1, 2, 3)
  └── with-scan &1
       ├── columns: a:9!null
       └── mapping:
@@ -1447,11 +1443,9 @@ insert inaccessible
  │    └── v_default:6 => v:2
  └── project
       ├── columns: v_default:6 column1:5!null
-      ├── project
+      ├── values
       │    ├── columns: column1:5!null
-      │    └── values
-      │         ├── columns: column1:5!null
-      │         └── (1,)
+      │    └── (1,)
       └── projections
            └── NULL::INT8 [as=v_default:6]
 
