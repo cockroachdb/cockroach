@@ -221,8 +221,9 @@ message BackupDetails {
   repeated string incremental_from = 14;
   bool full_cluster = 15;
 
+  reserved 16;
   // SpecificTenantIds if set indicates the IDs of explicit tenant targets.
-  repeated uint64 specific_tenant_ids = 16;
+  repeated roachpb.TenantID specific_tenant_ids = 19 [(gogoproto.nullable) = false];
   // ResolvedTargets contains all descriptors resolved from any explicit targets
   // (and is empty for full-cluster backups, which have no explicit targets).
   repeated sqlbase.Descriptor resolved_targets = 17 [(gogoproto.nullable) = false];
@@ -232,7 +233,7 @@ message BackupDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 19;
+  // NEXT ID: 20;
 }
 
 message BackupProgress {
