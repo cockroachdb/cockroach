@@ -319,7 +319,9 @@ func (b benchmarkExpectations) find(name string) (benchmarkExpectation, bool) {
 }
 
 func (e benchmarkExpectation) matches(roundTrips int) bool {
-	return e.min <= roundTrips && roundTrips <= e.max
+	return (e.min <= roundTrips && roundTrips <= e.max) ||
+		e.min == e.max &&
+			(roundTrips == e.min-1 || roundTrips == e.min+1)
 }
 
 func (e benchmarkExpectation) String() string {
