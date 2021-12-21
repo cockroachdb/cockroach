@@ -37,10 +37,38 @@ CREATE VIEW sc1.v5 AS (SELECT 'a'::sc1.typ::STRING AS k, n2, n1 FROM sc1.v4)
 deps
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
+- from: [Column:{DescID: 56, ColumnID: 1}, DELETE_AND_WRITE_ONLY]
+  to:   [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, ABSENT]
+  kind: Precedence
+  rule: column unnamed after column no longer public
+- from: [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY]
+  to:   [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, ABSENT]
+  kind: Precedence
+  rule: column unnamed after column no longer public
+- from: [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY]
+  to:   [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, ABSENT]
+  kind: Precedence
+  rule: column unnamed after column no longer public
+- from: [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, ABSENT]
+  to:   [Column:{DescID: 56, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column unnamed before column no longer exists
+- from: [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, ABSENT]
+  to:   [Column:{DescID: 56, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: column unnamed before column no longer exists
+- from: [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, ABSENT]
+  to:   [Column:{DescID: 56, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column unnamed before column no longer exists
 - from: [DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
   kind: Precedence
   rule: schema can be dropped after schema entry inside the database
+- from: [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 56, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index unnamed before index no longer exists
 - from: [Namespace:{DescID: 55, Name: sq1}, ABSENT]
   to:   [Sequence:{DescID: 55}, ABSENT]
   kind: Precedence
@@ -77,10 +105,18 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 63}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
+- from: [PrimaryIndex:{DescID: 56, IndexID: 1}, VALIDATED]
+  to:   [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, ABSENT]
+  kind: Precedence
+  rule: index unnamed after index no longer public
 - from: [Sequence:{DescID: 55}, ABSENT]
   to:   [Schema:{DescID: 54}, ABSENT]
   kind: Precedence
   rule: parent dependencies
+- from: [Sequence:{DescID: 55}, DROPPED]
+  to:   [Locality:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [Sequence:{DescID: 55}, DROPPED]
   to:   [Namespace:{DescID: 55, Name: sq1}, ABSENT]
   kind: Precedence
@@ -113,6 +149,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [DefaultExpression:{DescID: 56, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
+- from: [Table:{DescID: 56}, DROPPED]
+  to:   [Locality:{DescID: 56}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [Table:{DescID: 56}, DROPPED]
   to:   [Namespace:{DescID: 56, Name: t1}, ABSENT]
   kind: Precedence
@@ -170,6 +210,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [View:{DescID: 57}, DROPPED]
+  to:   [Locality:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 57}, DROPPED]
   to:   [Namespace:{DescID: 57, Name: v1}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -205,6 +249,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Schema:{DescID: 54}, ABSENT]
   kind: Precedence
   rule: parent dependencies
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [Locality:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 58}, DROPPED]
   to:   [Namespace:{DescID: 58, Name: v2}, ABSENT]
   kind: Precedence
@@ -242,6 +290,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [View:{DescID: 59}, DROPPED]
+  to:   [Locality:{DescID: 59}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 59}, DROPPED]
   to:   [Namespace:{DescID: 59, Name: v3}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -273,6 +325,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Schema:{DescID: 54}, ABSENT]
   kind: Precedence
   rule: parent dependencies
+- from: [View:{DescID: 60}, DROPPED]
+  to:   [Locality:{DescID: 60}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 - from: [View:{DescID: 60}, DROPPED]
   to:   [Namespace:{DescID: 60, Name: v4}, ABSENT]
   kind: Precedence
@@ -306,6 +362,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: parent dependencies
 - from: [View:{DescID: 63}, DROPPED]
+  to:   [Locality:{DescID: 63}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 63}, DROPPED]
   to:   [Namespace:{DescID: 63, Name: v5}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
@@ -336,23 +396,16 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
     [Column:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
-    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
     [Type:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
     [Schema:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
@@ -377,7 +430,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       DescID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
+PreCommitPhase stage 1 of 1 with 43 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 55, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -385,6 +438,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [DefaultExpression:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
@@ -393,6 +447,11 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [UserPrivileges:{DescID: 56, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: root}, PUBLIC, DROP] -> ABSENT
+    [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
+    [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
+    [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
+    [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 57, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -400,6 +459,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 57, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
@@ -408,6 +468,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, TXN_DROPPED, DROP] -> DROPPED
@@ -416,12 +477,14 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [UserPrivileges:{DescID: 59, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 59, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 60}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 60, Name: v4}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 60, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 60, ReferencedDescID: 63}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 63, Name: v5}, PUBLIC, DROP] -> ABSENT
@@ -431,6 +494,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
     [UserPrivileges:{DescID: 63, Username: root}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 63, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 63, ReferencedDescID: 62}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 61, Name: typ}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 62}, TXN_DROPPED, DROP] -> DROPPED
@@ -444,6 +508,41 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
       TableID: 55
     *scop.MarkDescriptorAsDropped
       DescID: 56
+    *scop.DrainDescriptorName
+      TableID: 56
+    *scop.MarkDescriptorAsDropped
+      DescID: 57
+    *scop.DrainDescriptorName
+      TableID: 57
+    *scop.MarkDescriptorAsDropped
+      DescID: 58
+    *scop.DrainDescriptorName
+      TableID: 58
+    *scop.MarkDescriptorAsDropped
+      DescID: 59
+    *scop.DrainDescriptorName
+      TableID: 59
+    *scop.MarkDescriptorAsDropped
+      DescID: 60
+    *scop.DrainDescriptorName
+      TableID: 60
+    *scop.MarkDescriptorAsDropped
+      DescID: 63
+    *scop.DrainDescriptorName
+      TableID: 63
+    *scop.MarkDescriptorAsDropped
+      DescID: 61
+    *scop.DrainDescriptorName
+      TableID: 61
+    *scop.MarkDescriptorAsDropped
+      DescID: 62
+    *scop.DrainDescriptorName
+      TableID: 62
+    *scop.MarkDescriptorAsDropped
+      DescID: 54
+    *scop.DeleteDatabaseSchemaEntry
+      DatabaseID: 50
+      SchemaID: 54
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 56
       TableID: 55
@@ -452,77 +551,78 @@ PreCommitPhase non-revertible stage 1 of 1 with 31 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 56
-    *scop.MarkDescriptorAsDropped
-      DescID: 57
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 57
       TableID: 56
-    *scop.DrainDescriptorName
-      TableID: 57
-    *scop.MarkDescriptorAsDropped
-      DescID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 58
       TableID: 57
-    *scop.MarkDescriptorAsDropped
-      DescID: 59
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 57
-    *scop.DrainDescriptorName
-      TableID: 58
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 58
-    *scop.MarkDescriptorAsDropped
-      DescID: 60
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 60
       TableID: 58
-    *scop.DrainDescriptorName
-      TableID: 59
-    *scop.DrainDescriptorName
-      TableID: 60
-    *scop.MarkDescriptorAsDropped
-      DescID: 63
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 63
       TableID: 60
-    *scop.DrainDescriptorName
-      TableID: 63
-    *scop.MarkDescriptorAsDropped
-      DescID: 61
     *scop.RemoveTypeBackRef
       DescID: 63
       TypeID: 61
-    *scop.MarkDescriptorAsDropped
-      DescID: 62
     *scop.RemoveTypeBackRef
       DescID: 63
       TypeID: 62
-    *scop.DrainDescriptorName
-      TableID: 61
-    *scop.DrainDescriptorName
-      TableID: 62
-    *scop.DeleteDatabaseSchemaEntry
-      DatabaseID: 50
-      SchemaID: 54
-    *scop.MarkDescriptorAsDropped
-      DescID: 54
-PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 50
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 57
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 58
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 59
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 60
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 61
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 62
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 63
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP SCHEMA defaultdb.sc1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [Table:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [ColumnName:{DescID: 56, ColumnID: 1, Name: id}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [ColumnName:{DescID: 56, ColumnID: 2, Name: name}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 2}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [ColumnName:{DescID: 56, ColumnID: 3, Name: val}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 3}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 56, IndexID: 1}, DELETE_AND_WRITE_ONLY, DROP] -> ABSENT
-    [IndexName:{DescID: 56, IndexID: 1, Name: t1_pkey}, PUBLIC, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 56, IndexID: 1}, VALIDATED, DROP] -> ABSENT
     [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 59}, DROPPED, DROP] -> ABSENT
@@ -684,3 +784,39 @@ PostCommitPhase non-revertible stage 1 of 1 with 21 MutationType ops
         Username: root
     *scop.DeleteDescriptor
       DescriptorID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 50
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 57
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 58
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 59
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 60
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 61
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 62
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 63
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1

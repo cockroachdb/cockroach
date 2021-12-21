@@ -76,8 +76,8 @@ type DepEdgeKind int
 const (
 	_ DepEdgeKind = iota
 
-	// Precedence indicates that the source (from) of the edge must be
-	// reached before the destination (to), possibly doing so in the same stage.
+	// Precedence indicates that the source (from) of the edge must be reached
+	// before the destination (to), whether in a previous stage or the same stage.
 	Precedence
 
 	// SameStagePrecedence indicates that the source (from) of the edge must
