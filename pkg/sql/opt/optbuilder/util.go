@@ -214,6 +214,7 @@ func (b *Builder) synthesizeColumn(
 // populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
 // the given existing column rather than allocating a new one.
 func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarExpr) {
+	col.typ = scalar.DataType()
 	colID := b.factory.Metadata().AddColumn(col.name.MetadataName(), col.typ)
 	col.id = colID
 	col.scalar = scalar
