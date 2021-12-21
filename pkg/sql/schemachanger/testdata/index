@@ -47,11 +47,9 @@ upsert descriptor #54
      nextColumnId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
-  -  nextMutationId: 1
   +  nextIndexId: 3
-  +  nextMutationId: 2
+     nextMutationId: 1
      parentId: 50
-     primaryIndex:
   ...
        time: {}
      unexposedParentSchemaId: 51

@@ -528,23 +528,15 @@ func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 	if err != nil {
 		return err
 	}
-	var idx descpb.IndexDescriptor
-	for i := range tbl.Indexes {
-		if tbl.Indexes[i].ID != op.IndexID {
-			continue
+	for i, idx := range tbl.PublicNonPrimaryIndexes() {
+		if idx.GetID() == op.IndexID {
+			desc := idx.IndexDescDeepCopy()
+			tbl.Indexes = append(tbl.Indexes[:i], tbl.Indexes[i+1:]...)
+			return enqueueDropIndexMutation(tbl, &desc)
+
 		}
-		idx = tbl.Indexes[i]
-		tbl.Indexes = append(tbl.Indexes[:i], tbl.Indexes[i+1:]...)
-		break
 	}
-	if len(tbl.Indexes) == 0 {
-		tbl.Indexes = nil
-	}
-	if idx.ID == 0 {
-		return errors.AssertionFailedf("failed to find index %d in descriptor %v",
-			op.IndexID, tbl)
-	}
-	return tbl.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP)
+	return errors.AssertionFailedf("failed to find secondary index %d in descriptor %v", op.IndexID, tbl)
 }
 
 func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
@@ -554,23 +546,14 @@ func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 	if err != nil {
 		return err
 	}
-	var col descpb.ColumnDescriptor
-	for i := range tbl.Columns {
-		if tbl.Columns[i].ID != op.ColumnID {
-			continue
+	for i, col := range tbl.PublicColumns() {
+		if col.GetID() == op.ColumnID {
+			desc := col.ColumnDescDeepCopy()
+			tbl.Columns = append(tbl.Columns[:i], tbl.Columns[i+1:]...)
+			return enqueueDropColumnMutation(tbl, &desc)
 		}
-		col = tbl.Columns[i]
-		tbl.Columns = append(tbl.Columns[:i], tbl.Columns[i+1:]...)
-		break
 	}
-	if len(tbl.Columns) == 0 {
-		tbl.Columns = nil
-	}
-	if col.ID == 0 {
-		return errors.AssertionFailedf("failed to find column %d in %v", col.ID, tbl)
-	}
-	tbl.AddColumnMutation(&col, descpb.DescriptorMutation_DROP)
-	return nil
+	return errors.AssertionFailedf("failed to find column %d in %v", op.ColumnID, tbl)
 }
 
 func (m *visitor) MakeDroppedColumnDeleteOnly(
@@ -681,7 +664,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		tbl.NextColumnID = op.ColumnID + 1
 	}
 
-	tbl.AddColumnMutation(&descpb.ColumnDescriptor{
+	return enqueueAddColumnMutation(tbl, &descpb.ColumnDescriptor{
 		ID:                                op.ColumnID,
 		Name:                              name,
 		Type:                              op.ColumnType,
@@ -697,8 +680,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		PGAttributeNum:                    op.PgAttributeNum,
 		SystemColumnKind:                  op.SystemColumnKind,
 		Virtual:                           op.Virtual,
-	}, descpb.DescriptorMutation_ADD)
-	return nil
+	})
 }
 
 func (m *visitor) MakeDroppedIndexDeleteOnly(
@@ -723,11 +705,11 @@ func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	if err != nil {
 		return err
 	}
-	if tbl.PrimaryIndex.ID != op.IndexID {
+	if tbl.GetPrimaryIndexID() != op.IndexID {
 		return errors.AssertionFailedf("index being dropped (%d) does not match existing primary index (%d).", op.IndexID, tbl.PrimaryIndex.ID)
 	}
-	idx := protoutil.Clone(&tbl.PrimaryIndex).(*descpb.IndexDescriptor)
-	return tbl.AddIndexMutation(idx, descpb.DescriptorMutation_DROP)
+	desc := tbl.GetPrimaryIndex().IndexDescDeepCopy()
+	return enqueueDropIndexMutation(tbl, &desc)
 }
 
 func (m *visitor) MakeAddedIndexDeleteOnly(
@@ -780,17 +762,10 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 		CreatedExplicitly:   true,
 		EncodingType:        encodingType,
 	}
-	if idx.Name == "" {
-		name, err := tabledesc.BuildIndexName(tbl, idx)
-		if err != nil {
-			return err
-		}
-		idx.Name = name
-	}
 	if op.ShardedDescriptor != nil {
 		idx.Sharded = *op.ShardedDescriptor
 	}
-	return tbl.AddIndexMutation(idx, descpb.DescriptorMutation_ADD)
+	return enqueueAddIndexMutation(tbl, idx)
 }
 
 func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstraint) error {
