@@ -61,26 +61,24 @@ func TestInboxCancellation(t *testing.T) {
 
 	typs := []*types.T{types.Int}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
-		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
-		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0), ctx.Done())
+		require.NoError(t, err)
 		// Cancel the context.
 		cancelFn()
-		// Init should encounter an error if the context is canceled.
+		// Init should encounter an error if the flow context is canceled.
 		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Init(ctx) })
-		require.True(t, testutils.IsError(err, "context canceled"), err)
+		require.True(t, testutils.IsError(err, "query execution canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
-		// We expect no error from the stream handler since we canceled it
-		// ourselves (a graceful termination).
-		require.Nil(t, err)
+		require.True(t, testutils.IsError(err, "query execution canceled"), err)
 	})
 
 	t.Run("DuringRecv", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
-		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0), ctx.Done())
+		require.NoError(t, err)
 
 		// Setup reader and stream.
 		go func() {
@@ -98,12 +96,10 @@ func TestInboxCancellation(t *testing.T) {
 		// Now wait for the Inbox to call Recv on the stream.
 		<-recvCalled
 
-		// Cancel the context.
+		// Cancel the flow context.
 		cancelFn()
 		err = <-streamHandlerErrCh
-		// Reader context cancellation is a graceful termination, so no error
-		// should be returned.
-		require.Nil(t, err)
+		require.True(t, testutils.IsError(err, "query execution canceled"), err)
 
 		// The mock RPC layer does not unblock the Recv for us on the server side,
 		// so manually send an io.EOF to the reader goroutine.
@@ -112,15 +108,14 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("StreamHandlerWaitingForReader", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
-		require.NoError(t, err)
-
 		ctx, cancelFn := context.WithCancel(context.Background())
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0), ctx.Done())
+		require.NoError(t, err)
 
 		cancelFn()
 		// A stream arrives but there is no reader.
-		err = <-handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.client.csChan) })
-		require.True(t, testutils.IsError(err, "while waiting for reader"), err)
+		err = <-handleStream(context.Background(), inbox, rpcLayer.server, func() { close(rpcLayer.client.csChan) })
+		require.True(t, testutils.IsError(err, "query execution canceled"), err)
 	})
 }
 
@@ -130,7 +125,7 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0), nil /* flowCtxDone */)
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
@@ -160,7 +155,7 @@ func TestInboxTimeout(t *testing.T) {
 
 	ctx := context.Background()
 
-	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0), ctx.Done())
 	require.NoError(t, err)
 
 	var (
@@ -266,7 +261,7 @@ func TestInboxShutdown(t *testing.T) {
 					inboxCtx, inboxCancel := context.WithCancel(context.Background())
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
-					inbox, err := NewInbox(colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+					inbox, err := NewInbox(colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0), inboxCtx.Done())
 					require.NoError(t, err)
 					c, err := colserde.NewArrowBatchConverter(typs)
 					require.NoError(t, err)
@@ -434,7 +429,7 @@ func TestInboxShutdown(t *testing.T) {
 
 					for i, errCh := range errChans {
 						for err := <-errCh; err != nil; err = <-errCh {
-							if !testutils.IsError(err, "context canceled|artificial timeout") {
+							if !testutils.IsError(err, "context canceled|artificial timeout|query execution canceled") {
 								// Error to keep on draining errors but mark this test as failed.
 								t.Errorf("unexpected error %v from %s goroutine", err, goroutines[goroutineIndices[i]].name)
 							}

@@ -48,10 +48,8 @@ type flowStreamServer interface {
 // to the inbox. Next may be called before RunWithStream, it will just block
 // until the stream is made available or its context is canceled. Note that
 // ownership of the stream is passed from the RunWithStream goroutine to the
-// Next goroutine. In exchange, the RunWithStream goroutine receives the first
-// context passed into Next and listens for cancellation. Returning from
-// RunWithStream (or more specifically, the RPC handler) will unblock Next by
-// closing the stream.
+// Next goroutine. Returning from RunWithStream (or more specifically, the RPC
+// handler) will unblock Next by closing the stream.
 type Inbox struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper
@@ -69,10 +67,9 @@ type Inbox struct {
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
 	streamCh chan flowStreamServer
-	// contextCh is the channel over which the reader goroutine passes the
-	// context to the stream handler so that it can listen for context
-	// cancellation.
-	contextCh chan context.Context
+	// waitForReaderCh is the channel which the reader goroutine closes when it
+	// arrives. This allows for the handler goroutine to wait for the reader.
+	waitForReaderCh chan struct{}
 
 	// timeoutCh is the channel over which an error will be sent if the reader
 	// goroutine should exit while waiting for a stream.
@@ -132,7 +129,10 @@ var _ colexecop.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -149,28 +149,13 @@ func NewInbox(
 		serializer:               s,
 		streamID:                 streamID,
 		streamCh:                 make(chan flowStreamServer, 1),
-		contextCh:                make(chan context.Context, 1),
+		waitForReaderCh:          make(chan struct{}),
 		timeoutCh:                make(chan error, 1),
+		flowCtxDone:              flowCtxDone,
 		errCh:                    make(chan error, 1),
 		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
-	return i, nil
-}
-
-// NewInboxWithFlowCtxDone creates a new Inbox when the done channel of the flow
-// context is available.
-func NewInboxWithFlowCtxDone(
-	allocator *colmem.Allocator,
-	typs []*types.T,
-	streamID execinfrapb.StreamID,
-	flowCtxDone <-chan struct{},
-) (*Inbox, error) {
-	i, err := NewInbox(allocator, typs, streamID)
-	if err != nil {
-		return nil, err
-	}
-	i.flowCtxDone = flowCtxDone
 	return i, nil
 }
 
@@ -184,7 +169,7 @@ func NewInboxWithAdmissionControl(
 	admissionQ *admission.WorkQueue,
 	admissionInfo admission.WorkInfo,
 ) (*Inbox, error) {
-	i, err := NewInboxWithFlowCtxDone(allocator, typs, streamID, flowCtxDone)
+	i, err := NewInbox(allocator, typs, streamID, flowCtxDone)
 	if err != nil {
 		return nil, err
 	}
@@ -205,34 +190,22 @@ func (i *Inbox) close() {
 	}
 }
 
-// checkFlowCtxCancellation returns an error if the flow context has already
-// been canceled.
-func (i *Inbox) checkFlowCtxCancellation() error {
-	select {
-	case <-i.flowCtxDone:
-		return cancelchecker.QueryCanceledError
-	default:
-		return nil
-	}
-}
-
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
-// canceled, the Inbox's host cancels the flow context, a caller of Next cancels
-// the context passed into Init, or any error is encountered on the stream by
-// the Next goroutine.
+// canceled, the Inbox's host cancels the flow context, or any error is
+// encountered on the stream by the Next goroutine (which includes io.EOF that
+// indicates a graceful shutdown - CloseSend() called by the outbox).
 func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
 	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
 	defer log.VEvent(streamCtx, 2, "Inbox exited stream handler")
-	// Pass the stream to the reader goroutine (non-blocking) and get the
-	// context to listen for cancellation.
+	// Pass the stream to the reader goroutine (non-blocking) and wait for the
+	// reader to arrive.
 	i.streamCh <- stream
-	var readerCtx context.Context
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
 		return err
-	case readerCtx = <-i.contextCh:
+	case <-i.waitForReaderCh:
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return errors.Wrap(streamCtx.Err(), "streamCtx error while waiting for reader (remote client canceled)")
@@ -255,12 +228,6 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		// e.g. when the query is canceled, or when another stream encountered
 		// an unrecoverable error forcing it to shutdown the flow.
 		return cancelchecker.QueryCanceledError
-	case <-readerCtx.Done():
-		// readerCtx is canceled, but we don't know whether it was because the
-		// flow context was canceled or for other reason. In the former case we
-		// have an ungraceful shutdown whereas in the latter case we have a
-		// graceful one.
-		return i.checkFlowCtxCancellation()
 	case <-streamCtx.Done():
 		// The client canceled the stream.
 		return errors.Wrap(streamCtx.Err(), "streamCtx error in Inbox stream handler (remote client canceled)")
@@ -293,22 +260,12 @@ func (i *Inbox) Init(ctx context.Context) {
 		case <-i.flowCtxDone:
 			i.errCh <- cancelchecker.QueryCanceledError
 			return cancelchecker.QueryCanceledError
-		case <-i.Ctx.Done():
-			// errToThrow is propagated to the reader of the Inbox.
-			errToThrow := i.Ctx.Err()
-			if err := i.checkFlowCtxCancellation(); err != nil {
-				// This is an ungraceful termination because the flow context
-				// has been canceled.
-				i.errCh <- err
-				errToThrow = err
-			}
-			return errToThrow
 		}
 
 		if i.ctxInterceptorFn != nil {
 			i.ctxInterceptorFn(i.Ctx)
 		}
-		i.contextCh <- i.Ctx
+		close(i.waitForReaderCh)
 		return nil
 	}(); err != nil {
 		// An error occurred while initializing the Inbox and is likely caused
@@ -321,8 +278,8 @@ func (i *Inbox) Init(ctx context.Context) {
 }
 
 // Next returns the next batch. It will block until there is data available.
-// The Inbox will exit when either the context passed in Init() is canceled or
-// when DrainMeta goroutine tells it to do so.
+// The Inbox will exit when either the flow context is canceled or when
+// DrainMeta goroutine tells it to do so.
 func (i *Inbox) Next() coldata.Batch {
 	if i.done {
 		return coldata.ZeroBatch

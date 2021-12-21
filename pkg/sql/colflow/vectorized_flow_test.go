@@ -211,7 +211,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			return colrpc.NewOutbox(allocator, input, typs, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
+			inbox, err := colrpc.NewInbox(allocator, typs, streamID, nil /* flowCtxDone */)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},

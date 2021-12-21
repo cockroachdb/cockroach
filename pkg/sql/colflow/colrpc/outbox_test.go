@@ -52,13 +52,13 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */)
 		wg.Done()
 	}()
 
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
-	inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0), ctx.Done())
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
@@ -132,7 +132,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		// Close the csChan to unblock the Recv goroutine (we don't need it for this
 		// test).
 		close(rpcLayer.client.csChan)
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */)
 
 		require.True(t, atomic.LoadUint32(sourceDrained) == 1)
 	})
@@ -149,7 +149,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		require.NoError(t, err)
 
 		close(rpcLayer.client.csChan)
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */)
 
 		require.True(t, atomic.LoadUint32(sourceDrained) == 1)
 	})

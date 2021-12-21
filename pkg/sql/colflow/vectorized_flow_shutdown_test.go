@@ -218,7 +218,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
-					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
+					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID), ctxLocal.Done())
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					synchronizerInputs = append(
@@ -330,7 +330,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
-					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
+					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID), ctxAnotherRemote.Done())
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -449,9 +449,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				for i := range inboxes {
 					err = <-handleStreamErrCh[i]
-					// We either should get no error or a context cancellation error.
+					// We either should get no error or a cancellation error.
 					if err != nil {
-						require.True(t, testutils.IsError(err, "context canceled"), err)
+						require.True(t, testutils.IsError(err, "canceled"), err)
 					}
 				}
 				wg.Wait()
