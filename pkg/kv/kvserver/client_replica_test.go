@@ -3901,6 +3901,107 @@ func TestTenantID(t *testing.T) {
 
 }
 
+
+//  TestUninitializedMetric 
+// This test examines the following behaviors:
+// TODO(austen) add test description
+func TestUninitializedMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+
+	// Create a config with a sticky-in-mem engine so we can restart the server.
+	// We also configure the settings to be as robust as possible to problems
+	// during stressrace as the setup of the rpc connections seems to somehow
+	// fail sometimes when using secure connections.
+	raftConfig := base.RaftConfig{
+		// Prevent failures under stressrace.
+		RangeLeaseRaftElectionTimeoutMultiplier: 10000,
+	}
+	stickySpecTestServerArgs := base.TestServerArgs{
+		RaftConfig: raftConfig,
+		Insecure:   true,
+		StoreSpecs: []base.StoreSpec{
+			{
+				InMemory:               true,
+				StickyInMemoryEngineID: "1",
+			},
+		},
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				StickyEngineRegistry: stickyEngineRegistry,
+			},
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      stickySpecTestServerArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tenant2 := roachpb.MakeTenantID(2)
+	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
+	t.Run("(1) uninitialized replic is reflected in UninitializedMetric", func(t *testing.T) {
+		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+		sawSnapshot := make(chan struct{}, 1)
+		blockSnapshot := make(chan struct{})
+		tc.AddAndStartServer(t, base.TestServerArgs{
+			RaftConfig: raftConfig,
+			Insecure:   true,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					BeforeSnapshotSSTIngestion: func(
+						snapshot kvserver.IncomingSnapshot,
+						request_type kvserver.SnapshotRequest_Type,
+						strings []string,
+					) error {
+						if snapshot.Desc.RangeID == repl.RangeID {
+							select {
+							case sawSnapshot <- struct{}{}:
+							default:
+							}
+							<-blockSnapshot
+						}
+						return nil
+					},
+				},
+			},
+		})
+
+		// We're going to block the snapshot. We need to retry adding the replica
+		// to the second node as under stressrace, failures can occur due to
+		// networking handshake timeouts.
+		addReplicaErr := make(chan error)
+		addReplica := func() {
+			_, err := tc.AddVoters(tenant2Prefix, tc.Target(1))
+			addReplicaErr <- err
+		}
+		go addReplica()
+		if err := retry.ForDuration(3*time.Minute, func() error {
+			select {
+			case <-sawSnapshot:
+				return nil
+			case err := <-addReplicaErr:
+				go addReplica()
+				return err
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		uninitStore := tc.GetFirstStoreFromServer(t, 1)
+		storeMetrics := uninitStore.Metrics()
+		require.Equal(t, uint64(1), storeMetrics.UninitializedCount)
+		close(blockSnapshot)
+		require.NoError(t, <-addReplicaErr)
+		storeMetrics = uninitStore.Metrics() // now initialized
+		require.Equal(t, uint64(0), storeMetrics.UninitializedCount)
+	})
+}
+
 // TestRangeMigration tests the below-raft migration infrastructure. It checks
 // to see that the version recorded as part of the in-memory ReplicaState
 // is up to date, and in-sync with the persisted state. It also checks to see

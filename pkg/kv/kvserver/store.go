@@ -3013,7 +3013,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			quiescentCount++
 		}
 
-		if rep.IsInitialized() {
+		if !rep.IsInitialized() {
 			uninitializedCount++
 		}
 
