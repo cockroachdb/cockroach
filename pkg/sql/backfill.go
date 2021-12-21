@@ -1157,6 +1157,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)
 		defer close(stopJobDetailsUpdate)
+		if err := sc.jobRegistry.CheckPausepoint("indexbackfill.before_flow"); err != nil {
+			return err
+		}
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := evalCtx
 		sc.distSQLPlanner.Run(
