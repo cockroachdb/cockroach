@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -1501,10 +1502,10 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// DebugCmdsForPebble lists debug commands that access Pebble through the engine
+// DebugCommandsRequiringEncryption lists debug commands that access Pebble through the engine
 // and need encryption flags (injected by CCL code).
 // Note: do NOT include commands that just call Pebble code without setting up an engine.
-var DebugCmdsForPebble = []*cobra.Command{
+var DebugCommandsRequiringEncryption = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
 	debugGCCmd,
@@ -1514,10 +1515,21 @@ var DebugCmdsForPebble = []*cobra.Command{
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
 	debugUnsafeRemoveDeadReplicasCmd,
+	debugRecoverCollectInfoCmd,
+	debugRecoverExecuteCmd,
 }
 
-// All other debug commands go here.
-var debugCmds = append(DebugCmdsForPebble,
+// Debug commands. All commands in this list to be added to root debug command.
+var debugCmds = []*cobra.Command{
+	debugCheckStoreCmd,
+	debugCompactCmd,
+	debugGCCmd,
+	debugIntentCount,
+	debugKeysCmd,
+	debugRaftLogCmd,
+	debugRangeDataCmd,
+	debugRangeDescriptorsCmd,
+	debugUnsafeRemoveDeadReplicasCmd,
 	debugBallastCmd,
 	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
@@ -1533,7 +1545,8 @@ var debugCmds = append(DebugCmdsForPebble,
 	debugListFilesCmd,
 	debugResetQuorumCmd,
 	debugSendKVBatchCmd,
-)
+	debugRecoverCmd,
+}
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
 var DebugCmd = &cobra.Command{
@@ -1630,6 +1643,22 @@ func init() {
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
+
+	f = debugRecoverCollectInfoCmd.Flags()
+	f.VarP(&debugRecoverCollectInfoOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
+
+	f = debugRecoverPlanCmd.Flags()
+	f.StringVarP(&debugRecoverPlanOpts.outputFileName, "plan", "o", "",
+		"filename to write plan to")
+	f.IntSliceVar(&debugRecoverPlanOpts.deadStoreIDs, "dead-store-ids", nil,
+		"list of dead store IDs")
+	f.VarP(&debugRecoverPlanOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
+		cliflags.ConfirmActions.Usage())
+
+	f = debugRecoverExecuteCmd.Flags()
+	f.VarP(&debugRecoverExecuteOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
+	f.VarP(&debugRecoverExecuteOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
+		cliflags.ConfirmActions.Usage())
 
 	f = debugMergeLogsCmd.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
