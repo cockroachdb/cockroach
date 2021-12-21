@@ -6,6 +6,10 @@ exec-ddl
 CREATE TABLE new_abc (a int, b int, c int)
 ----
 
+exec-ddl
+CREATE TABLE dec (k INT PRIMARY KEY, d DECIMAL(10, 2))
+----
+
 # Test a self join.
 opt
 UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = other.a
@@ -357,10 +361,34 @@ update abc
            └── first-agg [as=ac.rowid:18]
                 └── ac.rowid:18
 
+opt
+UPDATE abc SET b = other.d FROM dec AS other WHERE abc.a = other.k
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── column15:15 => b:2
+ └── project
+      ├── columns: column15:15 a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      ├── inner-join (merge)
+      │    ├── columns: a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      │    ├── left ordering: +6
+      │    ├── right ordering: +11
+      │    ├── scan abc
+      │    │    ├── columns: a:6!null b:7 c:8
+      │    │    └── ordering: +6
+      │    ├── scan dec [as=other]
+      │    │    ├── columns: k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      │    │    └── ordering: +11
+      │    └── filters (true)
+      └── projections
+           └── assignment-cast: INT8 [as=column15:15]
+                └── d:12
 
-# Regression test for #61520. The new value for column a (projected as b:8)
-# should be in-scope when building the partial index PUT expression when the
-# value in the FROM clause must be rounded.
+# Regression test for #61520. The new value for column a should be in-scope when
+# building the partial index PUT expression when the value in the FROM clause
+# must be rounded.
 
 exec-ddl
 CREATE TABLE t61520 (
@@ -373,17 +401,17 @@ build
 UPDATE t61520 t SET a = v.b FROM (VALUES (1.0)) v(b) WHERE t.a = v.b RETURNING a, b
 ----
 project
- ├── columns: a:1 b:9
+ ├── columns: a:1!null b:9
  └── update t61520 [as=t]
-      ├── columns: a:1 rowid:2!null column1:9
+      ├── columns: a:1!null rowid:2!null column1:9
       ├── fetch columns: a:5 rowid:6
       ├── update-mapping:
-      │    └── b:10 => a:1
+      │    └── column10:10 => a:1
       ├── check columns: check1:11
       └── project
-           ├── columns: check1:11 a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null b:10
+           ├── columns: check1:11!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column10:10!null
            ├── project
-           │    ├── columns: b:10 a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    ├── columns: column10:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    ├── select
            │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    ├── inner-join (cross)
@@ -397,6 +425,7 @@ project
            │    │    └── filters
            │    │         └── a:5 = column1:9
            │    └── projections
-           │         └── crdb_internal.round_decimal_values(column1:9, 2) [as=b:10]
+           │         └── assignment-cast: DECIMAL(10,2) [as=column10:10]
+           │              └── column1:9
            └── projections
-                └── b:10 > 0 [as=check1:11]
+                └── column10:10 > 0 [as=check1:11]

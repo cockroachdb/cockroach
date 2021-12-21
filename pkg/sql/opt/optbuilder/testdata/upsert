@@ -1743,7 +1743,7 @@ upsert decimals
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a:10 + c_default:12 [as=d_comp:13]
+      │    │    │    │    │    │         └── a:10::DECIMAL + c_default:12::DECIMAL [as=d_comp:13]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
       │    │    │    │    └── aggregations
@@ -1815,7 +1815,7 @@ upsert decimals
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(b_default:8, 1) [as=b_default:11]
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a:10 + c_default:12 [as=d_comp:13]
+      │    │    │    │    │    │         └── a:10::DECIMAL + c_default:12::DECIMAL [as=d_comp:13]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
       │    │    │    │    └── aggregations
@@ -1895,7 +1895,7 @@ upsert decimals
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
       │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── a:10 + c_default:12 [as=d_comp:13]
+      │    │    │    │    │    │    │    │         └── a:10::DECIMAL + c_default:12::DECIMAL [as=d_comp:13]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
       │    │    │    │    │    │    └── aggregations

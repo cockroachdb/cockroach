@@ -1480,13 +1480,13 @@ update cardsinfo [as=ci]
  ├── fetch columns: ci.dealerid:21 ci.cardid:22 buyprice:23 sellprice:24 discount:25 desiredinventory:26 actualinventory:27 maxinventory:28 ci.version:29 discountbuyprice:30 notes:31 oldinventory:32 ci.extra:33
  ├── update-mapping:
  │    ├── actualinventory_new:49 => actualinventory:12
- │    ├── discountbuyprice_comp:53 => discountbuyprice:15
+ │    ├── column53:53 => discountbuyprice:15
  │    ├── notes_default:50 => notes:16
  │    └── oldinventory_default:51 => oldinventory:17
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: discountbuyprice_comp:53 notes_default:50 oldinventory_default:51!null actualinventory_new:49 ci.dealerid:21!null ci.cardid:22!null buyprice:23!null sellprice:24!null discount:25!null desiredinventory:26!null actualinventory:27!null maxinventory:28!null ci.version:29!null discountbuyprice:30 notes:31 oldinventory:32 ci.extra:33 c:36!null q:37!null
+      ├── columns: column53:53!null notes_default:50 oldinventory_default:51!null actualinventory_new:49 ci.dealerid:21!null ci.cardid:22!null buyprice:23!null sellprice:24!null discount:25!null desiredinventory:26!null actualinventory:27!null maxinventory:28!null ci.version:29!null discountbuyprice:30 notes:31 oldinventory:32 ci.extra:33 c:36!null q:37!null
       ├── immutable
       ├── key: (22)
       ├── fd: ()-->(21,50,51), (22)-->(23-33,36,37,49,53), (29)-->(22-28,30-33), (22)==(36), (36)==(22)
@@ -1592,7 +1592,8 @@ update cardsinfo [as=ci]
       │         └── const-agg [as=q:37, outer=(37)]
       │              └── q:37
       └── projections
-           ├── crdb_internal.round_decimal_values(buyprice:23::DECIMAL - discount:25::DECIMAL, 4) [as=discountbuyprice_comp:53, outer=(23,25), immutable]
+           ├── assignment-cast: DECIMAL(10,4) [as=column53:53, outer=(23,25), immutable]
+           │    └── buyprice:23::DECIMAL - discount:25::DECIMAL
            ├── CAST(NULL AS STRING) [as=notes_default:50]
            ├── 0 [as=oldinventory_default:51]
            └── COALESCE(sum_int:47, 0) [as=actualinventory_new:49, outer=(47)]
