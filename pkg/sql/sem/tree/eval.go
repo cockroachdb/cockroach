@@ -3115,7 +3115,7 @@ type EvalDatabase interface {
 		ctx context.Context,
 		specifier HasPrivilegeSpecifier,
 		user security.SQLUsername,
-		kind privilege.Kind,
+		priv privilege.Privilege,
 	) (bool, error)
 }
 
