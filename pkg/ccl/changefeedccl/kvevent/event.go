@@ -79,7 +79,7 @@ type Event struct {
 	flush              bool
 	resolved           *jobspb.ResolvedSpan
 	backfillTimestamp  hlc.Timestamp
-	bufferGetTimestamp time.Time
+	bufferAddTimestamp time.Time
 	approxSize         int
 	alloc              Alloc
 }
@@ -131,9 +131,9 @@ func (b *Event) BackfillTimestamp() hlc.Timestamp {
 	return b.backfillTimestamp
 }
 
-// BufferGetTimestamp is the time this event came out of the buffer.
-func (b *Event) BufferGetTimestamp() time.Time {
-	return b.bufferGetTimestamp
+// BufferAddTimestamp is the time this event came into  the buffer.
+func (b *Event) BufferAddTimestamp() time.Time {
+	return b.bufferAddTimestamp
 }
 
 // Timestamp returns the timestamp of the write if this is a KV event.

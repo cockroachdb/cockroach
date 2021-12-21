@@ -2349,15 +2349,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		beforeEmitRowCh := make(chan struct{}, 2)
-		knobs := f.Server().TestingKnobs().
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-		knobs.BeforeEmitRow = func(_ context.Context) error {
-			<-beforeEmitRowCh
-			return nil
-		}
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
@@ -2369,13 +2360,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 		if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
-		if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c != 0 {
+		if c := s.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 		if c := s.MustGetSQLCounter(`changefeed.flushes`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 		if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
@@ -2391,9 +2379,17 @@ func TestChangefeedMonitoring(t *testing.T) {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 
-		beforeEmitRowCh <- struct{}{}
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		_, _ = foo.Next()
+		enableSLIMetrics = false
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
+		_, err := foo.Next()
+		require.Regexp(t, "cannot create metrics scope", err)
+		require.NoError(t, foo.Close())
+
+		enableSLIMetrics = true
+		foo = feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
+		_, err = foo.Next()
+		require.NoError(t, err)
+
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
@@ -2401,17 +2397,14 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
 				return errors.Errorf(`expected 22 got %d`, c)
 			}
-			if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
+			if c := s.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 22 {
+				return errors.Errorf(`expected 22 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.running`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
-			}
-			if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
@@ -2425,37 +2418,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 			return nil
 		})
 
-		// Not reading from foo will backpressure it and max_behind_nanos will grow.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
-		const expectedLatency = 5 * time.Second
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`,
-			(expectedLatency / 3).String())
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`)
-
-		testutils.SucceedsSoon(t, func() error {
-			waitForBehindNanos := 2 * expectedLatency.Nanoseconds()
-			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c < waitForBehindNanos {
-				return errors.Errorf(
-					`waiting for the feed to be > %d nanos behind got %d`, waitForBehindNanos, c)
-			}
-			return nil
-		})
-
-		// Unblocking the emit should bring the max_behind_nanos back down.
-		// Unfortunately, this is sensitive to how many closed timestamp updates are
-		// received. If we get them too fast, it takes longer to process them then
-		// they come in and we fall continually further behind. The target_duration
-		// and close_fraction settings above are tuned to try to avoid this.
-		close(beforeEmitRowCh)
-		_, _ = foo.Next()
-		testutils.SucceedsSoon(t, func() error {
-			waitForBehindNanos := expectedLatency.Nanoseconds()
-			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c > waitForBehindNanos {
-				return errors.Errorf(
-					`waiting for the feed to be < %d nanos behind got %d`, waitForBehindNanos, c)
-			}
-			return nil
-		})
 
 		// Check that two changefeeds add correctly.
 		// Set cluster settings back so we don't interfere with schema changes.
@@ -2491,10 +2454,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 	}
 	// TODO(ssd): tenant tests skipped because of f.Server() use
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
-	t.Run(`enterprise`, func(t *testing.T) {
-		skip.WithIssue(t, 38443)
-		enterpriseTest(testFn, feedTestNoTenants)
-	})
 }
 
 func TestChangefeedRetryableError(t *testing.T) {
@@ -2534,9 +2493,11 @@ func TestChangefeedRetryableError(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
 		registry := f.Server().JobRegistry().(*jobs.Registry)
 
-		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).ErrorRetries
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		retryCounter := sli.ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
-			if retryCounter.Counter.Count() < 3 {
+			if retryCounter.Value() < 3 {
 				return fmt.Errorf("insufficient error retries detected")
 			}
 			return nil
@@ -2837,13 +2798,17 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		resume <- struct{}{}
 
 		// Verify that the third call to Next() returns an error (the first is the
-		// initial row, the second is the first change. The third should detect the
-		// GC interval mismatch).
-		_, _ = dataExpiredRows.Next()
-		_, _ = dataExpiredRows.Next()
-		if _, err := dataExpiredRows.Next(); !testutils.IsError(err, `GC threshold`) {
-			t.Errorf(`expected "GC threshold" error got: %+v`, err)
+		// initial row, the second is the first change.
+		// Note: rows, and the error message may arrive in any order, so we just loop
+		// until we see an error.
+		for {
+			_, err := dataExpiredRows.Next()
+			if err != nil {
+				require.Regexp(t, `GC threshold`, err)
+				break
+			}
 		}
+
 	}
 	// TODO(ssd): tenant tests skipped because of f.Server() use
 	// in forceTableGC
@@ -2851,10 +2816,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn, feedTestNoTenants))
 	t.Run("cloudstorage", cloudStorageTest(testFn, feedTestNoTenants))
 	t.Run("kafka", kafkaTest(testFn, feedTestNoTenants))
-	t.Run(`webhook`, func(t *testing.T) {
-		skip.WithIssue(t, 66991, "flaky test")
-		webhookTest(testFn, feedTestNoTenants)(t)
-	})
+	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
 }
 
 func TestChangefeedErrors(t *testing.T) {
@@ -3802,10 +3764,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, func(t *testing.T) {
-		skip.WithIssue(t, 67034, "flakey test")
-		webhookTest(testFn)(t)
-	})
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestUnspecifiedPrimaryKey(t *testing.T) {
@@ -4949,7 +4908,7 @@ func (s *memoryHoggingSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	s.mu.Lock()

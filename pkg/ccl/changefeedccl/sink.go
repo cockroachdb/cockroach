@@ -50,7 +50,7 @@ type Sink interface {
 		ctx context.Context,
 		topic TopicDescriptor,
 		key, value []byte,
-		updated hlc.Timestamp,
+		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
 	// EmitResolvedTimestamp enqueues a resolved timestamp message for
@@ -73,6 +73,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	jobID jobspb.JobID,
+	m *sliMetrics,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -93,7 +94,7 @@ func getSink(
 
 	newSink := func() (Sink, error) {
 		if feedCfg.SinkURI == "" {
-			return &bufferSink{}, nil
+			return &bufferSink{metrics: m}, nil
 		}
 
 		switch {
@@ -101,22 +102,23 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, m)
 			})
 		case isWebhookSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts, defaultWorkerCount(), timeutil.DefaultTimeSource{})
+				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts,
+					defaultWorkerCount(), timeutil.DefaultTimeSource{}, m)
 			})
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user,
+					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, m,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets, m)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
@@ -224,12 +226,12 @@ type errorWrapperSink struct {
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
-	topicDescr TopicDescriptor,
+	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
-	r kvevent.Alloc,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated, r); err != nil {
+	if err := s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -289,6 +291,7 @@ type bufferSink struct {
 	alloc   rowenc.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
+	metrics *sliMetrics
 }
 
 // EmitRow implements the Sink interface.
@@ -296,10 +299,11 @@ func (s *bufferSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
+	defer s.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -320,6 +324,8 @@ func (s *bufferSink) EmitResolvedTimestamp(
 	if s.closed {
 		return errors.New(`cannot EmitResolvedTimestamp on a closed sink`)
 	}
+	defer s.metrics.recordResolvedCallback()()
+
 	var noTopic string
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, noTopic, resolved)
 	if err != nil {
@@ -337,6 +343,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 
 // Flush implements the Sink interface.
 func (s *bufferSink) Flush(_ context.Context) error {
+	defer s.metrics.recordFlushRequestCallback()()
 	return nil
 }
 
@@ -386,7 +393,7 @@ func (n *nullSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)

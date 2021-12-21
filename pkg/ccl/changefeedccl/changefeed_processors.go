@@ -90,8 +90,9 @@ type changeAggregator struct {
 	// boundary information.
 	frontier *schemaChangeFrontier
 
-	metrics *Metrics
-	knobs   TestingKnobs
+	metrics    *Metrics
+	sliMetrics *sliMetrics
+	knobs      TestingKnobs
 }
 
 type timestampLowerBoundOracle interface {
@@ -241,9 +242,19 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
 	ca.kvFeedMemMon = kvFeedMemMon
 
-	ca.sink, err = getSink(
-		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID)
+	// The job registry has a set of metrics used to monitor the various jobs it
+	// runs. They're all stored as the `metric.Struct` interface because of
+	// dependency cycles.
+	ca.metrics = ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	ca.sliMetrics, err = ca.metrics.getSLIMetrics(ca.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	if err != nil {
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
+
+	ca.sink, err = getSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -259,14 +270,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.changedRowBuf = &b.buf
 	}
 
-	// The job registry has a set of metrics used to monitor the various jobs it
-	// runs. They're all stored as the `metric.Struct` interface because of
-	// dependency cycles.
-	ca.metrics = ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan)
+	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan, ca.sliMetrics)
 	if err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -284,16 +290,20 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 }
 
 func (ca *changeAggregator) startKVFeed(
-	ctx context.Context, spans []roachpb.Span, initialHighWater hlc.Timestamp, needsInitialScan bool,
+	ctx context.Context,
+	spans []roachpb.Span,
+	initialHighWater hlc.Timestamp,
+	needsInitialScan bool,
+	sm *sliMetrics,
 ) (kvevent.Reader, error) {
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
-		cdcutils.NodeLevelThrottler(&cfg.Settings.SV))
+		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan)
+	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, sm)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -324,6 +334,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	buf kvevent.Writer,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
+	sm *sliMetrics,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
@@ -351,6 +362,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		BackfillCheckpoint: ca.spec.Checkpoint.Spans,
 		Targets:            ca.spec.Feed.Targets,
 		Metrics:            &ca.metrics.KVFeedMetrics,
+		OnBackfillCallback: ca.sliMetrics.getBackfillCallback(),
 		MM:                 ca.kvFeedMemMon,
 		InitialHighWater:   initialHighWater,
 		WithDiff:           withDiff,
@@ -497,19 +509,15 @@ func (ca *changeAggregator) tick() error {
 		return err
 	}
 
-	if event.BufferGetTimestamp() == (time.Time{}) {
-		// We could gracefully handle this instead of panic'ing, but
-		// we'd really like to be able to reason about this data, so
-		// instead we're defensive. If this is ever seen in prod without
-		// breaking a unit test, then we have a pretty severe test
-		// coverage issue.
-		panic(`unreachable: bufferGetTimestamp is set by all codepaths`)
-	}
-	processingNanos := timeutil.Since(event.BufferGetTimestamp()).Nanoseconds()
-	ca.metrics.ProcessingNanos.Inc(processingNanos)
+	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
+	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
 
 	switch event.Type() {
 	case kvevent.TypeKV:
+		// Keep track of SLI latency for non-backfill/rangefeed KV events.
+		if event.BackfillTimestamp().IsEmpty() {
+			ca.sliMetrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
+		}
 		return ca.eventConsumer.ConsumeEvent(ca.Ctx, event)
 	case kvevent.TypeResolved:
 		a := event.DetachAlloc()
@@ -704,7 +712,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	}
 	if err := c.sink.EmitRow(
 		ctx, tableDescriptorTopic{r.tableDesc},
-		keyCopy, valueCopy, r.updated, ev.DetachAlloc(),
+		keyCopy, valueCopy, r.updated, r.mvccTimestamp, ev.DetachAlloc(),
 	); err != nil {
 		return err
 	}
@@ -867,7 +875,8 @@ func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) e
 		return err
 	}
 
-	return c.sink.EmitRow(ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp, ev.DetachAlloc())
+	return c.sink.EmitRow(
+		ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp, val.Timestamp, ev.DetachAlloc())
 }
 
 const (
@@ -1090,12 +1099,23 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 	cf.input.Start(ctx)
 
+	// The job registry has a set of metrics used to monitor the various jobs it
+	// runs. They're all stored as the `metric.Struct` interface because of
+	// dependency cycles.
+	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
+	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+
 	// Pass a nil oracle because this sink is only used to emit resolved timestamps
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
+	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	if err != nil {
+		cf.MoveToDraining(err)
+		return
+	}
 	cf.sink, err = getSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
-		cf.spec.User(), cf.spec.JobID)
+		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -1107,12 +1127,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.resolvedBuf = &b.buf
 	}
 
-	// The job registry has a set of metrics used to monitor the various jobs it
-	// runs. They're all stored as the `metric.Struct` interface because of
-	// dependency cycles.
-	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
-	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
