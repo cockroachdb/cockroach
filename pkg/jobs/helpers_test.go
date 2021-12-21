@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // FakeResumer calls optional callbacks during the job lifecycle.
@@ -93,6 +95,27 @@ func (j *Job) Failed(ctx context.Context, causingErr error) error {
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
+}
+
+// TestingCurrentStatus returns the current job status from the jobs table or error.
+func (j *Job) TestingCurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
+	var statusString tree.DString
+	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, j.ID())
+		if err != nil {
+			return errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
+		}
+		if row == nil {
+			return errors.Errorf("job %d: not found in system.jobs", j.ID())
+		}
+
+		statusString = tree.MustBeDString(row[0])
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return Status(statusString), nil
 }
 
 const (
