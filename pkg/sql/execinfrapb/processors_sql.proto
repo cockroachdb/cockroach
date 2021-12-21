@@ -840,6 +840,8 @@ message AggregatorSpec {
     REGR_COUNT = 43;
     REGR_AVGX = 44;
     REGR_AVGY = 45;
+    FINAL_STDDEV_POP = 46;
+    FINAL_VAR_POP = 47;
   }
 
   enum Type {

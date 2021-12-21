@@ -158,23 +158,47 @@ func (p *planner) CheckPrivilege(
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
 
-// CheckGrantOption calls ValidateGrantPrivileges(), which will return an error if a user
-// tries to grant a privilege it does not have grant options for.
-func (p *planner) CheckGrantOption(
+// CheckGrantOptionsForUser calls PrivilegeDescriptor.CheckGrantOptions, which
+// will return an error if a user tries to grant a privilege it does not have
+// grant options for. Owners implicitly have all grant options, and also grant
+// options are inherited from parent roles.
+func (p *planner) CheckGrantOptionsForUser(
 	ctx context.Context, descriptor catalog.Descriptor, privList privilege.List, isGrant bool,
 ) error {
-	// Always allow the command to go through if performed by a superuser or the owner of the object
-	if admin, _ := p.UserHasAdminRole(ctx, p.User()); admin {
-		return nil
-	}
-
-	if IsOwner(descriptor, p.User()) {
+	user := p.User()
+	// Always allow the command to go through if performed by a superuser or the
+	// owner of the object
+	if isAdmin, err := p.UserHasAdminRole(ctx, user); err != nil {
+		return err
+	} else if isAdmin {
 		return nil
 	}
 
 	privs := descriptor.GetPrivileges()
-	err := privs.ValidateGrantPrivileges(p.User(), privList, isGrant)
-	return err
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
+		return IsOwner(descriptor, role) || privs.CheckGrantOptions(role, privList)
+	})
+	if err != nil {
+		return err
+	}
+	if hasPriv {
+		return nil
+	}
+
+	code := pgcode.WarningPrivilegeNotGranted
+	if !isGrant {
+		code = pgcode.WarningPrivilegeNotRevoked
+	}
+	if privList.Len() > 1 {
+		return pgerror.Newf(
+			code, "user %s missing WITH GRANT OPTION privilege on one or more of %s",
+			user, privList.String(),
+		)
+	}
+	return pgerror.Newf(
+		code, "user %s missing WITH GRANT OPTION privilege on %s",
+		user, privList.String(),
+	)
 }
 
 func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {

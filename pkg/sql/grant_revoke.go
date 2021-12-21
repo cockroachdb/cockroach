@@ -166,8 +166,12 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 
-		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
-			return err
+		// The check for GRANT is only needed before the v22.1 upgrade is finalized.
+		// Otherwise, we check grant options later in this function.
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+			if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
+				return err
+			}
 		}
 
 		if len(n.desiredprivs) > 0 {
@@ -181,7 +185,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			privileges := descriptor.GetPrivileges()
 
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOption(ctx, descriptor, n.desiredprivs, n.isGrant)
+				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, n.isGrant)
 				if err != nil {
 					return err
 				}
