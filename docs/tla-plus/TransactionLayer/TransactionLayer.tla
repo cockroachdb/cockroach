@@ -228,7 +228,7 @@ PipeLineWrite(tid) ==
                                                      /\ FALSE
                                                   \/ /\ ostatus = "pending"
                                                      \* Compare priority.
-                                                     /\ \/ \* Push ts of conflict txn,and retry it.
+                                                     /\ \/ \* Push ts of conflicting txn,and retry it.
                                                            /\ Record' = [Record EXCEPT ![otid] = [ts      |-> System_ts,
                                                                                                  \* Set status according to attempt.
                                                                                                   status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
@@ -239,7 +239,7 @@ PipeLineWrite(tid) ==
                                                            /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1,![otid] = 1]
                                                            /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
                                                            
-                                                        \/ \* retry myself.
+                                                        \/ \* Retry myself.
                                                            /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
                                                                                                  \* Set status according to attempt.
                                                                                                  status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
@@ -290,7 +290,7 @@ PipeLineWrite(tid) ==
                                          /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                          /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>>
                                       \/ /\ iw /= Nil
-                                         \* compare priority
+                                         \* Compare priority
                                          /\ LET otid    == iw.tid
                                                 ots     == Record[otid].ts
                                                 ostatus == Record[otid].status
@@ -298,7 +298,7 @@ PipeLineWrite(tid) ==
                                                 iwv     == iw.value
                                             IN /\ \/ /\ otid = tid
                                                      \* This Intent_write was written by myself.
-                                                     \* Ignore it and read MVCCData according to ts.
+                                                     \* Ignore it and update Intent_write.
                                                      /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
                                                                                                        value |-> value,
                                                                                                        ts    |-> ts]]
@@ -308,7 +308,7 @@ PipeLineWrite(tid) ==
                                                      \* This is a txn conflict.
                                                      \* Handle this conflict according to status.
                                                      /\ \/ /\ ostatus = "committed"
-                                                           \* Persist this Intent_write and write Intent_write.
+                                                           \* Persist this Intent_write and update Intent_write.
                                                            /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
                                                                                                              value |-> value,
                                                                                                              ts    |-> ts]]
@@ -318,7 +318,7 @@ PipeLineWrite(tid) ==
                                                            /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                                            /\ UNCHANGED <<Record,System_ts,Read_result,Tscache,Tocheck>> 
                                                         \/ /\ ostatus = "aborted"
-                                                           \* Delete this Intent_write and write Intent_write.
+                                                           \* Update Intent_write.
                                                            /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
                                                                                                              value |-> value,
                                                                                                              ts    |-> ts]]
@@ -328,11 +328,11 @@ PipeLineWrite(tid) ==
                                                            /\ FALSE
                                                         \/ /\ ostatus = "pending"
                                                            \* Compare priority.
-                                                           /\ \/ \* aborts the conflicting transaction
+                                                           /\ \/ \* Abort the conflicting transaction.
                                                                  /\ Record' = [Record EXCEPT ![otid].status = "aborted"]
                                                                  /\ Read_result' = [Read_result EXCEPT ![otid] = <<>>]
                                                                  /\ UNCHANGED <<MVCCData,System_ts,Txn_exeid,Intent_write,Tscache,Tocheck>> 
-                                                              \/ \* retry myself
+                                                              \/ \* Retry myself
                                                                  /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
                                                                                                        \* Set status according to attempt.
                                                                                                        status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
