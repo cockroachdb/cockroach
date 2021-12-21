@@ -43,7 +43,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager()
+				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -80,7 +80,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager()
+				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -114,7 +114,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager()
+				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
 				}
@@ -150,13 +150,13 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]*types.T{types.Bytes},
 				[]string{"stream_event"},
 			),
-			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
-				mgr, err := streaming.GetReplicationStreamManager()
+			func(evalCtx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
 				}
 				return mgr.StreamPartition(
-					ctx,
+					evalCtx,
 					streaming.StreamID(tree.MustBeDInt(args[0])),
 					[]byte(tree.MustBeDBytes(args[1])),
 				)
