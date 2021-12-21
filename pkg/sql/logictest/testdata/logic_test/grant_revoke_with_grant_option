@@ -19,6 +19,9 @@ GRANT ALL PRIVILEGES ON table t to testuser2
 # switch to root
 user root
 
+statement error grant options cannot be granted to "public" role
+GRANT ALL PRIVILEGES ON TABLE t TO public WITH GRANT OPTION
+
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t TO testuser WITH GRANT OPTION
 
