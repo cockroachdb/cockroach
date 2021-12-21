@@ -498,6 +498,10 @@ CREATE TABLE system.statement_statistics (
     statistics JSONB NOT NULL,
     plan JSONB NOT NULL,
 
+    crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (
+      mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)
+    ) STORED,
+
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH BUCKET_COUNT = 8,
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
@@ -513,6 +517,11 @@ CREATE TABLE system.statement_statistics (
 			metadata,
 			statistics,
 			plan
+		),
+		CONSTRAINT check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 CHECK (
+			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (
+				0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8
+			)
 		)
 )
 `
@@ -528,6 +537,10 @@ CREATE TABLE system.transaction_statistics (
     metadata   JSONB NOT NULL,
     statistics JSONB NOT NULL,
 
+    crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (
+      mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8
+    )) STORED,
+
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
       USING HASH WITH BUCKET_COUNT = 8,
     INDEX "fingerprint_stats_idx" (fingerprint_id),
@@ -540,6 +553,11 @@ CREATE TABLE system.transaction_statistics (
 			agg_interval,
 			metadata,
 			statistics
+		),
+		CONSTRAINT check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 CHECK (
+			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (
+				0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8
+			)
 		)
 );
 `
@@ -661,8 +679,8 @@ var (
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
-	sqlTxnHashComputeExpr  = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
+	sqlStmtHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
+	sqlTxnHashComputeExpr  = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
 )
 
 const (

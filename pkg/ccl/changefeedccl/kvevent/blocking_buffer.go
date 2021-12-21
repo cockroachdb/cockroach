@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -48,8 +49,10 @@ type blockingBuffer struct {
 func NewMemBuffer(
 	acc mon.BoundAccount, sv *settings.Values, metrics *Metrics, opts ...quotapool.Option,
 ) Buffer {
+	const slowAcquisitionThreshold = 5 * time.Second
+
 	opts = append(opts,
-		quotapool.OnSlowAcquisition(5*time.Second, quotapool.LogSlowAcquisition),
+		quotapool.OnSlowAcquisition(slowAcquisitionThreshold, logSlowAcquisition(slowAcquisitionThreshold)),
 		quotapool.OnWaitFinish(
 			func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) {
 				metrics.BufferPushbackNanos.Inc(timeutil.Since(start).Nanoseconds())
@@ -435,4 +438,25 @@ func (ap allocPool) Release(ctx context.Context, bytes, entries int64) {
 		ap.metrics.BufferEntriesReleased.Inc(entries)
 		return true
 	})
+}
+
+// logSlowAcquisition is a function returning a quotapool.SlowAcquisitionFunction.
+// It differs from the quotapool.LogSlowAcquisition in that only some of slow acquisition
+// events are logged to reduce log spam.
+func logSlowAcquisition(slowAcquisitionThreshold time.Duration) quotapool.SlowAcquisitionFunc {
+	logSlowAcquire := log.Every(slowAcquisitionThreshold)
+
+	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
+		shouldLog := logSlowAcquire.ShouldLog()
+		if shouldLog {
+			log.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota",
+				timeutil.Since(start))
+		}
+
+		return func() {
+			if shouldLog {
+				log.Infof(ctx, "acquired changefeed quota after %s", timeutil.Since(start))
+			}
+		}
+	}
 }
