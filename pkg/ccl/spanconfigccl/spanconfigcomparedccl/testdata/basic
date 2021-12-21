@@ -37,47 +37,9 @@ configs version=current offset=4 limit=3
 /Table/11                                  range system
 ...
 
-# The gossiped system config span splits (needlessly) on pseudo table IDs; the
-# new subsystem doesn't.
-#
-#   MetaRangesID                         = 16 // pseudo
-#   SystemRangesID                       = 17 // pseudo
-#   TimeseriesRangesID                   = 18 // pseudo
-#   LivenessRangesID                     = 22 // pseudo
-#   PublicSchemaID                       = 29 // pseudo
-#   TenantsRangesID                      = 38 // pseudo
-
-diff offset=2 limit=21
-----
---- gossiped system config span (legacy)
-+++ span config infrastructure (current)
-...
- /Table/15                                  range system
--/Table/16                                  range system
--/Table/17                                  range system
--/Table/18                                  range system
- /Table/19                                  range system
- /Table/20                                  range system
- /Table/21                                  range system
--/Table/22                                  range system
- /Table/23                                  range system
- /Table/24                                  range system
-@@ -23,5 +19,4 @@
- /Table/27                                  ttl_seconds=600 num_replicas=5
- /Table/28                                  range system
--/Table/29                                  range system
- /NamespaceTable/30                         range system
- /NamespaceTable/Max                        range system
-@@ -32,5 +27,4 @@
- /Table/36                                  range system
- /Table/37                                  range system
--/Table/38                                  range system
- /Table/39                                  range system
- ...
-
 # Both subsystems observe splits for the tables created above.
 
-configs version=current offset=35
+configs version=current offset=41
 ----
 ...
 /Table/46                                  range system
@@ -92,5 +54,11 @@ configs version=legacy offset=41
 /Table/47                                  range system
 /Table/56                                  num_replicas=7 num_voters=5
 /Table/57                                  num_replicas=7
+
+# Both subsystems are identical with respect to exposed configs (including for
+# pseudo table IDs).
+
+diff
+----
 
 # vim:ft=diff

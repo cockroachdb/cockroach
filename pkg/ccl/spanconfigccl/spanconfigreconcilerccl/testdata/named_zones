@@ -120,7 +120,7 @@ state limit=5
 /System{tse-/Max}                          ttl_seconds=50
 ...
 
-state offset=40
+state offset=46
 ----
 ...
 /Table/4{7-8}                              range system
@@ -135,7 +135,7 @@ mutations
 ----
 upsert /Table/5{7-8}                       ttl_seconds=50
 
-state offset=40
+state offset=46
 ----
 ...
 /Table/4{7-8}                              range system
