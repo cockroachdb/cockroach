@@ -875,7 +875,6 @@ func (f *clusterFactory) newCluster(
 		// Local clusters never expire.
 		cfg.spec.Lifetime = 100000 * time.Hour
 	}
-	exp := cfg.spec.Expiration()
 
 	setStatus("acquiring cluster creation semaphore")
 	release := f.acquireSem()
@@ -883,6 +882,22 @@ func (f *clusterFactory) newCluster(
 
 	setStatus("roachprod create")
 	defer setStatus("idle")
+
+	providerOptsContainer := vm.CreateProviderOptionsContainer()
+	// The ClusterName is set below in the retry loop to ensure
+	// that each create attempt gets a unique cluster name.
+	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.spec.Cloud != spec.Local {
+		providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
+	}
+
+	createFlagsOverride(overrideFlagset, &createVMOpts)
+	// Make sure expiration is changed if --lifetime override flag
+	// is passed.
+	cfg.spec.Lifetime = createVMOpts.Lifetime
 
 	// Attempt to create a cluster several times to be able to move past
 	// temporary flakiness in the cloud providers.
@@ -896,7 +911,7 @@ func (f *clusterFactory) newCluster(
 			// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
 			name:           f.genName(cfg),
 			spec:           cfg.spec,
-			expiration:     exp,
+			expiration:     cfg.spec.Expiration(),
 			encryptDefault: encrypt.asBool(),
 			r:              f.r,
 			destroyState: destroyState{
@@ -906,24 +921,10 @@ func (f *clusterFactory) newCluster(
 		}
 		c.status("creating cluster")
 
-		providerOptsContainer := vm.CreateProviderOptionsContainer()
-		createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts(c.name, cfg.useIOBarrier)
-		if err != nil {
-			return nil, err
-		}
-		if cfg.spec.Cloud != spec.Local {
-			providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
-		}
-
-		createFlagsOverride(overrideFlagset, &createVMOpts)
-		// Make sure c.expiration is changed if --lifetime override flag is passed.
-		cfg.spec.Lifetime = createVMOpts.Lifetime
-		c.expiration = cfg.spec.Expiration()
-
 		// Logs for creating a new cluster go to a dedicated log file.
 		var retryStr string
-		if i > 0 {
-			retryStr = "-retry" + strconv.Itoa(i)
+		if i > 1 {
+			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
