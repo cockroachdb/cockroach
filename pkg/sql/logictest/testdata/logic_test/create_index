@@ -230,3 +230,17 @@ CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
 
 statement error index with name "'t1-esc-index'" already exists
 CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
+
+subtest pause
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow'
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL)
+
+statement ok
+INSERT INTO tbl VALUES (1, 100), (2, 200), (3, 300);
+
+statement error job .* was paused before it completed with reason: pause point "indexbackfill.before_flow" hit
+CREATE INDEX idx ON tbl(j);
