@@ -91,6 +91,30 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 	return response, nil
 }
 
+// CancelStatementDiagnosticsReport cancels the statement diagnostics request by
+// updating the corresponding row from the system.statement_diagnostics_requests
+// table to be expired.
+func (s *statusServer) CancelStatementDiagnosticsReport(
+	ctx context.Context, req *serverpb.CancelStatementDiagnosticsReportRequest,
+) (*serverpb.CancelStatementDiagnosticsReportResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	var response serverpb.CancelStatementDiagnosticsReportResponse
+	err := s.stmtDiagnosticsRequester.CancelRequest(ctx, req.StatementFingerprint)
+	if err != nil {
+		response.Canceled = false
+		response.Error = err.Error()
+	} else {
+		response.Canceled = true
+	}
+	return &response, nil
+}
+
 // StatementDiagnosticsRequests retrieves all of the statement
 // diagnostics requests in the `system.statement_diagnostics_requests` table.
 func (s *statusServer) StatementDiagnosticsRequests(

@@ -680,3 +680,130 @@ descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is
 
 statement ok
 DROP TABLE poor_t
+
+subtest fk_reference_shard_pk
+
+statement ok
+DROP TABLE IF EXISTS child
+
+statement ok
+DROP TABLE IF EXISTS parent
+
+statement ok
+CREATE TABLE parent (
+    id INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+);
+
+statement ok
+CREATE TABLE child (
+    id INT PRIMARY KEY,
+    pid INT,
+    CONSTRAINT fk_child_pid FOREIGN KEY (pid) REFERENCES parent(id) ON DELETE CASCADE
+);
+
+statement error pq: insert on table "child" violates foreign key constraint "fk_child_pid"
+INSERT INTO child VALUES (1,1)
+
+statement ok
+INSERT INTO parent VALUES (1)
+
+statement ok
+INSERT INTO child VALUES (1,1)
+
+subtest fk_reference_shard_index
+
+statement ok
+DROP TABLE IF EXISTS child
+
+statement ok
+DROP TABLE IF EXISTS parent
+
+statement ok
+CREATE TABLE parent (
+    id INT PRIMARY KEY,
+    oid INT
+);
+
+statement ok
+CREATE UNIQUE INDEX t_idx_oid ON parent(oid) USING HASH WITH BUCKET_COUNT = 8
+
+statement ok
+CREATE TABLE child (
+    id INT PRIMARY KEY,
+    poid INT,
+    CONSTRAINT fk_child_pid FOREIGN KEY (poid) REFERENCES parent(oid) ON DELETE CASCADE
+);
+
+statement error pq: insert on table "child" violates foreign key constraint "fk_child_pid"
+INSERT INTO child VALUES (1,11)
+
+statement ok
+INSERT INTO parent VALUES (1,11)
+
+statement ok
+INSERT INTO child VALUES (1,11)
+
+subtest fk_reference_shard_pk_multi_col
+
+statement ok
+DROP TABLE IF EXISTS child
+
+statement ok
+DROP TABLE IF EXISTS parent
+
+statement ok
+CREATE TABLE parent (
+    a INT NOT NULL,
+    b INT NOT NULL,
+    PRIMARY KEY (a, b) USING HASH WITH BUCKET_COUNT = 8
+);
+
+statement ok
+CREATE TABLE child (
+    ca INT PRIMARY KEY,
+    cb INT,
+    CONSTRAINT fk_child_ca_cb FOREIGN KEY (ca, cb) REFERENCES parent(a, b) ON DELETE CASCADE
+);
+
+statement error pq: insert on table "child" violates foreign key constraint "fk_child_ca_cb"
+INSERT INTO child VALUES (1,1)
+
+statement ok
+INSERT INTO parent VALUES (1,1)
+
+statement ok
+INSERT INTO child VALUES (1,1)
+
+subtest fk_reference_shard_index_multi_col
+
+statement ok
+DROP TABLE IF EXISTS child
+
+statement ok
+DROP TABLE IF EXISTS parent
+
+statement ok
+CREATE TABLE parent (
+    a INT,
+    b INT
+);
+
+statement ok
+CREATE UNIQUE INDEX t_idx_a_b ON parent(a, b) USING HASH WITH BUCKET_COUNT = 8
+
+
+statement ok
+CREATE TABLE child (
+    ca INT PRIMARY KEY,
+    cb INT,
+    CONSTRAINT fk_child_ca_cb FOREIGN KEY (ca, cb) REFERENCES parent(a, b) ON DELETE CASCADE
+);
+
+statement error pq: insert on table "child" violates foreign key constraint "fk_child_ca_cb"
+INSERT INTO child VALUES (1,1)
+
+statement ok
+INSERT INTO parent VALUES (1,1)
+
+statement ok
+INSERT INTO child VALUES (1,1)
