@@ -86,6 +86,7 @@ var ErrProjectionNotFound error = errors.New("projection not found")
 // Projection returns the ProjInfo for the given SRID, as well as an
 // error if the projection does not exist.
 func Projection(srid geopb.SRID) (ProjInfo, error) {
+	projections := getProjections()
 	p, exists := projections[srid]
 	if !exists {
 		return ProjInfo{}, errors.Mark(
@@ -108,6 +109,7 @@ func MustProjection(srid geopb.SRID) ProjInfo {
 
 // AllProjections returns a sorted list of all projections.
 func AllProjections() []ProjInfo {
+	projections := getProjections()
 	ret := make([]ProjInfo, 0, len(projections))
 	for _, p := range projections {
 		ret = append(ret, p)
