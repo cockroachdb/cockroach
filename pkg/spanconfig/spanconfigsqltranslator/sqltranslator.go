@@ -73,6 +73,7 @@ func (s *SQLTranslator) Translate(
 		// IDs that have span configurations associated for them. We also
 		// de-duplicate leaf IDs to not generate redundant entries.
 		seen := make(map[descpb.ID]struct{})
+		addedPseudoTableSpans := false
 		var leafIDs descpb.IDs
 		for _, id := range ids {
 			descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, txn, descsCol)
@@ -84,6 +85,42 @@ func (s *SQLTranslator) Translate(
 					seen[descendantLeafID] = struct{}{}
 					leafIDs = append(leafIDs, descendantLeafID)
 				}
+			}
+
+			if (id == keys.SystemDatabaseID || id == keys.RootNamespaceID) && s.codec.ForSystemTenant() {
+				if addedPseudoTableSpans {
+					continue
+				}
+				// We have special handling for the system database (and RANGE
+				// DEFAULT, which the system database inherits from). The system
+				// config span infrastructure generates splits along (empty)
+				// pseudo table boundaries -- we do the same. Not doing so is
+				// safe, but this helps reduce the differences between the two
+				// subsystems which has practical implications for our bootstrap
+				// code and tests that bake in assumptions about these splits.
+				// While the two systems exist side-by-side, it's easier to just
+				// minimize these differences (it also removes the tiny
+				// re-splitting costs when switching between them). We can get
+				// rid of this special handling once the system config span is
+				// removed (#70560).
+				for _, pseudoTableID := range keys.PseudoTableIDs {
+					zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.SystemDatabaseID)
+					if err != nil {
+						return err
+					}
+
+					tableStartKey := s.codec.TablePrefix(pseudoTableID)
+					tableEndKey := tableStartKey.PrefixEnd()
+					tableSpanConfig := zone.AsSpanConfig()
+					entries = append(entries, roachpb.SpanConfigEntry{
+						Span: roachpb.Span{
+							Key:    tableStartKey,
+							EndKey: tableEndKey,
+						},
+						Config: tableSpanConfig,
+					})
+				}
+				addedPseudoTableSpans = true
 			}
 		}
 
