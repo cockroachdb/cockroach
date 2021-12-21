@@ -20,7 +20,6 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
-        "//pkg/util/ctxgroup",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -29,7 +28,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_linkedin_goavro_v2//:goavro",
-        "@dev_gocloud//pubsub",
     ],
 )
 

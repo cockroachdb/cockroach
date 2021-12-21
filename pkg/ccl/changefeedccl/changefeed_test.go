@@ -119,11 +119,11 @@ func TestChangefeedBasics(t *testing.T) {
 		})
 	}
 
-	//t.Run(`sinkless`, sinklessTest(testFn))
-	//t.Run(`enterprise`, enterpriseTest(testFn))
-	//t.Run(`cloudstorage`, cloudStorageTest(testFn))
-	//t.Run(`kafka`, kafkaTest(testFn))
-	//t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 	t.Run(`pubsub`, pubsubTest(testFn))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
@@ -1396,7 +1396,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn, feedTestNoTenants))
 	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
 	t.Run(`webhook`, webhookTest(testFn, feedTestNoTenants))
-	//t.Run(`pubsub`, pubsubTest(testFn, feedTestNoTenants))
+	t.Run(`pubsub`, pubsubTest(testFn, feedTestNoTenants))
 	//failing on payloads violate CDC per-key ordering guarantees for multiple altars
 	//because mempubsub does not guarantee ordering of keys
 	//https://github.com/google/go-cloud/blob/master/pubsub/mempubsub/mem.go#L262-L264
@@ -2621,7 +2621,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 type alwaysAliveSession string
@@ -3438,7 +3438,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
@@ -3485,7 +3485,7 @@ func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedProtectedTimestamps(t *testing.T) {
@@ -3730,7 +3730,7 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 		t.Run(`cloudstorage`, cloudStorageTest(testFn(shouldPause), feedTestNoTenants))
 		t.Run(`kafka`, kafkaTest(testFn(shouldPause), feedTestNoTenants))
 		t.Run(`webhook`, webhookTest(testFn(shouldPause), feedTestNoTenants))
-		//t.Run(`pubsub`, pubsubTest(testFn(shouldPause), feedTestNoTenants))
+		t.Run(`pubsub`, pubsubTest(testFn(shouldPause), feedTestNoTenants))
 	})
 
 }
@@ -4271,7 +4271,7 @@ INSERT INTO foo VALUES (1, 'f');
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 // Primary key changes are supported by changefeeds starting in 21.1. This test
@@ -4373,7 +4373,7 @@ INSERT INTO bar VALUES (6, 'f');
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 // TestChangefeedCheckpointSchemaChange tests to make sure that writes that
@@ -4885,7 +4885,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
