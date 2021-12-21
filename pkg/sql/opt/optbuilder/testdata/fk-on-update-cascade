@@ -731,6 +731,86 @@ root
                                     ├── c:50 = child_multi.c:52
                                     └── q:51 = child_multi.q:54
 
+# Test a cascade to a child that requires an assignment cast because the
+# referencing column type is not identical to the referenced column type.
+exec-ddl
+CREATE TABLE parent_assn_cast (p DECIMAL(10, 2) PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_assn_cast (
+  c INT PRIMARY KEY,
+  p DECIMAL(10, 0) REFERENCES parent_assn_cast(p) ON UPDATE CASCADE
+)
+----
+
+build-cascades
+UPDATE parent_assn_cast SET p = 1.45 WHERE p > 1
+----
+root
+ ├── update parent_assn_cast
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── update-mapping:
+ │    │    └── column8:8 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_assn_cast_p_fkey
+ │    └── project
+ │         ├── columns: column8:8!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── project
+ │         │    ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── select
+ │         │    │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    │    ├── scan parent_assn_cast
+ │         │    │    │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    │    └── filters
+ │         │    │         └── p:4 > 1
+ │         │    └── projections
+ │         │         └── 1.45 [as=p_new:7]
+ │         └── projections
+ │              └── assignment-cast: DECIMAL(10,2) [as=column8:8]
+ │                   └── p_new:7
+ └── cascade
+      └── update child_assn_cast
+           ├── columns: <none>
+           ├── fetch columns: c:13 child_assn_cast.p:14
+           ├── update-mapping:
+           │    └── column19:19 => child_assn_cast.p:10
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: column19:19!null c:13!null child_assn_cast.p:14!null p_old:17!null p_new:18!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: c:13!null child_assn_cast.p:14!null p_old:17!null p_new:18!null
+           │    │    ├── scan child_assn_cast
+           │    │    │    └── columns: c:13!null child_assn_cast.p:14
+           │    │    ├── select
+           │    │    │    ├── columns: p_old:17!null p_new:18!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p_old:17!null p_new:18!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  parent_assn_cast.p:4 => p_old:17
+           │    │    │    │         └──  column8:8 => p_new:18
+           │    │    │    └── filters
+           │    │    │         └── p_old:17 IS DISTINCT FROM p_new:18
+           │    │    └── filters
+           │    │         └── child_assn_cast.p:14 = p_old:17
+           │    └── projections
+           │         └── assignment-cast: DECIMAL(10) [as=column19:19]
+           │              └── p_new:18
+           └── f-k-checks
+                └── f-k-checks-item: child_assn_cast(p) -> parent_assn_cast(p)
+                     └── anti-join (hash)
+                          ├── columns: p:20!null
+                          ├── with-scan &2
+                          │    ├── columns: p:20!null
+                          │    └── mapping:
+                          │         └──  column19:19 => p:20
+                          ├── scan parent_assn_cast
+                          │    └── columns: parent_assn_cast.p:21!null
+                          └── filters
+                               └── p:20 = parent_assn_cast.p:21
+
 # Test a cascade to a child with a partial index.
 exec-ddl
 CREATE TABLE parent_partial (p INT PRIMARY KEY)
@@ -1246,71 +1326,80 @@ root
            ├── columns: <none>
            ├── fetch columns: t.public.child_diff_type.c:12(int) t.public.child_diff_type.p:13(int2)
            ├── update-mapping:
-           │    └── p_new:17 => t.public.child_diff_type.p:9
+           │    └── column18:18 => t.public.child_diff_type.p:9
            ├── input binding: &2
            ├── cardinality: [0 - 0]
            ├── volatile, mutations
            ├── stats: [rows=0]
-           ├── inner-join (hash)
-           │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
-           │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-           │    ├── stats: [rows=3.3, distinct(13)=0.333333333, null(13)=0, distinct(16)=0.333333333, null(16)=0, distinct(17)=0.333317413, null(17)=0]
+           ├── project
+           │    ├── columns: column18:18(int2!null) t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
+           │    ├── immutable
+           │    ├── stats: [rows=3.3, distinct(18)=0.333317413, null(18)=0]
            │    ├── key: (12)
-           │    ├── fd: ()-->(13,16,17), (13)==(16), (16)==(13)
-           │    ├── prune: (12)
-           │    ├── scan t.public.child_diff_type
-           │    │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2)
-           │    │    ├── stats: [rows=1000, distinct(12)=1000, null(12)=0, distinct(13)=100, null(13)=10]
+           │    ├── fd: ()-->(13,16-18), (13)==(16), (16)==(13)
+           │    ├── prune: (12,13,16-18)
+           │    ├── inner-join (hash)
+           │    │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
+           │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │    ├── stats: [rows=3.3, distinct(13)=0.333333333, null(13)=0, distinct(16)=0.333333333, null(16)=0, distinct(17)=0.333317413, null(17)=0]
            │    │    ├── key: (12)
-           │    │    ├── fd: (12)-->(13)
-           │    │    ├── prune: (12,13)
-           │    │    └── unfiltered-cols: (12-15)
-           │    ├── select
-           │    │    ├── columns: p_old:16(int!null) p_new:17(int!null)
-           │    │    ├── cardinality: [0 - 1]
-           │    │    ├── stats: [rows=0.333333333, distinct(16)=0.333333333, null(16)=0, distinct(17)=0.333333333, null(17)=0]
-           │    │    ├── key: ()
-           │    │    ├── fd: ()-->(16,17)
-           │    │    ├── with-scan &1
+           │    │    ├── fd: ()-->(13,16,17), (13)==(16), (16)==(13)
+           │    │    ├── scan t.public.child_diff_type
+           │    │    │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2)
+           │    │    │    ├── stats: [rows=1000, distinct(12)=1000, null(12)=0, distinct(13)=100, null(13)=10]
+           │    │    │    ├── key: (12)
+           │    │    │    ├── fd: (12)-->(13)
+           │    │    │    ├── prune: (12,13)
+           │    │    │    └── unfiltered-cols: (12-15)
+           │    │    ├── select
            │    │    │    ├── columns: p_old:16(int!null) p_new:17(int!null)
-           │    │    │    ├── mapping:
-           │    │    │    │    ├──  t.public.parent_diff_type.p:4(int) => p_old:16(int)
-           │    │    │    │    └──  p_new:7(int) => p_new:17(int)
            │    │    │    ├── cardinality: [0 - 1]
-           │    │    │    ├── stats: [rows=1, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0]
+           │    │    │    ├── stats: [rows=0.333333333, distinct(16)=0.333333333, null(16)=0, distinct(17)=0.333333333, null(17)=0]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(16,17)
-           │    │    │    └── prune: (16,17)
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: p_old:16(int!null) p_new:17(int!null)
+           │    │    │    │    ├── mapping:
+           │    │    │    │    │    ├──  t.public.parent_diff_type.p:4(int) => p_old:16(int)
+           │    │    │    │    │    └──  p_new:7(int) => p_new:17(int)
+           │    │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    │    ├── stats: [rows=1, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0]
+           │    │    │    │    ├── key: ()
+           │    │    │    │    ├── fd: ()-->(16,17)
+           │    │    │    │    └── prune: (16,17)
+           │    │    │    └── filters
+           │    │    │         └── is-not [type=bool, outer=(16,17)]
+           │    │    │              ├── variable: p_old:16 [type=int]
+           │    │    │              └── variable: p_new:17 [type=int]
            │    │    └── filters
-           │    │         └── is-not [type=bool, outer=(16,17)]
-           │    │              ├── variable: p_old:16 [type=int]
-           │    │              └── variable: p_new:17 [type=int]
-           │    └── filters
-           │         └── eq [type=bool, outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
-           │              ├── variable: t.public.child_diff_type.p:13 [type=int2]
-           │              └── variable: p_old:16 [type=int]
+           │    │         └── eq [type=bool, outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
+           │    │              ├── variable: t.public.child_diff_type.p:13 [type=int2]
+           │    │              └── variable: p_old:16 [type=int]
+           │    └── projections
+           │         └── assignment-cast: INT2 [as=column18:18, type=int2, outer=(17), immutable]
+           │              └── variable: p_new:17 [type=int]
            └── f-k-checks
                 └── f-k-checks-item: child_diff_type(p) -> parent_diff_type(p)
                      └── anti-join (hash)
-                          ├── columns: p:18(int2!null)
+                          ├── columns: p:19(int2!null)
                           ├── stats: [rows=1e-10]
-                          ├── fd: ()-->(18)
+                          ├── fd: ()-->(19)
                           ├── cte-uses
-                          │    └── &2: count=1 used-columns=(17)
+                          │    └── &2: count=1 used-columns=(18)
                           ├── with-scan &2
-                          │    ├── columns: p:18(int2!null)
+                          │    ├── columns: p:19(int2!null)
                           │    ├── mapping:
-                          │    │    └──  p_new:17(int) => p:18(int2)
-                          │    ├── stats: [rows=3.3, distinct(18)=0.333317413, null(18)=0]
-                          │    ├── fd: ()-->(18)
+                          │    │    └──  column18:18(int2) => p:19(int2)
+                          │    ├── stats: [rows=3.3, distinct(19)=0.333317413, null(19)=0]
+                          │    ├── fd: ()-->(19)
                           │    └── cte-uses
-                          │         └── &2: count=1 used-columns=(17)
+                          │         └── &2: count=1 used-columns=(18)
                           ├── scan t.public.parent_diff_type
-                          │    ├── columns: t.public.parent_diff_type.p:19(int!null)
-                          │    ├── stats: [rows=1000, distinct(19)=1000, null(19)=0]
-                          │    ├── key: (19)
-                          │    └── prune: (19)
+                          │    ├── columns: t.public.parent_diff_type.p:20(int!null)
+                          │    ├── stats: [rows=1000, distinct(20)=1000, null(20)=0]
+                          │    ├── key: (20)
+                          │    └── prune: (20)
                           └── filters
-                               └── eq [type=bool, outer=(18,19), constraints=(/18: (/NULL - ]; /19: (/NULL - ]), fd=(18)==(19), (19)==(18)]
-                                    ├── variable: p:18 [type=int2]
-                                    └── variable: t.public.parent_diff_type.p:19 [type=int]
+                               └── eq [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ]), fd=(19)==(20), (20)==(19)]
+                                    ├── variable: p:19 [type=int2]
+                                    └── variable: t.public.parent_diff_type.p:20 [type=int]

@@ -7,14 +7,23 @@ CREATE TABLE kv (
 statement error value type tuple{int, int} doesn't match type int of column "v"
 UPDATE kv SET v = (SELECT (10, 11))
 
-statement error value type decimal doesn't match type int of column "v"
+statement ok
 UPDATE kv SET v = 3.2
 
-statement error value type decimal doesn't match type int of column "v"
+statement ok
 UPDATE kv SET (k, v) = (3, 3.2)
 
-statement error value type decimal doesn't match type int of column "v"
+statement ok
 UPDATE kv SET (k, v) = (SELECT 3, 3.2)
+
+statement error value type string doesn't match type int of column "v"
+UPDATE kv SET v = '3.2'::STRING
+
+statement error value type string doesn't match type int of column "v"
+UPDATE kv SET (k, v) = (3, '3.2'::STRING)
+
+statement error value type string doesn't match type int of column "v"
+UPDATE kv SET (k, v) = (SELECT 3, '3.2'::STRING)
 
 statement count 4
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
