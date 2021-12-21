@@ -366,6 +366,11 @@ func (cl *CertificateLoader) Load() error {
 	return nil
 }
 
+// FullPath takes a CertInfo and returns the full path for it.
+func (cl *CertificateLoader) FullPath(ci *CertInfo) string {
+	return filepath.Join(cl.certsDir, ci.Filename)
+}
+
 // findKey takes a CertInfo and looks for the corresponding key file.
 // If found, sets the 'keyFilename' and returns nil, returns error otherwise.
 // Does not load CA keys.
