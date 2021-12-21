@@ -317,7 +317,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns, as well as mutation columns with default values.
-			mb.addSynthesizedColsForUpdate()
+			mb.addSynthesizedColsForUpdate(true /* isUpsert */)
 		}
 
 		// Build the final upsert statement, including any returned expressions.
@@ -334,7 +334,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
 
 		// Build each of the SET expressions.
-		mb.addUpdateCols(ins.OnConflict.Exprs)
+		mb.addUpdateCols(ins.OnConflict.Exprs, true /* isUpsert */)
 
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
@@ -646,6 +646,7 @@ func (mb *mutationBuilder) buildInputForInsert(
 	}
 
 	if !isUpsert {
+		// Add assignment casts for insert columns.
 		mb.addAssignmentCasts(mb.insertColIDs)
 	}
 }

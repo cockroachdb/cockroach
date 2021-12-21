@@ -361,7 +361,7 @@ explain(shape):
         │
         └── • lookup join (anti)
             │ table: status_type@status_type_pkey
-            │ equality: (t_st_id_new) = (st_id)
+            │ equality: (column127) = (st_id)
             │ equality cols are key
             │
             └── • scan buffer

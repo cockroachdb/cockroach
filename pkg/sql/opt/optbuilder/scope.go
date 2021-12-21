@@ -317,6 +317,22 @@ func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
 	return nil
 }
 
+// getColumnWithIDAndReferenceName returns the scopeColumn with the given id and
+// reference name (either in cols or extraCols).
+func (s *scope) getColumnWithIDAndReferenceName(col opt.ColumnID, refName tree.Name) *scopeColumn {
+	for i := range s.cols {
+		if s.cols[i].id == col && s.cols[i].name.MatchesReferenceName(refName) {
+			return &s.cols[i]
+		}
+	}
+	for i := range s.extraCols {
+		if s.extraCols[i].id == col && s.cols[i].name.MatchesReferenceName(refName) {
+			return &s.extraCols[i]
+		}
+	}
+	return nil
+}
+
 // getColumnForTableOrdinal returns the column with a specific tableOrdinal
 // value, or nil if it doesn't exist.
 func (s *scope) getColumnForTableOrdinal(tabOrd int) *scopeColumn {
