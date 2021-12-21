@@ -348,6 +348,256 @@ SELECT d, d_comp, d2, d2_comp FROM assn_cast_comp
 ----
 2  2.00  2.78  3
 
+
+# Tests for assignment casts in UPDATEs.
+subtest assignment_casts_update
+
+statement ok
+DELETE FROM assn_cast
+
+statement ok
+INSERT INTO assn_cast (c) VALUES (NULL)
+
+statement error value too long for type CHAR
+UPDATE assn_cast SET c = 'abc'
+
+query T
+UPDATE assn_cast SET c = 1 RETURNING c
+----
+1
+
+statement error value too long for type CHAR
+UPDATE assn_cast SET c = 123
+
+statement ok
+UPDATE assn_cast SET c = NULL
+
+statement ok
+PREPARE update_c AS UPDATE assn_cast SET c = $1
+
+statement error value too long for type CHAR
+EXECUTE update_c('foo')
+
+statement error value too long for type CHAR
+EXECUTE update_c('foo'::STRING)
+
+statement
+EXECUTE update_c(' ')
+
+query T
+SELECT concat('"', c, '"') FROM assn_cast
+----
+""
+
+statement
+EXECUTE update_c(' '::STRING)
+
+query T
+SELECT concat('"', c, '"') FROM assn_cast
+----
+""
+
+statement ok
+UPDATE assn_cast SET qc = 'a'
+
+query T
+UPDATE assn_cast SET qc = 'abc' RETURNING qc
+----
+a
+
+statement error \"char\" out of range
+UPDATE assn_cast SET qc = 1234
+
+statement ok
+PREPARE update_qc AS UPDATE assn_cast SET qc = $1
+
+statement ok
+EXECUTE update_qc('foo')
+
+query T
+SELECT qc FROM assn_cast
+----
+f
+
+statement ok
+EXECUTE update_qc('foo'::STRING)
+
+query T
+SELECT qc FROM assn_cast
+----
+f
+
+statement ok
+UPDATE assn_cast SET i = '1'
+
+statement ok
+PREPARE update_i AS UPDATE assn_cast SET i = $1
+
+statement ok
+EXECUTE update_i('1')
+
+statement error value type string doesn't match type int of column \"i\"
+UPDATE assn_cast SET i = '1'::STRING
+
+statement error integer out of range for type int2
+UPDATE assn_cast SET i2 = 999999999
+
+statement ok
+PREPARE update_i2 AS UPDATE assn_cast SET i2 = $1
+
+statement error integer out of range for type int2
+EXECUTE update_i2(99999999)
+
+query F
+UPDATE assn_cast SET d = 11.22 RETURNING d
+----
+11
+
+query F
+UPDATE assn_cast SET d = 11.22::DECIMAL(10, 0) RETURNING d
+----
+11
+
+query F
+UPDATE assn_cast SET d = 11.22::DECIMAL(10, 2) RETURNING d
+----
+11
+
+statement ok
+PREPARE update_d AS UPDATE assn_cast SET d = $1
+
+statement ok
+EXECUTE update_d(123.45)
+
+query F
+SELECT d FROM assn_cast
+----
+123
+
+statement ok
+PREPARE update_d2 AS UPDATE assn_cast SET d = (SELECT * FROM (VALUES ($1::DECIMAL(10, 2))))
+
+statement ok
+EXECUTE update_d2(67.89)
+
+query F
+SELECT d FROM assn_cast
+----
+68
+
+query T
+UPDATE assn_cast SET a = ARRAY[] RETURNING a
+----
+{}
+
+query T
+UPDATE assn_cast SET a = ARRAY[NULL] RETURNING a
+----
+{NULL}
+
+query T
+UPDATE assn_cast SET a = ARRAY[1.1] RETURNING a
+----
+{1}
+
+query T
+UPDATE assn_cast SET a = ARRAY[2.88, NULL, 15] RETURNING a
+----
+{3,NULL,15}
+
+query T
+UPDATE assn_cast SET a = ARRAY[3.99, NULL, 16]::DECIMAL(10, 2)[] RETURNING a
+----
+{4,NULL,16}
+
+query T
+UPDATE assn_cast SET a = ARRAY[5.55, 6.66::DECIMAL(10, 2)] RETURNING a
+----
+{6,7}
+
+statement ok
+PREPARE update_a AS UPDATE assn_cast SET a = $1
+
+statement ok
+EXECUTE update_a(ARRAY[7.77, 8.88::DECIMAL(10, 2)])
+
+query T
+SELECT a FROM assn_cast
+----
+{8,9}
+
+statement ok
+PREPARE update_a2 AS UPDATE assn_cast SET a = ARRAY[$1]
+
+statement ok
+EXECUTE update_a2(20.2)
+
+query T
+SELECT a FROM assn_cast
+----
+{20}
+
+statement ok
+PREPARE update_a3 AS UPDATE assn_cast SET a = ARRAY[30.12, $1, 32.1]
+
+statement ok
+EXECUTE update_a3(30.9)
+
+query T
+SELECT a FROM assn_cast
+----
+{30,31,32}
+
+statement error value type tuple{int, int} doesn't match type timestamp of column "t"
+UPDATE assn_cast SET t = (SELECT (10, 11))
+
+statement error value type decimal doesn't match type timestamp of column "t"
+UPDATE assn_cast SET t = 3.2
+
+statement error value type decimal doesn't match type timestamp of column "t"
+UPDATE assn_cast SET (i, t) = (1, 3.2)
+
+# Tests for assignment casts in cascading UPDATEs.
+subtest assignment_casts_update_cascade
+
+statement ok
+CREATE TABLE assn_cast_p (p DECIMAL(10, 2) PRIMARY KEY);
+INSERT INTO assn_cast_p VALUES (1.0);
+
+# Test ON UPDATE CASCADE.
+statement ok
+CREATE TABLE assn_cast_c (c INT PRIMARY KEY, p DECIMAL(10, 0) REFERENCES assn_cast_p(p) ON UPDATE CASCADE);
+INSERT INTO assn_cast_c VALUES (1, 1.0);
+
+statement error update on table "assn_cast_c" violates foreign key constraint "assn_cast_c_p_fkey"
+UPDATE assn_cast_p SET p = 1.2
+
+statement ok
+UPDATE assn_cast_p SET p = 2.0
+
+query IF
+SELECT * FROM assn_cast_c
+----
+1  2
+
+# Test ON UPDATE SET DEFAULT.
+statement ok
+DROP TABLE assn_cast_c;
+CREATE TABLE assn_cast_c (c INT PRIMARY KEY, p DECIMAL(10, 0) DEFAULT 3.1 REFERENCES assn_cast_p(p) ON UPDATE SET DEFAULT);
+INSERT INTO assn_cast_c VALUES (2, 2.0);
+
+statement error update on table "assn_cast_c" violates foreign key constraint "assn_cast_c_p_fkey"
+UPDATE assn_cast_p SET p = 1.2
+
+statement ok
+UPDATE assn_cast_p SET p = 3.0
+
+query IF
+SELECT * FROM assn_cast_c
+----
+2  3
+
+
 # Regression tests.
 subtest regressions
 

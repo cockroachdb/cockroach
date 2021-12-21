@@ -537,9 +537,9 @@ update comp
            ├── e_comp:17 = 'FOO' [as=partial_index_put2:20]
            └── e:12 = 'FOO' [as=partial_index_del2:21]
 
-# Regression test for #61520. The new value for column a (project as b:8) should
-# be in-scope when building the partial index PUT expression when the value in
-# the FROM clause must be rounded.
+# Regression test for #61520. The new value for column a should be in-scope when
+# building the partial index PUT expression when the value in the FROM clause
+# must assignment cast.
 
 exec-ddl
 CREATE TABLE t61520 (
@@ -552,18 +552,18 @@ build
 UPDATE t61520 t SET a = v.b FROM (VALUES (1.0)) v(b) WHERE t.a = v.b RETURNING a, b
 ----
 project
- ├── columns: a:1 b:9
+ ├── columns: a:1!null b:9
  └── update t61520 [as=t]
-      ├── columns: a:1 rowid:2!null column1:9
+      ├── columns: a:1!null rowid:2!null column1:9
       ├── fetch columns: a:5 rowid:6
       ├── update-mapping:
-      │    └── b:10 => a:1
+      │    └── column10:10 => a:1
       ├── partial index put columns: partial_index_put1:11
       ├── partial index del columns: partial_index_del1:12
       └── project
-           ├── columns: partial_index_put1:11 partial_index_del1:12!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null b:10
+           ├── columns: partial_index_put1:11!null partial_index_del1:12!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column10:10!null
            ├── project
-           │    ├── columns: b:10 a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    ├── columns: column10:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    ├── select
            │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    ├── inner-join (cross)
@@ -580,9 +580,10 @@ project
            │    │    └── filters
            │    │         └── a:5 = column1:9
            │    └── projections
-           │         └── crdb_internal.round_decimal_values(column1:9, 2) [as=b:10]
+           │         └── assignment-cast: DECIMAL(10,2) [as=column10:10]
+           │              └── column1:9
            └── projections
-                ├── b:10 > 0 [as=partial_index_put1:11]
+                ├── column10:10 > 0 [as=partial_index_put1:11]
                 └── a:5 > 0 [as=partial_index_del1:12]
 
 # -- UPSERT / INSERT ON CONFLICT tests --
