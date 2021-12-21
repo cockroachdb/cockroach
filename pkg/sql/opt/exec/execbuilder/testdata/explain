@@ -938,10 +938,6 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: tc@c
           spans: /10-/11
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: CREATE INDEX ON tc (a) STORING (b); DROP INDEX tc@c;
 
 # Ensure that the query above no longer has index recommendations if they are
 # disabled.

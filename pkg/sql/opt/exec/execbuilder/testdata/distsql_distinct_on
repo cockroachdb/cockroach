@@ -120,10 +120,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x) STORING (y, z);
 
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
@@ -143,10 +139,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lkFv2kAQhe_9Fas5Jeois2sDiU-0CZWQUkiBQ6uKg4NXCRLx0l0jQSL-e4UJEDDMLBhxwzZvZ_zepye_g_03ghAavx8fvjVb7Oq-2e11fz1cs27joXHXY4vrZuuux9otdjXlbMbZ2zX7-MF-dNo_2XT2xtqd-0aHff_DpsAh0bFqRa_KQvgXBHCQwMEHDgFwqECfw9jogbJWm8Vf3jNBM55CWOYwTMaTdHG7z2GgjYLwHdJhOlIQQi96GqmOimJlvDJwiFUaDUfZmOnsrT42w9fIzIBDdxwlNmQlbzG5PUlDVpe87vN6AP05Bz1JN0NsGj0rCMWcuy9yP7TpMBmkXmV7i7rg2aCdKRvh04y9RPbloGqzjzy4z-a0SaJNrIyKt87LTjm4sSg7rbxZxD_GmK42qTKeyPny9eD5gcOL7nvNj0P3LNHSJT32ZHnHlf3jK1vjhTuAwgFAT5a84EQEiVXWgVYvhKA4H4KiEIKEMSsEc764IijdGZAuDASlLKNTGCBWWTtauxAD8nwMyEIMEMasGMj54sqA786A78JAtZRldAoDxCprR28uxIB_Pgb8QgwQxqwYyPniykDgzkDgwkCtdCIBxCJrP28vREBwPgKCQgQQxqwIyPlyysfInvM7yo51YpXTd0Z5YYSKn9XSNasnZqAejR5kY5aX7UyX3YiVTZdPxfKimSwfLRb8LBa7YvFZLLfE4jhxrYhYiELqSiH1La6WqOE-briPigN8coCKJZF1BVVXcXG1CCi4mAAFF1OgEGoCFEJNgFJDDb_BDb8pAsot3gllohRylXJUK-BqqhZwNdkLhJwqBkJOBC5yxbLtuyR8x5uFyFzg1SICYniuXI4KHVdToeNqMnRCToVOyKnQ8V4VRLGKXMccFTreMYIoGZFrmaNCx9VU6LiaDJ2QU6ETcip0vGEl0bAS_2jbDb0___I_AAD__8DB-Cg=
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x) STORING (y, z);
 
 # Ensure that even with more ordering columns, ordering propagates past local
 # DISTINCT processors.
@@ -174,10 +166,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y, x);
 
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
@@ -198,10 +186,6 @@ vectorized: true
           spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll9r4kwUxu_fTzGcq5aOxJnEP82V77YuCF3tqhe7LF6kZmgF67gzEUzF774kCqmmnpMY8TK1P5-T8_w4uAH7dw4-dH89P_3f67Obx95oPPr5dMtG3afuw5glz73-w5gN-uwmvmVrzmL2fTj4wdbxBxsMH7tD9u03izlbA4eFDlU_eFcW_D8ggIMEDi5w8IBDAyYclkZPlbXaJP-ySYFeuAa_zmG2WK6i5M8TDlNtFPgbiGbRXIEP4-BlroYqCJVx6sAhVFEwm6cx6_ijszSz98DEwGG0DBbWZzUnSR6sIp91JO-4MNly0KsoS7BR8KrAF1tefIqRNpEyTuNwgI684x1xdzJClol4nNlotphGjqgfpyQvZEJlVJi81FFc9g0vMXsL7FuOnmyzkdyTI2Xfo3dZp94VnT23IXT2bC6vwlxfz9TXNb105OEyT8U3DuJFcSVFASUdWXO8c6Qk5thL2awiJRGRFSuuJqW4uJS5DZ0lpSxuhSxihVdLqyttBTHH3opWFSuIiGyz8mpWyItbkdvQWVa4xa1wi1jRrKXVlbaCmGNvRbuKFUREtln3ala4F7cit6GzrPCKW-EVsaJVO8cJYoq9E_dVnCAisr16V3PCu7gTuQ1V_lHzRdxQ2aVeWFXo90o9GViFr2r3klavzFQ9Gz1NY3aPg5RL_xAqG-0-FbuH3mL3UTLgZ1igsMRheQyLz7B7AItycLsKLGQlulmFlnWcdtGFezjs4W0RXTdQuonDTRRu4XCriig4TIiCw5QoBE2IgtOUKO0qotzjN6FOHAXipFA3JXdUytRN0ETfBE0VTuFE4wROVS5yp6VM5wI_LcIjWsOPi2gQeO66lCodp6nScZosncCp0nGcLB2_rFTpuSNz2FqbaA2_MuKewHN3plTpOE2VjtNk6QROlY7jVOkSv7DHpU-2__0LAAD__xPOEOI=
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y, x);
 
 # Distinct processors elided becaue of strong key.
 query T
