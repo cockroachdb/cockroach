@@ -777,10 +777,11 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outColsNew := outCols[numFKCols:]
 	for i := 0; i < numFKCols; i++ {
 		c := childTable.Column(fk.OriginColumnOrdinal(childTable, i))
+		typ := md.ColumnMeta(oldValues[i]).Type
 		oldName := fmt.Sprintf("%s_old", c.ColName())
 		newName := fmt.Sprintf("%s_new", c.ColName())
-		outColsOld[i] = md.AddColumn(oldName, c.DatumType())
-		outColsNew[i] = md.AddColumn(newName, c.DatumType())
+		outColsOld[i] = md.AddColumn(oldName, typ)
+		outColsNew[i] = md.AddColumn(newName, typ)
 	}
 
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
