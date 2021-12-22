@@ -124,6 +124,16 @@ func TestSavepoints(t *testing.T) {
 				}
 				fmt.Fprintf(&buf, "txn id %s\n", changed)
 
+			case "reset":
+				prevID := txn.ID()
+				txn.PrepareForRetry(ctx)
+				changed := "changed"
+				if prevID == txn.ID() {
+					changed = "not changed"
+				}
+				fmt.Fprintf(&buf, "txn error cleared\n")
+				fmt.Fprintf(&buf, "txn id %s\n", changed)
+
 			case "put":
 				b := txn.NewBatch()
 				b.Put(td.CmdArgs[0].Key, td.CmdArgs[1].Key)
