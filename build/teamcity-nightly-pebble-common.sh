@@ -32,7 +32,7 @@ build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
 export build_tag
 
 # Build the roachtest binary.
-make bin/roachprod bin/roachtest
+make bin/roachtest
 
 # Pull in the latest version of Pebble from upstream. The benchmarks run
 # against the tip of the 'master' branch.

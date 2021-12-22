@@ -4,16 +4,15 @@
 
 bazel build --config crosslinux --config ci --config with_ui -c opt \
       //pkg/cmd/cockroach //pkg/cmd/workload //pkg/cmd/roachtest \
-      //pkg/cmd/roachprod //c-deps:libgeos
+      //c-deps:libgeos
 BAZEL_BIN=$(bazel info bazel-bin --config crosslinux --config ci --config with_ui -c opt)
 # Move this stuff to bin for simplicity.
 mkdir -p bin
 chmod o+rwx bin
 cp $BAZEL_BIN/pkg/cmd/cockroach/cockroach_/cockroach bin
-cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin
 cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin
-chmod a+w bin/cockroach bin/roachprod bin/roachtest bin/workload
+chmod a+w bin/cockroach bin/roachtest bin/workload
 # Stage the geos libs in the appropriate spot.
 mkdir -p lib.docker_amd64
 chmod o+rwx lib.docker_amd64
