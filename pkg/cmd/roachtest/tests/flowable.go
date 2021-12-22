@@ -37,7 +37,7 @@ func registerFlowable(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		t.Status("cloning flowable and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(

@@ -68,7 +68,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 	}
 
 	t.Status("starting nodes")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {

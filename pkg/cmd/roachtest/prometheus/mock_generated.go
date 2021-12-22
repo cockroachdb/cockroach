@@ -9,8 +9,8 @@ import (
 	os "os"
 	reflect "reflect"
 
-	logger "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	option "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -38,18 +38,18 @@ func (m *MockCluster) EXPECT() *MockClusterMockRecorder {
 }
 
 // ExternalIP mocks base method.
-func (m *MockCluster) ExternalIP(arg0 context.Context, arg1 option.NodeListOption) ([]string, error) {
+func (m *MockCluster) ExternalIP(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExternalIP", arg0, arg1)
+	ret := m.ctrl.Call(m, "ExternalIP", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ExternalIP indicates an expected call of ExternalIP.
-func (mr *MockClusterMockRecorder) ExternalIP(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockClusterMockRecorder) ExternalIP(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalIP", reflect.TypeOf((*MockCluster)(nil).ExternalIP), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalIP", reflect.TypeOf((*MockCluster)(nil).ExternalIP), arg0, arg1, arg2)
 }
 
 // Get mocks base method.

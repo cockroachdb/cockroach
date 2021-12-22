@@ -38,7 +38,7 @@ func registerDrop(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Range(1, nodes))
 		settings := install.MakeClusterSettings()
 		settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
-		c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, nodes))
 
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
@@ -49,7 +49,7 @@ func registerDrop(r registry.Registry) {
 			// Otherwise the ALTER TABLE query below might fail to find the
 			// tpcc.order_line table that we just imported (!) due to what seems to
 			// be a problem with table descriptor leases (#24374).
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			run := func(maybeExperimental bool, stmtStr string, args ...interface{}) {

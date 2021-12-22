@@ -21,11 +21,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"

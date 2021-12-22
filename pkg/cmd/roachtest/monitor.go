@@ -18,10 +18,10 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -180,7 +180,7 @@ func (m *monitorImpl) wait() error {
 			wg.Done()
 		}()
 
-		messagesChannel, err := roachprod.Monitor(m.ctx, m.nodes, install.MonitorOpts{})
+		messagesChannel, err := roachprod.Monitor(m.ctx, m.l, m.nodes, install.MonitorOpts{})
 		if err != nil {
 			setErr(errors.Wrap(err, "monitor command failure"))
 			return

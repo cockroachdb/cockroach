@@ -135,7 +135,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, workers, "sh", "-c", `"cat controller_id_rsa.pub >> .ssh/authorized_keys"`)
 	// Prime the known hosts file, and use the unhashed format to
 	// work around JSCH auth error: https://github.com/jepsen-io/jepsen/blob/master/README.md
-	ips, err := c.InternalIP(ctx, workers)
+	ips, err := c.InternalIP(ctx, t.L(), workers)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 
 	// Get the IP addresses for all our workers.
 	var nodeFlags []string
-	ips, err := c.InternalIP(ctx, c.Range(1, c.Spec().NodeCount-1))
+	ips, err := c.InternalIP(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
 	if err != nil {
 		t.Fatal(err)
 	}

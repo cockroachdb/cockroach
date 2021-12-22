@@ -35,13 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -109,9 +109,9 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 	tdb := sqlutils.MakeSQLRunner(db)
 	cdcClusterSettings(t, tdb)
@@ -309,7 +309,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -332,7 +332,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
 	tdb := sqlutils.MakeSQLRunner(db)
@@ -477,7 +477,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -487,7 +487,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	kafka.start(ctx)
 	defer kafka.stop(ctx)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
 	cdcClusterSettings(t, sqlutils.MakeSQLRunner(db))
@@ -616,7 +616,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{
 		t:     t,
@@ -629,7 +629,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	kafka.addSCRAMUsers(ctx)
 	defer kafka.stop(ctx)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
 	tdb := sqlutils.MakeSQLRunner(db)
@@ -1258,7 +1258,7 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	k.t.Status("generating TLS certificates")
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1454,7 +1454,7 @@ func (k kafkaManager) chaosLoop(
 }
 
 func (k kafkaManager) sinkURL(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1462,7 +1462,7 @@ func (k kafkaManager) sinkURL(ctx context.Context) string {
 }
 
 func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1470,7 +1470,7 @@ func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
 }
 
 func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1478,7 +1478,7 @@ func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
-	ips, err := k.c.ExternalIP(ctx, k.nodes)
+	ips, err := k.c.ExternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1486,7 +1486,7 @@ func (k kafkaManager) consumerURL(ctx context.Context) string {
 }
 
 func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}

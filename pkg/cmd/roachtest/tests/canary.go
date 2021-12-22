@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -68,8 +68,10 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 	return "", nil, "", nil
 }
 
-func fetchCockroachVersion(ctx context.Context, c cluster.Cluster, nodeIndex int) (string, error) {
-	db, err := c.ConnE(ctx, nodeIndex)
+func fetchCockroachVersion(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodeIndex int,
+) (string, error) {
+	db, err := c.ConnE(ctx, l, nodeIndex)
 	if err != nil {
 		return "", err
 	}
