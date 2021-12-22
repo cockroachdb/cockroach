@@ -15,9 +15,11 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 const asyncpgRunTestCmd = `
@@ -41,7 +43,7 @@ func registerAsyncpg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -108,15 +110,15 @@ func registerAsyncpg(r registry.Registry) {
 			version, blocklistName, ignoredlistName)
 
 		t.Status("Running asyncpg tests ")
-		rawResults, err := c.RunWithBuffer(
+		result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(), node, asyncpgRunTestCmd)
 		if err != nil {
 			t.L().Printf("error during asyncpg run (may be ok): %v\n", err)
 		}
-		t.L().Printf("Test results for asyncpg: %s", rawResults)
+		t.L().Printf("Test results for asyncpg: %s", result.Stdout+result.Stderr)
 		t.L().Printf("Test stdout for asyncpg")
-		if err := c.RunL(
-			ctx, t.L(), node, "cd /mnt/data1/asyncpg && cat asyncpg.stdout",
+		if err := c.RunE(
+			ctx, node, "cd /mnt/data1/asyncpg && cat asyncpg.stdout",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -124,7 +126,7 @@ func registerAsyncpg(r registry.Registry) {
 		t.Status("collating test results")
 
 		results := newORMTestsResults()
-		results.parsePythonUnitTestOutput(rawResults, expectedFailureList, ignoredlist)
+		results.parsePythonUnitTestOutput([]byte(result.Stdout+result.Stderr), expectedFailureList, ignoredlist)
 		results.summarizeAll(
 			t, "asyncpg" /* ormName */, blocklistName, expectedFailureList, version, asyncpgSupportedTag,
 		)

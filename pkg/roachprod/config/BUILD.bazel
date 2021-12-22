@@ -5,7 +5,10 @@ go_library(
     srcs = ["config.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/config",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/log"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+    ],
 )
 
 go_test(

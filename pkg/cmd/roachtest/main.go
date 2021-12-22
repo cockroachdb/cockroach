@@ -277,7 +277,8 @@ runner itself.
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
-			&roachprodBinary, "roachprod", "", "path to roachprod binary to use")
+			&deprecatedRoachprodBinary, "roachprod", "", "DEPRECATED")
+		_ = cmd.Flags().MarkDeprecated("roachprod", "roachtest now uses roachprod as a library")
 		cmd.Flags().BoolVar(
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
@@ -367,6 +368,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 			cfg.parallelism = 1
 		}
 	}
+
 	opt := clustersOpt{
 		typ:                       clusterType,
 		clusterName:               clusterName,

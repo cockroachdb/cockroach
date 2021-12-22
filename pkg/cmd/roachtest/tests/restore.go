@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -298,7 +299,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -312,7 +313,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -395,7 +396,7 @@ func registerRestore(r registry.Registry) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx)
+				c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 				m := c.NewMonitor(ctx)
 
 				// Run the disk usage logger in the monitor to guarantee its

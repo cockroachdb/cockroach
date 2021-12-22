@@ -20,8 +20,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,7 +50,7 @@ func registerGopg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
 			t.Fatal(err)
@@ -106,14 +108,26 @@ func registerGopg(r registry.Registry) {
 		// with matching of the blocklisted tests, so we will strip off all color
 		// code escape sequences.
 		const removeColorCodes = `sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"`
-		// Note that this is expected to return an error, since the test suite
-		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			fmt.Sprintf(
 				`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v ./... 2>&1 | %s | tee %s`,
 				destPath, removeColorCodes, resultsFilePath),
 		)
 
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		rawResults := []byte(result.Stdout + result.Stderr)
 		t.Status("collating the test results")
 		t.L().Printf("Test Results: %s", rawResults)
 		results := newORMTestsResults()
@@ -129,9 +143,7 @@ func registerGopg(r registry.Registry) {
 
 		// Now we parse the output of top-level tests.
 
-		// Note that this is expected to return an error, since the test suite
-		// will fail. And it is safe to swallow it here.
-		xmlResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			// We pipe the test output into go-junit-report tool which will output
 			// it in XML format.
 			fmt.Sprintf(`cd %s &&
@@ -139,6 +151,20 @@ func registerGopg(r registry.Registry) {
 							cat %s | %s/bin/go-junit-report`,
 				destPath, goPath, resultsFilePath, goPath),
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		xmlResults := []byte(result.Stdout + result.Stderr)
 
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeFailed(

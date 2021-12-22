@@ -57,6 +57,27 @@ enforcing invariants within CockroachDB. What follows is an enumeration of each
 of the interactions in which causality passing through an HLC is necessary for
 correctness. It is intended to be exhaustive.
 
+For context, recall CockroachDB's transactional model: we guarantee
+serializability (transactions appear to be executed in _some_ serial order), and
+linearizability (transactions appear to execute in real-time order) for
+transactions that have overlapping read/write sets. Notably, we are not strictly
+serializable, so transactions with disjoint read/write sets can appear to
+execute in any order to a concurrent third observer that has overlapping
+read/write sets with both transactions (deemed a "causal reverse").
+
+The linearizability guarantee is important to note as two sequential (in real
+time) transactions via two different gateway nodes can be assigned timestamps
+in reverse order (the second gateway's clock may be behind), but must still see
+results according to real-time order if they access overlapping keys (e.g. B
+must see A's write). Also keep in mind that an intent's written timestamp
+signifies when the intent itself was written, but the final value will be
+resolved to the transaction's commit timestamp, which may be later than the
+written timestamp. Since the commit status and timestamp are non-local
+properties, a range may contain committed values (as unresolved intents) that
+turn out to exist in the future of the local HLC when the intent gets resolved.
+
+TODO(nvanbenschoten): Update the above on written timestamps after #72121.
+
  - Cooperative lease transfers (Raft channel). During a cooperative lease
    transfer from one replica of a range to another, the outgoing leaseholder
    revokes its lease before its expiration time and consults its clock to

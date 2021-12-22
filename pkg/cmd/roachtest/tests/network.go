@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -43,7 +44,7 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 		t.Fatal(err)
 	}
 
-	c.Start(ctx, c.All())
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	db := c.Conn(ctx, 1) // unaffected by toxiproxy
 	defer db.Close()
@@ -122,30 +123,28 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// 3 will re-recreate a separate set of certs, which
 	// we don't want. Starting all nodes at once ensures
 	// that they use coherent certs.
-	c.Start(ctx, serverNodes, option.StartArgs("--secure"))
-	require.NoError(t, c.StopE(ctx, serverNodes))
+	settings := install.MakeClusterSettings(install.SecureOption(true))
+	c.Start(ctx, option.DefaultStartOpts(), settings, serverNodes)
+	require.NoError(t, c.StopE(ctx, option.DefaultStopOpts(), serverNodes))
 
 	t.L().Printf("restarting nodes...")
-	c.Start(ctx, c.Node(1), option.StartArgs(
-		"--secure",
-		"--args=--locality=node=1",
-		"--args=--accept-sql-without-tls",
-		// For troubleshooting the test, the engineer can add the following
-		// environment variables to make the rebalancing faster.
-		// However, they should be removed for the production version
-		// of the test, because they make the cluster recover from a failure
-		// in a way that is unrealistically fast.
-		// "--env=COCKROACH_SCAN_INTERVAL=200ms",
-		// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
-	))
-	c.Start(ctx, c.Range(2, n-1), option.StartArgs(
-		"--secure",
-		"--args=--locality=node=other",
-		"--args=--accept-sql-without-tls",
-		// See comment above about env vars.
-		// "--env=COCKROACH_SCAN_INTERVAL=200ms",
-		// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
-	))
+	// For troubleshooting the test, the engineer can add the following
+	// environment variables to make the rebalancing faster.
+	// However, they should be removed for the production version
+	// of the test, because they make the cluster recover from a failure
+	// in a way that is unrealistically fast.
+	// "--env=COCKROACH_SCAN_INTERVAL=200ms",
+	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=1", "--accept-sql-without-tls")
+	c.Start(ctx, startOpts, settings, c.Node(1))
+
+	// See comment above about env vars.
+	// "--env=COCKROACH_SCAN_INTERVAL=200ms",
+	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
+	startOpts = option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=other", "--accept-sql-without-tls")
+	c.Start(ctx, startOpts, settings, c.Range(2, n-1))
 
 	t.L().Printf("retrieving server addresses...")
 	serverAddrs, err := c.InternalAddr(ctx, serverNodes)
@@ -274,7 +273,8 @@ SELECT $1::INT = ALL (
 
 				// Attempt a client connection to that server.
 				t.L().Printf("server %d, attempt %d; url: %s\n", server, attempt, url)
-				b, err := c.RunWithBuffer(ctx, t.L(), clientNode, "time", "-p", "./cockroach", "sql",
+
+				b, err := c.RunWithDetailsSingleNode(ctx, t.L(), clientNode, "time", "-p", "./cockroach", "sql",
 					"--url", url, "--certs-dir", certsDir, "-e", "'SELECT 1'")
 
 				// Report the results of execution.
@@ -377,7 +377,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	}
 
 	const warehouses = 1
-	c.Start(ctx, serverNodes)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), serverNodes)
 	c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 
 	db := c.Conn(ctx, 1)

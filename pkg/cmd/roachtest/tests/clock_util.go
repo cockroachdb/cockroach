@@ -65,22 +65,17 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 	if err := oi.c.Install(ctx, oi.c.All(), "gcc"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.L(), oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
+	if err := oi.c.RunE(ctx, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.L(),
-		oi.c.All(),
-		"curl",
-		"--retry", "3",
-		"--fail",
-		"--show-error",
-		"-kO",
+	if err := oi.c.RunE(ctx, oi.c.All(),
+		"curl", "--retry", "3", "--fail", "--show-error", "-kO",
 		"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
 	); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.L(),
-		oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c",
+	if err := oi.c.RunE(ctx, oi.c.All(),
+		"gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c",
 	); err != nil {
 		return err
 	}

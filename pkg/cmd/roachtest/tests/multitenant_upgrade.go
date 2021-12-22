@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -162,7 +163,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	kvNodes := c.Node(1)
 
-	c.Start(ctx, kvNodes, option.StartArgs("--binary="+predecessorBinary))
+	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary))
+	c.Start(ctx, option.DefaultStartOpts(), settings, kvNodes)
 
 	kvAddrs, err := c.ExternalAddr(ctx, kvNodes)
 	require.NoError(t, err)
@@ -206,8 +208,9 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	}
 
 	t.Status("upgrading host server")
-	c.Stop(ctx, kvNodes)
-	c.Start(ctx, kvNodes, option.StartArgs("--binary="+currentBinary))
+	c.Stop(ctx, option.DefaultStopOpts(), kvNodes)
+	settings.Binary = currentBinary
+	c.Start(ctx, option.DefaultStartOpts(), settings, kvNodes)
 	time.Sleep(time.Second)
 
 	t.Status("checking the pre-upgrade sql server still works after the KV binary upgrade")

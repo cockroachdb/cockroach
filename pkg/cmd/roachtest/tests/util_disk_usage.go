@@ -17,13 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 // getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
 func getDiskUsageInBytes(
 	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
 ) (int, error) {
-	var out []byte
+	var result install.RunResultDetails
 	for {
 		var err error
 		// `du` can warn if files get removed out from under it (which
@@ -32,7 +33,7 @@ func getDiskUsageInBytes(
 		// TODO(bdarnell): Refactor this stack to not combine stdout and
 		// stderr so we don't need to do this (and the Warning check
 		// below).
-		out, err = c.RunWithBuffer(
+		result, err = c.RunWithDetailsSingleNode(
 			ctx,
 			logger,
 			c.Node(nodeIdx),
@@ -50,17 +51,17 @@ func getDiskUsageInBytes(
 			logger.Printf("retrying disk usage computation after spurious error: %s", err)
 			continue
 		}
+
 		break
 	}
 
-	str := string(out)
 	// We need this check because sometimes the first line of the roachprod output is a warning
 	// about adding an ip to a list of known hosts.
-	if strings.Contains(str, "Warning") {
-		str = strings.Split(str, "\n")[1]
+	if strings.Contains(result.Stdout, "Warning") {
+		result.Stdout = strings.Split(result.Stdout, "\n")[1]
 	}
 
-	size, err := strconv.Atoi(strings.TrimSpace(str))
+	size, err := strconv.Atoi(strings.TrimSpace(result.Stdout))
 	if err != nil {
 		return 0, err
 	}

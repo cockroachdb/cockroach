@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,8 @@ func registerSecure(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, option.StartArgs("--secure"))
+				settings := install.MakeClusterSettings(install.SecureOption(true))
+				c.Start(ctx, option.DefaultStartOpts(), settings)
 				db := c.Conn(ctx, 1)
 				defer db.Close()
 				_, err := db.QueryContext(ctx, `SELECT 1`)

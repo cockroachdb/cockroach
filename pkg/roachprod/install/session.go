@@ -24,8 +24,8 @@ import (
 )
 
 type session interface {
-	CombinedOutput(cmd string) ([]byte, error)
-	Run(cmd string) error
+	CombinedOutput(ctx context.Context, cmd string) ([]byte, error)
+	Run(ctx context.Context, cmd string) error
 	SetWithExitStatus(value bool)
 	SetStdin(r io.Reader)
 	SetStdout(w io.Writer)
@@ -92,7 +92,7 @@ func (s *remoteSession) errWithDebug(err error) error {
 	return err
 }
 
-func (s *remoteSession) CombinedOutput(cmd string) ([]byte, error) {
+func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, error) {
 	if s.withExitStatus {
 		cmd = strings.TrimSpace(cmd)
 		if !strings.HasSuffix(cmd, ";") {
@@ -101,11 +101,29 @@ func (s *remoteSession) CombinedOutput(cmd string) ([]byte, error) {
 		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
 	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	b, err := s.Cmd.CombinedOutput()
-	return b, s.errWithDebug(err)
+
+	var b []byte
+	var err error
+	commandFinished := make(chan struct{})
+
+	go func() {
+		b, err = s.Cmd.CombinedOutput()
+		err = s.errWithDebug(err)
+		close(commandFinished)
+	}()
+
+	select {
+	case <-ctx.Done():
+		s.Close()
+		err = ctx.Err()
+		break
+	case <-commandFinished:
+		break
+	}
+	return b, err
 }
 
-func (s *remoteSession) Run(cmd string) error {
+func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 	if s.withExitStatus {
 		cmd = strings.TrimSpace(cmd)
 		if !strings.HasSuffix(cmd, ";") {
@@ -114,7 +132,23 @@ func (s *remoteSession) Run(cmd string) error {
 		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
 	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.errWithDebug(s.Cmd.Run())
+
+	var err error
+	commandFinished := make(chan struct{})
+	go func() {
+		err = s.errWithDebug(s.Cmd.Run())
+		close(commandFinished)
+	}()
+
+	select {
+	case <-ctx.Done():
+		s.Close()
+		err = ctx.Err()
+		break
+	case <-commandFinished:
+		break
+	}
+	return err
 }
 
 func (s *remoteSession) Start(cmd string) error {
@@ -188,7 +222,7 @@ func newLocalSession() *localSession {
 	return &localSession{cmd, cancel, withExitStatus}
 }
 
-func (s *localSession) CombinedOutput(cmd string) ([]byte, error) {
+func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, error) {
 	if s.withExitStatus {
 		cmd = strings.TrimSpace(cmd)
 		if !strings.HasSuffix(cmd, ";") {
@@ -197,10 +231,29 @@ func (s *localSession) CombinedOutput(cmd string) ([]byte, error) {
 		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
 	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.Cmd.CombinedOutput()
+
+	var b []byte
+	var err error
+	commandFinished := make(chan struct{})
+
+	go func() {
+		b, err = s.Cmd.CombinedOutput()
+		close(commandFinished)
+	}()
+
+	select {
+	case <-ctx.Done():
+		s.Close()
+		err = ctx.Err()
+		break
+	case <-commandFinished:
+		break
+	}
+
+	return b, err
 }
 
-func (s *localSession) Run(cmd string) error {
+func (s *localSession) Run(ctx context.Context, cmd string) error {
 	if s.withExitStatus {
 		cmd = strings.TrimSpace(cmd)
 		if !strings.HasSuffix(cmd, ";") {
@@ -209,7 +262,23 @@ func (s *localSession) Run(cmd string) error {
 		cmd += "echo -n 'LAST EXIT STATUS: '$?;"
 	}
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.Cmd.Run()
+
+	var err error
+	commandFinished := make(chan struct{})
+	go func() {
+		err = s.Cmd.Run()
+		close(commandFinished)
+	}()
+
+	select {
+	case <-ctx.Done():
+		s.Close()
+		err = ctx.Err()
+		break
+	case <-commandFinished:
+		break
+	}
+	return err
 }
 
 func (s *localSession) Start(cmd string) error {
