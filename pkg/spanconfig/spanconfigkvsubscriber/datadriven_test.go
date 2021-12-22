@@ -104,11 +104,7 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		ctx := context.Background()
 		ctx, cancel := context.WithCancel(ctx)
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				EnableSpanConfigs: true,
-			},
-		})
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer cancel()
 		defer tc.Stopper().Stop(ctx)
 

@@ -189,6 +189,12 @@ func createTestStoreWithoutStart(
 	// and merge queues separately to cover event-driven splits and merges.
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
+	// When using the span configs infrastructure, we initialize dependencies
+	// (spanconfig.KVSubscriber) outside of pkg/kv/kvserver due to circular
+	// dependency reasons. Tests using this harness can probably be refactored
+	// to do the same (with some effort). That's unlikely to happen soon, so
+	// let's continue to use the system config span.
+	cfg.SpanConfigsDisabled = true
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	require.Nil(t, cfg.Transport)
