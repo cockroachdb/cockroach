@@ -817,6 +817,18 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
+// For example:
+// err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+//		if kv, err := txn.Get(ctx, key); err != nil {
+//			return err
+//		}
+//		// ...
+//		return nil
+//	})
+// Note that once the transaction encounters a retryable error, the txn object
+// is marked as poisoned and all future ops fail fast until the retry. The
+// callback may return either nil or the retryable error. Txn is responsible for
+// resetting the transaction and retrying the callback.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).

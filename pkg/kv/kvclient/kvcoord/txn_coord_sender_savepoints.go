@@ -126,8 +126,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 			err = roachpb.NewTransactionRetryWithProtoRefreshError(
 				"cannot rollback to savepoint after a transaction restart",
 				tc.mu.txn.ID,
-				// The transaction inside this error doesn't matter.
-				roachpb.Transaction{},
+				tc.mu.txn,
 			)
 		}
 		return err
@@ -173,8 +172,7 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 		err = roachpb.NewTransactionRetryWithProtoRefreshError(
 			"cannot release savepoint after a transaction restart",
 			tc.mu.txn.ID,
-			// The transaction inside this error doesn't matter.
-			roachpb.Transaction{},
+			tc.mu.txn,
 		)
 	}
 	return err

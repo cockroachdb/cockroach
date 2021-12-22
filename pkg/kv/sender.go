@@ -324,6 +324,15 @@ type TxnSender interface {
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
+
+	// GetTxnRetryableErr returns an error if the TxnSender had a retryable error,
+	// otherwise nil. In this state Send() always fails with the same retryable
+	// error. ClearTxnRetryableErr can be called to clear this error and make
+	// TxnSender usable again.
+	GetTxnRetryableErr(ctx context.Context) *roachpb.TransactionRetryWithProtoRefreshError
+
+	// ClearTxnRetryableErr clears the retryable error, if any.
+	ClearTxnRetryableErr(ctx context.Context)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
