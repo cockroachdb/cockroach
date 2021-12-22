@@ -174,7 +174,7 @@ func (r *registry) register(e scpb.Element, add addSpec, drop dropSpec) {
 	}
 
 	r.targets = append(r.targets,
-		makeTarget(e, scpb.Target_ADD, add.transitionSpecs...),
-		makeTarget(e, scpb.Target_DROP, drop.transitionSpecs...),
+		makeTarget(e, scpb.Status_PUBLIC, add.transitionSpecs...),
+		makeTarget(e, scpb.Status_ABSENT, drop.transitionSpecs...),
 	)
 }

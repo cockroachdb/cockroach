@@ -9,46 +9,38 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
-- DROP Locality:{DescID: 55}
-  state: PUBLIC
+- [[Locality:{DescID: 55}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
-- DROP Namespace:{DescID: 55, Name: v1}
-  state: PUBLIC
+- [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 55
     name: v1
     schemaId: 51
-- DROP Owner:{DescID: 55}
-  state: PUBLIC
+- [[Owner:{DescID: 55}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     owner: root
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC]
   details:
     dependedOn: 55
     tableId: 54
-- DROP UserPrivileges:{DescID: 55, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 55, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     username: public
-- DROP UserPrivileges:{DescID: 55, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     privileges: 2
     username: root
-- DROP View:{DescID: 55}
-  state: PUBLIC
+- [[View:{DescID: 55}, ABSENT], PUBLIC]
   details:
     tableId: 55
 
@@ -75,233 +67,190 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- DROP Locality:{DescID: 55}
-  state: PUBLIC
+- [[Locality:{DescID: 55}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
-- DROP Locality:{DescID: 56}
-  state: PUBLIC
+- [[Locality:{DescID: 56}, ABSENT], PUBLIC]
   details:
     descriptorId: 56
-- DROP Locality:{DescID: 57}
-  state: PUBLIC
+- [[Locality:{DescID: 57}, ABSENT], PUBLIC]
   details:
     descriptorId: 57
-- DROP Locality:{DescID: 58}
-  state: PUBLIC
+- [[Locality:{DescID: 58}, ABSENT], PUBLIC]
   details:
     descriptorId: 58
-- DROP Locality:{DescID: 61}
-  state: PUBLIC
+- [[Locality:{DescID: 61}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
-- DROP Namespace:{DescID: 55, Name: v1}
-  state: PUBLIC
+- [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 55
     name: v1
     schemaId: 51
-- DROP Namespace:{DescID: 56, Name: v2}
-  state: PUBLIC
+- [[Namespace:{DescID: 56, Name: v2}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 56
     name: v2
     schemaId: 51
-- DROP Namespace:{DescID: 57, Name: v3}
-  state: PUBLIC
+- [[Namespace:{DescID: 57, Name: v3}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 57
     name: v3
     schemaId: 51
-- DROP Namespace:{DescID: 58, Name: v4}
-  state: PUBLIC
+- [[Namespace:{DescID: 58, Name: v4}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 58
     name: v4
     schemaId: 51
-- DROP Namespace:{DescID: 61, Name: v5}
-  state: PUBLIC
+- [[Namespace:{DescID: 61, Name: v5}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 61
     name: v5
     schemaId: 51
-- DROP Owner:{DescID: 55}
-  state: PUBLIC
+- [[Owner:{DescID: 55}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     owner: root
-- DROP Owner:{DescID: 56}
-  state: PUBLIC
+- [[Owner:{DescID: 56}, ABSENT], PUBLIC]
   details:
     descriptorId: 56
     owner: root
-- DROP Owner:{DescID: 57}
-  state: PUBLIC
+- [[Owner:{DescID: 57}, ABSENT], PUBLIC]
   details:
     descriptorId: 57
     owner: root
-- DROP Owner:{DescID: 58}
-  state: PUBLIC
+- [[Owner:{DescID: 58}, ABSENT], PUBLIC]
   details:
     descriptorId: 58
     owner: root
-- DROP Owner:{DescID: 61}
-  state: PUBLIC
+- [[Owner:{DescID: 61}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     owner: root
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC]
   details:
     dependedOn: 55
     tableId: 54
-- DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT], PUBLIC]
   details:
     columnID: 1
     dependedOn: 56
     tableId: 55
-- DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT], PUBLIC]
   details:
     columnID: 1
     dependedOn: 57
     tableId: 55
-- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT], PUBLIC]
   details:
     columnID: 1
     dependedOn: 57
     tableId: 56
-- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT], PUBLIC]
   details:
     columnID: 1
     dependedOn: 58
     tableId: 56
-- DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT], PUBLIC]
   details:
     columnID: 1
     dependedOn: 61
     tableId: 58
-- DROP UserPrivileges:{DescID: 55, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 55, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     username: public
-- DROP UserPrivileges:{DescID: 55, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 56, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 56, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 56
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 56, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 56, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 56
     username: public
-- DROP UserPrivileges:{DescID: 56, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 56, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 56
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 57, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 57, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 57
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 57, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 57, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 57
     username: public
-- DROP UserPrivileges:{DescID: 57, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 57, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 57
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 58, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 58, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 58
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 58, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 58, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 58
     username: public
-- DROP UserPrivileges:{DescID: 58, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 58, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 58
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 61, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 61, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 61, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 61, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     username: public
-- DROP UserPrivileges:{DescID: 61, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 61, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     privileges: 2
     username: root
-- DROP View:{DescID: 55}
-  state: PUBLIC
+- [[View:{DescID: 55}, ABSENT], PUBLIC]
   details:
     tableId: 55
-- DROP View:{DescID: 56}
-  state: PUBLIC
+- [[View:{DescID: 56}, ABSENT], PUBLIC]
   details:
     tableId: 56
-- DROP View:{DescID: 57}
-  state: PUBLIC
+- [[View:{DescID: 57}, ABSENT], PUBLIC]
   details:
     tableId: 57
-- DROP View:{DescID: 58}
-  state: PUBLIC
+- [[View:{DescID: 58}, ABSENT], PUBLIC]
   details:
     tableId: 58
-- DROP View:{DescID: 61}
-  state: PUBLIC
+- [[View:{DescID: 61}, ABSENT], PUBLIC]
   details:
     tableId: 61
-- DROP ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}
-  state: PUBLIC
+- [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, ABSENT], PUBLIC]
   details:
     tableId: 61
     typeId: 59
-- DROP ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}
-  state: PUBLIC
+- [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, ABSENT], PUBLIC]
   details:
     tableId: 61
     typeId: 60

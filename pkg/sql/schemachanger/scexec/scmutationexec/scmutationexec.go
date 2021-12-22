@@ -904,7 +904,7 @@ func asEventPayload(
 	if err != nil {
 		return nil, err
 	}
-	if op.Direction == scpb.Target_DROP {
+	if op.TargetStatus == scpb.Status_ABSENT {
 		switch op.Element.GetValue().(type) {
 		case *scpb.Table:
 			return &eventpb.DropTable{TableName: fullName}, nil
@@ -943,23 +943,23 @@ func asEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		switch op.Direction {
-		case scpb.Target_ADD:
+		switch op.TargetStatus {
+		case scpb.Status_PUBLIC:
 			return &eventpb.AlterTable{
 				TableName:  fullName,
 				MutationID: uint32(mutation.MutationID()),
 			}, nil
-		case scpb.Target_DROP:
+		case scpb.Status_ABSENT:
 			return &eventpb.DropIndex{
 				TableName:  fullName,
 				IndexName:  mutation.AsIndex().GetName(),
 				MutationID: uint32(mutation.MutationID()),
 			}, nil
 		default:
-			return nil, errors.AssertionFailedf("unknown direction %s", op.Direction)
+			return nil, errors.AssertionFailedf("unknown target status %s", op.TargetStatus)
 		}
 	}
-	return nil, errors.AssertionFailedf("unknown %s element type %T", op.Direction.String(), op.Element.GetValue())
+	return nil, errors.AssertionFailedf("unknown %s element type %T", op.TargetStatus.String(), op.Element.GetValue())
 }
 
 func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {

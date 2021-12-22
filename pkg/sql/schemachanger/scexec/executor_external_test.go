@@ -269,50 +269,62 @@ func TestSchemaChanger(t *testing.T) {
 				SubWorkID:       1,
 				SourceElementID: 1}
 			targetSlice = []*scpb.Target{
-				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
-					TableID:             fooTable.GetID(),
-					IndexID:             2,
-					KeyColumnIDs:        []descpb.ColumnID{1},
-					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-					StoringColumnIDs:    []descpb.ColumnID{2},
-					Unique:              true,
-					Inverted:            false,
-				},
+				scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.PrimaryIndex{
+						TableID:             fooTable.GetID(),
+						IndexID:             2,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+						StoringColumnIDs:    []descpb.ColumnID{2},
+						Unique:              true,
+						Inverted:            false,
+					},
 					metadata),
-				scpb.NewTarget(scpb.Target_ADD, &scpb.IndexName{
-					TableID: fooTable.GetID(),
-					IndexID: 2,
-					Name:    "new_primary_key",
-				},
+				scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.IndexName{
+						TableID: fooTable.GetID(),
+						IndexID: 2,
+						Name:    "new_primary_key",
+					},
 					metadata),
-				scpb.NewTarget(scpb.Target_ADD, &scpb.ColumnName{
-					TableID:  fooTable.GetID(),
-					ColumnID: 2,
-					Name:     "j",
-				},
+				scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.ColumnName{
+						TableID:  fooTable.GetID(),
+						ColumnID: 2,
+						Name:     "j",
+					},
 					metadata),
-				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
-					TableID:        fooTable.GetID(),
-					ColumnID:       2,
-					Type:           types.Int,
-					Nullable:       true,
-					PgAttributeNum: 2,
-				},
+				scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.Column{
+						TableID:        fooTable.GetID(),
+						ColumnID:       2,
+						Type:           types.Int,
+						Nullable:       true,
+						PgAttributeNum: 2,
+					},
 					metadata),
-				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
-					TableID:             fooTable.GetID(),
-					IndexID:             1,
-					KeyColumnIDs:        []descpb.ColumnID{1},
-					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-					Unique:              true,
-					Inverted:            false,
-				},
+				scpb.NewTarget(
+					scpb.Status_ABSENT,
+					&scpb.PrimaryIndex{
+						TableID:             fooTable.GetID(),
+						IndexID:             1,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+						Unique:              true,
+						Inverted:            false,
+					},
 					metadata),
-				scpb.NewTarget(scpb.Target_DROP, &scpb.IndexName{
-					TableID: fooTable.GetID(),
-					IndexID: 1,
-					Name:    "primary",
-				},
+				scpb.NewTarget(
+					scpb.Status_ABSENT,
+					&scpb.IndexName{
+						TableID: fooTable.GetID(),
+						IndexID: 1,
+						Name:    "primary",
+					},
 					metadata),
 			}
 

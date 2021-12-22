@@ -160,11 +160,11 @@ func makeState(
 			Status: states[i],
 		}
 		if rollback {
-			switch ts.Nodes[i].Direction {
-			case scpb.Target_ADD:
-				ts.Nodes[i].Direction = scpb.Target_DROP
-			case scpb.Target_DROP:
-				ts.Nodes[i].Direction = scpb.Target_ADD
+			switch ts.Nodes[i].TargetStatus {
+			case scpb.Status_PUBLIC:
+				ts.Nodes[i].TargetStatus = scpb.Status_ABSENT
+			case scpb.Status_ABSENT:
+				ts.Nodes[i].TargetStatus = scpb.Status_PUBLIC
 			}
 		}
 	}

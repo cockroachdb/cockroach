@@ -295,10 +295,10 @@ type AddIndexPartitionInfo struct {
 // LogEvent logs an event for a given descriptor.
 type LogEvent struct {
 	mutationOp
-	DescID    descpb.ID
-	Metadata  scpb.ElementMetadata
-	Element   *scpb.ElementProto
-	Direction scpb.Target_Direction
+	DescID       descpb.ID
+	Metadata     scpb.ElementMetadata
+	Element      *scpb.ElementProto
+	TargetStatus scpb.Status
 }
 
 // SetColumnName makes a column only to allocate

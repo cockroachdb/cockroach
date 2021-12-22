@@ -40,11 +40,9 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBehavior) {
 	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(b, seq, privilege.DROP))
 	// Add a node to drop the sequence
-	decomposeTableDescToElements(b, seq, scpb.Target_DROP)
+	decomposeTableDescToElements(b, seq, scpb.Status_ABSENT)
 	// Check if there are dependencies.
-	scpb.ForEachRelationDependedOnBy(b, func(_ scpb.Status,
-		_ scpb.Target_Direction,
-		dep *scpb.RelationDependedOnBy) {
+	scpb.ForEachRelationDependedOnBy(b, func(_, _ scpb.Status, dep *scpb.RelationDependedOnBy) {
 		if dep.TableID != seq.GetID() {
 			return
 		}
@@ -63,7 +61,7 @@ func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBeha
 					continue
 				}
 				// Convert the default expression into elements.
-				decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
+				decomposeDefaultExprToElements(b, desc, col, scpb.Status_ABSENT)
 			}
 		} else if desc.IsView() {
 			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) {

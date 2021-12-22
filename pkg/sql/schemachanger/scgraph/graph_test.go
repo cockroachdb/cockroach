@@ -86,7 +86,8 @@ func TestGraphRanks(t *testing.T) {
 		for idx := range tc.addNode {
 			if tc.addNode[idx] {
 				state.Nodes = append(state.Nodes, &scpb.Node{
-					Target: scpb.NewTarget(scpb.Target_ADD,
+					Target: scpb.NewTarget(
+						scpb.Status_PUBLIC,
 						&scpb.Table{
 							TableID: descpb.ID(idx),
 						},
@@ -95,7 +96,8 @@ func TestGraphRanks(t *testing.T) {
 				})
 			} else {
 				state.Nodes = append(state.Nodes, &scpb.Node{
-					Target: scpb.NewTarget(scpb.Target_DROP,
+					Target: scpb.NewTarget(
+						scpb.Status_PUBLIC,
 						&scpb.Table{
 							TableID: descpb.ID(idx),
 						},

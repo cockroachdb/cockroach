@@ -39,10 +39,10 @@ func init() {
 			// If the relation is in any drop state in the current phase,
 			// then any dependent edges should be cleaned up.
 			screl.JoinTargetNode(relation, relationTarget, relationNode),
-			relationTarget.AttrEq(screl.Direction, scpb.Target_DROP),
+			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 
 			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.Direction, scpb.Target_DROP),
+			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -63,10 +63,10 @@ func init() {
 			// If the relation is in any drop state in the current phase,
 			// then any dependent edges should be cleaned up.
 			screl.JoinTargetNode(name, nameTarget, nameNode),
-			name.AttrEq(screl.Direction, scpb.Target_DROP),
+			name.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 
 			screl.JoinTargetNode(col, colTarget, colNode),
-			col.AttrEq(screl.Direction, scpb.Target_DROP),
+			col.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -87,10 +87,10 @@ func init() {
 			// If the relation is in any drop state in the current phase,
 			// then any dependent edges should be cleaned up.
 			screl.JoinTargetNode(name, nameTarget, nameNode),
-			name.AttrEq(screl.Direction, scpb.Target_DROP),
+			name.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 
 			screl.JoinTargetNode(idx, idxTarget, idxNode),
-			idx.AttrEq(screl.Direction, scpb.Target_DROP),
+			idx.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }

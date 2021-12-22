@@ -39,7 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuilderAlterTable(t *testing.T) {
+func TestBuildDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -184,11 +184,8 @@ func marshalNodes(t *testing.T, nodes scpb.State) string {
 		require.NoError(t, err)
 		entry := strings.Builder{}
 		entry.WriteString("- ")
-		entry.WriteString(node.Target.Direction.String())
-		entry.WriteString(" ")
-		entry.WriteString(screl.ElementString(node.Element()))
+		entry.WriteString(screl.NodeString(node))
 		entry.WriteString("\n")
-		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))
 		entry.WriteString(indentText(yaml, "    "))
 		sortedEntries = append(sortedEntries, entry.String())

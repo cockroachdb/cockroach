@@ -48,10 +48,11 @@ func init() {
 				minPhase(scop.PostCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.View, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{View: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{View: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 				emit(func(this *scpb.View) scop.Op {
