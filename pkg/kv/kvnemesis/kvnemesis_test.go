@@ -39,7 +39,6 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t)
-	skip.WithIssue(t, 73722)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -74,7 +73,6 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t)
-	skip.WithIssue(t, 73710)
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	const numNodes = 4
