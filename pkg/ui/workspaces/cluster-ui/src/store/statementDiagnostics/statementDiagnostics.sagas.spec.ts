@@ -11,7 +11,7 @@
 import { expectSaga } from "redux-saga-test-plan";
 import { throwError } from "redux-saga-test-plan/providers";
 import { call } from "redux-saga/effects";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
 import {
   createDiagnosticsReportSaga,
@@ -24,12 +24,24 @@ import {
   getStatementDiagnosticsReports,
 } from "src/api/statementDiagnosticsApi";
 
+const CreateStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 const CreateStatementDiagnosticsReportResponse =
   cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
 
 describe("statementsDiagnostics sagas", () => {
   describe("createDiagnosticsReportSaga", () => {
     const statementFingerprint = "SELECT * FROM table";
+
+    const request = new CreateStatementDiagnosticsReportRequest({
+      statement_fingerprint: statementFingerprint,
+      min_execution_latency: new google.protobuf.Duration({
+        seconds: new Long(100),
+      }),
+      expires_after: new google.protobuf.Duration({
+        seconds: new Long(15 * 60),
+      }),
+    });
 
     const report = new CreateStatementDiagnosticsReportResponse({
       report: {
@@ -44,15 +56,9 @@ describe("statementsDiagnostics sagas", () => {
     );
 
     it("successful request", () => {
-      expectSaga(
-        createDiagnosticsReportSaga,
-        actions.createReport(statementFingerprint),
-      )
+      expectSaga(createDiagnosticsReportSaga, actions.createReport(request))
         .provide([
-          [
-            call(createStatementDiagnosticsReport, statementFingerprint),
-            report,
-          ],
+          [call(createStatementDiagnosticsReport, request), report],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
         .put(actions.createReportCompleted())
@@ -68,15 +74,9 @@ describe("statementsDiagnostics sagas", () => {
 
     it("failed request", () => {
       const error = new Error("Failed request");
-      expectSaga(
-        createDiagnosticsReportSaga,
-        actions.createReport(statementFingerprint),
-      )
+      expectSaga(createDiagnosticsReportSaga, actions.createReport(request))
         .provide([
-          [
-            call(createStatementDiagnosticsReport, statementFingerprint),
-            throwError(error),
-          ],
+          [call(createStatementDiagnosticsReport, request), throwError(error)],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
         .put(actions.createReportFailed(error))

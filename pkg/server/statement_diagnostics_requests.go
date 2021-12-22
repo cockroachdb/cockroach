@@ -115,8 +115,9 @@ func (s *statusServer) CancelStatementDiagnosticsReport(
 	return &response, nil
 }
 
-// StatementDiagnosticsRequests retrieves all of the statement
-// diagnostics requests in the `system.statement_diagnostics_requests` table.
+// StatementDiagnosticsRequests retrieves all statement diagnostics
+// requests in the `system.statement_diagnostics_requests` table that
+// have not yet expired.
 func (s *statusServer) StatementDiagnosticsRequests(
 	ctx context.Context, req *serverpb.StatementDiagnosticsReportsRequest,
 ) (*serverpb.StatementDiagnosticsReportsResponse, error) {
@@ -179,6 +180,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			}
 			if expiresAt, ok := row[6].(*tree.DTimestampTZ); ok {
 				req.ExpiresAt = expiresAt.Time
+				// Don't return already expired requests.
+				if req.ExpiresAt.Before(time.Now()) {
+					continue
+				}
 			}
 		}
 
