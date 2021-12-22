@@ -40,12 +40,12 @@ go_test(
     ],
     embed = [":scjob"],
     deps = [
+        "//pkg/keys",
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/testutils",
         "//pkg/util/hlc",
-        "//pkg/util/interval",
         "//pkg/util/leaktest",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

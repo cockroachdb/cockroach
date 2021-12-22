@@ -121,9 +121,7 @@ type Backfiller interface {
 	// MaybePrepareDestIndexesForBackfill will choose a MinimumWriteTimestamp
 	// for the backfill if one does not exist. It will scan all destination
 	// indexes at that timestamp to ensure that no subsequent writes from
-	// other transactions will occur below that timestamp. If it populates
-	// the timestamp, it will initialize the set of SpansToDo to the entire
-	// index span corresponding to the source index.
+	// other transactions will occur below that timestamp.
 	MaybePrepareDestIndexesForBackfill(
 		context.Context, BackfillProgress, catalog.TableDescriptor,
 	) (BackfillProgress, error)
@@ -177,9 +175,10 @@ type BackfillProgress struct {
 	// all subsequent writes due to other transactions will occur.
 	MinimumWriteTimestamp hlc.Timestamp
 
-	// SpansToDo contains the spans of the source index which still need to
-	// be backfilled. The spans are expected to contain any tenant prefix.
-	SpansToDo []roachpb.Span
+	// CompletedSpans contains the spans of the source index which have been
+	// backfilled into the destination indexes. The spans are expected to
+	// contain any tenant prefix.
+	CompletedSpans []roachpb.Span
 }
 
 // Backfill corresponds to a definition of a backfill from a source

@@ -530,14 +530,10 @@ message BackfillProgress {
   // writing.
   util.hlc.Timestamp write_timestamp = 4 [(gogoproto.nullable) = false];
 
-  // SpansToDo are the set of spans of the parent index which must still be
-  // backfilled. Note that this will never contain tenant prefixes even if
-  // the data corresponds to a secondary tenant.
-  //
-  // TODO(ajwerner): There's been talk that SpansToDo is worse than DoneSpans
-  // in terms of constructs. Discuss with @dt before merging this whether we
-  // want to make moves on that.
-  repeated roachpb.Span spans_to_do = 5 [(gogoproto.nullable) = false];
+  // CompletedSpans are the set of spans of the source index which have been
+  // backfilled into the destination indexes. Note that this will never contain
+  // tenant prefixes even if the data corresponds to a secondary tenant.
+  repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
 }
 
 

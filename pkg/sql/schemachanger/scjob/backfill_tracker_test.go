@@ -14,11 +14,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
@@ -32,12 +32,22 @@ import (
 // to read.
 func TestBackfillTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mkSpans := func(keys ...string) (ret []roachpb.Span) {
-		for i := 1; i < len(keys); i++ {
-			ret = append(ret, roachpb.Span{
-				Key:    []byte(keys[i-1]),
-				EndKey: []byte(keys[i]),
-			})
+	mkSpans := func(tableID, indexID uint32, ks ...string) (ret []roachpb.Span) {
+		prefix := keys.SystemSQLCodec.IndexPrefix(tableID, indexID)
+		prefix = prefix[:len(prefix):len(prefix)]
+		switch len(ks) {
+		case 0:
+			ks = []string{string(prefix), string(prefix.PrefixEnd())}
+		case 1:
+			ks = append(ks, string(prefix.PrefixEnd()))
+		}
+		for i := 1; i < len(ks); i++ {
+			start := append(prefix, ks[i-1]...)
+			end := append(prefix, ks[i]...)
+			if ks[i] == "" {
+				end = prefix.PrefixEnd()
+			}
+			ret = append(ret, roachpb.Span{Key: start, EndKey: end})
 		}
 		return ret
 	}
@@ -61,32 +71,31 @@ func TestBackfillTracker(t *testing.T) {
 	}
 	t.Run("basic", func(t *testing.T) {
 		tc := testData{
-			name:         "foo",
-			rangeSpans:   mkSpans("a", "b", "c", "d", "e", "f"),
-			origFraction: .1,
+			name: "foo",
+			rangeSpans: append(append(
+				mkSpans(1, 1, "", "a", "b", "c", "d", ""),
+				mkSpans(2, 1, "", "a", "b", "c", "d", "")...,
+			), mkSpans(42, 1, "", "a", "b", "c", "d", "")...),
 			progress: []scexec.BackfillProgress{
 				{
 					Backfill:              mkBackfill(1, 1, 2, 3),
 					MinimumWriteTimestamp: hlc.Timestamp{},
-					SpansToDo: append(
-						mkSpans("a", "cc"),
-						mkSpans("dd", "ee")...,
+					CompletedSpans: append(
+						mkSpans(1, 1, "", "bb"),
+						mkSpans(1, 1, "cc", "")...,
 					),
 				},
 				{
 					Backfill:              mkBackfill(2, 1, 2),
 					MinimumWriteTimestamp: hlc.Timestamp{},
-					SpansToDo: append(
-						mkSpans("a", "cc"),
-						mkSpans("dd", "ee")...,
-					),
+					CompletedSpans:        nil,
 				},
 			},
 		}
 		ctx := context.Background()
 		var bts backfillTrackerTestState
 		bts.mu.rangeSpans = tc.rangeSpans
-		tr := newBackfillTracker(bts.cfg(), tc.progress, tc.origFraction)
+		tr := newBackfillTracker(keys.SystemSQLCodec, bts.cfg(), tc.progress)
 
 		t.Run("retrieving initial state", func(t *testing.T) {
 			{
@@ -134,8 +143,8 @@ func TestBackfillTracker(t *testing.T) {
 		t.Run("WriteFraction initial", func(t *testing.T) {
 			require.Equal(t, float32(0), bts.getFraction())
 			require.NoError(t, tr.FlushFractionCompleted(ctx))
-			// No update, so no write.
-			require.EqualValues(t, float32(0), bts.getFraction())
+			// We've never had an update call, so expect the flush to no-op.
+			require.EqualValues(t, 0, bts.getFraction())
 			require.EqualValues(t, 0, bts.getFractionUpdatedCalls())
 		})
 		backfill2 := mkBackfill(42, 1, 3)
@@ -143,33 +152,28 @@ func TestBackfillTracker(t *testing.T) {
 			require.NoError(t, tr.SetBackfillProgress(ctx, scexec.BackfillProgress{
 				Backfill:              backfill2,
 				MinimumWriteTimestamp: hlc.Timestamp{WallTime: 1},
-				SpansToDo:             mkSpans("a", "c"),
+				CompletedSpans:        nil,
 			}))
 		})
-		t.Run("Observe that there still has not been any progress", func(t *testing.T) {
+		t.Run("Observe that there has been a progress update", func(t *testing.T) {
 			require.NoError(t, tr.FlushFractionCompleted(ctx))
-			// No update, so no write.
-			require.EqualValues(t, float32(0), bts.getFraction())
-			require.EqualValues(t, 0, bts.getFractionUpdatedCalls())
+			// No we see that the denominator has changed to 3/15
+			require.EqualValues(t, float32(.2), bts.getFraction())
+			require.EqualValues(t, 1, bts.getFractionUpdatedCalls())
 		})
 		updatedProgress2 := scexec.BackfillProgress{
 			Backfill:              backfill2,
 			MinimumWriteTimestamp: hlc.Timestamp{WallTime: 1},
-			SpansToDo:             mkSpans("a", "b"),
+			CompletedSpans:        mkSpans(42, 1, "a", "d"),
 		}
 		t.Run("SetBackfillProgress to finish a range", func(t *testing.T) {
 			require.NoError(t, tr.SetBackfillProgress(ctx, updatedProgress2))
 		})
 		t.Run("Observe that has been a progress update", func(t *testing.T) {
 			require.NoError(t, tr.FlushFractionCompleted(ctx))
-			// Each of the backfills has 2 ranges. One of the backfills now
-			// is 1/2 done. That means we've finished 1/6th of the backfill
-			// work. We started at 10%, so
-			//
-			//  .1 + .9*(1/6) = (2+3)/20 = .25
-			//
-			require.EqualValues(t, float32(.25), bts.getFraction())
-			require.EqualValues(t, 1, bts.getFractionUpdatedCalls())
+
+			require.EqualValues(t, float32(.4), bts.getFraction())
+			require.EqualValues(t, 2, bts.getFractionUpdatedCalls())
 		})
 		t.Run("Observe that FlushCheckpoint works", func(t *testing.T) {
 			require.Nil(t, tr.FlushCheckpoint(ctx))
@@ -211,20 +215,19 @@ func (bts *backfillTrackerTestState) cfg() backfillTrackerConfig {
 }
 
 func (bts *backfillTrackerTestState) numRangesInSpans(
-	ctx context.Context, sp []roachpb.Span,
-) (nRanges int, _ error) {
-	tr := interval.NewRangeTree()
-	for _, s := range sp {
-		tr.Add(s.AsRange())
-	}
+	ctx context.Context, totalSpan roachpb.Span, containedBy roachpb.SpanGroup,
+) (total, inContainedBy int, _ error) {
 	bts.mu.Lock()
 	defer bts.mu.Unlock()
 	for _, s := range bts.mu.rangeSpans {
-		if tr.Encloses(s.AsRange()) {
-			nRanges++
+		if totalSpan.Overlaps(s) {
+			total++
+			if containedBy.Encloses(s) {
+				inContainedBy++
+			}
 		}
 	}
-	return nRanges, nil
+	return total, inContainedBy, nil
 }
 
 func (bts *backfillTrackerTestState) writeProgressFraction(

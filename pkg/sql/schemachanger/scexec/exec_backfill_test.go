@@ -147,7 +147,7 @@ func TestExecBackfill(t *testing.T) {
 			scanned := scexec.BackfillProgress{
 				Backfill:              backfill,
 				MinimumWriteTimestamp: hlc.Timestamp{WallTime: 1},
-				SpansToDo:             []roachpb.Span{mut.IndexSpan(keys.SystemSQLCodec, 1)},
+				CompletedSpans:        []roachpb.Span{mut.IndexSpan(keys.SystemSQLCodec, 1)},
 			}
 			bf.EXPECT().
 				MaybePrepareDestIndexesForBackfill(gomock.Any(), progress, desc).
@@ -230,7 +230,7 @@ func TestExecBackfill(t *testing.T) {
 				scannedBar := scexec.BackfillProgress{
 					Backfill:              backfillBar,
 					MinimumWriteTimestamp: hlc.Timestamp{WallTime: 1},
-					SpansToDo:             []roachpb.Span{bar.IndexSpan(keys.SystemSQLCodec, 1)},
+					CompletedSpans:        []roachpb.Span{bar.IndexSpan(keys.SystemSQLCodec, 1)},
 				}
 				bt.EXPECT().
 					GetBackfillProgress(gomock.Any(), backfillBar).

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 )
@@ -38,18 +37,7 @@ var _ scexec.BackfillTracker = (*testBackfillTracker)(nil)
 func (s *testBackfillTracker) GetBackfillProgress(
 	ctx context.Context, b scexec.Backfill,
 ) (scexec.BackfillProgress, error) {
-	desc, err := s.deps.Catalog().MustReadImmutableDescriptor(ctx, b.TableID)
-	if err != nil {
-		return scexec.BackfillProgress{}, err
-	}
-	table, err := catalog.AsTableDescriptor(desc)
-	if err != nil {
-		return scexec.BackfillProgress{}, err
-	}
-	return scexec.BackfillProgress{
-		Backfill:  b,
-		SpansToDo: []roachpb.Span{table.IndexSpan(s.deps.Codec(), b.SourceIndexID)},
-	}, nil
+	return scexec.BackfillProgress{Backfill: b}, nil
 }
 
 func (s *testBackfillTracker) SetBackfillProgress(

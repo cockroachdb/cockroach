@@ -31,8 +31,10 @@ func newBackfillTrackerFactory(
 ) func() scexec.BackfillTracker {
 	return func() scexec.BackfillTracker {
 		cfg := backfillTrackerConfig{
-			numRangesInSpans: func(ctx context.Context, spans []roachpb.Span) (nRanges int, _ error) {
-				return sql.NumRangesInSpans(ctx, db, distSQLPlanner, spans)
+			numRangesInSpans: func(
+				ctx context.Context, span roachpb.Span, containedBy []roachpb.Span,
+			) (total, inContainedBy int, _ error) {
+				return sql.NumRangesInSpanContainedBy(ctx, db, distSQLPlanner, span, containedBy)
 			},
 			writeProgressFraction: func(_ context.Context, fractionProgressed float32) error {
 				if err := job.FractionProgressed(
@@ -58,12 +60,12 @@ func newBackfillTrackerFactory(
 				})
 			},
 		}
-		progress := job.Progress()
 		payload := job.Payload()
 		return newBackfillTracker(
+			codec,
 			cfg,
-			convertFromJobBackfillProgress(codec, payload.GetNewSchemaChange().BackfillProgress),
-			progress.GetFractionCompleted(),
+			convertFromJobBackfillProgress(
+				codec, payload.GetNewSchemaChange().BackfillProgress),
 		)
 	}
 }
@@ -73,7 +75,7 @@ func convertToJobBackfillProgress(
 ) ([]jobspb.BackfillProgress, error) {
 	ret := make([]jobspb.BackfillProgress, 0, len(progresses))
 	for _, bp := range progresses {
-		strippedSpans, err := removeTenantPrefixFromSpans(codec, bp.SpansToDo)
+		strippedSpans, err := removeTenantPrefixFromSpans(codec, bp.CompletedSpans)
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +84,7 @@ func convertToJobBackfillProgress(
 			SourceIndexID:  bp.SourceIndexID,
 			DestIndexIDs:   bp.DestIndexIDs,
 			WriteTimestamp: bp.MinimumWriteTimestamp,
-			SpansToDo:      strippedSpans,
+			CompletedSpans: strippedSpans,
 		})
 	}
 	return ret, nil
@@ -100,7 +102,7 @@ func convertFromJobBackfillProgress(
 				DestIndexIDs:  bp.DestIndexIDs,
 			},
 			MinimumWriteTimestamp: bp.WriteTimestamp,
-			SpansToDo:             addTenantPrefixToSpans(codec, bp.SpansToDo),
+			CompletedSpans:        addTenantPrefixToSpans(codec, bp.CompletedSpans),
 		})
 	}
 	return ret
