@@ -486,6 +486,11 @@ savepoint x
 abort
 ----
 (*roachpb.TransactionRetryWithProtoRefreshError)
+txn id not changed
+
+reset
+----
+txn error cleared
 txn id changed
 
 release x
