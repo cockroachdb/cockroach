@@ -61,7 +61,6 @@ func registerSQLSmith(r registry.Registry) {
 		"default":      sqlsmith.Settings["default"],
 		"no-mutations": sqlsmith.Settings["no-mutations"],
 		"no-ddl":       sqlsmith.Settings["no-ddl"],
-		"multi-region": sqlsmith.Settings["multi-region"],
 	}
 
 	runSQLSmith := func(ctx context.Context, t test.Test, c cluster.Cluster, setupName, settingName string) {
@@ -308,6 +307,7 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 	setups["seed-multi-region"] = sqlsmith.Setups["seed-multi-region"]
 	settings["ddl-nodrop"] = sqlsmith.Settings["ddl-nodrop"]
 	settings["vec"] = sqlsmith.SettingVectorize
+	settings["multi-region"] = sqlsmith.Settings["multi-region"]
 	register("seed-vec", "vec")
 	register("tpcc", "ddl-nodrop")
 	register("seed-multi-region", "multi-region")
