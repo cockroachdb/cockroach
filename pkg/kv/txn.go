@@ -89,6 +89,8 @@ type Txn struct {
 		// The txn has to be committed by this deadline. A nil value indicates no
 		// deadline.
 		deadline *hlc.Timestamp
+
+		poisonErr error
 	}
 
 	// admissionHeader is used for admission control for work done in this
@@ -840,12 +842,28 @@ func (txn *Txn) resetDeadlineLocked() {
 	txn.mu.deadline = nil
 }
 
+func (txn *Txn) setPoisonedLocked(ctx context.Context, err error) {
+	log.VEventf(ctx, 2, "poisoning txn: %v", err)
+	txn.mu.poisonErr = err
+}
+
+func (txn *Txn) clearPoisonedLocked(ctx context.Context) {
+	if txn.mu.poisonErr != nil {
+		log.VEventf(ctx, 2, "clearing poisoning: %v", txn.mu.poisonErr)
+		txn.mu.poisonErr = nil
+	}
+}
+
 // Rollback sends an EndTxnRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback(ctx context.Context) error {
 	if txn.typ != RootTxn {
 		return errors.WithContextTags(errors.AssertionFailedf("Rollback() called on leaf txn"), ctx)
 	}
+
+	txn.mu.Lock()
+	txn.clearPoisonedLocked(ctx)
+	txn.mu.Unlock()
 
 	return txn.rollback(ctx).GoError()
 }
@@ -974,6 +992,14 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
+			// fn returned nil but something went wrong and txn is poisoned, therefore we fail.
+			txn.mu.Lock()
+			poisonErr := txn.mu.poisonErr
+			txn.mu.Unlock()
+			if poisonErr != nil {
+				log.VEventf(ctx, 2, "txn was poisoned: %v", poisonErr)
+				return poisonErr
+			}
 			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v", err)
@@ -1030,6 +1056,11 @@ func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
 	txn.commitTriggers = nil
 	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
 		txn.DebugName(), err)
+
+	// Clear poisoning for the retry.
+	txn.mu.Lock()
+	txn.clearPoisonedLocked(ctx)
+	txn.mu.Unlock()
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
@@ -1091,7 +1122,13 @@ func (txn *Txn) Send(
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
 	sender := txn.mu.sender
+	poisonErr := txn.mu.poisonErr
 	txn.mu.Unlock()
+	if poisonErr != nil {
+		// All ops should fail because txn is poisoned.
+		log.VEventf(ctx, 2, "txn was poisoned: %v", poisonErr)
+		return nil, roachpb.NewError(poisonErr)
+	}
 	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
 	if pErr == nil {
 		return br, nil
@@ -1120,6 +1157,7 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 	if !errors.As(err, &retryErr) {
 		return
 	}
+	txn.setPoisonedLocked(ctx, err)
 	txn.resetDeadlineLocked()
 	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
 }
