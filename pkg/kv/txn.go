@@ -974,6 +974,16 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
+			txn.mu.Lock()
+			txnErr := txn.mu.sender.GetTxnRetryableErr(ctx)
+			txn.mu.Unlock()
+			if txnErr != nil {
+				// The closure returned nil but the sender has a retryable error, fail
+				// here. Normally the closure should return errors, and then the retry
+				// loop can retry the closure.
+				log.Eventf(ctx, "txn was poisoned: %v", txnErr)
+				return txnErr
+			}
 			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v", err)
@@ -1018,18 +1028,21 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 	return err
 }
 
-// PrepareForRetry needs to be called before an retry to perform some
-// book-keeping.
-//
-// TODO(andrei): I think this is called in the wrong place. See #18170.
+// PrepareForRetry needs to be called before a retry to perform some
+// book-keeping and clear errors when possible.
 func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(err, "PrepareForRetry() called on leaf txn"), ctx))
 	}
 
+	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
 	txn.commitTriggers = nil
 	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
 		txn.DebugName(), err)
+
+	txn.mu.Lock()
+	txn.handleErrIfRetryableLocked(ctx, err)
+	txn.mu.Unlock()
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
@@ -1104,12 +1117,6 @@ func (txn *Txn) Send(
 			log.Fatalf(ctx, "retryable error for the wrong txn. "+
 				"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
 				requestTxnID, retryErr.TxnID, retryErr)
-		}
-		if txn.typ == RootTxn {
-			// On root senders, we bump the sender's identity upon retry errors.
-			txn.mu.Lock()
-			txn.handleErrIfRetryableLocked(ctx, retryErr)
-			txn.mu.Unlock()
 		}
 	}
 	return br, pErr
@@ -1405,8 +1412,13 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 		return
 	}
 	if !retryErr.PrevTxnAborted() {
-		// We don't need a new transaction as a result of this error. Nothing more
-		// to do.
+		// We don't need a new transaction as a result of this error, but we may
+		// have a retryable error that should be cleared.
+		txn.mu.sender.ClearTxnRetryableErr(ctx)
+		return
+	}
+	// Verify we have an initialized Transaction before creating a new root sender.
+	if newTxn.ID == (uuid.UUID{}) {
 		return
 	}
 
@@ -1468,17 +1480,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	now := txn.db.clock.NowAsClockTimestamp()
 	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
-	return roachpb.NewTransactionRetryWithProtoRefreshError(
-		msg,
-		txn.mu.ID,
-		roachpb.MakeTransaction(
-			txn.debugNameLocked(),
-			nil, // baseKey
-			txn.mu.userPriority,
-			now.ToTimestamp(),
-			txn.db.clock.MaxOffset().Nanoseconds(),
-			int32(txn.db.ctx.NodeID.SQLInstanceID())),
-	)
+	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 
 // PrepareRetryableError returns a

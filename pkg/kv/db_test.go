@@ -699,3 +699,139 @@ func TestDBDecommissionedOperations(t *testing.T) {
 		})
 	}
 }
+
+// Get a retryable error within a db.Txn transaction, return the error, and
+// verify the retry works well. This test is here to show the right
+// implementation for a retryable callback, unlike the TestDB_TxnReturnNil test
+// below.
+func TestDB_TxnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	runNumber := 0
+	err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		require.NoError(t, txn.Put(ctx, "aa", "1"))
+		require.NoError(t, txn.Put(ctx, "bb", "1"))
+
+		{
+			// High priority txn - will abort the other txn.
+			hpTxn := kv.NewTxn(ctx, db, 0)
+			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+			// Only write if we have not written before, because otherwise we will keep aborting
+			// the other txn forever.
+			r, e := hpTxn.Get(ctx, "aa")
+			require.NoError(t, e)
+			if !r.Exists() {
+				require.Zero(t, runNumber)
+				require.NoError(t, hpTxn.Put(ctx, "aa", "hp txn"))
+				require.NoError(t, hpTxn.Commit(ctx))
+			} else {
+				// We already wrote to 'aa', meaning this is a retry, no need to write again.
+				require.Equal(t, 1, runNumber)
+				require.NoError(t, hpTxn.Rollback(ctx))
+			}
+		}
+
+		// Read, so that we'll get a retryable error.
+		r, e := txn.Get(ctx, "aa")
+		if runNumber == 0 {
+			// First run, we should get a retryable error.
+			require.Zero(t, runNumber)
+			require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, e)
+			require.Equal(t, []byte(nil), r.ValueBytes())
+		} else {
+			// The retry should succeed.
+			require.Equal(t, 1, runNumber)
+			require.NoError(t, e)
+			require.Equal(t, []byte("1"), r.ValueBytes())
+		}
+		runNumber++
+
+		// Return the retryable error.
+		return e
+	})
+	require.NoError(t, err)
+
+	err1 := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		// The high priority txn was overridden by the successful  retry.
+		kv, e1 := txn.Get(ctx, "aa")
+		require.NoError(t, e1)
+		require.Equal(t, []byte("1"), kv.ValueBytes())
+		kv, e2 := txn.Get(ctx, "bb")
+		require.NoError(t, e2)
+		require.Equal(t, []byte("1"), kv.ValueBytes())
+		return nil
+	})
+	require.NoError(t, err1)
+}
+
+// Get a retryable error within a db.Txn transaction, but ignore the error and
+// eventually return a nil. After the error the txn object is not usable
+// (poisoned), and other calls should fail with the same error. The better way
+// to write the retryable callback is in the TestDB_TxnRetry above.
+func TestDB_TxnReturnNil(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	runNumber := 0
+	err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		require.NoError(t, txn.Put(ctx, "aa", "1"))
+		require.NoError(t, txn.Put(ctx, "bb", "1"))
+
+		{
+			// High priority txn - will abort the other txn.
+			hpTxn := kv.NewTxn(ctx, db, 0)
+			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+			// Only write if we have not written before, because otherwise we will keep aborting
+			// the other txn forever.
+			r, e := hpTxn.Get(ctx, "aa")
+			require.NoError(t, e)
+			if !r.Exists() {
+				require.Zero(t, runNumber)
+				require.NoError(t, hpTxn.Put(ctx, "aa", "hp txn"))
+				require.NoError(t, hpTxn.Commit(ctx))
+			} else {
+				// We already wrote to 'aa', meaning this is a retry, no need to write again.
+				require.Equal(t, 1, runNumber)
+				require.NoError(t, hpTxn.Rollback(ctx))
+			}
+		}
+
+		// Read, so that we'll get a retryable error.
+		r, e := txn.Get(ctx, "aa")
+		require.Zero(t, runNumber)
+		// First and only run, we should get a retryable error.
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, e)
+		require.Equal(t, []byte(nil), r.ValueBytes())
+		runNumber++
+
+		// At this point txn is poisoned, and any op returns the same (poisoning) error.
+		r, e = txn.Get(ctx, "bb")
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, e)
+		require.Equal(t, []byte(nil), r.ValueBytes())
+
+		// Return nil - the retry loop will not retry and the txn will fail.
+		return nil
+	})
+	// db.Txn should return the retryable error that poisoned txn.
+	expectedErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil)
+	require.True(t, errors.As(err, &expectedErr))
+
+	err1 := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		// The high priority txn succeeded.
+		kv, e1 := txn.Get(ctx, "aa")
+		require.NoError(t, e1)
+		require.Equal(t, []byte("hp txn"), kv.ValueBytes())
+
+		// The main txn failed.
+		kv, e2 := txn.Get(ctx, "bb")
+		require.NoError(t, e2)
+		require.Equal(t, []byte(nil), kv.ValueBytes())
+		return nil
+	})
+	require.NoError(t, err1)
+}

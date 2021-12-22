@@ -650,9 +650,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		expEpoch              enginepb.TxnEpoch
 		expPri                enginepb.TxnPriority
 		expWriteTS, expReadTS hlc.Timestamp
-		// Is set, we're expecting that the Transaction proto is re-initialized (as
-		// opposed to just having the epoch incremented).
-		expNewTransaction bool
 	}{
 		{
 			// No error, so nothing interesting either.
@@ -712,10 +709,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
 			},
-			expNewTransaction: true,
-			expPri:            10,
-			expWriteTS:        plus20,
-			expReadTS:         plus20,
+			expPri:     1,
+			expWriteTS: origTS,
+			expReadTS:  origTS,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
@@ -809,10 +805,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				t.Fatalf("expected an error")
 			}
 			proto := txn.TestingCloneTxn()
-			txnReset := origTxnProto.ID != proto.ID
-			if txnReset != test.expNewTransaction {
-				t.Fatalf("expected txn reset: %t and got: %t", test.expNewTransaction, txnReset)
-			}
 			if proto.Epoch != test.expEpoch {
 				t.Errorf("expected epoch = %d; got %d",
 					test.expEpoch, proto.Epoch)
@@ -1922,9 +1914,9 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			calls = nil
 			firstIter := true
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				var err error
 				if firstIter {
 					firstIter = false
-					var err error
 					if write {
 						err = txn.Put(ctx, "consider", "phlebas")
 					} else /* locking read */ {
@@ -1937,7 +1929,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				if !success {
 					return errors.New("aborting on purpose")
 				}
-				return nil
+				return err
 			}); err == nil != success {
 				t.Fatalf("expected error: %t, got error: %v", !success, err)
 			}

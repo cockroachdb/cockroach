@@ -71,6 +71,7 @@ func TestSavepoints(t *testing.T) {
 		// Transient state during the test.
 		sp := make(map[string]kv.SavepointToken)
 		var txn *kv.Txn
+		var prevErr error
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			var buf strings.Builder
@@ -121,6 +122,17 @@ func TestSavepoints(t *testing.T) {
 				if prevID == txn.ID() {
 					changed = "not changed"
 				}
+				prevErr = err
+				fmt.Fprintf(&buf, "txn id %s\n", changed)
+
+			case "reset":
+				prevID := txn.ID()
+				txn.PrepareForRetry(ctx, prevErr)
+				changed := "changed"
+				if prevID == txn.ID() {
+					changed = "not changed"
+				}
+				fmt.Fprintf(&buf, "txn error cleared\n")
 				fmt.Fprintf(&buf, "txn id %s\n", changed)
 
 			case "put":
