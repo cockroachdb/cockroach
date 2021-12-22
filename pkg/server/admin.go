@@ -2232,9 +2232,27 @@ func (s *adminServer) DecommissionStatus(
 	}
 
 	var res serverpb.DecommissionStatusResponse
+	livenessMap := map[roachpb.NodeID]livenesspb.Liveness{}
+	{
+		// We use GetLivenessesFromKV to avoid races in which the caller has
+		// just made an update to a liveness record but has not received this
+		// update in its local liveness instance yet. Doing a consistent read
+		// here avoids such issues.
+		//
+		// For an example, see:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/73636
+		ls, err := s.server.nodeLiveness.GetLivenessesFromKV(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, rec := range ls {
+			livenessMap[rec.NodeID] = rec
+		}
+	}
 
 	for nodeID := range replicaCounts {
-		l, ok := s.server.nodeLiveness.GetLiveness(nodeID)
+		l, ok := livenessMap[nodeID]
 		if !ok {
 			return nil, errors.Newf("unable to get liveness for %d", nodeID)
 		}
