@@ -1,0 +1,33 @@
+# LogicTest: 5node-default-configs
+
+# Regression test for nested tuple enum hydration (#74189)
+statement ok
+CREATE TYPE greeting AS ENUM ('hello')
+
+statement ok
+CREATE TABLE IF NOT EXISTS seed AS
+	SELECT
+		enum_range('hello'::greeting)[g] as _enum
+	FROM
+		generate_series(1, 1) AS g
+
+query TT nodeidx=3
+WITH w (col)
+				AS (
+					SELECT
+						*
+					FROM
+						(
+							VALUES
+								(
+									((('hello':::greeting, 0), 0))
+								)
+						)
+				)
+		SELECT
+			seed._enum, w.col
+		FROM
+			w, seed
+----
+hello     ("(hello,0)",0)
+

@@ -741,31 +741,26 @@ func (desc *immutable) MakeTypesT(
 func EnsureTypeIsHydrated(
 	ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver,
 ) error {
-	// maybeHydrateType checks if t is a user-defined type that hasn't been
-	// hydrated yet, and installs the metadata if so.
-	maybeHydrateType := func(ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver) error {
-		if !t.UserDefined() || t.IsHydrated() {
-			return nil
-		}
-		id, err := GetUserDefinedTypeDescID(t)
-		if err != nil {
-			return err
-		}
-		elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-		if err != nil {
-			return err
-		}
-		return elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res)
-	}
 	if t.Family() == types.TupleFamily {
 		for _, typ := range t.TupleContents() {
-			if err := maybeHydrateType(ctx, typ, res); err != nil {
+			if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	return maybeHydrateType(ctx, t, res)
+	if !t.UserDefined() || t.IsHydrated() {
+		return nil
+	}
+	id, err := GetUserDefinedTypeDescID(t)
+	if err != nil {
+		return err
+	}
+	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
+	if err != nil {
+		return err
+	}
+	return elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res)
 }
 
 // HydrateTypesInTableDescriptor uses res to install metadata in the types
