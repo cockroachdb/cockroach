@@ -419,11 +419,6 @@ func NewColIndexJoin(
 	if err != nil {
 		return nil, err
 	}
-	if idxMap != nil {
-		// The index join is fetching from the primary index, so there should be
-		// no mapping needed.
-		return nil, errors.AssertionFailedf("unexpectedly non-nil idx map for the index join")
-	}
 
 	// Retrieve the set of columns that the index join needs to fetch.
 	var neededColumns []uint32

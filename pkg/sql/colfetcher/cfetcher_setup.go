@@ -126,7 +126,25 @@ func populateTableArgs(
 		cols = append(cols, systemCols...)
 	}
 
-	if !index.Primary() {
+	if index.Primary() {
+		// Prune virtual computed columns because they do not exist in primary
+		// indexes.
+		idxMap = make([]int, len(cols))
+		colIdx := 0
+		for i := range cols {
+			if !cols[i].IsVirtual() {
+				idxMap[i] = colIdx
+				cols[colIdx] = cols[i]
+				colIdx++
+			}
+		}
+		cols = cols[:colIdx]
+		if err := remapPostProcessSpec(
+			flowCtx, post, idxMap, helper, args.typs,
+		); err != nil {
+			return nil, nil, err
+		}
+	} else {
 		// If we have a secondary index, not all columns might be available from
 		// the index, so we'll prune the unavailable columns away.
 		colIDs := index.CollectKeyColumnIDs()
