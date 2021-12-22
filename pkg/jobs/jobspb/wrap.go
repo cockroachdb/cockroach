@@ -344,4 +344,9 @@ func init() {
 		panic(fmt.Errorf("NumJobTypes (%d) does not match generated job type name map length (%d)",
 			NumJobTypes, len(Type_name)))
 	}
+
+	protoreflect.RegisterShorthands((*Progress)(nil), "progress")
+	protoreflect.RegisterShorthands((*Payload)(nil), "payload")
+	protoreflect.RegisterShorthands((*ScheduleDetails)(nil), "schedule", "schedule_details")
+	protoreflect.RegisterShorthands((*ExecutionArguments)(nil), "exec_args", "execution_args", "schedule_args")
 }
