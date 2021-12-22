@@ -211,7 +211,7 @@ func StartTenant(
 	)
 
 	mux := http.NewServeMux()
-	debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
 	mux.Handle("/", debugServer)
 	mux.Handle("/_status/", gwMux)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {

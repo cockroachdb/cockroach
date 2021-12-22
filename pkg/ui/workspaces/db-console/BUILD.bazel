@@ -130,6 +130,7 @@ DEPENDENCIES = [
     "@npm//highlight.js",
     "@npm//lodash",
     "@npm//long",
+    "@npm//list.js",
     "@npm//mini-create-react-context",
     "@npm//moment",
     "@npm//nvd3",
