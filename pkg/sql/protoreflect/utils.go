@@ -21,13 +21,31 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+var shorthands map[string]protoutil.Message = map[string]protoutil.Message{}
+
+// RegisterShorthand registers a shorthand alias for a given message type which
+// can be used by NewMessage to look up that message type, if it fails to find
+// a message type with that name in the fully-qualified global registry first.
+// Aliases are converted to and searched for using all lower-case.
+func RegisterShorthand(name string, msg protoutil.Message) {
+	shorthands[strings.ToLower(name)] = msg
+}
+
 // NewMessage creates a new protocol message object, given its fully
-// qualified name.
+// qualified name, or an alias previously registered via RegisterShorthand.
 func NewMessage(name string) (protoutil.Message, error) {
 	// Get the reflected type of the protocol message.
 	rt := proto.MessageType(name)
 	if rt == nil {
-		return nil, errors.Newf("unknown proto message type %s", name)
+		if msg, ok := shorthands[strings.ToLower(name)]; ok {
+			fullName := proto.MessageName(msg)
+			rt = proto.MessageType(fullName)
+			if rt == nil {
+				return nil, errors.Newf("unknown proto message type %s", fullName)
+			}
+		} else {
+			return nil, errors.Newf("unknown proto message type %s", name)
+		}
 	}
 
 	// If the message is known, we should get the pointer to our message.
