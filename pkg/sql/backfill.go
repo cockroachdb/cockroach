@@ -853,11 +853,11 @@ func getJobIDForMutationWithDescriptor(
 		"job not found for table id %d, mutation %d", tableDesc.GetID(), mutationID)
 }
 
-// NumRangesInSpans returns the number of ranges that cover a set of spans.
+// numRangesInSpans returns the number of ranges that cover a set of spans.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func NumRangesInSpans(
+func numRangesInSpans(
 	ctx context.Context, db *kv.DB, distSQLPlanner *DistSQLPlanner, spans []roachpb.Span,
 ) (int, error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
@@ -880,6 +880,42 @@ func NumRangesInSpans(
 	}
 
 	return len(rangeIds), nil
+}
+
+// NumRangesInSpanContainedBy returns the number of ranges that covers
+// a span and how many of those ranged are wholly contained in containedBy.
+//
+// It operates entirely on the current goroutine and is thus able to
+// reuse an existing kv.Txn safely.
+func NumRangesInSpanContainedBy(
+	ctx context.Context,
+	db *kv.DB,
+	distSQLPlanner *DistSQLPlanner,
+	outerSpan roachpb.Span,
+	containedBy []roachpb.Span,
+) (total, inContainedBy int, _ error) {
+	txn := db.NewTxn(ctx, "num-ranges-in-spans")
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	// For each span, iterate the spanResolver until it's exhausted, storing
+	// the found range ids in the map to de-duplicate them.
+	spanResolver.Seek(ctx, outerSpan, kvcoord.Ascending)
+	var g roachpb.SpanGroup
+	g.Add(containedBy...)
+	for {
+		if !spanResolver.Valid() {
+			return 0, 0, spanResolver.Error()
+		}
+		total++
+		desc := spanResolver.Desc()
+		if g.Encloses(desc.RSpan().AsRawSpanWithNoLocals().Intersect(outerSpan)) {
+			inContainedBy++
+		}
+		if !spanResolver.NeedAnother() {
+			break
+		}
+		spanResolver.Next(ctx)
+	}
+	return total, inContainedBy, nil
 }
 
 // TODO(adityamaru): Consider moving this to sql/backfill. It has a lot of
@@ -1077,7 +1113,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if updatedTodoSpans == nil {
 			return nil
 		}
-		nRanges, err := NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
+		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
 		if err != nil {
 			return err
 		}
@@ -1237,7 +1273,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			// schema change state machine or from a previous backfill attempt,
 			// we scale that fraction of ranges completed by the remaining fraction
 			// of the job's progress bar.
-			nRanges, err := NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
+			nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
 			if err != nil {
 				return err
 			}

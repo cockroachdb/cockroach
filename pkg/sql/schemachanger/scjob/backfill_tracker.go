@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -30,16 +31,12 @@ import (
 // records the remaining spans of the source index to scan.
 type backfillTracker struct {
 	backfillTrackerConfig
-
-	// origFractionCompleted corresponds to the fraction completed at the
-	// time the tracker was constructed. Any new work is assumed to not
-	// include work performed prior to the construction of the tracker.
-	origFractionCompleted float32
+	codec keys.SQLCodec
 
 	mu struct {
 		syncutil.Mutex
 
-		progress map[tableIndexKey]*backfillProgress
+		progress map[tableIndexKey]*progress
 	}
 }
 
@@ -47,7 +44,7 @@ type backfillTracker struct {
 // backfillTracker. It exists in this abstracted form largely to facilitate
 // testing.
 type backfillTrackerConfig struct {
-	numRangesInSpans      func(context.Context, []roachpb.Span) (nRanges int, _ error)
+	numRangesInSpans      func(context.Context, roachpb.Span, []roachpb.Span) (total, contained int, _ error)
 	writeProgressFraction func(_ context.Context, fractionProgressed float32) error
 	writeCheckpoint       func(context.Context, []scexec.BackfillProgress) error
 }
@@ -55,20 +52,15 @@ type backfillTrackerConfig struct {
 var _ scexec.BackfillTracker = (*backfillTracker)(nil)
 
 func newBackfillTracker(
-	cfg backfillTrackerConfig,
-	initialProgress []scexec.BackfillProgress,
-	origFractionCompleted float32,
+	codec keys.SQLCodec, cfg backfillTrackerConfig, initialProgress []scexec.BackfillProgress,
 ) *backfillTracker {
 	bt := &backfillTracker{
+		codec:                 codec,
 		backfillTrackerConfig: cfg,
-		origFractionCompleted: origFractionCompleted,
 	}
-	bt.mu.progress = make(map[tableIndexKey]*backfillProgress)
+	bt.mu.progress = make(map[tableIndexKey]*progress)
 	for _, p := range initialProgress {
-		bp := &backfillProgress{
-			BackfillProgress: p,
-			origRanges:       -1,
-		}
+		bp := newProgress(codec, p)
 
 		bt.mu.progress[toKey(p.Backfill)] = bp
 	}
@@ -100,19 +92,26 @@ func (b *backfillTracker) SetBackfillProgress(
 		return err
 	}
 	if p == nil {
-		p = &backfillProgress{
-			BackfillProgress: progress,
-			origRanges:       -1,
-		}
+		p = newProgress(b.codec, progress)
 		b.mu.progress[toKey(progress.Backfill)] = p
 	} else {
-		if len(p.SpansToDo) == 0 && len(progress.SpansToDo) > 0 {
-			p.origRanges = -1
-		}
 		p.BackfillProgress = progress
 	}
 	p.needsCheckpointFlush = true
+	p.needsFractionFlush = true
 	return nil
+}
+
+func newProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *progress {
+	indexPrefix := codec.IndexPrefix(uint32(bp.TableID), uint32(bp.SourceIndexID))
+	indexSpan := roachpb.Span{
+		Key:    indexPrefix,
+		EndKey: indexPrefix.PrefixEnd(),
+	}
+	return &progress{
+		BackfillProgress: bp,
+		totalSpan:        indexSpan,
+	}
 }
 
 func (b *backfillTracker) FlushFractionCompleted(ctx context.Context) error {
@@ -120,8 +119,7 @@ func (b *backfillTracker) FlushFractionCompleted(ctx context.Context) error {
 	if err != nil || !updated {
 		return err
 	}
-	return b.writeProgressFraction(ctx,
-		b.origFractionCompleted+(1-b.origFractionCompleted)*fractionRangesFinished)
+	return b.writeProgressFraction(ctx, fractionRangesFinished)
 }
 
 func (b *backfillTracker) FlushCheckpoint(ctx context.Context) error {
@@ -138,22 +136,20 @@ func (b *backfillTracker) FlushCheckpoint(ctx context.Context) error {
 	return b.writeCheckpoint(ctx, progress)
 }
 
-func (b *backfillTracker) getTableIndexBackfillProgress(
-	bf scexec.Backfill,
-) (backfillProgress, bool) {
+func (b *backfillTracker) getTableIndexBackfillProgress(bf scexec.Backfill) (progress, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if p, ok := b.getTableIndexBackfillProgressLocked(bf); ok {
 		return *p, true
 	}
-	return backfillProgress{}, false
+	return progress{}, false
 }
 
 // getBackfillProgressLocked is used to get a mutable handle to the backfill
 // progress for a given backfill. It will return nil, nil if no such entry
 // exists. It will return an error if an entry exists for the source index
 // with a different set of dest indexes.
-func (b *backfillTracker) getBackfillProgressLocked(bf scexec.Backfill) (*backfillProgress, error) {
+func (b *backfillTracker) getBackfillProgressLocked(bf scexec.Backfill) (*progress, error) {
 	p, ok := b.getTableIndexBackfillProgressLocked(bf)
 	if !ok {
 		return nil, nil
@@ -166,7 +162,7 @@ func (b *backfillTracker) getBackfillProgressLocked(bf scexec.Backfill) (*backfi
 
 func (b *backfillTracker) getTableIndexBackfillProgressLocked(
 	bf scexec.Backfill,
-) (*backfillProgress, bool) {
+) (*progress, bool) {
 	if p, ok := b.mu.progress[toKey(bf)]; ok {
 		return p, true
 	}
@@ -185,35 +181,52 @@ func (b *backfillTracker) getTableIndexBackfillProgressLocked(
 func (b *backfillTracker) getFractionRangesFinished(
 	ctx context.Context,
 ) (updated bool, _ float32, _ error) {
-	progresses := b.collectProgress()
-
-	var origNumRanges int
-	var updatedNumRanges int
-	var updatedAny bool
-	for i := range progresses {
-		p := &progresses[i]
-		numRanges, err := b.numRangesInSpans(ctx, p.SpansToDo)
+	needsFlush, progresses := b.collectFractionProgressSpansForFlush()
+	if !needsFlush {
+		return false, 0, nil
+	}
+	var totalRanges int
+	var completedRanges int
+	for _, p := range progresses {
+		total, completed, err := b.numRangesInSpans(ctx, p.total, p.completed)
 		if err != nil {
 			return false, 0, err
 		}
-		origRanges, updated := b.updateNumRanges(p.Backfill, numRanges)
-		updatedAny = updatedAny || updated
-		origNumRanges += origRanges
-		updatedNumRanges += numRanges
+		totalRanges += total
+		completedRanges += completed
 	}
-	if origNumRanges == 0 || !updatedAny {
-		return false, 0, nil
+	if totalRanges == 0 {
+		return true, 0, nil
 	}
-	return true, float32(origNumRanges-updatedNumRanges) / float32(origNumRanges), nil
+	return true, float32(completedRanges) / float32(totalRanges), nil
 }
 
-func (b *backfillTracker) collectProgress() (progress []scexec.BackfillProgress) {
+type fractionProgressSpans struct {
+	total     roachpb.Span
+	completed []roachpb.Span
+}
+
+func (b *backfillTracker) collectFractionProgressSpansForFlush() (
+	needsFlush bool,
+	progress []fractionProgressSpans,
+) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, p := range b.mu.progress {
-		progress = append(progress, p.BackfillProgress)
+		needsFlush = needsFlush || p.needsFractionFlush
 	}
-	return progress
+	if !needsFlush {
+		return false, nil
+	}
+	progress = make([]fractionProgressSpans, 0, len(b.mu.progress))
+	for _, p := range b.mu.progress {
+		p.needsFractionFlush = false
+		progress = append(progress, fractionProgressSpans{
+			total:     p.totalSpan,
+			completed: p.CompletedSpans,
+		})
+	}
+	return true, progress
 }
 
 func (b *backfillTracker) collectProgressForCheckpointFlush() (
@@ -236,47 +249,22 @@ func (b *backfillTracker) collectProgressForCheckpointFlush() (
 	return needsFlush, progress
 }
 
-// updateNumRanges will update the number of ranges remaining for
-// a given backfill. If there has never been an update to the backfill
-// progress for the range count, this number is used as the original
-// number of ranges. The updated return parameter will be true if the
-// original number of ranges was already set and the provided range
-// count has changed since the last call.
-func (b *backfillTracker) updateNumRanges(
-	backfill scexec.Backfill, ranges int,
-) (origRanges int, updated bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	// It's safe to assume that this exists because entries cannot be removed
-	// from the set and we only call this after getting the entry from the set.
-	p := b.mu.progress[toKey(backfill)]
-	if p.origRanges == -1 {
-		p.origRanges = ranges
-		p.nRanges = ranges
-		return p.origRanges, false // updated
-	}
-	if p.nRanges == ranges {
-		return p.origRanges, false
-	}
-	p.nRanges = ranges
-	return p.origRanges, true
-}
-
-type backfillProgress struct {
+type progress struct {
 	scexec.BackfillProgress
 
 	// needsCheckpointFlush is set when the progress is updated before any
 	// call to FlushCheckpoint has occurred. It is cleared when collecting
 	// the progresses for flushing.
 	needsCheckpointFlush bool
+	// needsFractionFlush is parallel to needsCheckpointFlush.
+	needsFractionFlush bool
 
-	// origRanges is initialized to -1 as a sentinel. The first time that
-	// nRanges is set for this progress, origRanges is set to that initial
-	// value.
-	origRanges, nRanges int
+	// totalSpan represents the complete span of the source index being
+	// backfilled.
+	totalSpan roachpb.Span
 }
 
-func (p backfillProgress) matches(bf scexec.Backfill) error {
+func (p progress) matches(bf scexec.Backfill) error {
 	if bf.TableID == p.TableID &&
 		bf.SourceIndexID == p.SourceIndexID &&
 		sameIndexIDSet(bf.DestIndexIDs, p.DestIndexIDs) {

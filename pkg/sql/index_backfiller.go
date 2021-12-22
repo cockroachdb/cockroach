@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -61,15 +62,10 @@ func (ib *IndexBackfillPlanner) MaybePrepareDestIndexesForBackfill(
 	); err != nil {
 		return scexec.BackfillProgress{}, err
 	}
-
-	scanned := scexec.BackfillProgress{
+	return scexec.BackfillProgress{
 		Backfill:              current.Backfill,
 		MinimumWriteTimestamp: backfillReadTimestamp,
-	}
-	scanned.SpansToDo = []roachpb.Span{
-		td.IndexSpan(ib.execCfg.Codec, td.GetPrimaryIndexID()),
-	}
-	return scanned, nil
+	}, nil
 }
 
 // BackfillIndex is part of the scexec.Backfiller interface.
@@ -79,15 +75,33 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 	tracker scexec.BackfillProgressWriter,
 	descriptor catalog.TableDescriptor,
 ) error {
+	var completed = struct {
+		syncutil.Mutex
+		g roachpb.SpanGroup
+	}{}
+	addCompleted := func(c ...roachpb.Span) []roachpb.Span {
+		completed.Lock()
+		defer completed.Unlock()
+		completed.g.Add(c...)
+		return completed.g.Slice()
+	}
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
 		if meta.BulkProcessorProgress == nil {
 			return nil
 		}
-		progress.SpansToDo = roachpb.SubtractSpans(progress.SpansToDo,
-			meta.BulkProcessorProgress.CompletedSpans)
+		progress.CompletedSpans = addCompleted(
+			meta.BulkProcessorProgress.CompletedSpans...)
 		return tracker.SetBackfillProgress(ctx, progress)
+	}
+	var spansToDo []roachpb.Span
+	{
+		sourceIndexSpan := descriptor.IndexSpan(ib.execCfg.Codec, progress.SourceIndexID)
+		var g roachpb.SpanGroup
+		g.Add(sourceIndexSpan)
+		g.Sub(progress.CompletedSpans...)
+		spansToDo = g.Slice()
 	}
 	now := ib.execCfg.DB.Clock().Now()
 	run, err := ib.plan(
@@ -96,7 +110,7 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 		progress.MinimumWriteTimestamp,
 		now,
 		progress.MinimumWriteTimestamp,
-		progress.SpansToDo,
+		spansToDo,
 		progress.DestIndexIDs,
 		updateFunc,
 	)

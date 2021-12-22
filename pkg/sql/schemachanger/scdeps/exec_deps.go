@@ -375,7 +375,7 @@ type BackfillTrackerFactory func() scexec.BackfillTracker
 
 // NewNoOpBackfillTracker constructs a backfill tracker which does not do
 // anything. It will always return progress for a given backfill which
-// contains a full set of SpansToDo corresponding to the source index
+// contains a full set of CompletedSpans corresponding to the source index
 // span and an empty MinimumWriteTimestamp.
 func NewNoOpBackfillTracker(codec keys.SQLCodec) scexec.BackfillTracker {
 	return noopBackfillProgress{codec: codec}
@@ -399,7 +399,7 @@ func (n noopBackfillProgress) GetBackfillProgress(
 	key := n.codec.IndexPrefix(uint32(b.TableID), uint32(b.SourceIndexID))
 	return scexec.BackfillProgress{
 		Backfill: b,
-		SpansToDo: []roachpb.Span{
+		CompletedSpans: []roachpb.Span{
 			{Key: key, EndKey: key.PrefixEnd()},
 		},
 	}, nil
