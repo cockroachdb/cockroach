@@ -188,9 +188,9 @@ CREATE TABLE db.t (
 					},
 					State:      descpb.DescriptorMutation_DELETE_ONLY,
 					Direction:  descpb.DescriptorMutation_ADD,
-					MutationID: mutable.NextMutationID,
+					MutationID: 1,
 				})
-				mutable.NextMutationID++
+				mutable.NextMutationID = 1
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{
@@ -489,8 +489,6 @@ func (noopIndexValidator) ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil
@@ -500,7 +498,6 @@ func (noopIndexValidator) ValidateInvertedIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil

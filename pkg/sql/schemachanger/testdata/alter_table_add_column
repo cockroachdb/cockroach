@@ -74,11 +74,9 @@ upsert descriptor #56
   +  nextColumnId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
-  -  nextMutationId: 1
   +  nextIndexId: 3
-  +  nextMutationId: 2
+     nextMutationId: 1
      parentId: 54
-     primaryIndex:
   ...
        time: {}
      unexposedParentSchemaId: 55
@@ -182,15 +180,7 @@ upsert descriptor #56
   -      - crdb_internal_column_2_name_placeholder
          unique: true
          version: 4
-  -    mutationId: 1
-  +    mutationId: 2
-       state: DELETE_AND_WRITE_ONLY
-     name: tbl
   ...
-     nextFamilyId: 1
-     nextIndexId: 3
-  -  nextMutationId: 2
-  +  nextMutationId: 3
      parentId: 54
      primaryIndex:
   +    createdExplicitly: true
@@ -223,7 +213,7 @@ set schema change job #1 to non-cancellable
 upsert descriptor #56
   ...
          version: 4
-       mutationId: 2
+       mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
      name: tbl
@@ -262,7 +252,7 @@ upsert descriptor #56
   -      sharded: {}
   -      unique: true
   -      version: 4
-  -    mutationId: 2
+  -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
      name: tbl
