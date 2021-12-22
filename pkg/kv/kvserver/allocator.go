@@ -1438,6 +1438,18 @@ func (a *Allocator) TransferLeaseTarget(
 			storeQPSMap[storeDesc.StoreID] = storeDesc.Capacity.QueriesPerSecond
 		}
 
+		existingStores := make([]roachpb.StoreDescriptor, 0, len(existing))
+		for _, repl := range existing {
+			desc, ok := storeDescMap[repl.StoreID]
+			if !ok {
+				log.VEventf(
+					ctx, 5, "cannot find store descriptor for existing replica on s%d", repl.StoreID,
+				)
+				continue
+			}
+			existingStores = append(existingStores, *desc)
+		}
+		existingStoreList := makeStoreList(existingStores)
 		leaseholderStoreQPS, ok := storeQPSMap[leaseRepl.StoreID()]
 		if !ok {
 			log.VEventf(
@@ -1447,35 +1459,57 @@ func (a *Allocator) TransferLeaseTarget(
 			return roachpb.ReplicaDescriptor{}
 		}
 
+		// Ensure that the leaseholder is far enough from the average QPS of the
+		// existing stores of the range. There's no point transferring our lease
+		// away if we're close enough to the rest of the replicas' stores.
+		qpsRebalanceThreshold := qpsRebalanceThreshold.Get(&a.storePool.st.SV)
+		mean := existingStoreList.candidateQueriesPerSecond.mean
+		overfullThreshold := mean + math.Max(mean*qpsRebalanceThreshold, minQPSThresholdDifference)
+		if leaseholderStoreQPS < overfullThreshold {
+			log.VEventf(
+				ctx,
+				3,
+				"leaseholder s%d's qps (%0.2f) is close enough to the rest of the existing stores' qps (avg: %0.2f); skipping",
+				leaseRepl.StoreID(),
+				leaseholderStoreQPS,
+				mean,
+			)
+			return roachpb.ReplicaDescriptor{}
+		}
+
 		leaseholderReplQPS, _ := stats.avgQPS()
 		currentDelta := getQPSDelta(storeQPSMap, existing)
 		bestOption := getCandidateWithMinQPS(storeQPSMap, existing)
 		if bestOption != (roachpb.ReplicaDescriptor{}) && bestOption.StoreID != leaseRepl.StoreID() &&
-			// It is always beneficial to transfer the lease to the coldest candidate
-			// if the range's own qps is smaller than the difference between the
-			// leaseholder store and the candidate store. This will always drive down
-			// the difference between those two stores, which should always drive down
-			// the difference between the store serving the highest QPS and the store
+			// It is beneficial to transfer the lease to the coldest candidate if the
+			// range's own qps is smaller than the difference between the leaseholder
+			// store and the candidate store. This will always drive down the
+			// difference between those two stores, which should always drive down the
+			// difference between the store serving the highest QPS and the store
 			// serving the lowest QPS.
-			//
-			// TODO(aayush): We should think about whether we need any padding here.
-			// Not adding any sort of padding could make this a little sensitive, but
-			// there are some downsides to doing so. If the padding here is too high,
-			// we're going to keep ignoring opportunities for lease transfers for
-			// ranges with low QPS. This can add up and prevent us from achieving
-			// convergence in cases where we're dealing with a ton of very low-QPS
-			// ranges.
-			(leaseholderStoreQPS-leaseholderReplQPS) > storeQPSMap[bestOption.StoreID] {
-			storeQPSMap[leaseRepl.StoreID()] -= leaseholderReplQPS
+			(leaseholderStoreQPS-leaseholderReplQPS) > (storeQPSMap[bestOption.StoreID]+minQPSDifferenceForLeaseTransfers) {
+			storeQPSMap[leaseRepl.StoreID()] = math.Max(leaseholderStoreQPS-leaseholderReplQPS, 0)
 			storeQPSMap[bestOption.StoreID] += leaseholderReplQPS
-			minDelta := getQPSDelta(storeQPSMap, existing)
+			newDelta := getQPSDelta(storeQPSMap, existing)
+			// Bail if `bestOption` would become significantly hotter than the current
+			// leaseholder after the lease transfer.
+			if storeQPSMap[leaseRepl.StoreID()]+maxQPSLeaseTransferOvershoot < storeQPSMap[bestOption.StoreID] {
+				log.VEventf(
+					ctx, 5,
+					"avoiding lease transfer for r%d (qps: %0.2f) from s%d to s%d because the latter"+
+						" would become significantly hotter than the former",
+					leaseRepl.GetRangeID(), leaseholderReplQPS, leaseRepl.StoreID(), bestOption.StoreID,
+				)
+				return roachpb.ReplicaDescriptor{}
+			}
 			log.VEventf(
 				ctx,
 				3,
-				"lease transfer to s%d would reduce the QPS delta between this ranges' stores from %.2f to %.2f",
+				"lease transfer (repl qps: %0.2f) to s%d would reduce the QPS delta between this range's stores from %.2f to %.2f",
+				leaseholderReplQPS,
 				bestOption.StoreID,
 				currentDelta,
-				minDelta,
+				newDelta,
 			)
 			return bestOption
 		}
