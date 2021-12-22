@@ -15,9 +15,17 @@ import (
 )
 
 // ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
-func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor) error {
-	t, ok := targets[tableDesc.GetID()]
-	if !ok {
+func ValidateTable(targets []jobspb.ChangefeedTargetSpecification, tableDesc catalog.TableDescriptor) error {
+	var t jobspb.ChangefeedTargetSpecification
+	var found bool
+	for _, cts := range targets {
+		if cts.TableID == tableDesc.GetID() {
+			t = cts
+			found = true
+			break
+		}
+	}
+	if !found {
 		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
 

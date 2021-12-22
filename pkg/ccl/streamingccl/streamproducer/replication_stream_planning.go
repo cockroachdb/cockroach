@@ -93,7 +93,7 @@ func streamKVs(
 	}
 
 	details := jobspb.ChangefeedDetails{
-		Targets:       nil, // Not interested in schema changes
+		Tables:       nil, // Not interested in schema changes
 		Opts:          cfOpts,
 		SinkURI:       "", // TODO(yevgeniy): Support sinks
 		StatementTime: statementTime,

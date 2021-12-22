@@ -55,7 +55,7 @@ func createProtectedTimestampRecord(
 	pts protectedts.Storage,
 	txn *kv.Txn,
 	jobID jobspb.JobID,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	resolved hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,
 ) error {
@@ -74,19 +74,19 @@ func createProtectedTimestampRecord(
 	return pts.Protect(ctx, txn, rec)
 }
 
-func makeTargetToProtect(targets jobspb.ChangefeedTargets) *ptpb.Target {
+func makeTargetToProtect(targets []jobspb.ChangefeedTargetSpecification) *ptpb.Target {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
 	tablesToProtect := make(descpb.IDs, 0, len(targets)+1)
-	for t := range targets {
-		tablesToProtect = append(tablesToProtect, t)
+	for _, t := range targets {
+		tablesToProtect = append(tablesToProtect, t.TableID)
 	}
 	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 
-func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) []roachpb.Span {
+func makeSpansToProtect(codec keys.SQLCodec, targets []jobspb.ChangefeedTargetSpecification) []roachpb.Span {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
@@ -98,8 +98,8 @@ func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) [
 			EndKey: tablePrefix.PrefixEnd(),
 		})
 	}
-	for t := range targets {
-		addTablePrefix(uint32(t))
+	for _, t := range targets {
+		addTablePrefix(uint32(t.TableID))
 	}
 	addTablePrefix(keys.DescriptorTableID)
 	return spansToProtect

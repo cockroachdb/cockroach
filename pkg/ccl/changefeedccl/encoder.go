@@ -82,7 +82,7 @@ type Encoder interface {
 	EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error)
 }
 
-func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encoder, error) {
+func getEncoder(opts map[string]string, targets []jobspb.ChangefeedTargetSpecification) (Encoder, error) {
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case ``, changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts, targets)
@@ -102,7 +102,7 @@ func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encod
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
-	targets                 jobspb.ChangefeedTargets
+	targets                 []jobspb.ChangefeedTargetSpecification
 	alloc                   tree.DatumAlloc
 	buf                     bytes.Buffer
 	virtualColumnVisibility string
@@ -111,7 +111,7 @@ type jsonEncoder struct {
 var _ Encoder = &jsonEncoder{}
 
 func makeJSONEncoder(
-	opts map[string]string, targets jobspb.ChangefeedTargets,
+	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
 		targets:                 targets,
@@ -184,12 +184,13 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
 	descID := row.tableDesc.GetID()
 	// use the target list since row.tableDesc.GetName() will not have fully qualified names
-	topicName, ok := e.targets[descID]
-	if !ok {
-		return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
-			row.tableDesc.GetName(), descID)
+	for _, topic := range e.targets {
+		if topic.TableID == descID {
+			return topic.StatementTimeName, nil
+		}
 	}
-	return topicName.StatementTimeName, nil
+	return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
+		row.tableDesc.GetName(), descID)
 }
 
 // EncodeValue implements the Encoder interface.
@@ -328,8 +329,8 @@ type confluentAvroEncoder struct {
 	schemaRegistry                     schemaRegistry
 	schemaPrefix                       string
 	updatedField, beforeField, keyOnly bool
-	targets                            jobspb.ChangefeedTargets
 	virtualColumnVisibility            string
+	targets                            []jobspb.ChangefeedTargetSpecification
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -367,7 +368,7 @@ var encoderCacheConfig = cache.Config{
 }
 
 func newConfluentAvroEncoder(
-	opts map[string]string, targets jobspb.ChangefeedTargets,
+	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts[changefeedbase.OptAvroSchemaPrefix],

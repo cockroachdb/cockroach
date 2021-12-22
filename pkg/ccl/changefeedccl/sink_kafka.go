@@ -400,18 +400,18 @@ func (p *changefeedPartitioner) Partition(
 }
 
 func makeTopicsMap(
-	prefix string, name string, targets jobspb.ChangefeedTargets,
+	prefix string, name string, targets []jobspb.ChangefeedTargetSpecification,
 ) map[descpb.ID]string {
 	topics := make(map[descpb.ID]string)
 	useSingleName := name != ""
 	if useSingleName {
 		name = prefix + SQLNameToKafkaName(name)
 	}
-	for id, t := range targets {
+	for _, t := range targets {
 		if useSingleName {
-			topics[id] = name
+			topics[t.TableID] = name
 		} else {
-			topics[id] = prefix + SQLNameToKafkaName(t.StatementTimeName)
+			topics[t.TableID] = prefix + SQLNameToKafkaName(t.StatementTimeName)
 		}
 	}
 	return topics
@@ -628,7 +628,7 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 func makeKafkaSink(
 	ctx context.Context,
 	u sinkURL,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	opts map[string]string,
 	m *sliMetrics,
 ) (Sink, error) {

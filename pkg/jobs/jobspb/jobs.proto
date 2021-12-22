@@ -695,31 +695,42 @@ message SchemaChangeGCProgress {
   bool ranges_unsplit_done = 4;
 }
 
-message ChangefeedTarget {
+message ChangefeedTargetTable {
   string statement_time_name = 1;
+}
 
-  // TODO(dan): Add partition name, ranges of primary keys.
+message ChangefeedTargetSpecification {
+  enum TargetType {
+    // The primary index of the table with table_id descriptor id.
+    // Fail if there are ever multiple column families.
+    FULL_TABLE = 0;
+
+    // The primary index of the table with table_id descriptor id.
+    // Each column family gets its own record schema and events.
+    EACH_FAMILY = 1;
+
+    // Column family family_name of table table_id.
+    COLUMN_FAMILY = 2;
+
+    // Add TargetTypes for database, secondary index, etc. when implemented
+
+  }
+
+  TargetType type = 1;
+  uint32 table_id = 2 [(gogoproto.customname) = "TableID",
+  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  string family_name = 3;
+  string statement_time_name = 4;
+
 }
 
 message ChangefeedDetails {
-  // Targets contains the user-specified tables and databases to watch, mapping
-  // the descriptor id to the name at the time of changefeed creating. There is
-  // a 1:1 correspondence between unique targets in the original sql query and
-  // entries in this map.
-  //
-  // - A watched table is stored here under its table id
-  // - TODO(dan): A watched database is stored here under its database id
-  // - TODO(dan): A db.* expansion is treated identically to watching the
-  //   database
-  //
-  // Note that the TODOs mean this field currently is guaranteed to only hold
-  // table ids and a cluster version check will be added when this changes.
-  //
+  // Targets contains the user-specified tables to watch, mapping
+  // the descriptor id to the name at the time of changefeed creation.
   // The names at resolution time are included so that table and database
-  // renames can be detected. They are also used to construct an error message
-  // if the descriptor id no longer exists when the jobs is unpaused (which can
-  // happen if it was dropped or truncated).
-  map<uint32, ChangefeedTarget> targets = 6 [
+  // renames can be tolerated and derived topic names remain immutable.
+  //
+  map<uint32, ChangefeedTargetTable> tables = 6 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
     (gogoproto.casttype) = "ChangefeedTargets",
     (gogoproto.nullable) = false
@@ -727,8 +738,10 @@ message ChangefeedDetails {
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+  repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
   reserved 1, 2, 5;
+  reserved "targets";
 }
 
 message ResolvedSpan {
