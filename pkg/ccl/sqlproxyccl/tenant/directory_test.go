@@ -548,6 +548,7 @@ func newTestDirectory(
 
 	// Setup directory
 	directorySrvAddr := listenPort.Addr()
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(directorySrvAddr.String(), grpc.WithInsecure())
 	require.NoError(t, err)
 	// nolint:grpcconnclose
