@@ -648,6 +648,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		// The test's name.
 		name                  string
 		pErrGen               func(txn *roachpb.Transaction) *roachpb.Error
+		callPrepareForRetry   bool
 		expEpoch              enginepb.TxnEpoch
 		expPri                enginepb.TxnPriority
 		expWriteTS, expReadTS hlc.Timestamp
@@ -705,18 +706,32 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expReadTS:  plus20,
 		},
 		{
-			// On abort, nothing changes but we get a new priority to use for
-			// the next attempt.
+			// On abort, nothing changes - we are left with a poisoned txn (unless we
+			// call PrepareForRetry as in the next test case).
 			name: "TransactionAbortedError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				txn.WriteTimestamp = plus20
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
 			},
-			expNewTransaction: true,
-			expPri:            10,
-			expWriteTS:        plus20,
-			expReadTS:         plus20,
+			expPri:     1,
+			expWriteTS: origTS,
+			expReadTS:  origTS,
+		},
+		{
+			// On abort, reset the txn by calling PrepareForRetry, and then we get a
+			// new priority to use for the next attempt.
+			name: "TransactionAbortedError with PrepareForRetry",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+				txn.WriteTimestamp = plus20
+				txn.Priority = 10
+				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
+			},
+			callPrepareForRetry: true,
+			expNewTransaction:   true,
+			expPri:              10,
+			expWriteTS:          plus20,
+			expReadTS:           plus20,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
@@ -806,6 +821,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			err := txn.Put(ctx, key, []byte("value"))
 			stopper.Stop(ctx)
 
+			if test.callPrepareForRetry {
+				txn.PrepareForRetry(ctx, err)
+			}
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
 			}
@@ -1931,9 +1949,9 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			calls = nil
 			firstIter := true
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				var err error
 				if firstIter {
 					firstIter = false
-					var err error
 					if write {
 						err = txn.Put(ctx, "consider", "phlebas")
 					} else /* locking read */ {
@@ -1946,7 +1964,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				if !success {
 					return errors.New("aborting on purpose")
 				}
-				return nil
+				return err
 			}); err == nil != success {
 				t.Fatalf("expected error: %t, got error: %v", !success, err)
 			}

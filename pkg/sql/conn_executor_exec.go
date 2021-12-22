@@ -749,13 +749,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
 			payload := eventRetriableErrPayload{
-				err: roachpb.NewTransactionRetryWithProtoRefreshError(
-					"serializable transaction timestamp pushed (detected by connExecutor)",
-					txn.ID(),
-					// No updated transaction required; we've already manually updated our
-					// client.Txn.
-					roachpb.Transaction{},
-				),
+				err:    txn.PrepareRetryableError(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
 				rewCap: rc,
 			}
 			return ev, payload, nil

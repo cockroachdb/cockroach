@@ -1018,18 +1018,23 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 	return err
 }
 
-// PrepareForRetry needs to be called before an retry to perform some
-// book-keeping.
-//
-// TODO(andrei): I think this is called in the wrong place. See #18170.
+// PrepareForRetry needs to be called before a retry to perform some
+// book-keeping and clear errors when possible.
+// TODO(lidor, #75235): we don't really need the caller to pass the error here,
+// we already stored it in the coordinator.
 func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(err, "PrepareForRetry() called on leaf txn"), ctx))
 	}
 
+	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
 	txn.commitTriggers = nil
 	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
 		txn.DebugName(), err)
+
+	txn.mu.Lock()
+	txn.handleErrIfRetryableLocked(ctx, err)
+	txn.mu.Unlock()
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
@@ -1104,12 +1109,6 @@ func (txn *Txn) Send(
 			log.Fatalf(ctx, "retryable error for the wrong txn. "+
 				"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
 				requestTxnID, retryErr.TxnID, retryErr)
-		}
-		if txn.typ == RootTxn {
-			// On root senders, we bump the sender's identity upon retry errors.
-			txn.mu.Lock()
-			txn.handleErrIfRetryableLocked(ctx, retryErr)
-			txn.mu.Unlock()
 		}
 	}
 	return br, pErr
@@ -1405,8 +1404,9 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 		return
 	}
 	if !retryErr.PrevTxnAborted() {
-		// We don't need a new transaction as a result of this error. Nothing more
-		// to do.
+		// We don't need a new transaction as a result of this error, but we may
+		// have a retryable error that should be cleared.
+		txn.mu.sender.ClearTxnRetryableErr(ctx)
 		return
 	}
 
