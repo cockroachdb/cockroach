@@ -1,8 +1,13 @@
 diff -urN a/errcheck/analyzer.go b/errcheck/analyzer.go
+diff --git a/errcheck/analyzer.go b/errcheck/analyzer.go
+index 8b444c7..0173dda 100644
 --- a/errcheck/analyzer.go
 +++ b/errcheck/analyzer.go
-@@ -6,6 +6,7 @@ import (
- 	"go/token"
+@@ -3,9 +3,9 @@ package errcheck
+ import (
+ 	"fmt"
+ 	"go/ast"
+-	"go/token"
  	"reflect"
  	"regexp"
 +	"strings"
@@ -41,3 +46,16 @@ diff -urN a/errcheck/analyzer.go b/errcheck/analyzer.go
  		excludes, err := ReadExcludes(argExcludeFile)
  		if err != nil {
  			return nil, fmt.Errorf("Could not read exclude file: %v\n", err)
+--- a/errcheck/analyzer.go
++++ b/errcheck/analyzer.go
+@@ -65,8 +65,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
+ 		ast.Walk(v, f)
+ 
+ 		for _, err := range v.errors {
++			fsetFile := pass.Fset.File(f.Pos())
+ 			pass.Report(analysis.Diagnostic{
+-				Pos:     token.Pos(int(f.Pos()) + err.Pos.Offset),
++				Pos:     fsetFile.Pos(err.Pos.Offset),
+ 				Message: "unchecked error",
+ 			})
+ 		}
