@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,56 +87,6 @@ func getStatusJSONProtoWithAdminOption(
 	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
-}
-
-// TestStatusLocalStacks verifies that goroutine stack traces are available
-// via the /_status/stacks/local endpoint.
-func TestStatusLocalStacks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 74133)
-
-	ts := startServer(t)
-	defer ts.Stopper().Stop(context.Background())
-
-	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
-
-	url := ts.ServingRPCAddr()
-	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := serverpb.NewStatusClient(conn)
-
-	testCases := []struct {
-		stackType serverpb.StacksType
-		re        *regexp.Regexp
-	}{
-		{serverpb.StacksType_GOROUTINE_STACKS, regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")},
-		// At least `labels: {"pebble":"table-cache"}` and `labels: {"pebble":"wal-sync"}`
-		// should be present.
-		{serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1, regexp.MustCompile("(?s)labels: {.*labels: {.*")},
-	}
-
-	for _, tt := range testCases {
-		t.Run(fmt.Sprintf("debug=%s", tt.stackType), func(t *testing.T) {
-			var stacks serverpb.JSONResponse
-			for _, nodeID := range []string{"local", "1"} {
-				request := serverpb.StacksRequest{
-					NodeId: nodeID, Type: tt.stackType,
-				}
-				response, err := client.Stacks(context.Background(), &request)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !tt.re.Match(response.Data) {
-					t.Errorf("expected %s to match %s", stacks.Data, tt.re)
-				}
-			}
-		})
-	}
 }
 
 // TestStatusJson verifies that status endpoints return expected Json results.
