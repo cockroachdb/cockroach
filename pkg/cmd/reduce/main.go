@@ -17,7 +17,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -130,10 +129,10 @@ func reduceSQL(
 		return "", err
 	}
 
-	var logger io.Writer
+	var logger *log.Logger
 	if verbose {
-		logger = os.Stderr
-		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+		logger = log.New(os.Stderr, "", 0)
+		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
 	}
 
 	var chunkReducer reduce.ChunkReducer
@@ -164,7 +163,7 @@ func reduceSQL(
 		}
 		if verbose {
 			logOriginalHint = func() {
-				fmt.Fprintf(logger, "output did not match regex %s:\n\n%s", contains, string(out))
+				logger.Printf("output did not match regex %s:\n\n%s", contains, string(out))
 			}
 		}
 		return containsRE.Match(out), logOriginalHint
