@@ -32,7 +32,7 @@ import (
 // check if the span config reconciliation job exists. If it's not found, it
 // will be started. It has no effect unless
 // spanconfig.reconciliation_job.enabled is configured. For host
-// tenants, COCKROACH_EXPERIMENTAL_SPAN_CONFIGS needs to be additionally set.
+// tenants, COCKROACH_DISABLE_SPAN_CONFIGS must not be set.
 var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"spanconfig.reconciliation_job.check_interval",
@@ -42,16 +42,15 @@ var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 )
 
 // jobEnabledSetting gates the activation of the span config reconciliation job.
-//
-// For the host tenant it has no effect unless
-// COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is also set.
+// For the host tenant it has no effect if COCKROACH_DISABLE_SPAN_CONFIGS is
+// set.
 //
 // TODO(irfansharif): This should be a tenant read-only setting once the work
 // for #73349 is completed.
 var jobEnabledSetting = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"spanconfig.reconciliation_job.enabled",
-	"enable the use of the kv accessor", false)
+	"enable the use of the kv accessor", true)
 
 // Manager is the coordinator of the span config subsystem. It ensures that
 // there's only one span config reconciliation job[1] for every tenant. It also

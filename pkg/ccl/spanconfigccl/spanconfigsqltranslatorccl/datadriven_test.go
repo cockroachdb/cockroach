@@ -80,7 +80,6 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				EnableSpanConfigs: true,
 				Knobs: base.TestingKnobs{
 					SpanConfig: scKnobs,
 				},

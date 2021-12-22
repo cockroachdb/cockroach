@@ -1928,7 +1928,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()
 
-	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	serverArgs := base.TestServerArgs{
+		DisableSpanConfigs: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}
 	// Disable external processing of mutations so that the final check of
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.

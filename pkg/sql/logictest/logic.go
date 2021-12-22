@@ -1441,9 +1441,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",
 				},
 			},
-			ClusterName:       "testclustername",
-			ExternalIODir:     t.sharedIODir,
-			EnableSpanConfigs: true, // overridable through "disable-span-configs" cluster option
+			ClusterName:   "testclustername",
+			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
@@ -1892,7 +1891,7 @@ var _ clusterOpt = clusterOptDisableSpanConfigs{}
 
 // apply implements the clusterOpt interface.
 func (c clusterOptDisableSpanConfigs) apply(args *base.TestServerArgs) {
-	args.EnableSpanConfigs = false
+	args.DisableSpanConfigs = true
 }
 
 // clusterOptTracingOff corresponds to the tracing-off directive.
