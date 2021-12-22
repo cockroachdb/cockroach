@@ -104,12 +104,12 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
 
 	// Install Jepsen's prereqs on the controller.
-	if out, err := c.RunWithBuffer(
+	if result, err := c.RunWithDetailsSingleNode(
 		ctx, t.L(), controller, "sh", "-c",
 		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
-		if strings.Contains(string(out), "exit status 100") {
-			t.Skip("apt-get failure (#31944)", string(out))
+		if result.RemoteExitStatus == "100" {
+			t.Skip("apt-get failure (#31944)", result.Stdout+result.Stderr)
 		}
 		t.Fatal(err)
 	}
@@ -283,14 +283,14 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			ignoreErr = true
 		}
 
-		if output, err := c.RunWithBuffer(
+		if result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(), controller,
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log",
 		); err != nil {
 			t.L().Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
-		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
+		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), []byte(result.Stdout), 0666); err != nil {
 			t.Fatal(err)
 		} else {
 			t.L().Printf("downloaded jepsen logs in failure-logs.tbz")

@@ -24,8 +24,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -303,7 +305,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					curlCmd := fmt.Sprintf(
 						"curl %s > logs/bundle_%s_%d.zip", url, runConfig.setupNames[setupIdx], i,
 					)
-					if err = c.RunL(ctx, t.L(), c.Node(1), curlCmd); err != nil {
+					if err = c.RunE(ctx, c.Node(1), curlCmd); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -469,14 +471,15 @@ func baseTestRun(
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 				"--default-vectorize --max-ops=%d --queries=%d {pgurl:1} --enable-checks=true",
 				runConfig.numRunsPerQuery, queryNum)
-			workloadOutput, err := c.RunWithBuffer(ctx, t.L(), firstNode, cmd)
-			t.L().Printf("\n" + string(workloadOutput))
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), firstNode, cmd)
+			workloadOutput := result.Stdout + result.Stderr
+			t.L().Printf(workloadOutput)
 			if err != nil {
 				// Note: if you see an error like "exit status 1", it is likely caused
 				// by the erroneous output of the query.
 				t.Fatal(err)
 			}
-			tc.postQueryRunHook(t, workloadOutput, setupIdx)
+			tc.postQueryRunHook(t, []byte(workloadOutput), setupIdx)
 		}
 	}
 }
@@ -542,7 +545,7 @@ func runTPCHVec(
 	firstNode := c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
-	c.Start(ctx)
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)

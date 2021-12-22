@@ -339,7 +339,13 @@ func List(listMine bool, clusterNamePattern string) (cloud.Cloud, error) {
 }
 
 // Run runs a command on the nodes in a cluster.
-func Run(clusterName, SSHOptions, processTag string, secure bool, cmdArray []string) error {
+func Run(
+	ctx context.Context,
+	clusterName, SSHOptions, processTag string,
+	secure bool,
+	stdout, stderr io.Writer,
+	cmdArray []string,
+) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -351,7 +357,7 @@ func Run(clusterName, SSHOptions, processTag string, secure bool, cmdArray []str
 	// Use "ssh" if an interactive session was requested (i.e. there is no
 	// remote command to run).
 	if len(cmdArray) == 0 {
-		return c.SSH(strings.Split(SSHOptions, " "), cmdArray)
+		return c.SSH(ctx, strings.Split(SSHOptions, " "), cmdArray)
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
@@ -359,11 +365,37 @@ func Run(clusterName, SSHOptions, processTag string, secure bool, cmdArray []str
 	if len(title) > 30 {
 		title = title[:27] + "..."
 	}
-	return c.Run(os.Stdout, os.Stderr, c.Nodes, title, cmd)
+	return c.Run(ctx, stdout, stderr, c.Nodes, title, cmd)
+}
+
+// RunWithDetails runs a command on the nodes in a cluster.
+func RunWithDetails(
+	ctx context.Context, clusterName, SSHOptions, processTag string, secure bool, cmdArray []string,
+) ([]install.RunResultDetails, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(clusterName, install.SecureOption(secure), install.TagOption(processTag))
+	if err != nil {
+		return nil, err
+	}
+
+	// Use "ssh" if an interactive session was requested (i.e. there is no
+	// remote command to run).
+	if len(cmdArray) == 0 {
+		return nil, c.SSH(ctx, strings.Split(SSHOptions, " "), cmdArray)
+	}
+
+	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
+	title := cmd
+	if len(title) > 30 {
+		title = title[:27] + "..."
+	}
+	return c.RunWithDetails(ctx, c.Nodes, title, cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster.
-func SQL(clusterName string, secure bool, cmdArray []string) error {
+func SQL(ctx context.Context, clusterName string, secure bool, cmdArray []string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -371,11 +403,11 @@ func SQL(clusterName string, secure bool, cmdArray []string) error {
 	if err != nil {
 		return err
 	}
-	return c.SQL(cmdArray)
+	return c.SQL(ctx, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
-func IP(clusterName string, external bool) ([]string, error) {
+func IP(ctx context.Context, clusterName string, external bool) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
 	}
@@ -394,7 +426,7 @@ func IP(clusterName string, external bool) ([]string, error) {
 	} else {
 		var err error
 		if err := c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
-			ips[i], err = c.GetInternalIP(nodes[i])
+			ips[i], err = c.GetInternalIP(ctx, nodes[i])
 			return nil, err
 		}); err != nil {
 			return nil, err
@@ -404,7 +436,7 @@ func IP(clusterName string, external bool) ([]string, error) {
 }
 
 // Status retrieves the status of nodes in a cluster.
-func Status(clusterName, processTag string) error {
+func Status(ctx context.Context, clusterName, processTag string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -412,12 +444,14 @@ func Status(clusterName, processTag string) error {
 	if err != nil {
 		return err
 	}
-	return c.Status()
+	return c.Status(ctx)
 }
 
 // Stage stages release and edge binaries to the cluster.
 // stageOS, stageDir, version can be "" to use default values
-func Stage(clusterName string, stageOS, stageDir, applicationName, version string) error {
+func Stage(
+	ctx context.Context, clusterName string, stageOS, stageDir, applicationName, version string,
+) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -438,7 +472,7 @@ func Stage(clusterName string, stageOS, stageDir, applicationName, version strin
 		dir = stageDir
 	}
 
-	return install.StageApplication(c, applicationName, version, os, dir)
+	return install.StageApplication(ctx, c, applicationName, version, os, dir)
 }
 
 // Reset resets all VMs in a cluster.
@@ -466,7 +500,7 @@ func Reset(clusterName string) error {
 }
 
 // SetupSSH sets up the keys and host keys for the vms in the cluster.
-func SetupSSH(clusterName string) error {
+func SetupSSH(ctx context.Context, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -523,7 +557,7 @@ func SetupSSH(clusterName string) error {
 			installCluster.VMs[i].RemoteUser = config.OSUser.Username
 		}
 	}
-	if err := installCluster.Wait(); err != nil {
+	if err := installCluster.Wait(ctx); err != nil {
 		return err
 	}
 	// Fetch public keys from gcloud to set up ssh access for all users into the
@@ -532,7 +566,7 @@ func SetupSSH(clusterName string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve authorized keys from gcloud")
 	}
-	return installCluster.SetupSSH()
+	return installCluster.SetupSSH(ctx)
 }
 
 // Extend extends the lifetime of the specified cluster to prevent it from being destroyed.
@@ -569,8 +603,20 @@ func Extend(clusterName string, lifetime time.Duration) error {
 	return nil
 }
 
+// DefaultStartOpts returns a StartOpts populated with default values.
+func DefaultStartOpts() install.StartOpts {
+	return install.StartOpts{
+		Sequential:      true,
+		EncryptedStores: false,
+		SkipInit:        false,
+		StoreCount:      1,
+		TenantID:        2,
+	}
+}
+
 // Start starts nodes on a cluster.
 func Start(
+	ctx context.Context,
 	clusterName string,
 	startOpts install.StartOpts,
 	clusterSettingsOpts ...install.ClusterSettingOption,
@@ -582,43 +628,50 @@ func Start(
 	if err != nil {
 		return err
 	}
-	return c.Start(startOpts)
+	return c.Start(ctx, startOpts)
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.
-func Monitor(clusterName string, opts install.MonitorOpts) error {
+func Monitor(
+	ctx context.Context, clusterName string, opts install.MonitorOpts,
+) (chan install.NodeMonitorInfo, error) {
 	c, err := newCluster(clusterName)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	messages := c.Monitor(opts)
-	for msg := range messages {
-		if msg.Err != nil {
-			msg.Msg += "error: " + msg.Err.Error()
-		}
-		thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
-		if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-			err = errors.CombineErrors(err, thisError)
-		}
-		fmt.Println(thisError.Error())
+	return c.Monitor(ctx, opts), nil
+}
+
+// StopOpts is used to pass options to Stop.
+type StopOpts struct {
+	ProcessTag string
+	Sig        int
+	Wait       bool
+}
+
+// DefaultStopOpts returns StopOpts populated with the default values used by Stop.
+func DefaultStopOpts() StopOpts {
+	return StopOpts{
+		ProcessTag: "",
+		Sig:        9,
+		Wait:       false,
 	}
-	return err
 }
 
 // Stop stops nodes on a cluster.
-func Stop(clusterName, processTag string, sig int, wait bool) error {
+func Stop(ctx context.Context, clusterName string, opts StopOpts) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	c, err := newCluster(clusterName, install.TagOption(processTag))
+	c, err := newCluster(clusterName, install.TagOption(opts.ProcessTag))
 	if err != nil {
 		return err
 	}
-	return c.Stop(sig, wait)
+	return c.Stop(ctx, opts.Sig, opts.Wait)
 }
 
 // Init initializes the cluster.
-func Init(clusterName string) error {
+func Init(ctx context.Context, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -626,11 +679,11 @@ func Init(clusterName string) error {
 	if err != nil {
 		return err
 	}
-	return c.Init()
+	return c.Init(ctx)
 }
 
 // Wipe wipes the nodes in a cluster.
-func Wipe(clusterName string, preserveCerts bool) error {
+func Wipe(ctx context.Context, clusterName string, preserveCerts bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -638,11 +691,11 @@ func Wipe(clusterName string, preserveCerts bool) error {
 	if err != nil {
 		return err
 	}
-	return c.Wipe(preserveCerts)
+	return c.Wipe(ctx, preserveCerts)
 }
 
 // Reformat reformats disks in a cluster to use the specified filesystem.
-func Reformat(clusterName string, fs string) error {
+func Reformat(ctx context.Context, clusterName string, fs string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -654,7 +707,7 @@ func Reformat(clusterName string, fs string) error {
 	var fsCmd string
 	switch fs {
 	case vm.Zfs:
-		if err := install.Install(c, []string{vm.Zfs}); err != nil {
+		if err := install.Install(ctx, c, []string{vm.Zfs}); err != nil {
 			return err
 		}
 		fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
@@ -664,7 +717,7 @@ func Reformat(clusterName string, fs string) error {
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
 
-	err = c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
+	err = c.Run(ctx, os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
 sudo zpool destroy -f data1
@@ -682,7 +735,7 @@ sudo chmod 777 /mnt/data1
 }
 
 // Install installs third party software.
-func Install(clusterName string, software []string) error {
+func Install(ctx context.Context, clusterName string, software []string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -690,11 +743,11 @@ func Install(clusterName string, software []string) error {
 	if err != nil {
 		return err
 	}
-	return install.Install(c, software)
+	return install.Install(ctx, c, software)
 }
 
 // Download downloads 3rd party tools, using a GCS cache if possible.
-func Download(clusterName string, src, sha, dest string) error {
+func Download(ctx context.Context, clusterName string, src, sha, dest string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -702,12 +755,12 @@ func Download(clusterName string, src, sha, dest string) error {
 	if err != nil {
 		return err
 	}
-	return install.Download(c, src, sha, dest)
+	return install.Download(ctx, c, src, sha, dest)
 }
 
 // DistributeCerts distributes certificates to the nodes in a cluster.
 // If the certificates already exist, no action is taken.
-func DistributeCerts(clusterName string) error {
+func DistributeCerts(ctx context.Context, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -715,11 +768,11 @@ func DistributeCerts(clusterName string) error {
 	if err != nil {
 		return err
 	}
-	return c.DistributeCerts()
+	return c.DistributeCerts(ctx)
 }
 
 // Put copies a local file to the nodes in a cluster.
-func Put(clusterName, src, dest string, useTreeDist bool) error {
+func Put(ctx context.Context, clusterName, src, dest string, useTreeDist bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -727,7 +780,7 @@ func Put(clusterName, src, dest string, useTreeDist bool) error {
 	if err != nil {
 		return err
 	}
-	return c.Put(src, dest)
+	return c.Put(ctx, src, dest)
 }
 
 // Get copies a remote file from the nodes in a cluster.
@@ -745,7 +798,9 @@ func Get(clusterName, src, dest string) error {
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
-func PgURL(clusterName, certsDir string, external, secure bool) ([]string, error) {
+func PgURL(
+	ctx context.Context, clusterName, certsDir string, external, secure bool,
+) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
 	}
@@ -763,7 +818,7 @@ func PgURL(clusterName, certsDir string, external, secure bool) ([]string, error
 	} else {
 		var err error
 		if err := c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
-			ips[i], err = c.GetInternalIP(nodes[i])
+			ips[i], err = c.GetInternalIP(ctx, nodes[i])
 			return nil, err
 		}); err != nil {
 			return nil, err
@@ -1009,7 +1064,7 @@ func Destroy(destroyAllMine bool, destroyAllLocal bool, clusterNames ...string) 
 		func(ctx context.Context, idx int) error {
 			name := clusterNames[idx]
 			if config.IsLocalClusterName(name) {
-				return destroyLocalCluster(name)
+				return destroyLocalCluster(ctx, name)
 			}
 			if cld == nil {
 				var err error
@@ -1035,7 +1090,7 @@ func destroyCluster(cld *cloud.Cloud, clusterName string) error {
 	return cloud.DestroyCluster(c)
 }
 
-func destroyLocalCluster(clusterName string) error {
+func destroyLocalCluster(ctx context.Context, clusterName string) error {
 	if _, ok := readSyncedClusters(clusterName); !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
@@ -1044,7 +1099,7 @@ func destroyLocalCluster(clusterName string) error {
 	if err != nil {
 		return err
 	}
-	if err := c.Wipe(false); err != nil {
+	if err := c.Wipe(ctx, false); err != nil {
 		return err
 	}
 	return local.DeleteCluster(clusterName)
@@ -1075,6 +1130,7 @@ func cleanupFailedCreate(clusterName string) error {
 
 // Create TODO
 func Create(
+	ctx context.Context,
 	username string,
 	numNodes int,
 	createVMOpts vm.CreateOpts,
@@ -1143,7 +1199,7 @@ func Create(
 		// No need for ssh for local clusters.
 		return LoadClusters()
 	}
-	return SetupSSH(clusterName)
+	return SetupSSH(ctx, clusterName)
 }
 
 // GC garbage-collects expired clusters and unused SSH keypairs in AWS.

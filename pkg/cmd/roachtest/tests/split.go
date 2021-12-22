@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -133,7 +135,7 @@ func registerLoadSplits(r registry.Registry) {
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	c.Start(ctx, c.All())
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -259,7 +261,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
-	c.Start(ctx, c.Node(1))
+	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -324,7 +326,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	// Phase 2: add other nodes, wait for full replication of bank table.
 	t.Status("waiting for full replication")
 	{
-		c.Start(ctx, c.Range(2, numNodes))
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(2, numNodes))
 		m := c.NewMonitor(ctx, c.All())
 		// NB: we do a round-about thing of making sure that there's at least one
 		// range that has 3 replicas (rather than waiting that there are no ranges

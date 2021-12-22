@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -35,7 +36,9 @@ func registerDrop(r registry.Registry) {
 	runDrop := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses, nodes int) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), option.StartArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
+		settings := install.MakeClusterSettings()
+		settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
+		c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(1, nodes))
 
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
