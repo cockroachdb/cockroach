@@ -1195,7 +1195,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 					err := rpcCtx.runHeartbeat(conn, target, redialChan)
 					if err != nil && !grpcutil.IsClosedConnection(err) &&
 						!grpcutil.IsConnectionRejected(err) {
-						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
+						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %v", target, err)
 					}
 					rpcCtx.removeConn(conn, thisConnKeys...)
 				}); err != nil {
