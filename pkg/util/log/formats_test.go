@@ -82,8 +82,7 @@ func TestFormatRedaction(t *testing.T) {
 							Infof(ctx, "safe2 %s", "secret3")
 							Flush()
 
-							debugFileSink := debugLog.getFileSink()
-							contents, err := ioutil.ReadFile(debugFileSink.mu.file.(*syncBuffer).file.Name())
+							contents, err := ioutil.ReadFile(getDebugLogFileName(t))
 							require.NoError(t, err)
 							require.Greater(t, len(contents), 0)
 							lastLineStart := bytes.LastIndexByte(contents[:len(contents)-1], '\n')
