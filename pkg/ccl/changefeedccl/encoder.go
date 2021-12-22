@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -321,8 +322,11 @@ type confluentAvroEncoder struct {
 	updatedField, beforeField, keyOnly bool
 	targets                            jobspb.ChangefeedTargets
 
-	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
-	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
+	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
+	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
+
+	// resolvedCache doesn't need to be bounded like the other caches because the number of topics
+	// is fixed per changefeed.
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
 }
 
@@ -344,6 +348,14 @@ type confluentRegisteredEnvelopeSchema struct {
 }
 
 var _ Encoder = &confluentAvroEncoder{}
+
+var encoderCacheConfig = cache.Config{
+	Policy: cache.CacheFIFO,
+	// TODO: If we find ourselves thrashing here in changefeeds on many tables,
+	// we can improve performance by eagerly evicting versions using Resolved notifications.
+	// An old version with a timestamp entirely before a notification can be safely evicted.
+	ShouldEvict: func(size int, _ interface{}, _ interface{}) bool { return size > 1024 },
+}
 
 func newConfluentAvroEncoder(
 	opts map[string]string, targets jobspb.ChangefeedTargets,
@@ -391,8 +403,8 @@ func newConfluentAvroEncoder(
 	}
 
 	e.schemaRegistry = reg
-	e.keyCache = make(map[tableIDAndVersion]confluentRegisteredKeySchema)
-	e.valueCache = make(map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema)
+	e.keyCache = cache.NewUnorderedCache(encoderCacheConfig)
+	e.valueCache = cache.NewUnorderedCache(encoderCacheConfig)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
 	return e, nil
 }
@@ -407,8 +419,12 @@ func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
 	cacheKey := makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
 
-	registered, ok := e.keyCache[cacheKey]
-	if !ok {
+	var registered confluentRegisteredKeySchema
+	v, ok := e.keyCache.Get(cacheKey)
+	if ok {
+		registered = v.(confluentRegisteredKeySchema)
+		registered.schema.refreshTypeMetadata(row.tableDesc)
+	} else {
 		var err error
 		tableName := e.rawTableName(row.tableDesc)
 		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
@@ -423,12 +439,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Bound the size of this cache.
-		e.keyCache[cacheKey] = registered
-	}
-
-	if ok {
-		registered.schema.refreshTypeMetadata(row.tableDesc)
+		e.keyCache.Add(cacheKey, registered)
 	}
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
@@ -451,8 +462,16 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 		cacheKey[0] = makeTableIDAndVersion(row.prevTableDesc.GetID(), row.prevTableDesc.GetVersion())
 	}
 	cacheKey[1] = makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
-	registered, ok := e.valueCache[cacheKey]
-	if !ok {
+
+	var registered confluentRegisteredEnvelopeSchema
+	v, ok := e.valueCache.Get(cacheKey)
+	if ok {
+		registered = v.(confluentRegisteredEnvelopeSchema)
+		registered.schema.after.refreshTypeMetadata(row.tableDesc)
+		if row.prevTableDesc != nil && registered.schema.before != nil {
+			registered.schema.before.refreshTypeMetadata(row.prevTableDesc)
+		}
+	} else {
 		var beforeDataSchema *avroDataRecord
 		if e.beforeField && row.prevTableDesc != nil {
 			var err error
@@ -481,14 +500,7 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Bound the size of this cache.
-		e.valueCache[cacheKey] = registered
-	}
-	if ok {
-		registered.schema.after.refreshTypeMetadata(row.tableDesc)
-		if row.prevTableDesc != nil && registered.schema.before != nil {
-			registered.schema.before.refreshTypeMetadata(row.prevTableDesc)
-		}
+		e.valueCache.Add(cacheKey, registered)
 	}
 
 	var meta avroMetadata
@@ -533,7 +545,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Bound the size of this cache.
+
 		e.resolvedCache[topic] = registered
 	}
 	var meta avroMetadata
