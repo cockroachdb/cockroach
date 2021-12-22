@@ -65,9 +65,32 @@ const (
 )
 
 const (
-	defaultWindowSize     = 65535
-	initialWindowSize     = defaultWindowSize * 32 // for an RPC
+	defaultWindowSize = 65535
+)
+
+func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
+	const maxWindowSize = defaultWindowSize * 32
+	s := envutil.EnvOrDefaultInt(name, defaultSize)
+	if s > maxWindowSize {
+		log.Warningf(context.Background(), "%s value too large; trimmed to %d", name, maxWindowSize)
+		s = maxWindowSize
+	}
+	if s <= defaultWindowSize {
+		log.Warningf(context.Background(),
+			"%s RPC will use dynamic window sizes due to %s value lower than %d", c, name, defaultSize)
+	}
+	return int32(s)
+}
+
+var (
+	// for an RPC
+	initialWindowSize = getWindowSize(
+		"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultWindowSize*32)
 	initialConnWindowSize = initialWindowSize * 16 // for a connection
+
+	// for RangeFeed RPC
+	rangefeedInitialWindowSize = getWindowSize(
+		"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
 )
 
 // GRPC Dialer connection timeout. 20s matches default value that is
@@ -1016,9 +1039,12 @@ func (ctx *Context) grpcDialRaw(
 		Backoff:           backoffConfig,
 		MinConnectTimeout: minConnectionTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
-	dialOpts = append(dialOpts,
-		grpc.WithInitialWindowSize(initialWindowSize),
-		grpc.WithInitialConnWindowSize(initialConnWindowSize))
+	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(initialConnWindowSize))
+	if class == RangefeedClass {
+		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rangefeedInitialWindowSize))
+	} else {
+		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
+	}
 
 	dialer := onlyOnceDialer{
 		redialChan: make(chan struct{}),
