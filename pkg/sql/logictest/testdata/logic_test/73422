@@ -1,0 +1,264 @@
+# LogicTest: 5node-default-configs
+
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning')
+
+statement ok
+CREATE TABLE IF NOT EXISTS seed AS
+	SELECT
+		g::INT2 AS _int2,
+		g::INT4 AS _int4,
+		g::INT8 AS _int8,
+		g::FLOAT4 AS _float4,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+		g * '1 day'::INTERVAL AS _interval,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes,
+		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid,
+		'0.0.0.0'::INET + g AS _inet,
+		g::STRING::JSONB AS _jsonb,
+		enum_range('hello'::greeting)[g] as _enum
+	FROM
+		generate_series(1, 5) AS g
+
+statement ok
+INSERT INTO seed DEFAULT VALUES;
+CREATE INDEX on seed (_int8, _float8, _date);
+CREATE INVERTED INDEX on seed (_jsonb)
+
+query TT nodeidx=3
+WITH
+			with_19743 (col_118471)
+				AS (
+					SELECT
+						*
+					FROM
+						(
+							VALUES
+								((-313.6555401823484085):::DECIMAL),
+								((-9.186208521790816640E+26):::DECIMAL),
+								(1.061399143614036366E+20:::DECIMAL),
+								(NULL)
+						)
+							AS tab_47865 (col_118471)
+				),
+			with_19744 (col_118472, col_118473)
+				AS (
+					SELECT
+						*
+					FROM
+						(
+							VALUES
+								(
+									('-18 years -11 mons -572 days -19:57:15.654104':::INTERVAL::INTERVAL + '18:59:55.168769':::TIME::TIME)::TIME,
+									('[{"b": [[{}, [true], 0.6596255799508062], [], {"foo": true}, [{}]], "baz": {"bar": false}, "foobar": {}}, false, null]':::JSONB, 2558096681:::OID, (-9492):::INT8, (('15:53:01.30526':::TIME, 'hello':::greeting, 'BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)':::BOX2D, '0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1':::GEOMETRY), B'11111011010000001100011001011'))
+								)
+						)
+							AS tab_47866 (col_118472, col_118473)
+				),
+			with_19751 (col_118486)
+				AS (
+					SELECT
+						*
+					FROM
+						(
+							VALUES
+								(B'001001101010011110110100100100101100100010'),
+								(B'110100001100100001110011110111010010101111'),
+								(B'001100001010000000001100010101001100000100'),
+								(
+									(
+										WITH
+											with_19745 (col_118474)
+												AS (
+													SELECT
+														*
+													FROM
+														(
+															VALUES
+																('1982-12-22':::DATE),
+																('1994-06-24':::DATE),
+																('1987-11-25':::DATE),
+																('1990-07-23':::DATE)
+														)
+															AS tab_47867 (col_118474)
+													EXCEPT ALL
+														SELECT
+															*
+														FROM
+															(
+																VALUES
+																	('1977-02-14':::DATE),
+																	('1972-01-18':::DATE),
+																	('1986-01-21':::DATE),
+																	('1970-12-15':::DATE),
+																	('1980-07-11':::DATE),
+																	('1987-02-26':::DATE)
+															)
+																AS tab_47868 (col_118475)
+												),
+											with_19746 (col_118477)
+												AS (
+													SELECT
+														*
+													FROM
+														(VALUES ((SELECT '1983-07-17':::DATE AS col_118476 LIMIT 1:::INT8)))
+															AS tab_47869 (col_118477)
+												),
+											with_19750 (col_118484)
+												AS (
+													SELECT
+														*
+													FROM
+														(
+															VALUES
+																(
+																	'0103000000010000000900000040299F598677BFC1B0D4006E9E17DCC1C0E094BDEDA7C341FA975777F321F4C1E0C986F6A9C7F44100F493216A9BEDC1786ACEC2616CE9419087F6371F59CA41CE0A1574852601421CF185137257F74170587D8A1C29C641D02E6A3B4E9FF5419078165A8B25CCC11C815E82588BF341342A50A49E80FCC18CD375D761FFFC4140299F598677BFC1B0D4006E9E17DCC1':::GEOMETRY
+																),
+																(NULL),
+																(
+																	(
+																		WITH
+																			with_19749 (col_118482)
+																				AS (
+																					SELECT
+																						*
+																					FROM
+																						(
+																							VALUES
+																								(
+																									(
+																										WITH
+																											with_19747
+																												(col_118478)
+																												AS (
+																													SELECT
+																														*
+																													FROM
+																														(
+																															VALUES
+																																(
+																																	3629941205:::OID
+																																),
+																																(
+																																	0:::OID
+																																),
+																																(
+																																	3798885058:::OID
+																																)
+																														)
+																															AS tab_47870
+																																(
+																																	col_118478
+																																)
+																												),
+																											with_19748
+																												(
+																													col_118479,
+																													col_118480
+																												)
+																												AS (
+																													SELECT
+																														*
+																													FROM
+																														(
+																															VALUES
+																																(
+																																	ARRAY[0:::OID,527520391:::OID,3827781291:::OID,4068370447:::OID,2514947539:::OID,513941833:::OID],
+																																	'204e83e9-3e04-4c78-b31f-6a106b94499b':::UUID
+																																),
+																																(
+																																	ARRAY[3582321388:::OID],
+																																	'97a70d4b-0445-46cb-908a-ec0e755329a3':::UUID
+																																),
+																																(
+																																	ARRAY[1420247402:::OID,1957294180:::OID,371032643:::OID,0:::OID],
+																																	'115d2e8f-47b1-468e-b015-f20334f9fe9c':::UUID
+																																),
+																																(
+																																	ARRAY[0:::OID],
+																																	'32574f92-526c-4f8b-8aac-71cbb8dbd5fd':::UUID
+																																),
+																																(
+																																	NULL,
+																																	'd64c13f3-fad6-408f-bf6c-5bc4a8d983f5':::UUID
+																																)
+																														)
+																															AS tab_47871
+																																(
+																																	col_118479,
+																																	col_118480
+																																)
+																												)
+																										SELECT
+																											499428938:::OID
+																												AS col_118481
+																										LIMIT
+																											1:::INT8
+																									)
+																								),
+																								(2965938619:::OID),
+																								(3684572605:::OID)
+																						)
+																							AS tab_47872 (col_118482)
+																				)
+																		SELECT
+																			'010500004000000000':::GEOMETRY AS col_118483
+																		FROM
+																			with_19749 AS cte_ref_5815
+																		WHERE
+																			false
+																		LIMIT
+																			1:::INT8
+																	)
+																),
+																(
+																	st_geomfromgeojson(e'\rc\\':::STRING::STRING):::GEOMETRY::GEOMETRY
+																)
+														)
+															AS tab_47873 (col_118484)
+												)
+										SELECT
+											B'010111000000101100110100101010110110010011' AS col_118485
+										FROM
+											with_19746 AS cte_ref_5816
+										ORDER BY
+											cte_ref_5816.col_118477 ASC, cte_ref_5816.col_118477 DESC
+										LIMIT
+											1:::INT8
+									)
+								)
+						)
+							AS tab_47874 (col_118486)
+					INTERSECT
+						SELECT
+							*
+						FROM
+							(
+								VALUES
+									(B'011010011011111110110011000110100000001001'),
+									(B'110111110111000111011000010100100000010100'),
+									(B'011101011110101001111100010101100111111001')
+							)
+								AS tab_47875 (col_118487)
+				)
+		SELECT
+			tab_47876._enum AS col_118488, cte_ref_5817.col_118473 AS col_118489
+		FROM
+			with_19744 AS cte_ref_5817, seed@seed__int8__float8__date_idx AS tab_47876
+		ORDER BY
+			cte_ref_5817.col_118472 ASC, tab_47876._int4 ASC, cte_ref_5817.col_118472 DESC
+		LIMIT
+			32:::INT8
+----
+NULL      ("[{""b"": [[{}, [true], 0.6596255799508062], [], {""foo"": true}, [{}]], ""baz"": {""bar"": false}, ""foobar"": {}}, false, null]",2558096681,-9492,"(""(15:53:01.30526,hello,""""BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)"""",0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1)"",11111011010000001100011001011)")
+hello     ("[{""b"": [[{}, [true], 0.6596255799508062], [], {""foo"": true}, [{}]], ""baz"": {""bar"": false}, ""foobar"": {}}, false, null]",2558096681,-9492,"(""(15:53:01.30526,hello,""""BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)"""",0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1)"",11111011010000001100011001011)")
+howdy     ("[{""b"": [[{}, [true], 0.6596255799508062], [], {""foo"": true}, [{}]], ""baz"": {""bar"": false}, ""foobar"": {}}, false, null]",2558096681,-9492,"(""(15:53:01.30526,hello,""""BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)"""",0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1)"",11111011010000001100011001011)")
+hi        ("[{""b"": [[{}, [true], 0.6596255799508062], [], {""foo"": true}, [{}]], ""baz"": {""bar"": false}, ""foobar"": {}}, false, null]",2558096681,-9492,"(""(15:53:01.30526,hello,""""BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)"""",0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1)"",11111011010000001100011001011)")
+good day  ("[{""b"": [[{}, [true], 0.6596255799508062], [], {""foo"": true}, [{}]], ""baz"": {""bar"": false}, ""foobar"": {}}, false, null]",2558096681,-9492,"(""(15:53:01.30526,hello,""""BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)"""",0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1)"",11111011010000001100011001011)")
+morning   ("[{""b"": [[{}, [true], 0.6596255799508062], [], {""foo"": true}, [{}]], ""baz"": {""bar"": false}, ""foobar"": {}}, false, null]",2558096681,-9492,"(""(15:53:01.30526,hello,""""BOX(0.7984147268382222 1.290567134717541,1.1437193488042054 2.1295069614491755)"""",0104000080090000000101000080F0E477809330C2C15A617CFFBFF7F741746E262AC9D3EA41010100008066075353F56F01C2BC2401D2C36FDDC1B2F5C3CDC0F4E8C1010100008068E091CD3A5CD241500996B6D91EF6C1F03270877285FBC10101000080A03FB36681FFC8411077F5D943B6D3C1FA38B949FEBDF34101010000803CD79C9A7461E2C107721C3C3EA200C2AB5D962512A0F7C10101000080D896FD208A5CED4150632B2D054EE6C1C8D1A74E0680E0C10101000080B43EB527B0EDE8411CC95E7528370142545C2FB3FE7AF84101010000806ABE9696069DFBC19C9FC9E19F4EF24140625147F13301420101000080A0FA9889EA2ED641F696733DFEA3F941555BCE14BD1BF2C1)"",11111011010000001100011001011)")

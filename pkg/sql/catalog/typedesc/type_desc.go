@@ -759,7 +759,7 @@ func EnsureTypeIsHydrated(
 	}
 	if t.Family() == types.TupleFamily {
 		for _, typ := range t.TupleContents() {
-			if err := maybeHydrateType(ctx, typ, res); err != nil {
+			if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
 				return err
 			}
 		}
