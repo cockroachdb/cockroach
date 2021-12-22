@@ -1941,24 +1941,18 @@ func (sc *SchemaChanger) txn(
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ts hlc.Timestamp,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-	descriptors *descs.Collection,
+	ctx context.Context, execCfg *ExecutorConfig, ts hlc.Timestamp, descriptors *descs.Collection,
 ) extendedEvalContext {
 
 	sd := NewFakeSessionData(execCfg.SV())
-	ie := ieFactory(ctx, sd)
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
 		// other fields are used.
-		Tracing:                      &SessionTracing{},
-		ExecCfg:                      execCfg,
-		Descs:                        descriptors,
-		SchemaChangeInternalExecutor: ie.(*InternalExecutor),
+		Tracing: &SessionTracing{},
+		ExecCfg: execCfg,
+		Descs:   descriptors,
 		EvalContext: tree.EvalContext{
 			SessionDataStack: sessiondata.NewStack(sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
