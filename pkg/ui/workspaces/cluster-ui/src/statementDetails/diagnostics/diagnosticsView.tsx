@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import moment from "moment";
 import classnames from "classnames/bind";
@@ -17,18 +17,19 @@ import { Button, Icon } from "@cockroachlabs/ui-components";
 import { Text, TextTypes } from "src/text";
 import { Table, ColumnsConfig } from "src/table";
 import { SummaryCard } from "src/summaryCard";
-import { DiagnosticStatusBadge } from "src/statementsDiagnostics";
+import {
+  ActivateDiagnosticsModalRef,
+  DiagnosticStatusBadge,
+} from "src/statementsDiagnostics";
 import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
 import {
   getDiagnosticsStatus,
   sortByCompletedField,
   sortByRequestedAtField,
 } from "./diagnosticsUtils";
-import { statementDiagnostics } from "src/util/docs";
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath } from "../../api";
-import { Anchor } from "../../anchor";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
@@ -36,10 +37,10 @@ export interface DiagnosticsViewStateProps {
   hasData: boolean;
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   showDiagnosticsViewLink?: boolean;
+  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
 }
 
 export interface DiagnosticsViewDispatchProps {
-  activate: (statementFingerprint: string) => void;
   dismissAlertMessage: () => void;
   onDownloadDiagnosticBundleClick?: (statementFingerprint: string) => void;
   onSortingChange?: (
@@ -72,30 +73,24 @@ const NavButton: React.FC = props => (
 );
 
 export const EmptyDiagnosticsView = ({
-  activate,
   statementFingerprint,
   showDiagnosticsViewLink,
+  activateDiagnosticsRef,
 }: DiagnosticsViewProps) => {
-  const onActivateButtonClick = useCallback(() => {
-    activate(statementFingerprint);
-  }, [activate, statementFingerprint]);
   return (
     <EmptyTable
       icon={emptyListResultsImg}
       title="Activate statement diagnostics"
-      message={
-        <span>
-          When you activate statement diagnostics, CockroachDB will wait for the
-          next query that matches this statement fingerprint. A download button
-          will appear on the statement list and detail pages when the query is
-          ready. The statement diagnostic will include EXPLAIN plans, table
-          statistics, and traces.{" "}
-          <Anchor href={statementDiagnostics}>Learn More</Anchor>
-        </span>
-      }
       footer={
         <footer className={cx("empty-view__footer")}>
-          <Button intent="primary" onClick={onActivateButtonClick}>
+          <Button
+            intent="primary"
+            onClick={() =>
+              activateDiagnosticsRef?.current?.showModalFor(
+                statementFingerprint,
+              )
+            }
+          >
             Activate Diagnostics
           </Button>
           {showDiagnosticsViewLink && (
@@ -186,11 +181,6 @@ export class DiagnosticsView extends React.Component<
     },
   ];
 
-  onActivateButtonClick = () => {
-    const { activate, statementFingerprint } = this.props;
-    activate(statementFingerprint);
-  };
-
   componentWillUnmount() {
     this.props.dismissAlertMessage();
   }
@@ -202,7 +192,13 @@ export class DiagnosticsView extends React.Component<
   };
 
   render() {
-    const { hasData, diagnosticsReports, showDiagnosticsViewLink } = this.props;
+    const {
+      hasData,
+      diagnosticsReports,
+      showDiagnosticsViewLink,
+      statementFingerprint,
+      activateDiagnosticsRef,
+    } = this.props;
 
     const canRequestDiagnostics = diagnosticsReports.every(
       diagnostic => diagnostic.completed,
@@ -227,7 +223,11 @@ export class DiagnosticsView extends React.Component<
           <Text textType={TextTypes.Heading3}>Statement diagnostics</Text>
           {canRequestDiagnostics && (
             <Button
-              onClick={this.onActivateButtonClick}
+              onClick={() =>
+                activateDiagnosticsRef?.current?.showModalFor(
+                  statementFingerprint,
+                )
+              }
               disabled={!canRequestDiagnostics}
               intent="secondary"
             >
