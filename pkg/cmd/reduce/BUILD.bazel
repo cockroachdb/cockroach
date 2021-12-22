@@ -6,8 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/reduce",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/testutils/reduce",
-        "//pkg/testutils/reduce/reducesql",
+        "//pkg/cmd/reduce/reduce",
+        "//pkg/cmd/reduce/reduce/reducesql",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
