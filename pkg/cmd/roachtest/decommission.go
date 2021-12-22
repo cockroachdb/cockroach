@@ -523,10 +523,13 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("decommission failed: %v", err)
 			}
 
+			// The nodes are excluded from the cluster upon being decommissioned and so they may no longer
+			// be live. Also, it's possible that the final status is decommissioning and not decommissioned
+			// because of gossip delay (this is fixed in 22.1 but was not backported).
 			exp := [][]string{
 				decommissionHeader,
-				{strconv.Itoa(targetNodeA), "true", "0", "true", "decommissioned", "false"},
-				{strconv.Itoa(targetNodeB), "true", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeA), "false|true", "0", "true", "decommissioned|decommissioning", "false"},
+				{strconv.Itoa(targetNodeB), "false|true", "0", "true", "decommissioned|decommissioning", "false"},
 				decommissionFooter,
 			}
 			return h.matchCSV(o, exp)
@@ -609,9 +612,11 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			exp := [][]string{
 				decommissionHeader,
 				// NB: the "false" is liveness. We waited above for these nodes to
-				// vanish from `node ls`, so definitely not live at this point.
-				{strconv.Itoa(targetNodeA), "false", "0", "true", "decommissioned", "false"},
-				{strconv.Itoa(targetNodeB), "false", "0", "true", "decommissioned", "false"},
+				// vanish from `node ls`, so definitely not live at this point. Also,
+				// while at this time it would be highly unlikely to see "decommissioning"
+				// as status still, we'll accept it.
+				{strconv.Itoa(targetNodeA), "false", "0", "true", "decommissioning|decommissioned", "false"},
+				{strconv.Itoa(targetNodeB), "false", "0", "true", "decommissioning|decommissioned", "false"},
 				decommissionFooter,
 			}
 			if err := h.matchCSV(o, exp); err != nil {
@@ -702,7 +707,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioned", "false"},
+			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioning|decommissioned", "false"},
 			decommissionFooter,
 		}
 		if err := h.matchCSV(o, exp); err != nil {
