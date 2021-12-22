@@ -1480,6 +1480,7 @@ func TestLint(t *testing.T) {
 			stream.Uniq(),
 			stream.Grep(`^`+settingsPkgPrefix+`: | `+grepBuf.String()),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
+			stream.GrepNot(`cockroach/pkg/roachprod/logger: log$`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
 			stream.GrepNot(`cockroach/pkg/roachprod/install: syscall$`), // TODO: switch to sysutil
@@ -2157,9 +2158,9 @@ func TestLint(t *testing.T) {
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
-			// roachtest is not collecting redactable logs so we don't care
+			// roachprod/logger is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
-			stream.GrepNot(`pkg/cmd/roachtest/logger/log\.go:.*format argument is not a constant expression`),
+			stream.GrepNot(`pkg/roachprod/logger/log\.go:.*format argument is not a constant expression`),
 			// We purposefully produce nil dereferences in this file to test crash conditions
 			stream.GrepNot(`pkg/util/log/logcrash/crash_reporting_test\.go:.*nil dereference in type assertion`),
 			// Spawning naked goroutines is ok when it's not as part of the main CRDB

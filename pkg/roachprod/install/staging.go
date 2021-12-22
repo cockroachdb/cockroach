@@ -14,10 +14,10 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 )
@@ -125,6 +125,7 @@ func cockroachReleaseURL(version string, arch string) (*url.URL, error) {
 // available.
 func StageApplication(
 	ctx context.Context,
+	l *logger.Logger,
 	c *SyncedCluster,
 	applicationName string,
 	version string,
@@ -139,7 +140,7 @@ func StageApplication(
 	switch applicationName {
 	case "cockroach":
 		sha, err := StageRemoteBinary(
-			ctx, c, applicationName, "cockroach/cockroach", version, archInfo.DebugArchitecture, destDir,
+			ctx, l, c, applicationName, "cockroach/cockroach", version, archInfo.DebugArchitecture, destDir,
 		)
 		if err != nil {
 			return err
@@ -149,6 +150,7 @@ func StageApplication(
 		for _, library := range crdbLibraries {
 			if err := StageOptionalRemoteLibrary(
 				ctx,
+				l,
 				c,
 				library,
 				fmt.Sprintf("cockroach/lib/%s", library),
@@ -163,11 +165,11 @@ func StageApplication(
 		return nil
 	case "workload":
 		_, err := StageRemoteBinary(
-			ctx, c, applicationName, "cockroach/workload", version, "" /* arch */, destDir,
+			ctx, l, c, applicationName, "cockroach/workload", version, "" /* arch */, destDir,
 		)
 		return err
 	case "release":
-		return StageCockroachRelease(ctx, c, version, archInfo.ReleaseArchitecture, destDir)
+		return StageCockroachRelease(ctx, l, c, version, archInfo.ReleaseArchitecture, destDir)
 	default:
 		return fmt.Errorf("unknown application %s", applicationName)
 	}
@@ -225,19 +227,22 @@ func URLsForApplication(application string, version string, os string) ([]*url.U
 // If no SHA is specified, the latest build of the binary is used instead.
 // Returns the SHA of the resolved binary.
 func StageRemoteBinary(
-	ctx context.Context, c *SyncedCluster, applicationName, urlPathBase, SHA, arch, dir string,
+	ctx context.Context,
+	l *logger.Logger,
+	c *SyncedCluster,
+	applicationName, urlPathBase, SHA, arch, dir string,
 ) (string, error) {
 	binURL, err := getEdgeURL(urlPathBase, SHA, arch, "")
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("Resolved binary url for %s: %s\n", applicationName, binURL)
+	l.Printf("Resolved binary url for %s: %s", applicationName, binURL)
 	target := filepath.Join(dir, applicationName)
 	cmdStr := fmt.Sprintf(
 		`curl -sfSL -o "%s" "%s" && chmod 755 %s`, target, binURL, target,
 	)
 	return shaFromEdgeURL(binURL), c.Run(
-		ctx, os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
+		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
 	)
 }
 
@@ -246,7 +251,10 @@ func StageRemoteBinary(
 // If no SHA is specified, the latest build of the library is used instead.
 // It will not error if the library does not exist on the edge.
 func StageOptionalRemoteLibrary(
-	ctx context.Context, c *SyncedCluster, libraryName, urlPathBase, SHA, arch, ext, dir string,
+	ctx context.Context,
+	l *logger.Logger,
+	c *SyncedCluster,
+	libraryName, urlPathBase, SHA, arch, ext, dir string,
 ) error {
 	url, err := getEdgeURL(urlPathBase, SHA, arch, ext)
 	if err != nil {
@@ -254,7 +262,7 @@ func StageOptionalRemoteLibrary(
 	}
 	libDir := filepath.Join(dir, "lib")
 	target := filepath.Join(libDir, libraryName+ext)
-	fmt.Printf("Resolved library url for %s: %s\n", libraryName, url)
+	l.Printf("Resolved library url for %s: %s", libraryName, url)
 	cmdStr := fmt.Sprintf(
 		`mkdir -p "%s" && \
 curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; continuing...'`,
@@ -264,13 +272,15 @@ curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; cont
 		libraryName+ext,
 	)
 	return c.Run(
-		ctx, os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
+		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
 	)
 }
 
 // StageCockroachRelease downloads an official CockroachDB release binary with
 // the specified version.
-func StageCockroachRelease(ctx context.Context, c *SyncedCluster, version, arch, dir string) error {
+func StageCockroachRelease(
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, version, arch, dir string,
+) error {
 	if len(version) == 0 {
 		return fmt.Errorf(
 			"release application cannot be staged without specifying a specific version",
@@ -280,7 +290,7 @@ func StageCockroachRelease(ctx context.Context, c *SyncedCluster, version, arch,
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Resolved release url for cockroach version %s: %s\n", version, binURL)
+	l.Printf("Resolved release url for cockroach version %s: %s", version, binURL)
 
 	// This command incantation:
 	// - Creates a temporary directory on the remote machine
@@ -297,6 +307,6 @@ if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ${dir}/lib; fi && \
 chmod 755 ${dir}/cockroach
 `, dir, binURL)
 	return c.Run(
-		ctx, os.Stdout, os.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
+		ctx, l, l.Stdout, l.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
 	)
 }

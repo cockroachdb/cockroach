@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -120,9 +121,11 @@ func findUserChannel(client *slack.Client, email string) (string, error) {
 	return u.ID, nil
 }
 
-func postStatus(client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List) {
+func postStatus(
+	l *logger.Logger, client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List,
+) {
 	if dryrun {
-		tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+		tw := tabwriter.NewWriter(l.Stdout, 0, 8, 2, ' ', 0)
 		for _, c := range s.good {
 			fmt.Fprintf(tw, "good:\t%s\t%s\t(%s)\n", c.Name,
 				c.GCAt().Format(time.Stamp),
@@ -276,7 +279,7 @@ func shouldSend(channel string, status *status) (bool, error) {
 // GCClusters checks all cluster to see if they should be deleted. It only
 // fails on failure to perform cloud actions. All other actions (load/save
 // file, email) do not abort.
-func GCClusters(cloud *Cloud, dryrun bool) error {
+func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 	now := timeutil.Now()
 
 	var names []string
@@ -312,7 +315,7 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 	// Send out notification to #roachprod-status.
 	client := makeSlackClient()
 	channel, _ := findChannel(client, "roachprod-status", "")
-	postStatus(client, channel, dryrun, &s, badVMs)
+	postStatus(l, client, channel, dryrun, &s, badVMs)
 
 	// Send out user notifications if any of the user's clusters are expired or
 	// will be destroyed.
@@ -320,7 +323,7 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 		if len(status.warn) > 0 || len(status.destroy) > 0 {
 			userChannel, err := findUserChannel(client, user+config.EmailDomain)
 			if err == nil {
-				postStatus(client, userChannel, dryrun, status, nil)
+				postStatus(l, client, userChannel, dryrun, status, nil)
 			} else if !errors.Is(err, errNoSlackClient) {
 				log.Infof(context.Background(), "could not deliver Slack DM to %s: %v", user+config.EmailDomain, err)
 			}

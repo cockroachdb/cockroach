@@ -82,7 +82,7 @@ func verifyNodeLiveness(
 	ctx context.Context, c cluster.Cluster, t test.Test, runDuration time.Duration,
 ) {
 	const maxFailures = 10
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(1))
 	if err != nil {
 		t.Fatal(err)
 	}

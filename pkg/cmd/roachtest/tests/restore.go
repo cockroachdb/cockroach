@@ -24,12 +24,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -111,7 +111,7 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 		tBegin := timeutil.Now()
 
 		nodeIdx := 1 + rand.Intn(len(hc.nodes))
-		db, err := hc.c.ConnE(ctx, nodeIdx)
+		db, err := hc.c.ConnE(ctx, hc.t.L(), nodeIdx)
 		if err != nil {
 			return err
 		}
@@ -228,9 +228,9 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 }
 func registerRestoreNodeShutdown(r registry.Registry) {
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
-		return func(c cluster.Cluster) (string, error) {
+		return func(c cluster.Cluster, t test.Test) (string, error) {
 			t.L().Printf("connecting to gateway")
-			gatewayDB := c.Conn(ctx, gatewayNode)
+			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 			defer gatewayDB.Close()
 
 			t.L().Printf("creating bank database")
@@ -299,7 +299,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -313,7 +313,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -396,7 +396,7 @@ func registerRestore(r registry.Registry) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				m := c.NewMonitor(ctx)
 
 				// Run the disk usage logger in the monitor to guarantee its
@@ -462,10 +462,12 @@ func registerRestore(r registry.Registry) {
 // specified in m. This is particularly useful for verifying that a counter
 // metric does not exceed some threshold during a test. For example, the
 // restore and import tests verify that the range merge queue is inactive.
-func verifyMetrics(ctx context.Context, c cluster.Cluster, m map[string]float64) error {
+func verifyMetrics(
+	ctx context.Context, t test.Test, c cluster.Cluster, m map[string]float64,
+) error {
 	const sample = 10 * time.Second
 	// Query needed information over the timespan of the query.
-	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(1))
 	if err != nil {
 		return err
 	}

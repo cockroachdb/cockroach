@@ -26,7 +26,7 @@ func registerRoachmart(r registry.Registry) {
 	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {

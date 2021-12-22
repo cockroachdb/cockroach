@@ -13,6 +13,7 @@ package flagstub
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 )
@@ -42,7 +43,9 @@ func (p *provider) ConfigSSH(zones []string) error {
 }
 
 // Create implements vm.Provider and returns Unimplemented.
-func (p *provider) Create(names []string, opts vm.CreateOpts, providerOpts vm.ProviderOpts) error {
+func (p *provider) Create(
+	l *logger.Logger, names []string, opts vm.CreateOpts, providerOpts vm.ProviderOpts,
+) error {
 	return errors.Newf("%s", p.unimplemented)
 }
 
@@ -67,7 +70,7 @@ func (p *provider) FindActiveAccount() (string, error) {
 }
 
 // List implements vm.Provider and returns an empty list.
-func (p *provider) List() (vm.List, error) {
+func (p *provider) List(l *logger.Logger) (vm.List, error) {
 	return nil, nil
 }
 

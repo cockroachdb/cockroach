@@ -37,7 +37,7 @@ func loadTPCHDataset(
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
 ) error {
-	db := c.Conn(ctx, roachNodes[0])
+	db := c.Conn(ctx, t.L(), roachNodes[0])
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx, `USE tpch`); err == nil {
@@ -68,7 +68,7 @@ func loadTPCHDataset(
 		// cluster and restore.
 		m.ExpectDeaths(int32(c.Spec().NodeCount))
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 		m.ResetDeaths()
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {

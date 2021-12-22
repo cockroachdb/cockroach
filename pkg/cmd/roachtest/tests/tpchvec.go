@@ -258,7 +258,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				// however, the session variables might contain the old values,
 				// so we will open up new connections for each of the setups in
 				// order to get the correct cluster setup on each.
-				tempConn := c.Conn(ctx, 1)
+				tempConn := c.Conn(ctx, t.L(), 1)
 				defer tempConn.Close()
 				if _, err := tempConn.Exec("USE tpch;"); err != nil {
 					t.Fatal(err)
@@ -545,9 +545,9 @@ func runTPCHVec(
 	firstNode := c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-	conn := c.Conn(ctx, 1)
+	conn := c.Conn(ctx, t.L(), 1)
 	disableAutoStats(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx), c.All()); err != nil {

@@ -37,10 +37,10 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	nodes := c.Range(1, 3)
 	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
 
 	{
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		// Disable consistency checks. We're going to be introducing an
 		// inconsistency and wish for it to be detected when we've set up the test
 		// to expect it.
@@ -63,9 +63,9 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	stopOpts := option.DefaultStopOpts()
 	stopOpts.RoachprodOpts.Wait = false
 	stopOpts.RoachprodOpts.Sig = 2
-	c.Stop(ctx, stopOpts, nodes)
+	c.Stop(ctx, t.L(), stopOpts, nodes)
 	stopOpts.RoachprodOpts.Wait = true
-	c.Stop(ctx, stopOpts, nodes)
+	c.Stop(ctx, t.L(), stopOpts, nodes)
 
 	// Write an extraneous transaction record to n1's engine. This means n1 should
 	// ultimately be terminated by the consistency checker (as the other two nodes
@@ -98,7 +98,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// determine why.
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=consistency_queue=5,replica_consistency=5,queue=5")
-	c.Start(ctx, startOpts, install.MakeClusterSettings(), nodes)
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), nodes)
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):
@@ -114,7 +114,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// check runs against all three nodes. If it targeted only two nodes, a random
 	// one would fatal - not what we want.
 	{
-		db := c.Conn(ctx, 2)
+		db := c.Conn(ctx, t.L(), 2)
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '10ms'`)
 		if err != nil {
 			t.Fatal(err)
@@ -128,7 +128,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	time.Sleep(20 * time.Second) // wait for liveness to time out for dead nodes
 
-	db := c.Conn(ctx, 2)
+	db := c.Conn(ctx, t.L(), 2)
 	rows, err := db.Query(`SELECT node_id FROM crdb_internal.gossip_nodes WHERE is_live = false;`)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), "grep "+
 		expr+" "+"{log-dir}/cockroach.log")
 
-	if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1)); err == nil {
+	if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1)); err == nil {
 		// NB: we can't easily verify the error because there's a lot of output
 		// which isn't fully included in the error returned from StartE.
 		t.Fatalf("node restart should have failed")

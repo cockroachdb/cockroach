@@ -129,7 +129,7 @@ func Toxify(
 			return nil, errors.Wrap(err, "toxify")
 		}
 
-		externalAddrs, err := c.ExternalAddr(ctx, n)
+		externalAddrs, err := c.ExternalAddr(ctx, t.L(), n)
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +180,7 @@ func (tc *ToxiCluster) Proxy(i int) *toxiproxy.Proxy {
 func (tc *ToxiCluster) ExternalAddr(
 	ctx context.Context, node option.NodeListOption,
 ) ([]string, error) {
-	return tc.Cluster.ExternalAddr(ctx, node)
+	return tc.Cluster.ExternalAddr(ctx, tc.t.L(), node)
 }
 
 // PoisonedExternalAddr gives the external host:port of the toxiproxy process
@@ -210,7 +210,7 @@ func (tc *ToxiCluster) PoisonedPGAddr(
 ) ([]string, error) {
 	var out []string
 
-	urls, err := tc.ExternalPGUrl(ctx, node)
+	urls, err := tc.ExternalPGUrl(ctx, tc.t.L(), node)
 	if err != nil {
 		return nil, err
 	}

@@ -28,9 +28,9 @@ func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Start(ctx, option.DefaultStartOpts(), settings)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	// Wait for upreplication then create many ranges.

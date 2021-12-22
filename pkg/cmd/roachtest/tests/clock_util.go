@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 // isAlive returns whether the node queried by db is alive.
@@ -59,10 +59,10 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 		return nil
 	}
 
-	if err := oi.c.Install(ctx, oi.c.All(), "ntp"); err != nil {
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "ntp"); err != nil {
 		return err
 	}
-	if err := oi.c.Install(ctx, oi.c.All(), "gcc"); err != nil {
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "gcc"); err != nil {
 		return err
 	}
 	if err := oi.c.RunE(ctx, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {

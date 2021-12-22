@@ -139,14 +139,14 @@ func (ch *Chaos) Runner(
 				stopOpts := option.DefaultStopOpts()
 				stopOpts.RoachprodOpts.Sig = 15
 				stopOpts.RoachtestOpts.Worker = true
-				if err := c.StopE(ctx, stopOpts, target); err != nil {
+				if err := c.StopE(ctx, l, stopOpts, target); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			} else {
 				l.Printf("killing %v\n", target)
 				stopOpts := option.DefaultStopOpts()
 				stopOpts.RoachtestOpts.Worker = true
-				if err := c.StopE(ctx, stopOpts, target); err != nil {
+				if err := c.StopE(ctx, l, stopOpts, target); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			}
@@ -159,7 +159,7 @@ func (ch *Chaos) Runner(
 				l.Printf("restarting %v (chaos is done)\n", target)
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
-				if err := c.StartE(ctx, startOpts, install.MakeClusterSettings(), target); err != nil {
+				if err := c.StartE(ctx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return nil
@@ -173,7 +173,7 @@ func (ch *Chaos) Runner(
 				defer cancel()
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
-				if err := c.StartE(tCtx, startOpts, install.MakeClusterSettings(), target); err != nil {
+				if err := c.StartE(tCtx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return ctx.Err()
@@ -184,7 +184,7 @@ func (ch *Chaos) Runner(
 			ch.sendEvent(ChaosEventTypePreStartup, target)
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachtestOpts.Worker = true
-			if err := c.StartE(ctx, startOpts, install.MakeClusterSettings(), target); err != nil {
+			if err := c.StartE(ctx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
 				return errors.Wrapf(err, "could not restart node %s", target)
 			}
 			ch.sendEvent(ChaosEventTypeStartupComplete, target)

@@ -40,9 +40,9 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-	db := c.Conn(ctx, c.Spec().NodeCount)
+	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(
@@ -71,7 +71,7 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
 		if !isAlive(db, t.L()) {
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 		}
 	}()
 	defer offsetInjector.recover(ctx, c.Spec().NodeCount)

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -378,7 +379,7 @@ func (p *Provider) ConfigSSH(zones []string) error {
 
 // Create TODO(peter): document
 func (p *Provider) Create(
-	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	project := p.GetProject()
@@ -390,8 +391,8 @@ func (p *Provider) Create(
 		}
 	}
 	if !gcJob {
-		fmt.Printf("WARNING: --lifetime functionality requires "+
-			"`roachprod gc --gce-project=%s` cronjob\n", project)
+		l.Printf("WARNING: --lifetime functionality requires "+
+			"`roachprod gc --gce-project=%s` cronjob", project)
 	}
 
 	zones, err := vm.ExpandZonesFlag(providerOpts.Zones)
@@ -662,7 +663,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 }
 
 // List queries gcloud to produce a list of VM info objects.
-func (p *Provider) List() (vm.List, error) {
+func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}

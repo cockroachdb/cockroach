@@ -66,7 +66,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 		fmt.Fprint(tlpLog, "\n\n")
 	}
 
-	conn := c.Conn(ctx, 1)
+	conn := c.Conn(ctx, t.L(), 1)
 
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
@@ -75,7 +75,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
 		t.Fatalf("could not initialize libraries: %v", err)
 	}
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
 

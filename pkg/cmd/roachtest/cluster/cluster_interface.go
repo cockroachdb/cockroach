@@ -15,10 +15,10 @@ import (
 	gosql "database/sql"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -49,34 +49,34 @@ type Cluster interface {
 
 	// Starting and stopping CockroachDB.
 
-	StartE(ctx context.Context, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
-	Start(ctx context.Context, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
-	StopE(ctx context.Context, stopOpts option.StopOpts, opts ...option.Option) error
-	Stop(ctx context.Context, stopOpts option.StopOpts, opts ...option.Option)
-	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
+	StartE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
+	Start(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
+	StopE(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option) error
+	Stop(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option)
+	StopCockroachGracefullyOnNode(ctx context.Context, l *logger.Logger, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
 
 	// Hostnames and IP addresses of the nodes.
 
-	InternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
-	InternalIP(ctx context.Context, node option.NodeListOption) ([]string, error)
-	ExternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
-	ExternalIP(ctx context.Context, node option.NodeListOption) ([]string, error)
+	InternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	InternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	ExternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	ExternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
-	ExternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 
 	// SQL clients to nodes.
 
-	Conn(ctx context.Context, node int) *gosql.DB
-	ConnE(ctx context.Context, node int) (*gosql.DB, error)
+	Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB
+	ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error)
 
 	// URLs for the Admin UI.
 
-	InternalAdminUIAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
-	ExternalAdminUIAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
+	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 
 	// Running commands on nodes.
 
@@ -118,10 +118,10 @@ type Cluster interface {
 
 	// Internal niche tools.
 
-	Reset(ctx context.Context) error
-	Reformat(ctx context.Context, node option.NodeListOption, filesystem string) error
+	Reset(ctx context.Context, l *logger.Logger) error
+	Reformat(ctx context.Context, l *logger.Logger, node option.NodeListOption, filesystem string) error
 	Install(
-		ctx context.Context, nodes option.NodeListOption, software ...string,
+		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, software ...string,
 	) error
 
 	// Methods whose inclusion on this interface is purely historical.

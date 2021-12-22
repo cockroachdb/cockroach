@@ -32,8 +32,8 @@ func registerSecure(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				settings := install.MakeClusterSettings(install.SecureOption(true))
-				c.Start(ctx, option.DefaultStartOpts(), settings)
-				db := c.Conn(ctx, 1)
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 				_, err := db.QueryContext(ctx, `SELECT 1`)
 				require.NoError(t, err)

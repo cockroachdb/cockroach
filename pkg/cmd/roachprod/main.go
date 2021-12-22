@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
@@ -125,7 +126,7 @@ Local Clusters
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		createVMOpts.ClusterName = args[0]
-		return roachprod.Create(context.Background(), username, numNodes, createVMOpts, providerOptsContainer)
+		return roachprod.Create(context.Background(), roachprodLibraryLogger, username, numNodes, createVMOpts, providerOptsContainer)
 	}),
 }
 
@@ -144,7 +145,7 @@ if the user would like to update the keys on the remote hosts.
 
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.SetupSSH(context.Background(), args[0])
+		return roachprod.SetupSSH(context.Background(), roachprodLibraryLogger, args[0])
 	}),
 }
 
@@ -165,7 +166,7 @@ directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Destroy(destroyAllMine, destroyAllLocal, args...)
+		return roachprod.Destroy(roachprodLibraryLogger, destroyAllMine, destroyAllLocal, args...)
 	}),
 }
 
@@ -174,7 +175,7 @@ var cachedHostsCmd = &cobra.Command{
 	Short: "list all clusters (and optionally their host numbers) from local cache",
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		roachprod.CachedClusters(func(clusterName string, numVMs int) {
+		roachprod.CachedClusters(roachprodLibraryLogger, func(clusterName string, numVMs int) {
 			if strings.HasPrefix(clusterName, "teamcity") {
 				return
 			}
@@ -242,7 +243,7 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(listMine, listPattern)
+		filteredCloud, err := roachprod.List(roachprodLibraryLogger, listMine, listPattern)
 		if err != nil {
 			return err
 		}
@@ -268,7 +269,7 @@ hosts file.
 			for _, name := range names {
 				c := filteredCloud.Clusters[name]
 				if listDetails {
-					c.PrintDetails()
+					c.PrintDetails(roachprodLibraryLogger)
 				} else {
 					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
 					if !c.IsLocal() {
@@ -314,7 +315,7 @@ var syncCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync()
+		_, err := roachprod.Sync(roachprodLibraryLogger)
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),
@@ -330,7 +331,7 @@ hourly by a cronjob so it is not necessary to run manually.
 `,
 	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.GC(dryrun)
+		return roachprod.GC(roachprodLibraryLogger, dryrun)
 	}),
 }
 
@@ -344,7 +345,7 @@ destroyed:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Extend(args[0], extendLifetime)
+		return roachprod.Extend(roachprodLibraryLogger, args[0], extendLifetime)
 	}),
 }
 
@@ -396,7 +397,7 @@ cluster setting will be set to its value.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		return roachprod.Start(context.Background(), args[0], startOpts, clusterSettingsOpts...)
+		return roachprod.Start(context.Background(), roachprodLibraryLogger, args[0], startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -426,7 +427,7 @@ signals.
 			wait = true
 		}
 		stopOpts := roachprod.StopOpts{Wait: wait, ProcessTag: tag, Sig: sig}
-		return roachprod.Stop(context.Background(), args[0], stopOpts)
+		return roachprod.Stop(context.Background(), roachprodLibraryLogger, args[0], stopOpts)
 	}),
 }
 
@@ -469,7 +470,7 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		return roachprod.StartTenant(context.Background(), tenantCluster, hostCluster, startOpts, clusterSettingsOpts...)
+		return roachprod.StartTenant(context.Background(), roachprodLibraryLogger, tenantCluster, hostCluster, startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -484,7 +485,7 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Init(context.Background(), args[0])
+		return roachprod.Init(context.Background(), roachprodLibraryLogger, args[0])
 	}),
 }
 
@@ -504,7 +505,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Status(context.Background(), args[0], tag)
+		return roachprod.Status(context.Background(), roachprodLibraryLogger, args[0], tag)
 	}),
 }
 
@@ -529,7 +530,7 @@ into a single stream.
 		} else {
 			dest = args[0] + ".logs"
 		}
-		return roachprod.Logs(args[0], dest, username, logsOpts)
+		return roachprod.Logs(roachprodLibraryLogger, args[0], dest, username, logsOpts)
 	}),
 }
 
@@ -552,7 +553,7 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		messages, err := roachprod.Monitor(context.Background(), args[0], monitorOpts)
+		messages, err := roachprod.Monitor(context.Background(), roachprodLibraryLogger, args[0], monitorOpts)
 		if err != nil {
 			return err
 		}
@@ -581,7 +582,7 @@ nodes.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Wipe(context.Background(), args[0], wipePreserveCerts)
+		return roachprod.Wipe(context.Background(), roachprodLibraryLogger, args[0], wipePreserveCerts)
 	}),
 }
 
@@ -611,7 +612,7 @@ the 'zfs rollback' command:
 
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Reformat(context.Background(), args[0], args[1])
+		return roachprod.Reformat(context.Background(), roachprodLibraryLogger, args[0], args[1])
 	}),
 }
 
@@ -623,7 +624,7 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		return roachprod.Run(context.Background(), args[0], extraSSHOptions, tag, secure, os.Stdout, os.Stderr, args[1:])
+		return roachprod.Run(context.Background(), roachprodLibraryLogger, args[0], extraSSHOptions, tag, secure, os.Stdout, os.Stderr, args[1:])
 	}),
 }
 
@@ -634,7 +635,7 @@ var resetCmd = &cobra.Command{
 environments and will fall back to a no-op.`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.Reset(args[0])
+		return roachprod.Reset(roachprodLibraryLogger, args[0])
 	}),
 }
 
@@ -647,7 +648,7 @@ var installCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Install(context.Background(), args[0], args[1:])
+		return roachprod.Install(context.Background(), roachprodLibraryLogger, args[0], args[1:])
 	}),
 }
 
@@ -662,7 +663,7 @@ var downloadCmd = &cobra.Command{
 		if len(args) == 4 {
 			dest = args[3]
 		}
-		return roachprod.Download(context.Background(), args[0], src, sha, dest)
+		return roachprod.Download(context.Background(), roachprodLibraryLogger, args[0], src, sha, dest)
 	}),
 }
 
@@ -684,7 +685,7 @@ Currently available application options are:
 		if len(args) == 2 {
 			versionArg = args[1]
 		}
-		urls, err := roachprod.StageURL(args[0], versionArg, stageOS)
+		urls, err := roachprod.StageURL(roachprodLibraryLogger, args[0], versionArg, stageOS)
 		if err != nil {
 			return err
 		}
@@ -723,7 +724,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(context.Background(), args[0], stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(context.Background(), roachprodLibraryLogger, args[0], stageOS, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -737,7 +738,7 @@ start."
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.DistributeCerts(context.Background(), args[0])
+		return roachprod.DistributeCerts(context.Background(), roachprodLibraryLogger, args[0])
 	}),
 }
 
@@ -753,7 +754,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Put(context.Background(), args[0], src, dest, useTreeDist)
+		return roachprod.Put(context.Background(), roachprodLibraryLogger, args[0], src, dest, useTreeDist)
 	}),
 }
 
@@ -770,7 +771,7 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Get(args[0], src, dest)
+		return roachprod.Get(roachprodLibraryLogger, args[0], src, dest)
 	}),
 }
 
@@ -780,7 +781,7 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(context.Background(), args[0], secure, args[1:])
+		return roachprod.SQL(context.Background(), roachprodLibraryLogger, args[0], secure, args[1:])
 	}),
 }
 
@@ -791,7 +792,7 @@ var pgurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		urls, err := roachprod.PgURL(context.Background(), args[0], pgurlCertsDir, external, secure)
+		urls, err := roachprod.PgURL(context.Background(), roachprodLibraryLogger, args[0], pgurlCertsDir, external, secure)
 		if err != nil {
 			return err
 		}
@@ -822,7 +823,7 @@ Examples:
 		if cmd.CalledAs() == "pprof-heap" {
 			pprofOpts.Heap = true
 		}
-		return roachprod.Pprof(args[0], pprofOpts)
+		return roachprod.Pprof(roachprodLibraryLogger, args[0], pprofOpts)
 	}),
 }
 
@@ -834,7 +835,7 @@ var adminurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		urls, err := roachprod.AdminURL(args[0], adminurlPath, adminurlIPs, adminurlOpen, secure)
+		urls, err := roachprod.AdminURL(roachprodLibraryLogger, args[0], adminurlPath, adminurlIPs, adminurlOpen, secure)
 		if err != nil {
 			return err
 		}
@@ -852,7 +853,7 @@ var ipCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		ips, err := roachprod.IP(context.Background(), args[0], external)
+		ips, err := roachprod.IP(context.Background(), roachprodLibraryLogger, args[0], external)
 		if err != nil {
 			return err
 		}
@@ -867,7 +868,7 @@ var versionCmd = &cobra.Command{
 	Use:   `version`,
 	Short: `print version information`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(roachprod.Version())
+		fmt.Println(roachprod.Version(roachprodLibraryLogger))
 		return nil
 	},
 }
@@ -885,6 +886,14 @@ var getProvidersCmd = &cobra.Command{
 }
 
 func main() {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	var loggerError error
+	roachprodLibraryLogger, loggerError = loggerCfg.NewLogger("")
+	if loggerError != nil {
+		fmt.Fprintf(os.Stderr, "unable to configure logger: %s\n", loggerError)
+		os.Exit(1)
+	}
+
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
 	// The commands are displayed in the order they are added to rootCmd. Note

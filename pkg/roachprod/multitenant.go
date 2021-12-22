@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,18 +28,19 @@ import (
 // subsets of nodes are selected (e.g. "local:1,2" and "local:3,4").
 func StartTenant(
 	ctx context.Context,
+	l *logger.Logger,
 	tenantCluster string,
 	hostCluster string,
 	startOpts install.StartOpts,
 	clusterSettingsOpts ...install.ClusterSettingOption,
 ) error {
-	tc, err := newCluster(tenantCluster, clusterSettingsOpts...)
+	tc, err := newCluster(l, tenantCluster, clusterSettingsOpts...)
 	if err != nil {
 		return err
 	}
 
 	// TODO(radu): do we need separate clusterSettingsOpts for the host cluster?
-	hc, err := newCluster(hostCluster, clusterSettingsOpts...)
+	hc, err := newCluster(l, hostCluster, clusterSettingsOpts...)
 	if err != nil {
 		return err
 	}
@@ -68,8 +70,8 @@ func StartTenant(
 	// so temporarily restrict the target nodes to 1.
 	saveNodes := hc.Nodes
 	hc.Nodes = hc.Nodes[:1]
-	fmt.Printf("Creating tenant metadata\n")
-	if err := hc.RunSQL(ctx, []string{
+	l.Printf("Creating tenant metadata")
+	if err := hc.RunSQL(ctx, l, []string{
 		`-e`,
 		fmt.Sprintf(createTenantIfNotExistsQuery, startOpts.TenantID),
 	}); err != nil {
@@ -82,7 +84,7 @@ func StartTenant(
 		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", hc.Host(node), hc.NodePort(node)))
 	}
 	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
-	return tc.Start(ctx, startOpts)
+	return tc.Start(ctx, l, startOpts)
 }
 
 // createTenantIfNotExistsQuery is used to initialize the tenant metadata, if

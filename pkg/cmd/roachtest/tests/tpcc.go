@@ -133,15 +133,15 @@ func setupTPCC(
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 		}
 	}
 
 	func() {
 		opts.Start(ctx, t, c)
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
-		WaitFor3XReplication(t, c.Conn(ctx, crdbNodes[0]))
+		WaitFor3XReplication(t, c.Conn(ctx, t.L(), crdbNodes[0]))
 		switch opts.SetupType {
 		case usingExistingData:
 			// Do nothing.
@@ -588,7 +588,7 @@ func registerTPCC(r registry.Registry) {
 							prometheusNode option.NodeListOption,
 							workloadInstances []workloadInstance,
 						) (tpccChaosEventProcessor, error) {
-							prometheusNodeIP, err := c.ExternalIP(ctx, prometheusNode)
+							prometheusNodeIP, err := c.ExternalIP(ctx, t.L(), prometheusNode)
 							if err != nil {
 								return tpccChaosEventProcessor{}, err
 							}
@@ -920,7 +920,7 @@ func loadTPCCBench(
 	b tpccBenchSpec,
 	roachNodes, loadNode option.NodeListOption,
 ) error {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	// Check if the dataset already exists and is already large enough to
@@ -943,7 +943,7 @@ func loadTPCCBench(
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
 		startOpts, settings := b.startOpts()
-		c.Start(ctx, startOpts, settings, roachNodes)
+		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
 		return err
@@ -1038,7 +1038,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)
 	startOpts, settings := b.startOpts()
-	c.Start(ctx, startOpts, settings, roachNodes)
+	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
@@ -1051,7 +1051,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal("distributed chaos benchmarking not supported")
 			}
 			t.Status("installing haproxy")
-			if err := c.Install(ctx, loadNodes, "haproxy"); err != nil {
+			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
@@ -1094,7 +1094,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// passing warehouse count, making the line search sensitive to the choice
 		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
 		// to recover without failing the line search.
-		if err := c.Reset(ctx); err != nil {
+		if err := c.Reset(ctx, t.L()); err != nil {
 			// Reset() can flake sometimes, see for example:
 			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
 			t.L().Printf("failed to reset VMs, proceeding anyway: %s", err)
@@ -1106,7 +1106,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal(err)
 			}
 			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			if err := c.StopE(shortCtx, option.DefaultStopOpts(), roachNodes); err != nil {
+			if err := c.StopE(shortCtx, t.L(), option.DefaultStopOpts(), roachNodes); err != nil {
 				cancel()
 				t.L().Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
 				// We usually spend a long time blocking in StopE anyway, but just in case
@@ -1128,7 +1128,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		}
 
 		startOpts, settings := b.startOpts()
-		c.Start(ctx, startOpts, settings, roachNodes)
+		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	}
 
@@ -1467,6 +1467,7 @@ func setupPrometheus(
 		ctx,
 		*cfg,
 		c,
+		t.L(),
 		func(ctx context.Context, nodes option.NodeListOption, operation string, args ...string) error {
 			return repeatRunE(
 				ctx,

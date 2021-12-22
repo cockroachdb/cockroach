@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -60,7 +60,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-		c.Start(ctx, startOpts, install.MakeClusterSettings(), roachNodes)
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), roachNodes)
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
@@ -92,7 +92,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		m.Go(func() error {
 			t.Status("checking for lease balance")
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			t.Status("disable load based splitting")

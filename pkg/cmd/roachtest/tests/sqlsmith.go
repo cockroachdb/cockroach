@@ -93,7 +93,7 @@ func registerSQLSmith(r registry.Registry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatalf("could not initialize libraries: %v", err)
 		}
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]
 		if !ok {
@@ -109,7 +109,7 @@ func registerSQLSmith(r registry.Registry) {
 
 		allConns := make([]*gosql.DB, 0, numNodes)
 		for node := 1; node <= numNodes; node++ {
-			allConns = append(allConns, c.Conn(ctx, node))
+			allConns = append(allConns, c.Conn(ctx, t.L(), node))
 		}
 		conn := allConns[0]
 		t.Status("executing setup")

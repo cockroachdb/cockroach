@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -238,13 +239,13 @@ type Provider interface {
 	// ConfigSSH takes a list of zones and configures SSH for machines in those
 	// zones for the given provider.
 	ConfigSSH(zones []string) error
-	Create(names []string, opts CreateOpts, providerOpts ProviderOpts) error
+	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) error
 	Reset(vms List) error
 	Delete(vms List) error
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	List() (List, error)
+	List(l *logger.Logger) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
 
