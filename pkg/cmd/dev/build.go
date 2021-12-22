@@ -68,6 +68,7 @@ var buildTargetMapping = map[string]string{
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
 	"cockroach":        "//pkg/cmd/cockroach:cockroach",
+	"cockroach-sql":    "//pkg/cmd/cockroach-sql:cockroach-sql",
 	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
 	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
 	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
