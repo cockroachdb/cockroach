@@ -5,38 +5,38 @@ CREATE SEQUENCE defaultdb.SQ1
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- DROP Locality:{DescID: 54}
+- ABSENT Locality:{DescID: 54}
   state: PUBLIC
   details:
     descriptorId: 54
-- DROP Namespace:{DescID: 54, Name: sq1}
+- ABSENT Namespace:{DescID: 54, Name: sq1}
   state: PUBLIC
   details:
     databaseId: 50
     descriptorId: 54
     name: sq1
     schemaId: 51
-- DROP Owner:{DescID: 54}
+- ABSENT Owner:{DescID: 54}
   state: PUBLIC
   details:
     descriptorId: 54
     owner: root
-- DROP Sequence:{DescID: 54}
+- ABSENT Sequence:{DescID: 54}
   state: PUBLIC
   details:
     sequenceId: 54
-- DROP UserPrivileges:{DescID: 54, Username: admin}
+- ABSENT UserPrivileges:{DescID: 54, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 54
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 54, Username: public}
+- ABSENT UserPrivileges:{DescID: 54, Username: public}
   state: PUBLIC
   details:
     descriptorId: 54
     username: public
-- DROP UserPrivileges:{DescID: 54, Username: root}
+- ABSENT UserPrivileges:{DescID: 54, Username: root}
   state: PUBLIC
   details:
     descriptorId: 54
@@ -62,19 +62,19 @@ CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- DROP DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 57}
+- ABSENT DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 57}
   state: PUBLIC
   details:
     columnId: 2
     tableId: 59
     typeId: 57
-- DROP DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 58}
+- ABSENT DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 58}
   state: PUBLIC
   details:
     columnId: 2
     tableId: 59
     typeId: 58
-- DROP DefaultExpression:{DescID: 55, ColumnID: 2}
+- ABSENT DefaultExpression:{DescID: 55, ColumnID: 2}
   state: PUBLIC
   details:
     columnId: 2
@@ -82,7 +82,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     tableId: 55
     usesSequenceIDs:
     - 54
-- DROP DefaultExpression:{DescID: 56, ColumnID: 2}
+- ABSENT DefaultExpression:{DescID: 56, ColumnID: 2}
   state: PUBLIC
   details:
     columnId: 2
@@ -90,7 +90,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     tableId: 56
     usesSequenceIDs:
     - 54
-- DROP DefaultExpression:{DescID: 59, ColumnID: 2}
+- ABSENT DefaultExpression:{DescID: 59, ColumnID: 2}
   state: PUBLIC
   details:
     columnId: 2
@@ -98,56 +98,56 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     tableId: 59
     usesSequenceIDs:
     - 54
-- DROP Locality:{DescID: 54}
+- ABSENT Locality:{DescID: 54}
   state: PUBLIC
   details:
     descriptorId: 54
-- DROP Namespace:{DescID: 54, Name: sq1}
+- ABSENT Namespace:{DescID: 54, Name: sq1}
   state: PUBLIC
   details:
     databaseId: 50
     descriptorId: 54
     name: sq1
     schemaId: 51
-- DROP Owner:{DescID: 54}
+- ABSENT Owner:{DescID: 54}
   state: PUBLIC
   details:
     descriptorId: 54
     owner: root
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
+- ABSENT RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
   state: PUBLIC
   details:
     columnID: 2
     dependedOn: 55
     tableId: 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
+- ABSENT RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
   state: PUBLIC
   details:
     columnID: 2
     dependedOn: 56
     tableId: 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 59}
+- ABSENT RelationDependedOnBy:{DescID: 54, ReferencedDescID: 59}
   state: PUBLIC
   details:
     columnID: 2
     dependedOn: 59
     tableId: 54
-- DROP Sequence:{DescID: 54}
+- ABSENT Sequence:{DescID: 54}
   state: PUBLIC
   details:
     sequenceId: 54
-- DROP UserPrivileges:{DescID: 54, Username: admin}
+- ABSENT UserPrivileges:{DescID: 54, Username: admin}
   state: PUBLIC
   details:
     descriptorId: 54
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 54, Username: public}
+- ABSENT UserPrivileges:{DescID: 54, Username: public}
   state: PUBLIC
   details:
     descriptorId: 54
     username: public
-- DROP UserPrivileges:{DescID: 54, Username: root}
+- ABSENT UserPrivileges:{DescID: 54, Username: root}
   state: PUBLIC
   details:
     descriptorId: 54

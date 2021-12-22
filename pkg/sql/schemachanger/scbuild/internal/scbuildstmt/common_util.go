@@ -115,11 +115,11 @@ func checkIfDescOrElementAreDropped(b BuildCtx, id descpb.ID) bool {
 	// statement for example DROP TABLE A, B. Otherwise, the statement phase
 	// should have marked the descriptor already.
 	matches := false
-	b.ForEachNode(func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
+	b.ForEachNode(func(_, targetStatus scpb.Status, elem scpb.Element) {
 		if matches {
 			return
 		}
-		if dir == scpb.Target_DROP && screl.GetDescID(elem) == id {
+		if targetStatus == scpb.Status_ABSENT && screl.GetDescID(elem) == id {
 			switch elem.(type) {
 			case *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.Type,
 				*scpb.Database, *scpb.Schema:

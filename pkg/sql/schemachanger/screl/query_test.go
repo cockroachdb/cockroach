@@ -24,16 +24,16 @@ import (
 
 func TestQueryBasic(t *testing.T) {
 	mkType := func(id descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Target_ADD, &scpb.Type{TypeID: id}, nil /* metadata */)
+		return scpb.NewTarget(scpb.Status_PUBLIC, &scpb.Type{TypeID: id}, nil /* metadata */)
 	}
 	mkTypeRef := func(typID, descID descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Target_ADD, &scpb.ViewDependsOnType{
+		return scpb.NewTarget(scpb.Status_PUBLIC, &scpb.ViewDependsOnType{
 			TypeID:  typID,
 			TableID: descID,
 		}, nil /* metadata */)
 	}
 	mkTable := func(id descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Target_ADD, &scpb.Table{TableID: id}, nil /* metadata */)
+		return scpb.NewTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: id}, nil /* metadata */)
 	}
 	concatNodes := func(nodes ...[]*scpb.Node) []*scpb.Node {
 		var ret []*scpb.Node
@@ -75,7 +75,7 @@ func TestQueryBasic(t *testing.T) {
 			screl.JoinTargetNode(refEl, refTarget, refNode),
 			screl.JoinTargetNode(typeEl, typeTarget, typeNode),
 
-			dir.Entities(screl.Direction, tableTarget, refTarget, typeTarget),
+			dir.Entities(screl.TargetStatus, tableTarget, refTarget, typeTarget),
 			status.Entities(screl.Status, tableNode, refNode, typeNode),
 		)
 	)
@@ -103,27 +103,27 @@ func TestQueryBasic(t *testing.T) {
 					query: pathJoinQuery,
 					nodes: []rel.Var{tableNode, typeNode},
 					exp: []string{`
-[Table:{DescID: 2}, ABSENT, ADD]
-[Type:{DescID: 1}, ABSENT, ADD]`, `
-[Table:{DescID: 2}, PUBLIC, ADD]
-[Type:{DescID: 1}, PUBLIC, ADD]`, `
-[Table:{DescID: 4}, ABSENT, ADD]
-[Type:{DescID: 3}, ABSENT, ADD]`,
+[Table:{DescID: 2}, PUBLIC; ABSENT]
+[Type:{DescID: 1}, PUBLIC; ABSENT]`, `
+[Table:{DescID: 2}, PUBLIC; PUBLIC]
+[Type:{DescID: 1}, PUBLIC; PUBLIC]`, `
+[Table:{DescID: 4}, PUBLIC; ABSENT]
+[Type:{DescID: 3}, PUBLIC; ABSENT]`,
 					},
 				},
 				{
 					query: pathJoinQuery,
 					nodes: []rel.Var{tableNode, typeNode, refNode},
 					exp: []string{`
-[Table:{DescID: 2}, ABSENT, ADD]
-[Type:{DescID: 1}, ABSENT, ADD]
-[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, ABSENT, ADD]`, `
-[Table:{DescID: 2}, PUBLIC, ADD]
-[Type:{DescID: 1}, PUBLIC, ADD]
-[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, PUBLIC, ADD]`, `
-[Table:{DescID: 4}, ABSENT, ADD]
-[Type:{DescID: 3}, ABSENT, ADD]
-[ViewDependsOnType:{DescID: 4, ReferencedDescID: 3}, ABSENT, ADD]`,
+[Table:{DescID: 2}, PUBLIC; ABSENT]
+[Type:{DescID: 1}, PUBLIC; ABSENT]
+[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, PUBLIC; ABSENT]`, `
+[Table:{DescID: 2}, PUBLIC; PUBLIC]
+[Type:{DescID: 1}, PUBLIC; PUBLIC]
+[ViewDependsOnType:{DescID: 2, ReferencedDescID: 1}, PUBLIC; PUBLIC]`, `
+[Table:{DescID: 4}, PUBLIC; ABSENT]
+[Type:{DescID: 3}, PUBLIC; ABSENT]
+[ViewDependsOnType:{DescID: 4, ReferencedDescID: 3}, PUBLIC; ABSENT]`,
 					},
 				},
 			},

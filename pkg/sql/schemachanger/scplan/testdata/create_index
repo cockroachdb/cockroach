@@ -7,7 +7,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 PreCommitPhase stage 1 of 1 with 3 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -33,7 +33,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -42,7 +42,7 @@ PostCommitPhase stage 1 of 4 with 2 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -50,15 +50,15 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC; ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -90,7 +90,7 @@ CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money
 ----
 PreCommitPhase stage 1 of 1 with 3 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       Concurrently: true
@@ -119,7 +119,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
             (money)
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -128,7 +128,7 @@ PostCommitPhase stage 1 of 4 with 2 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -136,15 +136,15 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC; ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -176,8 +176,8 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (i
 ----
 PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [Partitioning:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> PUBLIC
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Partitioning:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -214,7 +214,7 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
             BY LIST (id) (PARTITION p1 VALUES IN (1))
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -223,7 +223,7 @@ PostCommitPhase stage 1 of 4 with 2 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -231,15 +231,15 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
-    [SecondaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, ABSENT, ADD] -> PUBLIC
+    [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC; ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2

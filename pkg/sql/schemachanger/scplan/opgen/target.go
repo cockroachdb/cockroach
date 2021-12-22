@@ -21,7 +21,7 @@ import (
 // target represents the operation generation rules for a given Target.
 type target struct {
 	e           scpb.Element
-	dir         scpb.Target_Direction
+	status      scpb.Status
 	transitions []transition
 	iterateFunc func(*rel.Database, func(*scpb.Node) error) error
 }
@@ -34,15 +34,15 @@ type transition struct {
 	minPhase   scop.Phase
 }
 
-func makeTarget(e scpb.Element, dir scpb.Target_Direction, specs ...transitionSpec) target {
+func makeTarget(e scpb.Element, status scpb.Status, specs ...transitionSpec) target {
 	defer decoratePanickedError(func(err error) error {
-		return errors.Wrapf(err, "making target %T:%v", e, dir)
+		return errors.Wrapf(err, "making target %T:%s", e, status.String())
 	})()
 	return target{
 		e:           e,
-		dir:         dir,
+		status:      status,
 		transitions: makeTransitions(e, specs),
-		iterateFunc: makeQuery(e, dir),
+		iterateFunc: makeQuery(e, status),
 	}
 }
 
@@ -64,15 +64,13 @@ func makeTransitions(e scpb.Element, specs []transitionSpec) []transition {
 	return transitions
 }
 
-func makeQuery(
-	e scpb.Element, d scpb.Target_Direction,
-) func(*rel.Database, func(*scpb.Node) error) error {
-	var element, target, node, dir rel.Var = "element", "target", "node", "dir"
+func makeQuery(e scpb.Element, ts scpb.Status) func(*rel.Database, func(*scpb.Node) error) error {
+	var element, target, node, targetStatus rel.Var = "element", "target", "node", "target-status"
 	q, err := rel.NewQuery(screl.Schema,
 		element.Type(e),
-		dir.Eq(d),
+		targetStatus.Eq(ts),
 		screl.JoinTargetNode(element, target, node),
-		target.AttrEqVar(screl.Direction, dir),
+		target.AttrEqVar(screl.TargetStatus, targetStatus),
 	)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err,

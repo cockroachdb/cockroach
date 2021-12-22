@@ -42,10 +42,11 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{Column: this},
-						Direction: scpb.Target_ADD,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{Column: this},
+						TargetStatus: scpb.Status_PUBLIC,
 					}
 				}),
 			),
@@ -76,10 +77,11 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{Column: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{Column: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 			),

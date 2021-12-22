@@ -37,9 +37,9 @@ func FormatNode(w redact.SafeWriter, e *scpb.Node) (err error) {
 		return err
 	}
 	w.SafeString(", ")
+	w.SafeString(redact.SafeString(e.Target.TargetStatus.String()))
+	w.SafeString("; ")
 	w.SafeString(redact.SafeString(e.Status.String()))
-	w.SafeString(", ")
-	w.SafeString(redact.SafeString(e.Target.Direction.String()))
 	w.SafeString("]")
 	return nil
 }

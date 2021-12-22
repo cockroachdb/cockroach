@@ -5,13 +5,13 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: id1}
+- PUBLIC IndexName:{DescID: 54, IndexID: 2, Name: id1}
   state: ABSENT
   details:
     indexId: 2
     name: id1
     tableId: 54
-- ADD SecondaryIndex:{DescID: 54, IndexID: 2}
+- PUBLIC SecondaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -30,13 +30,13 @@ build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name) STORING (money)
 ----
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: id2}
+- PUBLIC IndexName:{DescID: 54, IndexID: 2, Name: id2}
   state: ABSENT
   details:
     indexId: 2
     name: id2
     tableId: 54
-- ADD SecondaryIndex:{DescID: 54, IndexID: 2}
+- PUBLIC SecondaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     concurrently: true
@@ -59,13 +59,13 @@ CREATE INDEX id3
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: id3}
+- PUBLIC IndexName:{DescID: 54, IndexID: 2, Name: id3}
   state: ABSENT
   details:
     indexId: 2
     name: id3
     tableId: 54
-- ADD Partitioning:{DescID: 54, IndexID: 2}
+- PUBLIC Partitioning:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     fields:
@@ -77,7 +77,7 @@ CREATE INDEX id3
       name: p1
     rangePartitions: []
     tableId: 54
-- ADD SecondaryIndex:{DescID: 54, IndexID: 2}
+- PUBLIC SecondaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -96,7 +96,28 @@ build
 CREATE INDEX id4
 	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
 ----
-- ADD Column:{DescID: 54, ColumnID: 4}
+- ABSENT IndexName:{DescID: 54, IndexID: 1, Name: t1_pkey}
+  state: PUBLIC
+  details:
+    indexId: 1
+    name: t1_pkey
+    tableId: 54
+- ABSENT PrimaryIndex:{DescID: 54, IndexID: 1}
+  state: PUBLIC
+  details:
+    indexId: 1
+    keyColumnDirection:
+    - ASC
+    keyColumnIds:
+    - 1
+    shardedDescriptor: {}
+    sourceIndexId: 1
+    storingColumnIds:
+    - 2
+    - 3
+    tableId: 54
+    unique: true
+- PUBLIC Column:{DescID: 54, ColumnID: 4}
   state: ABSENT
   details:
     columnId: 4
@@ -109,19 +130,19 @@ CREATE INDEX id4
       family: IntFamily
       oid: 23
       width: 32
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}
+- PUBLIC IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}
   state: ABSENT
   details:
     indexId: 2
     name: t1_pkey
     tableId: 54
-- ADD IndexName:{DescID: 54, IndexID: 3, Name: id4}
+- PUBLIC IndexName:{DescID: 54, IndexID: 3, Name: id4}
   state: ABSENT
   details:
     indexId: 3
     name: id4
     tableId: 54
-- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
+- PUBLIC PrimaryIndex:{DescID: 54, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -137,7 +158,7 @@ CREATE INDEX id4
     - 4
     tableId: 54
     unique: true
-- ADD SecondaryIndex:{DescID: 54, IndexID: 3}
+- PUBLIC SecondaryIndex:{DescID: 54, IndexID: 3}
   state: ABSENT
   details:
     indexId: 3
@@ -158,24 +179,3 @@ CREATE INDEX id4
     storingColumnIds:
     - 3
     tableId: 54
-- DROP IndexName:{DescID: 54, IndexID: 1, Name: t1_pkey}
-  state: PUBLIC
-  details:
-    indexId: 1
-    name: t1_pkey
-    tableId: 54
-- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
-  state: PUBLIC
-  details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    - 3
-    tableId: 54
-    unique: true

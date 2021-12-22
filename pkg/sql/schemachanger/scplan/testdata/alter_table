@@ -7,8 +7,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 PreCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -22,7 +22,6 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       TableID: 54
     *scop.LogEvent
       DescID: 54
-      Direction: 1
       Element:
         column:
           columnId: 2
@@ -40,6 +39,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
       KeyColumnDirections:
@@ -63,8 +63,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -76,7 +76,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -84,19 +84,19 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 7 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
-    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; PUBLIC] -> VALIDATED
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT; PUBLIC] -> ABSENT
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -123,7 +123,7 @@ PostCommitPhase stage 4 of 4 with 7 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -133,7 +133,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; DELETE_ONLY] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -153,8 +153,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
 PreCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -169,7 +169,6 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       TableID: 54
     *scop.LogEvent
       DescID: 54
-      Direction: 1
       Element:
         column:
           columnId: 2
@@ -188,6 +187,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
       KeyColumnDirections:
@@ -211,8 +211,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -224,7 +224,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -232,19 +232,19 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 7 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
-    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; PUBLIC] -> VALIDATED
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT; PUBLIC] -> ABSENT
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -271,7 +271,7 @@ PostCommitPhase stage 4 of 4 with 7 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -281,7 +281,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; DELETE_ONLY] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -302,9 +302,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
 PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [Column:{DescID: 54, ColumnID: 3}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [Column:{DescID: 54, ColumnID: 3}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -319,7 +319,6 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       TableID: 54
     *scop.LogEvent
       DescID: 54
-      Direction: 1
       Element:
         column:
           columnId: 2
@@ -338,6 +337,7 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 3
       ColumnType:
@@ -351,7 +351,6 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       TableID: 54
     *scop.LogEvent
       DescID: 54
-      Direction: 1
       Element:
         column:
           columnId: 3
@@ -371,6 +370,7 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
           StatementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
       KeyColumnDirections:
@@ -396,9 +396,9 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
 PostCommitPhase stage 1 of 4 with 4 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [Column:{DescID: 54, ColumnID: 3}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 54, ColumnID: 3}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -413,7 +413,7 @@ PostCommitPhase stage 1 of 4 with 4 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -421,21 +421,21 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 9 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
-    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 54, ColumnID: 3}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 54, ColumnID: 3, Name: k}, ABSENT, ADD] -> PUBLIC
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 54, ColumnID: 2, Name: j}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; PUBLIC] -> VALIDATED
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT; PUBLIC] -> ABSENT
+    [Column:{DescID: 54, ColumnID: 3}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 54, ColumnID: 3, Name: k}, PUBLIC; ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -469,7 +469,7 @@ PostCommitPhase stage 4 of 4 with 9 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -479,7 +479,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; DELETE_ONLY] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -499,8 +499,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
 PreCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -515,7 +515,6 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       TableID: 54
     *scop.LogEvent
       DescID: 54
-      Direction: 1
       Element:
         column:
           columnId: 2
@@ -534,6 +533,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
       KeyColumnDirections:
@@ -557,8 +557,8 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -570,7 +570,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -578,19 +578,19 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       TableID: 54
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
       TableID: 54
 PostCommitPhase stage 4 of 4 with 7 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 54, ColumnID: 2, Name: a}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
-    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 54, ColumnID: 2, Name: a}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; PUBLIC] -> VALIDATED
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT; PUBLIC] -> ABSENT
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -617,7 +617,7 @@ PostCommitPhase stage 4 of 4 with 7 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -627,7 +627,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; DELETE_ONLY] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -653,10 +653,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 PreCommitPhase stage 1 of 1 with 9 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
-    [Column:{DescID: 55, ColumnID: 3}, ABSENT, ADD] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 55, IndexID: 2}, ABSENT, ADD] -> DELETE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [Column:{DescID: 55, ColumnID: 3}, PUBLIC; ABSENT] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 55, IndexID: 2}, PUBLIC; ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 2
@@ -670,7 +670,6 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
       TableID: 54
     *scop.LogEvent
       DescID: 54
-      Direction: 1
       Element:
         column:
           columnId: 2
@@ -688,6 +687,7 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
       KeyColumnDirections:
@@ -711,7 +711,6 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
       TableID: 55
     *scop.LogEvent
       DescID: 55
-      Direction: 1
       Element:
         column:
           columnId: 3
@@ -730,6 +729,7 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
           StatementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
       KeyColumnDirections:
@@ -758,10 +758,10 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
         - statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
 PostCommitPhase stage 1 of 4 with 5 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [Column:{DescID: 55, ColumnID: 3}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
-    [PrimaryIndex:{DescID: 55, IndexID: 2}, DELETE_ONLY, ADD] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [Column:{DescID: 55, ColumnID: 3}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [PrimaryIndex:{DescID: 55, IndexID: 2}, PUBLIC; DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
@@ -779,8 +779,8 @@ PostCommitPhase stage 1 of 4 with 5 MutationType ops
       JobID: 1
 PostCommitPhase stage 2 of 4 with 2 BackfillType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
-    [PrimaryIndex:{DescID: 55, IndexID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> BACKFILLED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [PrimaryIndex:{DescID: 55, IndexID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
@@ -792,8 +792,8 @@ PostCommitPhase stage 2 of 4 with 2 BackfillType ops
       TableID: 55
 PostCommitPhase stage 3 of 4 with 2 ValidationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
-    [PrimaryIndex:{DescID: 55, IndexID: 2}, BACKFILLED, ADD] -> VALIDATED
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
+    [PrimaryIndex:{DescID: 55, IndexID: 2}, PUBLIC; BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
@@ -803,18 +803,18 @@ PostCommitPhase stage 3 of 4 with 2 ValidationType ops
       TableID: 55
 PostCommitPhase stage 4 of 4 with 13 MutationType ops
   transitions:
-    [Column:{DescID: 54, ColumnID: 2}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 54, ColumnID: 2, Name: a}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
-    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, PUBLIC, DROP] -> ABSENT
-    [Column:{DescID: 55, ColumnID: 3}, DELETE_AND_WRITE_ONLY, ADD] -> PUBLIC
-    [ColumnName:{DescID: 55, ColumnID: 3, Name: b}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 55, IndexID: 2}, VALIDATED, ADD] -> PUBLIC
-    [IndexName:{DescID: 55, IndexID: 2, Name: bar_pkey}, ABSENT, ADD] -> PUBLIC
-    [PrimaryIndex:{DescID: 55, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
-    [IndexName:{DescID: 55, IndexID: 1, Name: bar_pkey}, PUBLIC, DROP] -> ABSENT
+    [Column:{DescID: 54, ColumnID: 2}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 54, ColumnID: 2, Name: a}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; PUBLIC] -> VALIDATED
+    [IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT; PUBLIC] -> ABSENT
+    [Column:{DescID: 55, ColumnID: 3}, PUBLIC; DELETE_AND_WRITE_ONLY] -> PUBLIC
+    [ColumnName:{DescID: 55, ColumnID: 3, Name: b}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 55, IndexID: 2}, PUBLIC; VALIDATED] -> PUBLIC
+    [IndexName:{DescID: 55, IndexID: 2, Name: bar_pkey}, PUBLIC; ABSENT] -> PUBLIC
+    [PrimaryIndex:{DescID: 55, IndexID: 1}, ABSENT; PUBLIC] -> VALIDATED
+    [IndexName:{DescID: 55, IndexID: 1, Name: bar_pkey}, ABSENT; PUBLIC] -> ABSENT
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -862,8 +862,8 @@ PostCommitPhase stage 4 of 4 with 13 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
-    [PrimaryIndex:{DescID: 55, IndexID: 1}, VALIDATED, DROP] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; VALIDATED] -> DELETE_ONLY
+    [PrimaryIndex:{DescID: 55, IndexID: 1}, ABSENT; VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 1
@@ -876,8 +876,8 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
   transitions:
-    [PrimaryIndex:{DescID: 54, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
-    [PrimaryIndex:{DescID: 55, IndexID: 1}, DELETE_ONLY, DROP] -> ABSENT
+    [PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT; DELETE_ONLY] -> ABSENT
+    [PrimaryIndex:{DescID: 55, IndexID: 1}, ABSENT; DELETE_ONLY] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 1

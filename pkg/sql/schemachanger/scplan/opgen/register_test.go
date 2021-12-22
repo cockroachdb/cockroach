@@ -34,10 +34,10 @@ func TestOpGen(t *testing.T) {
 			var adds, drops []target
 			for _, tg := range opRegistry.targets {
 				if reflect.ValueOf(tg.e).Type() == field.Type {
-					switch tg.dir {
-					case scpb.Target_ADD:
+					switch tg.status {
+					case scpb.Status_PUBLIC:
 						adds = append(adds, tg)
-					case scpb.Target_DROP:
+					case scpb.Status_ABSENT:
 						drops = append(drops, tg)
 					}
 				}

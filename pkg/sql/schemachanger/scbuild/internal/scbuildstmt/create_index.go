@@ -100,7 +100,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Setup the column ID.
 	for _, columnNode := range n.Columns {
 		// If the column was just added the new schema changer is not supported.
-		if b.HasNode(func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element) bool {
+		if b.HasNode(func(status, _ scpb.Status, elem scpb.Element) bool {
 			if status != scpb.Status_ABSENT {
 				return false
 			}
@@ -153,8 +153,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			// Add a new column element
 			alterTableAddColumn(b, rel, addCol, &n.Table)
 			var addColumn *scpb.ColumnName
-			scpb.ForEachColumnName(b, func(_ scpb.Status, dir scpb.Target_Direction, col *scpb.ColumnName) {
-				if dir == scpb.Target_ADD {
+			scpb.ForEachColumnName(b, func(_, targetStatus scpb.Status, col *scpb.ColumnName) {
+				if targetStatus == scpb.Status_PUBLIC {
 					if col.TableID == rel.GetID() && col.Name == colName {
 						addColumn = col
 					}
