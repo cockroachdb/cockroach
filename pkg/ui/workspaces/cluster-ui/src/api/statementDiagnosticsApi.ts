@@ -14,6 +14,7 @@ import { fetchData } from "src/api";
 const STATEMENT_DIAGNOSTICS_PATH = "/_status/stmtdiagreports";
 const CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH = "/_status/stmtdiagreports";
 
+type CreateStatementDiagnosticsReportRequestMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 type CreateStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
 
 export function getStatementDiagnosticsReports(): Promise<
@@ -26,14 +27,12 @@ export function getStatementDiagnosticsReports(): Promise<
 }
 
 export function createStatementDiagnosticsReport(
-  statementsFingerprint: string,
+  req: CreateStatementDiagnosticsReportRequestMessage,
 ): Promise<CreateStatementDiagnosticsReportResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse,
     CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH,
     cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest,
-    {
-      statement_fingerprint: statementsFingerprint,
-    },
+    req,
   );
 }

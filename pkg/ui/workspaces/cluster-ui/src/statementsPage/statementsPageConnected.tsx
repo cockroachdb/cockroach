@@ -40,6 +40,12 @@ import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+
+type IDuration = google.protobuf.IDuration;
+
+const CreateStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 
 export const ConnectedStatementsPage = withRouter(
   connect<
@@ -82,9 +88,19 @@ export const ConnectedStatementsPage = withRouter(
             value: false,
           }),
         ),
-      onActivateStatementDiagnostics: (statementFingerprint: string) => {
+      onActivateStatementDiagnostics: (
+        statementFingerprint: string,
+        minExecLatency: IDuration,
+        expiresAfter: IDuration,
+      ) => {
         dispatch(
-          statementDiagnosticsActions.createReport(statementFingerprint),
+          statementDiagnosticsActions.createReport(
+            new CreateStatementDiagnosticsReportRequest({
+              statement_fingerprint: statementFingerprint,
+              min_execution_latency: minExecLatency,
+              expires_after: expiresAfter,
+            }),
+          ),
         );
         dispatch(
           analyticsActions.track({
