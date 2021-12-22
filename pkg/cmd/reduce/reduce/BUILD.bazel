@@ -7,7 +7,7 @@ go_library(
         "pass.go",
         "reduce.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/reduce",
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/ctxgroup",
