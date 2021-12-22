@@ -17,6 +17,7 @@ import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 import { Badge } from "src/components";
 import { Line } from "rc-progress";
+import { ColorIntentInfo3 } from "@cockroachlabs/design-tokens";
 
 export class JobStatusBadge extends React.PureComponent<{ jobStatus: string }> {
   render() {
@@ -46,7 +47,7 @@ export class ProgressBar extends React.PureComponent<{
           percent={percent}
           strokeWidth={this.props.lineWidth}
           trailWidth={this.props.lineWidth}
-          strokeColor="#0788ff"
+          strokeColor={ColorIntentInfo3}
           trailColor="#d6dbe7"
           className="jobs-table__progress-bar"
         />

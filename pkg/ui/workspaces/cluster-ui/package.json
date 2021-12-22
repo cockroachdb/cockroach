@@ -44,6 +44,7 @@
     "@cockroachlabs/eslint-config": "^0.1.11",
     "@cockroachlabs/icons": "0.3.0",
     "@cockroachlabs/ui-components": "0.2.20",
+    "@cockroachlabs/design-tokens": "0.4.5",
     "@popperjs/core": "^2.4.0",
     "@reduxjs/toolkit": "^1.5.0",
     "@storybook/addon-actions": "^6.1.21",
