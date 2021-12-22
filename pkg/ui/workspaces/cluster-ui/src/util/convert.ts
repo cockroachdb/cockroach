@@ -11,6 +11,7 @@
 import moment from "moment";
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
 
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.
@@ -111,6 +112,19 @@ export function DurationToNumber(
     return defaultIfNull;
   }
   return duration.seconds.toNumber() + NanoToMilli(duration.nanos) * 1e-3;
+}
+
+/**
+ * NumberToDuration converts a number representing a duration in seconds
+ * to a Duration object.
+ */
+export function NumberToDuration(
+  seconds?: number,
+): protos.google.protobuf.IDuration {
+  return new protos.google.protobuf.Duration({
+    seconds: new Long(seconds),
+    nanos: SecondsToNano(seconds - Math.floor(seconds)),
+  });
 }
 
 // durationFromISO8601String function converts a string date in ISO8601 format to moment.Duration
