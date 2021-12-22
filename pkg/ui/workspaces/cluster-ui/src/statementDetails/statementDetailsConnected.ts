@@ -36,6 +36,11 @@ import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+type IDuration = google.protobuf.IDuration;
+
+const CreateStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -74,8 +79,20 @@ const mapDispatchToProps = (
         value: false,
       }),
     ),
-  createStatementDiagnosticsReport: (statementFingerprint: string) => {
-    dispatch(statementDiagnosticsActions.createReport(statementFingerprint));
+  createStatementDiagnosticsReport: (
+    statementFingerprint: string,
+    minExecLatency: IDuration,
+    expiresAfter: IDuration,
+  ) => {
+    dispatch(
+      statementDiagnosticsActions.createReport(
+        new CreateStatementDiagnosticsReportRequest({
+          statement_fingerprint: statementFingerprint,
+          min_execution_latency: minExecLatency,
+          expires_after: expiresAfter,
+        }),
+      ),
+    );
     dispatch(
       analyticsActions.track({
         name: "Statement Diagnostics Clicked",
