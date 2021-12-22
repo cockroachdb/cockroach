@@ -20,10 +20,10 @@ var _ scbuildstmt.NodeEnqueuerAndChecker = buildCtx{}
 
 // HasNode implements the scbuildstmt.NodeEnqueuerAndChecker interface.
 func (b buildCtx) HasNode(
-	filter func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element) bool,
+	filter func(status, targetStatus scpb.Status, elem scpb.Element) bool,
 ) (found bool) {
-	b.ForEachNode(func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element) {
-		if filter(status, dir, elem) {
+	b.ForEachNode(func(status, targetStatus scpb.Status, elem scpb.Element) {
+		if filter(status, targetStatus, elem) {
 			found = true
 		}
 	})
@@ -31,34 +31,34 @@ func (b buildCtx) HasNode(
 }
 
 // HasTarget implements the scbuildstmt.NodeEnqueuerAndChecker interface.
-func (b buildCtx) HasTarget(dir scpb.Target_Direction, elem scpb.Element) (found bool) {
-	return b.HasNode(func(_ scpb.Status, d scpb.Target_Direction, e scpb.Element) bool {
-		return d == dir && screl.EqualElements(e, elem)
+func (b buildCtx) HasTarget(targetStatus scpb.Status, elem scpb.Element) (found bool) {
+	return b.HasNode(func(_, ts scpb.Status, e scpb.Element) bool {
+		return ts == targetStatus && screl.EqualElements(e, elem)
 	})
 }
 
 // HasElement implements the scbuildstmt.NodeEnqueuerAndChecker interface.
 func (b buildCtx) HasElement(elem scpb.Element) bool {
-	return b.HasNode(func(_ scpb.Status, d scpb.Target_Direction, e scpb.Element) bool {
+	return b.HasNode(func(_, _ scpb.Status, e scpb.Element) bool {
 		return screl.EqualElements(e, elem)
 	})
 }
 
 // EnqueueAdd implements the scbuildstmt.NodeEnqueuerAndChecker interface.
 func (b buildCtx) EnqueueAdd(elem scpb.Element) {
-	b.AddNode(scpb.Target_ADD, elem, b.TargetMetadata())
+	b.AddNode(scpb.Status_ABSENT, scpb.Status_PUBLIC, elem, b.TargetMetadata())
 }
 
 // EnqueueDrop implements the scbuildstmt.NodeEnqueuerAndChecker interface.
 func (b buildCtx) EnqueueDrop(elem scpb.Element) {
-	b.AddNode(scpb.Target_DROP, elem, b.TargetMetadata())
+	b.AddNode(scpb.Status_PUBLIC, scpb.Status_ABSENT, elem, b.TargetMetadata())
 }
 
 // EnqueueDropIfNotExists implements the scbuildstmt.NodeEnqueuerAndChecker
 // interface.
 func (b buildCtx) EnqueueDropIfNotExists(elem scpb.Element) {
-	if b.HasTarget(scpb.Target_DROP, elem) {
+	if b.HasTarget(scpb.Status_ABSENT, elem) {
 		return
 	}
-	b.AddNode(scpb.Target_DROP, elem, b.TargetMetadata())
+	b.AddNode(scpb.Status_PUBLIC, scpb.Status_ABSENT, elem, b.TargetMetadata())
 }

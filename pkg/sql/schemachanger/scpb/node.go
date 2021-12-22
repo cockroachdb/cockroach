@@ -41,7 +41,7 @@ var NumStatus = len(Status_name)
 // Node represents a Target with a given status.
 type Node struct {
 	*Target
-	Status Status
+	Status
 }
 
 // Element represents a logical component of a catalog entry's schema (e.g., an
@@ -64,9 +64,9 @@ func (e *ElementProto) Element() Element {
 
 // NewTarget constructs a new Target. The passed elem must be one of the oneOf
 // members of Element. If not, this call will panic.
-func NewTarget(dir Target_Direction, elem Element, metadata *TargetMetadata) *Target {
+func NewTarget(status Status, elem Element, metadata *TargetMetadata) *Target {
 	t := Target{
-		Direction: dir,
+		TargetStatus: status,
 	}
 	if metadata != nil {
 		t.Metadata = *protoutil.Clone(metadata).(*TargetMetadata)

@@ -23,23 +23,13 @@ func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 	return el, el + "-target", el + "-node"
 }
 
-func joinTargetNode(
-	element, target, node rel.Var, direction scpb.Target_Direction, status scpb.Status,
-) rel.Clause {
+func joinTargetNode(element, target, node rel.Var, targetStatus, status scpb.Status) rel.Clause {
 	return rel.And(
 		screl.JoinTargetNode(element, target, node),
-		target.AttrEq(screl.Direction, direction),
+		target.AttrEq(screl.TargetStatus, targetStatus),
 		node.AttrEq(screl.Status, status),
 	)
 }
-
-const (
-	add, drop = scpb.Target_ADD, scpb.Target_DROP
-
-	public, dropped, absent, deleteOnly, deleteAndWriteOnly, validated = scpb.Status_PUBLIC,
-		scpb.Status_DROPPED, scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
-		scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_VALIDATED
-)
 
 func init() {
 	var (
@@ -79,10 +69,10 @@ func init() {
 			}),
 
 			screl.JoinTargetNode(parent, parentTarget, parentNode),
-			parentTarget.AttrEq(screl.Direction, drop),
-			parentNode.AttrIn(screl.Status, absent),
+			parentTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			parentNode.AttrIn(screl.Status, scpb.Status_ABSENT),
 
-			joinTargetNode(other, otherTarget, otherNode, drop, absent),
+			joinTargetNode(other, otherTarget, otherNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -124,14 +114,14 @@ func init() {
 
 	column, columnTarget, columnNode := targetNodeVars("column")
 	index, indexTarget, indexNode := targetNodeVars("index")
-	var id, status, direction rel.Var = "id", "status", "direction"
+	var id, status, targetStatus rel.Var = "id", "status", "target-status"
 	register(
 		"column depends on indexes",
 		scgraph.Precedence,
 		indexNode, columnNode,
 		screl.MustQuery(
-			status.In(deleteAndWriteOnly, public),
-			direction.Eq(add),
+			status.In(scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_PUBLIC),
+			targetStatus.Eq(scpb.Status_PUBLIC),
 
 			column.Type((*scpb.Column)(nil)),
 			index.Type((*scpb.PrimaryIndex)(nil)),
@@ -140,7 +130,7 @@ func init() {
 
 			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
-			direction.Entities(screl.Direction, columnTarget, indexTarget),
+			targetStatus.Entities(screl.TargetStatus, columnTarget, indexTarget),
 			status.Entities(screl.Status, columnNode, indexNode),
 
 			screl.JoinTargetNode(column, columnTarget, columnNode),
@@ -160,8 +150,8 @@ func init() {
 
 			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
-			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
-			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
+			joinTargetNode(column, columnTarget, columnNode, scpb.Status_PUBLIC, scpb.Status_DELETE_ONLY),
+			joinTargetNode(index, indexTarget, indexNode, scpb.Status_PUBLIC, scpb.Status_DELETE_ONLY),
 		),
 	)
 }
@@ -182,9 +172,9 @@ func init() {
 		}),
 
 		joinTargetNode(addIdx, addTarget, addNode,
-			add, public),
+			scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		joinTargetNode(dropIdx, dropTarget, dropNode,
-			drop, validated),
+			scpb.Status_ABSENT, scpb.Status_VALIDATED),
 	)
 
 	register(
@@ -212,9 +202,9 @@ func init() {
 			indexID.Entities(screl.IndexID, addIdx, partitioning),
 
 			joinTargetNode(addIdx, addTarget, addNode,
-				add, deleteOnly),
+				scpb.Status_PUBLIC, scpb.Status_DELETE_ONLY),
 			joinTargetNode(partitioning, partitioningTarget, partitioningNode,
-				add, public),
+				scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 }
@@ -235,9 +225,9 @@ func init() {
 			id.Entities(screl.IndexID, addIdx, partitioning),
 
 			joinTargetNode(addIdx, addTarget, addNode,
-				add, deleteAndWriteOnly),
+				scpb.Status_PUBLIC, scpb.Status_DELETE_AND_WRITE_ONLY),
 			joinTargetNode(partitioning, partitioningTarget, partitioningNode,
-				add, public),
+				scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 }
@@ -260,8 +250,8 @@ func init() {
 
 				relation.AttrEqVar(screl.DescID, id),
 				dep.AttrEqVar(depDescIDMatch, id),
-				joinTargetNode(relation, relationTarget, relationNode, drop, dropped),
-				joinTargetNode(dep, depTarget, depNode, drop, absent),
+				joinTargetNode(relation, relationTarget, relationNode, scpb.Status_ABSENT, scpb.Status_DROPPED),
+				joinTargetNode(dep, depTarget, depNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 			),
 		)
 	}
@@ -296,8 +286,8 @@ func init() {
 
 			tabID.Entities(screl.DescID, dep, ns),
 
-			joinTargetNode(ns, nsTarget, nsNode, drop, absent),
-			joinTargetNode(dep, depTarget, depNode, drop, dropped),
+			joinTargetNode(ns, nsTarget, nsNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(dep, depTarget, depNode, scpb.Status_ABSENT, scpb.Status_DROPPED),
 		),
 	)
 
@@ -315,8 +305,8 @@ func init() {
 
 			tabID.Entities(screl.DescID, dep, ns),
 
-			joinTargetNode(ns, nsTarget, nsNode, drop, absent),
-			joinTargetNode(dep, depTarget, depNode, drop, absent),
+			joinTargetNode(ns, nsTarget, nsNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(dep, depTarget, depNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -339,8 +329,8 @@ func init() {
 			tabID.Entities(screl.DescID, column, columnName),
 			columnID.Entities(screl.ColumnID, column, columnName),
 
-			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
-			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
+			joinTargetNode(column, columnTarget, columnNode, scpb.Status_PUBLIC, scpb.Status_DELETE_ONLY),
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 
@@ -356,8 +346,8 @@ func init() {
 			tabID.Entities(screl.DescID, column, columnName),
 			columnID.Entities(screl.ColumnID, column, columnName),
 
-			joinTargetNode(columnName, columnNameTarget, columnNameNode, add, public),
-			joinTargetNode(column, columnTarget, columnNode, add, public),
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
+			joinTargetNode(column, columnTarget, columnNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 
@@ -373,8 +363,8 @@ func init() {
 			tabID.Entities(screl.DescID, column, columnName),
 			columnID.Entities(screl.ColumnID, column, columnName),
 
-			joinTargetNode(column, columnTarget, columnNode, drop, deleteAndWriteOnly),
-			joinTargetNode(columnName, columnNameTarget, columnNameNode, drop, absent),
+			joinTargetNode(column, columnTarget, columnNode, scpb.Status_ABSENT, scpb.Status_DELETE_AND_WRITE_ONLY),
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 
@@ -390,8 +380,8 @@ func init() {
 			tabID.Entities(screl.DescID, column, columnName),
 			columnID.Entities(screl.ColumnID, column, columnName),
 
-			joinTargetNode(columnName, columnNameTarget, columnNameNode, drop, absent),
-			joinTargetNode(column, columnTarget, columnNode, drop, absent),
+			joinTargetNode(columnName, columnNameTarget, columnNameNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(column, columnTarget, columnNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -413,8 +403,8 @@ func init() {
 			tabID.Entities(screl.DescID, index, indexName),
 			indexID.Entities(screl.IndexID, index, indexName),
 
-			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
-			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
+			joinTargetNode(index, indexTarget, indexNode, scpb.Status_PUBLIC, scpb.Status_DELETE_ONLY),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 
@@ -429,8 +419,8 @@ func init() {
 			tabID.Entities(screl.DescID, index, indexName),
 			indexID.Entities(screl.IndexID, index, indexName),
 
-			joinTargetNode(indexName, indexNameTarget, indexNameNode, add, public),
-			joinTargetNode(index, indexTarget, indexNode, add, public),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
+			joinTargetNode(index, indexTarget, indexNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 
@@ -446,9 +436,9 @@ func init() {
 			indexID.Entities(screl.IndexID, index, indexName),
 
 			screl.JoinTargetNode(index, indexTarget, indexNode),
-			indexTarget.AttrEq(screl.Direction, drop),
-			indexNode.AttrIn(screl.Status, validated, scpb.Status_BACKFILLED, deleteAndWriteOnly),
-			joinTargetNode(indexName, indexNameTarget, indexNameNode, drop, absent),
+			indexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			indexNode.AttrIn(screl.Status, scpb.Status_VALIDATED, scpb.Status_BACKFILLED, scpb.Status_DELETE_AND_WRITE_ONLY),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 
@@ -463,8 +453,8 @@ func init() {
 			tabID.Entities(screl.DescID, index, indexName),
 			indexID.Entities(screl.IndexID, index, indexName),
 
-			joinTargetNode(indexName, indexNameTarget, indexNameNode, drop, absent),
-			joinTargetNode(index, indexTarget, indexNode, drop, absent),
+			joinTargetNode(indexName, indexNameTarget, indexNameNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(index, indexTarget, indexNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -492,8 +482,8 @@ func init() {
 			typeID.Entities(screl.ReferencedDescID, typeRefDrop, typeRefAdd),
 			tableID.Entities(screl.DescID, typeRefDrop, typeRefAdd),
 
-			joinTargetNode(typeRefDrop, typeRefDropTarget, typeRefDropNode, drop, absent),
-			joinTargetNode(typeRefAdd, typeRefAddTarget, typeRefAddNode, add, public),
+			joinTargetNode(typeRefDrop, typeRefDropTarget, typeRefDropNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(typeRefAdd, typeRefAddTarget, typeRefAddNode, scpb.Status_PUBLIC, scpb.Status_PUBLIC),
 		),
 	)
 }
@@ -514,8 +504,8 @@ func init() {
 
 			tableID.Entities(screl.DescID, tbl, dep),
 
-			joinTargetNode(dep, depTarget, depNode, drop, absent),
-			joinTargetNode(tbl, tblTarget, tblNode, drop, dropped),
+			joinTargetNode(dep, depTarget, depNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(tbl, tblTarget, tblNode, scpb.Status_ABSENT, scpb.Status_DROPPED),
 		),
 	)
 }
@@ -536,8 +526,8 @@ func init() {
 			schemaID.Entities(screl.DescID, schema),
 			schemaID.Entities(screl.ReferencedDescID, scEntry),
 
-			joinTargetNode(schema, schemaTarget, schemaNode, drop, absent),
-			joinTargetNode(scEntry, scEntryTarget, scEntryNode, drop, absent),
+			joinTargetNode(schema, schemaTarget, schemaNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
+			joinTargetNode(scEntry, scEntryTarget, scEntryNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -557,8 +547,8 @@ func init() {
 
 			schemaID.Entities(screl.DescID, database, scEntry),
 
-			joinTargetNode(database, databaseTarget, databaseNode, drop, dropped),
-			joinTargetNode(scEntry, scEntryTarget, scEntryNode, drop, absent),
+			joinTargetNode(database, databaseTarget, databaseNode, scpb.Status_ABSENT, scpb.Status_DROPPED),
+			joinTargetNode(scEntry, scEntryTarget, scEntryNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
 }

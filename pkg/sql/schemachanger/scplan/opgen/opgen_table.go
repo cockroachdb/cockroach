@@ -49,10 +49,11 @@ func init() {
 				// TODO(fqazi): We need to revisit if at this phase anything is revertible.
 				revertible(false),
 				emit(func(this *scpb.Table, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{Table: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{Table: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 				emit(func(this *scpb.Table) scop.Op {

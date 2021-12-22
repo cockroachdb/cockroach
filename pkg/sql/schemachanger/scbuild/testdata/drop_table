@@ -43,8 +43,7 @@ CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
 build
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-- DROP Column:{DescID: 59, ColumnID: 1}
-  state: PUBLIC
+- [[Column:{DescID: 59, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     defaultExpr: gen_random_uuid()
@@ -54,8 +53,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     type:
       family: UuidFamily
       oid: 2950
-- DROP Column:{DescID: 59, ColumnID: 2}
-  state: PUBLIC
+- [[Column:{DescID: 59, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     familyName: primary
@@ -65,8 +63,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     type:
       family: StringFamily
       oid: 25
-- DROP Column:{DescID: 59, ColumnID: 3}
-  state: PUBLIC
+- [[Column:{DescID: 59, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     familyName: primary
@@ -76,8 +73,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     type:
       family: StringFamily
       oid: 25
-- DROP Column:{DescID: 59, ColumnID: 4}
-  state: PUBLIC
+- [[Column:{DescID: 59, ColumnID: 4}, ABSENT], PUBLIC]
   details:
     columnId: 4
     familyName: primary
@@ -88,8 +84,7 @@ DROP TABLE defaultdb.shipments CASCADE;
       family: IntFamily
       oid: 20
       width: 64
-- DROP Column:{DescID: 59, ColumnID: 5}
-  state: PUBLIC
+- [[Column:{DescID: 59, ColumnID: 5}, ABSENT], PUBLIC]
   details:
     columnId: 5
     defaultExpr: nextval(56:::REGCLASS)
@@ -103,8 +98,7 @@ DROP TABLE defaultdb.shipments CASCADE;
       width: 64
     usesSequenceIds:
     - 56
-- DROP Column:{DescID: 59, ColumnID: 6}
-  state: PUBLIC
+- [[Column:{DescID: 59, ColumnID: 6}, ABSENT], PUBLIC]
   details:
     columnId: 6
     computerExpr: x'80':::@100057
@@ -117,83 +111,70 @@ DROP TABLE defaultdb.shipments CASCADE;
       oid: 100057
       udtMetadata:
         arrayTypeOid: 100058
-- DROP ColumnName:{DescID: 59, ColumnID: 1, Name: tracking_number}
-  state: PUBLIC
+- [[ColumnName:{DescID: 59, ColumnID: 1, Name: tracking_number}, ABSENT], PUBLIC]
   details:
     columnId: 1
     name: tracking_number
     tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 2, Name: carrier}
-  state: PUBLIC
+- [[ColumnName:{DescID: 59, ColumnID: 2, Name: carrier}, ABSENT], PUBLIC]
   details:
     columnId: 2
     name: carrier
     tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 3, Name: status}
-  state: PUBLIC
+- [[ColumnName:{DescID: 59, ColumnID: 3, Name: status}, ABSENT], PUBLIC]
   details:
     columnId: 3
     name: status
     tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 4, Name: customer_id}
-  state: PUBLIC
+- [[ColumnName:{DescID: 59, ColumnID: 4, Name: customer_id}, ABSENT], PUBLIC]
   details:
     columnId: 4
     name: customer_id
     tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 5, Name: randcol}
-  state: PUBLIC
+- [[ColumnName:{DescID: 59, ColumnID: 5, Name: randcol}, ABSENT], PUBLIC]
   details:
     columnId: 5
     name: randcol
     tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 6, Name: val}
-  state: PUBLIC
+- [[ColumnName:{DescID: 59, ColumnID: 6, Name: val}, ABSENT], PUBLIC]
   details:
     columnId: 6
     name: val
     tableId: 59
-- DROP ColumnTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}
-  state: PUBLIC
+- [[ColumnTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}, ABSENT], PUBLIC]
   details:
     columnId: 6
     tableId: 59
     typeId: 57
-- DROP ColumnTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 58}
-  state: PUBLIC
+- [[ColumnTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 58}, ABSENT], PUBLIC]
   details:
     columnId: 6
     tableId: 59
     typeId: 58
-- DROP ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}
-  state: PUBLIC
+- [[ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}, ABSENT], PUBLIC]
   details:
     columnId: 6
     tableId: 59
     typeId: 57
-- DROP ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 58}
-  state: PUBLIC
+- [[ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 58}, ABSENT], PUBLIC]
   details:
     columnId: 6
     tableId: 59
     typeId: 58
-- DROP DefaultExpression:{DescID: 59, ColumnID: 1}
-  state: PUBLIC
+- [[DefaultExpression:{DescID: 59, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     defaultExpr: gen_random_uuid()
     tableId: 59
     usesSequenceIDs: []
-- DROP DefaultExpression:{DescID: 59, ColumnID: 5}
-  state: PUBLIC
+- [[DefaultExpression:{DescID: 59, ColumnID: 5}, ABSENT], PUBLIC]
   details:
     columnId: 5
     defaultExpr: nextval(56:::REGCLASS)
     tableId: 59
     usesSequenceIDs:
     - 56
-- DROP ForeignKey:{DescID: 59, ReferencedDescID: 54, Name: fk_customers}
-  state: PUBLIC
+- [[ForeignKey:{DescID: 59, ReferencedDescID: 54, Name: fk_customers}, ABSENT], PUBLIC]
   details:
     name: fk_customers
     originColumns:
@@ -202,8 +183,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 1
     referenceId: 54
-- DROP ForeignKey:{DescID: 59, ReferencedDescID: 55, Name: fk_orders}
-  state: PUBLIC
+- [[ForeignKey:{DescID: 59, ReferencedDescID: 55, Name: fk_orders}, ABSENT], PUBLIC]
   details:
     name: fk_orders
     originColumns:
@@ -212,8 +192,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 2
     referenceId: 55
-- DROP ForeignKeyBackReference:{DescID: 54, ReferencedDescID: 59, Name: fk_customers}
-  state: PUBLIC
+- [[ForeignKeyBackReference:{DescID: 54, ReferencedDescID: 59, Name: fk_customers}, ABSENT], PUBLIC]
   details:
     name: fk_customers
     originColumns:
@@ -222,8 +201,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 4
     referenceId: 59
-- DROP ForeignKeyBackReference:{DescID: 55, ReferencedDescID: 59, Name: fk_orders}
-  state: PUBLIC
+- [[ForeignKeyBackReference:{DescID: 55, ReferencedDescID: 59, Name: fk_orders}, ABSENT], PUBLIC]
   details:
     name: fk_orders
     originColumns:
@@ -232,62 +210,51 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 4
     referenceId: 59
-- DROP IndexName:{DescID: 59, IndexID: 1, Name: shipments_pkey}
-  state: PUBLIC
+- [[IndexName:{DescID: 59, IndexID: 1, Name: shipments_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: shipments_pkey
     tableId: 59
-- DROP Locality:{DescID: 59}
-  state: PUBLIC
+- [[Locality:{DescID: 59}, ABSENT], PUBLIC]
   details:
     descriptorId: 59
-- DROP Locality:{DescID: 60}
-  state: PUBLIC
+- [[Locality:{DescID: 60}, ABSENT], PUBLIC]
   details:
     descriptorId: 60
-- DROP Locality:{DescID: 61}
-  state: PUBLIC
+- [[Locality:{DescID: 61}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
-- DROP Namespace:{DescID: 59, Name: shipments}
-  state: PUBLIC
+- [[Namespace:{DescID: 59, Name: shipments}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 59
     name: shipments
     schemaId: 51
-- DROP Namespace:{DescID: 60, Name: sq1}
-  state: PUBLIC
+- [[Namespace:{DescID: 60, Name: sq1}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 60
     name: sq1
     schemaId: 51
-- DROP Namespace:{DescID: 61, Name: v1}
-  state: PUBLIC
+- [[Namespace:{DescID: 61, Name: v1}, ABSENT], PUBLIC]
   details:
     databaseId: 50
     descriptorId: 61
     name: v1
     schemaId: 51
-- DROP Owner:{DescID: 59}
-  state: PUBLIC
+- [[Owner:{DescID: 59}, ABSENT], PUBLIC]
   details:
     descriptorId: 59
     owner: root
-- DROP Owner:{DescID: 60}
-  state: PUBLIC
+- [[Owner:{DescID: 60}, ABSENT], PUBLIC]
   details:
     descriptorId: 60
     owner: root
-- DROP Owner:{DescID: 61}
-  state: PUBLIC
+- [[Owner:{DescID: 61}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     owner: root
-- DROP PrimaryIndex:{DescID: 59, IndexID: 1}
-  state: PUBLIC
+- [[PrimaryIndex:{DescID: 59, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -304,83 +271,68 @@ DROP TABLE defaultdb.shipments CASCADE;
     - 6
     tableId: 59
     unique: true
-- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}, ABSENT], PUBLIC]
   details:
     columnID: 5
     dependedOn: 59
     tableId: 56
-- DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
-  state: PUBLIC
+- [[RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}, ABSENT], PUBLIC]
   details:
     columnID: 2
     dependedOn: 61
     tableId: 59
-- DROP Sequence:{DescID: 60}
-  state: PUBLIC
+- [[Sequence:{DescID: 60}, ABSENT], PUBLIC]
   details:
     sequenceId: 60
-- DROP SequenceOwnedBy:{DescID: 60, ReferencedDescID: 59}
-  state: PUBLIC
+- [[SequenceOwnedBy:{DescID: 60, ReferencedDescID: 59}, ABSENT], PUBLIC]
   details:
     ownerTableId: 59
     sequenceId: 60
-- DROP Table:{DescID: 59}
-  state: PUBLIC
+- [[Table:{DescID: 59}, ABSENT], PUBLIC]
   details:
     tableId: 59
-- DROP UserPrivileges:{DescID: 59, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 59, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 59
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 59, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 59, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 59
     username: public
-- DROP UserPrivileges:{DescID: 59, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 59, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 59
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 60, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 60, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 60
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 60, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 60, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 60
     username: public
-- DROP UserPrivileges:{DescID: 60, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 60, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 60
     privileges: 2
     username: root
-- DROP UserPrivileges:{DescID: 61, Username: admin}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 61, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     privileges: 2
     username: admin
-- DROP UserPrivileges:{DescID: 61, Username: public}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 61, Username: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     username: public
-- DROP UserPrivileges:{DescID: 61, Username: root}
-  state: PUBLIC
+- [[UserPrivileges:{DescID: 61, Username: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 61
     privileges: 2
     username: root
-- DROP View:{DescID: 61}
-  state: PUBLIC
+- [[View:{DescID: 61}, ABSENT], PUBLIC]
   details:
     tableId: 61

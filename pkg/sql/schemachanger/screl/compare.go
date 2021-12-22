@@ -26,7 +26,7 @@ var equalityAttrs = []rel.Attr{
 	Name,
 	Username,
 	IndexID,
-	Direction,
+	TargetStatus,
 	Status,
 }
 

@@ -51,10 +51,11 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Database, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.DatabaseID,
-						Element:   &scpb.ElementProto{Database: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.DatabaseID,
+						Element:      &scpb.ElementProto{Database: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 				emit(func(this *scpb.Database) scop.Op {

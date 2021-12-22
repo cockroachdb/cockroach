@@ -32,14 +32,14 @@ func NodeString(n *scpb.Node) string {
 
 // FormatNode formats the node into the SafeWriter.
 func FormatNode(w redact.SafeWriter, e *scpb.Node) (err error) {
-	w.SafeRune('[')
+	w.SafeString("[[")
 	if err := FormatElement(w, e.Element()); err != nil {
 		return err
 	}
 	w.SafeString(", ")
+	w.SafeString(redact.SafeString(e.Target.TargetStatus.String()))
+	w.SafeString("], ")
 	w.SafeString(redact.SafeString(e.Status.String()))
-	w.SafeString(", ")
-	w.SafeString(redact.SafeString(e.Target.Direction.String()))
 	w.SafeString("]")
 	return nil
 }

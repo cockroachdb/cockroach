@@ -33,12 +33,18 @@ import (
 // Next compare the contents of the new and old descriptors to validate the
 // conversion process.
 
-// addOrDropForDir enqueues for add or drop depending on the direction.
-func addOrDropForDir(b BuildCtx, dir scpb.Target_Direction, elem scpb.Element) {
-	if dir == scpb.Target_ADD {
-		b.EnqueueAdd(elem)
-	} else {
-		b.EnqueueDrop(elem)
+func enqueue(b BuildCtx, targetStatus scpb.Status, elem scpb.Element) {
+	switch targetStatus {
+	case scpb.Status_PUBLIC:
+		b.AddNode(scpb.Status_ABSENT, targetStatus, elem, b.TargetMetadata())
+	case scpb.Status_ABSENT:
+		b.AddNode(scpb.Status_PUBLIC, targetStatus, elem, b.TargetMetadata())
+	}
+}
+
+func enqueueIfNotExists(b BuildCtx, targetStatus scpb.Status, elem scpb.Element) {
+	if !b.HasTarget(targetStatus, elem) {
+		enqueue(b, targetStatus, elem)
 	}
 }
 
@@ -126,7 +132,7 @@ func decomposeExprToElements(
 	exprType exprType,
 	tableID descpb.ID,
 	expressionID uint32,
-	dir scpb.Target_Direction,
+	targetStatus scpb.Status,
 ) {
 	// Empty expressions don't have any type references.
 	if exprString == "" {
@@ -177,7 +183,7 @@ func decomposeExprToElements(
 					TypeID:            typeID,
 				}
 			}
-			addOrDropForDir(b, dir, typeRef)
+			enqueue(b, targetStatus, typeRef)
 		}
 	}
 }
@@ -185,7 +191,7 @@ func decomposeExprToElements(
 // decomposeDefaultExprToElements converts and inserts default
 // expression elements into the graph.
 func decomposeDefaultExprToElements(
-	b BuildCtx, table catalog.TableDescriptor, column catalog.Column, dir scpb.Target_Direction,
+	b BuildCtx, table catalog.TableDescriptor, column catalog.Column, targetStatus scpb.Status,
 ) {
 	if !column.HasDefault() || column.ColumnDesc().HasNullDefault() {
 		return
@@ -201,85 +207,84 @@ func decomposeDefaultExprToElements(
 		DefaultExpr:     defaultExpr,
 		UsesSequenceIDs: sequenceIDs,
 	}
-	if !b.HasTarget(dir, &expressionElem) {
-		addOrDropForDir(b, dir, &expressionElem)
+	if !b.HasTarget(targetStatus, &expressionElem) {
+		enqueue(b, targetStatus, &expressionElem)
 		// Decompose any elements required for expressions.
-		decomposeExprToElements(b,
-			defaultExpr, exprTypeDefault, table.GetID(), uint32(column.GetID()), dir)
+		decomposeExprToElements(b, defaultExpr, exprTypeDefault, table.GetID(), uint32(column.GetID()), targetStatus)
 	}
 }
 
 // decomposeDescToElements converts generic parts
 // of a descriptor into an elements in the graph.
-func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, dir scpb.Target_Direction) {
+func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, targetStatus scpb.Status) {
 	// Decompose all security settings
 	privileges := tbl.GetPrivileges()
 	ownerElem := scpb.Owner{
 		DescriptorID: tbl.GetID(),
 		Owner:        privileges.Owner().Normalized(),
 	}
-	addOrDropForDir(b, dir, &ownerElem)
+	enqueue(b, targetStatus, &ownerElem)
 
 	for _, user := range privileges.Users {
-		userElem := scpb.UserPrivileges{
+		enqueue(b, targetStatus, &scpb.UserPrivileges{
 			DescriptorID: tbl.GetID(),
 			Username:     user.User().Normalized(),
 			Privileges:   user.Privileges,
-		}
-		addOrDropForDir(b, dir, &userElem)
+		})
 	}
 }
 
 func decomposeColumnIntoElements(
-	b BuildCtx, tbl catalog.TableDescriptor, column catalog.Column, dir scpb.Target_Direction,
+	b BuildCtx, tbl catalog.TableDescriptor, column catalog.Column, targetStatus scpb.Status,
 ) {
 	if column.IsHidden() {
 		return
 	}
-	addOrDropForDir(b, dir,
-		&scpb.ColumnName{
-			TableID:  tbl.GetID(),
-			ColumnID: column.GetID(),
-			Name:     column.GetName(),
-		},
-	)
-	addOrDropForDir(b, dir,
-		columnDescToElement(tbl, column.ColumnDescDeepCopy(), nil, nil))
+	enqueue(b, targetStatus, &scpb.ColumnName{
+		TableID:  tbl.GetID(),
+		ColumnID: column.GetID(),
+		Name:     column.GetName(),
+	})
+	enqueue(b, targetStatus, columnDescToElement(tbl, column.ColumnDescDeepCopy(), nil, nil))
 	// Add references for the column types.
 	typeClosure, err := typedesc.GetTypeDescriptorClosure(column.GetType())
 	onErrPanic(err)
 	for typeID := range typeClosure {
-		addOrDropForDir(b, dir,
-			&scpb.ColumnTypeReference{
-				TableID:  tbl.GetID(),
-				ColumnID: column.GetID(),
-				TypeID:   typeID,
-			})
+		enqueue(b, targetStatus, &scpb.ColumnTypeReference{
+			TableID:  tbl.GetID(),
+			ColumnID: column.GetID(),
+			TypeID:   typeID,
+		})
 	}
 	// Convert any default expressions.
-	decomposeDefaultExprToElements(b, tbl, column, dir)
+	decomposeDefaultExprToElements(b, tbl, column, targetStatus)
 	// Deal with computed and on update expressions
-	decomposeExprToElements(b,
+	decomposeExprToElements(
+		b,
 		column.GetComputeExpr(),
 		exprTypeComputed,
 		tbl.GetID(),
 		uint32(column.GetID()),
-		dir)
-	decomposeExprToElements(b,
+		targetStatus,
+	)
+	decomposeExprToElements(
+		b,
 		column.GetOnUpdateExpr(),
 		exprTypeOnUpdate,
 		tbl.GetID(),
 		uint32(column.GetID()),
-		dir)
+		targetStatus,
+	)
 	// If there was a sequence owner dependency clean that up next.
 	if column.NumOwnsSequences() > 0 {
 		// Drop the depends on within the sequence side.
 		for seqOrd := 0; seqOrd < column.NumOwnsSequences(); seqOrd++ {
 			seqID := column.GetOwnsSequenceID(seqOrd)
 			// Remove dependencies to this sequences.
-			sequenceOwnedBy := &scpb.SequenceOwnedBy{SequenceID: seqID,
-				OwnerTableID: tbl.GetID()}
-			addOrDropForDir(b, dir, sequenceOwnedBy)
+			enqueue(b, targetStatus, &scpb.SequenceOwnedBy{
+				SequenceID:   seqID,
+				OwnerTableID: tbl.GetID(),
+			})
 		}
 	}
 	// If there was a sequence dependency track those.
@@ -288,12 +293,11 @@ func decomposeColumnIntoElements(
 		for seqOrd := 0; seqOrd < column.NumUsesSequences(); seqOrd++ {
 			seqID := column.GetUsesSequenceID(seqOrd)
 			// Remove dependencies to this sequences.
-			relationDep := &scpb.RelationDependedOnBy{TableID: seqID,
+			enqueueIfNotExists(b, targetStatus, &scpb.RelationDependedOnBy{
+				TableID:      seqID,
 				DependedOnBy: tbl.GetID(),
-				ColumnID:     column.GetID()}
-			if !b.HasTarget(dir, relationDep) {
-				addOrDropForDir(b, dir, relationDep)
-			}
+				ColumnID:     column.GetID(),
+			})
 		}
 	}
 }
@@ -301,7 +305,7 @@ func decomposeColumnIntoElements(
 // decomposeViewDescToElements converts view specific
 // parts of a table descriptor into elements for the graph.
 func decomposeViewDescToElements(
-	b BuildCtx, view catalog.TableDescriptor, dir scpb.Target_Direction,
+	b BuildCtx, view catalog.TableDescriptor, targetStatus scpb.Status,
 ) {
 	dependIDs := catalog.DescriptorIDSet{}
 	for _, typeRef := range view.GetDependsOnTypes() {
@@ -313,33 +317,30 @@ func decomposeViewDescToElements(
 		}
 	}
 	for _, typeRef := range dependIDs.Ordered() {
-		typeDep := &scpb.ViewDependsOnType{
+		enqueue(b, targetStatus, &scpb.ViewDependsOnType{
 			TableID: view.GetID(),
 			TypeID:  typeRef,
-		}
-		addOrDropForDir(b, dir, typeDep)
+		})
 	}
 }
 
 // decomposeSequenceDescToElements converts sequence specific
 // parts of a table descriptor into elements for the graph.
 func decomposeSequenceDescToElements(
-	b BuildCtx, seq catalog.TableDescriptor, dir scpb.Target_Direction,
+	b BuildCtx, seq catalog.TableDescriptor, targetStatus scpb.Status,
 ) {
 	if seq.GetSequenceOpts().SequenceOwner.OwnerTableID != descpb.InvalidID {
-		sequenceOwnedBy := &scpb.SequenceOwnedBy{
+		enqueueIfNotExists(b, targetStatus, &scpb.SequenceOwnedBy{
 			SequenceID:   seq.GetID(),
-			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
-		if !b.HasTarget(dir, sequenceOwnedBy) {
-			addOrDropForDir(b, dir, sequenceOwnedBy)
-		}
+			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID,
+		})
 	}
 }
 
 // decomposeTableDescToElements converts a table/view/sequence into
 // parts of a table descriptor into elements for the graph.
 func decomposeTableDescToElements(
-	b BuildCtx, tbl catalog.TableDescriptor, dir scpb.Target_Direction,
+	b BuildCtx, tbl catalog.TableDescriptor, targetStatus scpb.Status,
 ) {
 	var objectElem scpb.Element
 	switch {
@@ -360,47 +361,46 @@ func decomposeTableDescToElements(
 	}
 	// If the node is already added then skip
 	// adding it again.
-	if b.HasTarget(dir, objectElem) {
+	if b.HasTarget(targetStatus, objectElem) {
 		return
 	}
-	addOrDropForDir(b, dir, objectElem)
-	nameElem := scpb.Namespace{
+	enqueue(b, targetStatus, objectElem)
+	enqueue(b, targetStatus, &scpb.Namespace{
 		Name:         tbl.GetName(),
 		DatabaseID:   tbl.GetParentID(),
 		SchemaID:     tbl.GetParentSchemaID(),
 		DescriptorID: tbl.GetID(),
-	}
-	addOrDropForDir(b, dir, &nameElem)
+	})
 	// Convert common fields for descriptors into elements.
-	decomposeDescToElements(b, tbl, dir)
+	decomposeDescToElements(b, tbl, targetStatus)
 	switch {
 	case tbl.IsTable():
 		// Decompose columns into elements.
 		for _, column := range tbl.AllColumns() {
-			decomposeColumnIntoElements(b, tbl, column, dir)
+			decomposeColumnIntoElements(b, tbl, column, targetStatus)
 		}
 		// Decompose indexes into elements.
 		for _, index := range tbl.AllIndexes() {
 			if index.Primary() {
 				primaryIndex, indexName := primaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
-				addOrDropForDir(b, dir, primaryIndex)
-				addOrDropForDir(b, dir, indexName)
+				enqueue(b, targetStatus, primaryIndex)
+				enqueue(b, targetStatus, indexName)
 
 			} else {
 				secondaryIndex, indexName := secondaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
-				addOrDropForDir(b, dir, secondaryIndex)
-				addOrDropForDir(b, dir, indexName)
+				enqueue(b, targetStatus, secondaryIndex)
+				enqueue(b, targetStatus, indexName)
 			}
 		}
 	case tbl.IsSequence():
-		decomposeSequenceDescToElements(b, tbl, dir)
+		decomposeSequenceDescToElements(b, tbl, targetStatus)
 	case tbl.IsView():
-		decomposeViewDescToElements(b, tbl, dir)
+		decomposeViewDescToElements(b, tbl, targetStatus)
 
 	}
 	// Go through outbound/inbound foreign keys
 	err := tbl.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		outBoundFk := scpb.ForeignKey{
+		enqueueIfNotExists(b, targetStatus, &scpb.ForeignKey{
 			OriginID:         fk.OriginTableID,
 			OriginColumns:    fk.OriginColumnIDs,
 			ReferenceColumns: fk.ReferencedColumnIDs,
@@ -408,17 +408,14 @@ func decomposeTableDescToElements(
 			OnUpdate:         fk.OnUpdate,
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
-		}
-		if !b.HasTarget(dir, &outBoundFk) {
-			addOrDropForDir(b, dir, &outBoundFk)
-		}
+		})
 		return nil
 	})
 	if err != nil {
 		panic(err)
 	}
 	err = tbl.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		inBoundFk := scpb.ForeignKeyBackReference{
+		enqueueIfNotExists(b, targetStatus, &scpb.ForeignKeyBackReference{
 			OriginID:         fk.ReferencedTableID,
 			OriginColumns:    fk.ReferencedColumnIDs,
 			ReferenceID:      fk.OriginTableID,
@@ -426,10 +423,7 @@ func decomposeTableDescToElements(
 			OnUpdate:         fk.OnUpdate,
 			OnDelete:         fk.OnDelete,
 			Name:             fk.Name,
-		}
-		if !b.HasTarget(dir, &inBoundFk) {
-			addOrDropForDir(b, dir, &inBoundFk)
-		}
+		})
 		return nil
 	})
 	if err != nil {
@@ -437,31 +431,37 @@ func decomposeTableDescToElements(
 	}
 	// Add any constraints without indexes first.
 	for idx, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		constraintName := &scpb.ConstraintName{
+		enqueue(b, targetStatus, &scpb.ConstraintName{
 			TableID:           tbl.GetID(),
 			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
 			ConstraintOrdinal: uint32(idx),
 			Name:              constraint.Name,
-		}
-		uniqueWithoutConstraint := &scpb.UniqueConstraint{
+		})
+		enqueue(b, targetStatus, &scpb.UniqueConstraint{
 			TableID:           tbl.GetID(),
 			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
 			ConstraintOrdinal: uint32(idx),
 			IndexID:           0, // Invalid ID
 			ColumnIDs:         constraint.ColumnIDs,
-		}
-		addOrDropForDir(b, dir, uniqueWithoutConstraint)
-		addOrDropForDir(b, dir, constraintName)
+		})
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
-		constraintName := &scpb.ConstraintName{
+		decomposeExprToElements(
+			b,
+			constraint.Expr,
+			exprTypeCheck,
+			tbl.GetID(),
+			uint32(idx),
+			targetStatus,
+		)
+		enqueue(b, targetStatus, &scpb.ConstraintName{
 			TableID:           tbl.GetID(),
 			ConstraintType:    scpb.ConstraintType_Check,
 			ConstraintOrdinal: uint32(idx),
 			Name:              constraint.Name,
-		}
-		checkConstraint := &scpb.CheckConstraint{
+		})
+		enqueue(b, targetStatus, &scpb.CheckConstraint{
 			ConstraintType:    scpb.ConstraintType_Check,
 			ConstraintOrdinal: uint32(idx),
 			TableID:           tbl.GetID(),
@@ -469,50 +469,33 @@ func decomposeTableDescToElements(
 			Validated:         constraint.Validity == descpb.ConstraintValidity_Validated,
 			ColumnIDs:         constraint.ColumnIDs,
 			Expr:              constraint.Expr,
-		}
-		decomposeExprToElements(b,
-			constraint.Expr,
-			exprTypeCheck,
-			tbl.GetID(),
-			uint32(idx),
-			dir)
-		addOrDropForDir(b, dir, checkConstraint)
-		addOrDropForDir(b, dir, constraintName)
+		})
 	}
 	// Add locality information.
-	addOrDropForDir(b, dir, &scpb.Locality{
+	enqueue(b, targetStatus, &scpb.Locality{
 		DescriptorID: tbl.GetID(),
 		Locality:     tbl.GetLocalityConfig(),
 	})
 	// Inject any dependencies into the plan.
 	for _, dep := range tbl.GetDependsOn() {
-		dependsOn := &scpb.RelationDependedOnBy{
+		enqueueIfNotExists(b, targetStatus, &scpb.RelationDependedOnBy{
 			DependedOnBy: tbl.GetID(),
 			TableID:      dep,
-		}
-		if !b.HasTarget(dir, dependsOn) {
-			addOrDropForDir(b, dir, dependsOn)
-		}
+		})
 	}
 	for _, depBy := range tbl.GetDependedOnBy() {
 		if len(depBy.ColumnIDs) == 0 {
-			dependedOnBy := &scpb.RelationDependedOnBy{
+			enqueueIfNotExists(b, targetStatus, &scpb.RelationDependedOnBy{
 				DependedOnBy: depBy.ID,
 				TableID:      tbl.GetID(),
-			}
-			if !b.HasTarget(dir, dependedOnBy) {
-				addOrDropForDir(b, dir, dependedOnBy)
-			}
+			})
 		}
 		for _, colID := range depBy.ColumnIDs {
-			dependedOnBy := &scpb.RelationDependedOnBy{
+			enqueueIfNotExists(b, targetStatus, &scpb.RelationDependedOnBy{
 				DependedOnBy: depBy.ID,
 				TableID:      tbl.GetID(),
 				ColumnID:     colID,
-			}
-			if !b.HasTarget(dir, dependedOnBy) {
-				addOrDropForDir(b, dir, dependedOnBy)
-			}
+			})
 		}
 	}
 	//TODO (fqazi) Computed Expressions / Update expressions can be moved out

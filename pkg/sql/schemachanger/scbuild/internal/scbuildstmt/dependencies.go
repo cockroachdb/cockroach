@@ -121,10 +121,10 @@ type AuthorizationAccessor interface {
 type BuilderState interface {
 
 	// AddNode adds a node into the NodeAccumulator.
-	AddNode(dir scpb.Target_Direction, elem scpb.Element, meta scpb.TargetMetadata)
+	AddNode(status, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata)
 
 	// ForEachNode iterates over the accumulated notes in the NodeAccumulator.
-	ForEachNode(fn func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element))
+	ForEachNode(fn func(status, targetStatus scpb.Status, elem scpb.Element))
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -228,11 +228,11 @@ type NameResolver interface {
 // NodeEnqueuerAndChecker exposes convenient methods for enqueuing and checking
 // nodes in the NodeAccumulator.
 type NodeEnqueuerAndChecker interface {
-	// EnqueueAdd adds a target node in the ADD target direction.
+	// EnqueueAdd adds a node with a PUBLIC target status.
 	// Panics if the element is already present.
 	EnqueueAdd(elem scpb.Element)
 
-	// EnqueueDrop adds a target node in the DROP direction.
+	// EnqueueDrop adds a node with an ABSENT target status.
 	// Panics if the element is already present.
 	EnqueueDrop(elem scpb.Element)
 
@@ -242,14 +242,14 @@ type NodeEnqueuerAndChecker interface {
 
 	// HasNode returns true iff the builder state has a node matching the provided
 	// filter function.
-	HasNode(filter func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element) bool) bool
+	HasNode(filter func(status, targetStatus scpb.Status, elem scpb.Element) bool) bool
 
 	// HasTarget returns true iff the builder state has a node with an equal element
-	// and the same target direction, regardless of node status.
-	HasTarget(dir scpb.Target_Direction, elem scpb.Element) bool
+	// and the same target status, regardless of node status.
+	HasTarget(targetStatus scpb.Status, elem scpb.Element) bool
 
 	// HasElement returns true iff the builder state has a node with an equal
-	// element regardless of target direction or node status.
+	// element regardless of target status or node status.
 	HasElement(elem scpb.Element) bool
 }
 

@@ -67,7 +67,7 @@ func dropView(b BuildCtx, view catalog.TableDescriptor, behavior tree.DropBehavi
 // any objects that may need to be dealt with when cascading. The BuildCtx for
 // cascaded drops is returned.
 func dropViewBasic(b BuildCtx, view catalog.TableDescriptor) BuildCtx {
-	decomposeTableDescToElements(b, view, scpb.Target_DROP)
+	decomposeTableDescToElements(b, view, scpb.Status_ABSENT)
 	return b.WithNewSourceElementID()
 }
 
@@ -76,35 +76,32 @@ func dropViewBasic(b BuildCtx, view catalog.TableDescriptor) BuildCtx {
 func dropViewDependents(b BuildCtx, view catalog.TableDescriptor, behavior tree.DropBehavior) {
 	// Go over the dependencies and generate drop targets
 	// for them. In our case they should only be views.
-	scpb.ForEachRelationDependedOnBy(b,
-		func(_ scpb.Status,
-			_ scpb.Target_Direction,
-			dep *scpb.RelationDependedOnBy) {
-			if dep.TableID != view.GetID() {
-				return
-			}
-			dependentDesc := b.MustReadTable(dep.DependedOnBy)
-			if !dependentDesc.IsView() {
-				panic(errors.AssertionFailedf("descriptor :%s is not a view", dependentDesc.GetName()))
-			}
-			if behavior != tree.DropCascade &&
-				!checkIfDescOrElementAreDropped(b, dep.DependedOnBy) {
-				name, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(view.GetID()), tree.ResolveRequireViewDesc)
-				onErrPanic(err)
+	scpb.ForEachRelationDependedOnBy(b, func(_, _ scpb.Status, dep *scpb.RelationDependedOnBy) {
+		if dep.TableID != view.GetID() {
+			return
+		}
+		dependentDesc := b.MustReadTable(dep.DependedOnBy)
+		if !dependentDesc.IsView() {
+			panic(errors.AssertionFailedf("descriptor :%s is not a view", dependentDesc.GetName()))
+		}
+		if behavior != tree.DropCascade &&
+			!checkIfDescOrElementAreDropped(b, dep.DependedOnBy) {
+			name, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(view.GetID()), tree.ResolveRequireViewDesc)
+			onErrPanic(err)
 
-				depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(dep.DependedOnBy), tree.ResolveRequireViewDesc)
-				onErrPanic(err)
-				if dependentDesc.GetParentID() != view.GetParentID() {
-					panic(sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-						name.FQString(), depViewName.FQString()))
-				} else {
-					panic(errors.WithHintf(
-						sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-							name.Object(), depViewName.Object()),
-						"you can drop %s instead.", depViewName.Object()))
-				}
+			depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(dep.DependedOnBy), tree.ResolveRequireViewDesc)
+			onErrPanic(err)
+			if dependentDesc.GetParentID() != view.GetParentID() {
+				panic(sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
+					name.FQString(), depViewName.FQString()))
+			} else {
+				panic(errors.WithHintf(
+					sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
+						name.Object(), depViewName.Object()),
+					"you can drop %s instead.", depViewName.Object()))
 			}
-			// Decompose and recursively attempt to drop.
-			dropView(b, dependentDesc, behavior)
-		})
+		}
+		// Decompose and recursively attempt to drop.
+		dropView(b, dependentDesc, behavior)
+	})
 }

@@ -56,8 +56,8 @@ const (
 	Name
 	// IndexID is the index ID to which this element corresponds.
 	IndexID
-	// Direction is the direction of a Target.
-	Direction
+	// TargetStatus is the Status of a Target.
+	TargetStatus
 	// Status is the Status of a Node.
 	Status
 	// Element references an element.
@@ -84,7 +84,7 @@ var Schema = rel.MustSchema("screl",
 	),
 	rel.EntityMapping(
 		t((*scpb.Target)(nil)),
-		rel.EntityAttr(Direction, "Direction"),
+		rel.EntityAttr(TargetStatus, "TargetStatus"),
 		rel.EntityAttr(Element, elementProtoElementSelectors...),
 	),
 	rel.EntityMapping(t((*scpb.Column)(nil)),

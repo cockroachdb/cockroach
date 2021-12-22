@@ -62,7 +62,7 @@ func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavi
 // any objects that may need to be dealt with when cascading. The BuildCtx for
 // cascaded drops is returned.
 func dropTableBasic(b BuildCtx, tbl catalog.TableDescriptor) BuildCtx {
-	decomposeTableDescToElements(b, tbl, scpb.Target_DROP)
+	decomposeTableDescToElements(b, tbl, scpb.Status_ABSENT)
 	return b.WithNewSourceElementID()
 }
 
@@ -88,48 +88,40 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 			return nil
 		}))
 		// Detect if foreign key back refs will end up preventing this drop behavior.
-		scpb.ForEachForeignKeyBackReference(c,
-			func(_ scpb.Status,
-				_ scpb.Target_Direction,
-				fk *scpb.ForeignKeyBackReference) {
-				dependentTable := c.MustReadTable(fk.ReferenceID)
-				if fk.OriginID == tbl.GetID() &&
-					!checkIfDescOrElementAreDropped(b, fk.ReferenceID) &&
-					behavior != tree.DropCascade {
-					panic(pgerror.Newf(
-						pgcode.DependentObjectsStillExist,
-						"%q is referenced by foreign key from table %q",
-						tbl.GetName(),
-						dependentTable.GetName()))
-				}
-				// Add a foreign key for clean up.
-				b.EnqueueDropIfNotExists(&scpb.ForeignKey{
-					Name:             fk.Name,
-					OriginID:         fk.ReferenceID,
-					OriginColumns:    fk.ReferenceColumns,
-					ReferenceID:      fk.OriginID,
-					ReferenceColumns: fk.OriginColumns,
-				})
+		scpb.ForEachForeignKeyBackReference(c, func(_, _ scpb.Status, fk *scpb.ForeignKeyBackReference) {
+			dependentTable := c.MustReadTable(fk.ReferenceID)
+			if fk.OriginID == tbl.GetID() &&
+				!checkIfDescOrElementAreDropped(b, fk.ReferenceID) &&
+				behavior != tree.DropCascade {
+				panic(pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"%q is referenced by foreign key from table %q",
+					tbl.GetName(),
+					dependentTable.GetName()))
+			}
+			// Add a foreign key for clean up.
+			b.EnqueueDropIfNotExists(&scpb.ForeignKey{
+				Name:             fk.Name,
+				OriginID:         fk.ReferenceID,
+				OriginColumns:    fk.ReferenceColumns,
+				ReferenceID:      fk.OriginID,
+				ReferenceColumns: fk.OriginColumns,
 			})
+		})
 		// Clean up any foreign keys next.
-		scpb.ForEachForeignKey(c,
-			func(_ scpb.Status,
-				_ scpb.Target_Direction,
-				fk *scpb.ForeignKey) {
-				// Add a back reference for clean up.
-				b.EnqueueDropIfNotExists(&scpb.ForeignKeyBackReference{
-					Name:             fk.Name,
-					OriginID:         fk.ReferenceID,
-					OriginColumns:    fk.ReferenceColumns,
-					ReferenceID:      fk.OriginID,
-					ReferenceColumns: fk.OriginColumns,
-				})
+		scpb.ForEachForeignKey(c, func(_, _ scpb.Status, fk *scpb.ForeignKey) {
+			// Add a back reference for clean up.
+			b.EnqueueDropIfNotExists(&scpb.ForeignKeyBackReference{
+				Name:             fk.Name,
+				OriginID:         fk.ReferenceID,
+				OriginColumns:    fk.ReferenceColumns,
+				ReferenceID:      fk.OriginID,
+				ReferenceColumns: fk.OriginColumns,
 			})
+		})
 		// Detect any sequence ownerships and clean them up no cascade
 		// is required.
-		scpb.ForEachSequenceOwnedBy(c, func(_ scpb.Status,
-			_ scpb.Target_Direction,
-			sequenceOwnedBy *scpb.SequenceOwnedBy) {
+		scpb.ForEachSequenceOwnedBy(c, func(_, _ scpb.Status, sequenceOwnedBy *scpb.SequenceOwnedBy) {
 			if sequenceOwnedBy.OwnerTableID != tbl.GetID() {
 				return
 			}
