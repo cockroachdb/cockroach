@@ -15,6 +15,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 var installCmds = map[string]string{
@@ -159,12 +161,12 @@ func SortedCmds() []string {
 }
 
 // Install TODO(peter): document
-func Install(ctx context.Context, c *SyncedCluster, args []string) error {
+func Install(ctx context.Context, l *logger.Logger, c *SyncedCluster, args []string) error {
 	do := func(title, cmd string) error {
 		var buf bytes.Buffer
-		err := c.Run(ctx, &buf, &buf, c.Nodes, "installing "+title, cmd)
+		err := c.Run(ctx, l, &buf, &buf, c.Nodes, "installing "+title, cmd)
 		if err != nil {
-			fmt.Print(buf.String())
+			l.Printf(buf.String())
 		}
 		return err
 	}

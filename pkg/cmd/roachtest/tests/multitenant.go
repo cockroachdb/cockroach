@@ -25,15 +25,15 @@ import (
 func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	const tenantID = 123
 	{
-		_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant($1)`, tenantID)
+		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1)`, tenantID)
 		require.NoError(t, err)
 	}
 
-	kvAddrs, err := c.ExternalAddr(ctx, c.All())
+	kvAddrs, err := c.ExternalAddr(ctx, t.L(), c.All())
 	require.NoError(t, err)
 
 	const (

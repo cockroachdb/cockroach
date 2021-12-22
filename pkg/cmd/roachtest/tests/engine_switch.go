@@ -38,7 +38,7 @@ func registerEngineSwitch(r registry.Registry) {
 
 		pebbleStartOpts := option.DefaultStartOpts()
 		pebbleStartOpts.RoachprodOpts.ExtraArgs = append(pebbleStartOpts.RoachprodOpts.ExtraArgs, "--storage-engine=pebble")
-		c.Start(ctx, rockdbStartOpts, install.MakeClusterSettings(), roachNodes)
+		c.Start(ctx, t.L(), rockdbStartOpts, install.MakeClusterSettings(), roachNodes)
 		stageDuration := 1 * time.Minute
 		if c.IsLocal() {
 			t.L().Printf("local mode: speeding up test\n")
@@ -87,7 +87,7 @@ func registerEngineSwitch(r registry.Registry) {
 				// Make sure everyone is still running.
 				for i := 1; i <= len(roachNodes); i++ {
 					t.WorkerStatus("checking ", i)
-					db := c.Conn(ctx, i)
+					db := c.Conn(ctx, t.L(), i)
 					defer db.Close()
 					rows, err := db.Query(`SHOW DATABASES`)
 					if err != nil {
@@ -113,10 +113,10 @@ func registerEngineSwitch(r registry.Registry) {
 					m.ExpectDeath()
 					if rng.Intn(2) == 0 {
 						l.Printf("stopping node gracefully %d\n", node)
-						return c.StopCockroachGracefullyOnNode(ctx, node)
+						return c.StopCockroachGracefullyOnNode(ctx, t.L(), node)
 					}
 					l.Printf("stopping node %d\n", node)
-					c.Stop(ctx, option.DefaultStopOpts(), c.Node(node))
+					c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(node))
 					return nil
 				}
 
@@ -133,7 +133,7 @@ func registerEngineSwitch(r registry.Registry) {
 				if err := stop(i + 1); err != nil {
 					return err
 				}
-				c.Start(ctx, opts, install.MakeClusterSettings(), c.Node(i+1))
+				c.Start(ctx, t.L(), opts, install.MakeClusterSettings(), c.Node(i+1))
 			}
 			return sleepAndCheck()
 		})

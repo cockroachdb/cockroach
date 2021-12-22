@@ -30,13 +30,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -823,8 +823,8 @@ func (r *testRunner) runTest(
 			// Send SIGQUIT to dump stacks (this is how CRDB handles it) followed by SIGKILL.
 			stopOpts := option.DefaultStopOpts()
 			stopOpts.RoachprodOpts.Sig = 3
-			_ = c.StopE(innerCtx, stopOpts, c.All())
-			_ = c.StopE(innerCtx, option.DefaultStopOpts(), c.All())
+			_ = c.StopE(innerCtx, teardownL, stopOpts, c.All())
+			_ = c.StopE(innerCtx, teardownL, option.DefaultStopOpts(), c.All())
 			t.L().PrintfCtx(ctx, "CockroachDB nodes aborted; check the stderr log for goroutine stack traces")
 			cancel()
 		}
@@ -1195,7 +1195,7 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
-			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(req.Context(), w.Cluster().Node(1))
+			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(req.Context(), w.Cluster().l, w.Cluster().Node(1))
 			if err == nil {
 				clusterAdminUIAddr = adminUIAddrs[0]
 			}

@@ -47,16 +47,16 @@ func registerTPCE(r registry.Registry) {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.StoreCount = opts.ssds
 		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
-		c.Start(ctx, startOpts, settings, roachNodes)
+		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
 		// Configure to increase the speed of the import.
 		func() {
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
 				ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
@@ -74,7 +74,7 @@ func registerTPCE(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 
-			roachNodeIPs, err := c.InternalIP(ctx, roachNodes)
+			roachNodeIPs, err := c.InternalIP(ctx, t.L(), roachNodes)
 			if err != nil {
 				return err
 			}

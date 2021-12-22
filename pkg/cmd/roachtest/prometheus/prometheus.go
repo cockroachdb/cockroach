@@ -18,8 +18,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"gopkg.in/yaml.v2"
 )
 
@@ -46,7 +46,7 @@ type Config struct {
 // It is abstracted to prevent a circular dependency on roachtest, as Cluster
 // requires the test interface.
 type Cluster interface {
-	ExternalIP(context.Context, option.NodeListOption) ([]string, error)
+	ExternalIP(context.Context, *logger.Logger, option.NodeListOption) ([]string, error)
 	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
 	RunE(ctx context.Context, node option.NodeListOption, args ...string) error
 	PutString(
@@ -64,6 +64,7 @@ func Init(
 	ctx context.Context,
 	cfg Config,
 	c Cluster,
+	l *logger.Logger,
 	repeatFunc func(context.Context, option.NodeListOption, string, ...string) error,
 ) (*Prometheus, error) {
 	if err := c.RunE(
@@ -86,6 +87,7 @@ func Init(
 
 	yamlCfg, err := makeYAMLConfig(
 		ctx,
+		l,
 		c,
 		cfg.ScrapeConfigs,
 	)
@@ -148,7 +150,9 @@ const (
 )
 
 // makeYAMLConfig creates a prometheus YAML config for the server to use.
-func makeYAMLConfig(ctx context.Context, c Cluster, scrapeConfigs []ScrapeConfig) (string, error) {
+func makeYAMLConfig(
+	ctx context.Context, l *logger.Logger, c Cluster, scrapeConfigs []ScrapeConfig,
+) (string, error) {
 	type yamlStaticConfig struct {
 		Targets []string
 	}
@@ -174,7 +178,7 @@ func makeYAMLConfig(ctx context.Context, c Cluster, scrapeConfigs []ScrapeConfig
 	for _, scrapeConfig := range scrapeConfigs {
 		var targets []string
 		for _, scrapeNode := range scrapeConfig.ScrapeNodes {
-			ips, err := c.ExternalIP(ctx, scrapeNode.Nodes)
+			ips, err := c.ExternalIP(ctx, l, scrapeNode.Nodes)
 			if err != nil {
 				return "", err
 			}
