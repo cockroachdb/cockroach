@@ -178,6 +178,18 @@ func (v TableImplicitRecordType) DescriptorProto() *descpb.Descriptor {
 	return nil
 }
 
+// ByteSize implements the Descriptor interface.
+func (v TableImplicitRecordType) ByteSize() int64 {
+	mem := v.desc.ByteSize()
+	if v.typ != nil {
+		mem += int64(v.typ.Size())
+	}
+	if v.privs != nil {
+		mem += int64(v.privs.Size())
+	}
+	return mem
+}
+
 // NewBuilder implements the Descriptor interface.
 func (v TableImplicitRecordType) NewBuilder() catalog.DescriptorBuilder {
 	v.panicNotSupported("NewBuilder")

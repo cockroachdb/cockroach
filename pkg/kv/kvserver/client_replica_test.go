@@ -3901,6 +3901,85 @@ func TestTenantID(t *testing.T) {
 
 }
 
+// TestUninitializedMetric ensures that uninitialized replicas are reflected in the UninitializedCount store metric.
+func TestUninitializedMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      base.TestServerArgs{Insecure: true},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	_, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
+	sawSnapshot := make(chan struct{}, 1)
+	blockSnapshot := make(chan struct{})
+	tc.AddAndStartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				BeforeSnapshotSSTIngestion: func(
+					snapshot kvserver.IncomingSnapshot,
+					_ kvserver.SnapshotRequest_Type,
+					_ []string,
+				) error {
+					if snapshot.Desc.RangeID == repl.RangeID {
+						select {
+						case sawSnapshot <- struct{}{}:
+						default:
+						}
+						<-blockSnapshot
+					}
+					return nil
+				},
+			},
+		},
+	})
+
+	// We're going to block the snapshot. We need to retry adding the replica
+	// to the second node as under stressrace, failures can occur due to
+	// networking handshake timeouts.
+	addReplicaErr := make(chan error)
+	addReplica := func() {
+		_, err := tc.AddVoters(scratchKey, tc.Target(1))
+		addReplicaErr <- err
+	}
+	go addReplica()
+	if err := retry.ForDuration(3*time.Minute, func() error {
+		select {
+		case <-sawSnapshot:
+			return nil
+		case err := <-addReplicaErr:
+			go addReplica()
+			return err
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	targetStore := tc.GetFirstStoreFromServer(t, 1)
+
+	// Force the store to compute the replica metrics
+	require.NoError(t, targetStore.ComputeMetrics(ctx, 0))
+
+	// Blocked snapshot on the second server (1) should realize 1 uninitialized replica.
+	require.Equal(t, int64(1), targetStore.Metrics().UninitializedCount.Value())
+
+	// Unblock snapshot on the second server (1), this should initialize replica.
+	close(blockSnapshot)
+	require.NoError(t, <-addReplicaErr)
+
+	// Again force the store to compute metrics, increment tick counter 0 -> 1
+	require.NoError(t, targetStore.ComputeMetrics(ctx, 1))
+
+	// There should now be no uninitialized replicas in the recorded metrics
+	require.Equal(t, int64(0), targetStore.Metrics().UninitializedCount.Value())
+}
+
 // TestRangeMigration tests the below-raft migration infrastructure. It checks
 // to see that the version recorded as part of the in-memory ReplicaState
 // is up to date, and in-sync with the persisted state. It also checks to see
