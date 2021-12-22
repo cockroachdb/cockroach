@@ -29,6 +29,8 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingui",
         "//pkg/util/uint128",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//tool",
