@@ -141,11 +141,13 @@ func reduceSQL(
 	}
 
 	isInteresting := func(ctx context.Context, sql string) (interesting bool, logOriginalHint func()) {
-		// Disable telemetry and license generation.
+		// Disable telemetry and license generation. Do not exit on errors so
+		// the entirety of the input SQL is processed.
 		cmd := exec.CommandContext(ctx, binary,
 			"demo",
 			"--empty",
 			"--disable-demo-license",
+			"--set=errexit=false",
 		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
 		if !strings.HasSuffix(sql, ";") {
