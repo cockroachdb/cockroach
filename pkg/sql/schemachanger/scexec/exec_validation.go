@@ -41,9 +41,9 @@ func executeValidateUniqueIndex(
 		User: security.RootUserName(),
 	}
 	if index.GetType() == descpb.IndexDescriptor_FORWARD {
-		err = deps.IndexValidator().ValidateForwardIndexes(ctx, table, []catalog.Index{index}, true, false, execOverride)
+		err = deps.IndexValidator().ValidateForwardIndexes(ctx, table, []catalog.Index{index}, execOverride)
 	} else {
-		err = deps.IndexValidator().ValidateInvertedIndexes(ctx, table, []catalog.Index{index}, false, execOverride)
+		err = deps.IndexValidator().ValidateInvertedIndexes(ctx, table, []catalog.Index{index}, execOverride)
 	}
 	return err
 }

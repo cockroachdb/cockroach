@@ -126,8 +126,6 @@ type IndexValidator interface {
 		ctx context.Context,
 		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
-		withFirstMutationPublic bool,
-		gatherAllInvalid bool,
 		override sessiondata.InternalExecutorOverride,
 	) error
 
@@ -135,7 +133,6 @@ type IndexValidator interface {
 		ctx context.Context,
 		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
-		gatherAllInvalid bool,
 		override sessiondata.InternalExecutorOverride,
 	) error
 }
