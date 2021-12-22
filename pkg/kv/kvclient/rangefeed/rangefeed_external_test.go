@@ -12,6 +12,7 @@ package rangefeed_test
 
 import (
 	"context"
+	"runtime/pprof"
 	"sync"
 	"testing"
 
@@ -510,4 +511,113 @@ func TestUnrecoverableErrors(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestRangefeedWithLabelsOption verifies go routines started by rangefeed are
+// annotated with pprof labels.
+func TestRangefeedWithLabelsOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	srv0 := tc.Server(0)
+	db := srv0.DB()
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	mkKey := func(k string) roachpb.Key {
+		return encoding.EncodeStringAscending(scratchKey, k)
+	}
+	// Split the range a bunch of times.
+	const splits = 10
+	for i := 0; i < splits; i++ {
+		_, _, err := tc.SplitRange(mkKey(string([]byte{'a' + byte(i)})))
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, db.Put(ctx, mkKey("a"), 1))
+	require.NoError(t, db.Put(ctx, mkKey("b"), 2))
+	afterB := db.Clock().Now()
+	require.NoError(t, db.Put(ctx, mkKey("c"), 3))
+
+	sp := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+	{
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+		require.NoError(t, err)
+	}
+
+	const rangefeedName = "test-feed"
+	type label struct {
+		k, v string
+	}
+	defaultLabel := label{k: "rangefeed", v: rangefeedName}
+	label1 := label{k: "caller-label", v: "foo"}
+	label2 := label{k: "another-label", v: "bar"}
+
+	allLabelsCorrect := struct {
+		syncutil.Mutex
+		correct bool
+	}{correct: true}
+
+	verifyLabels := func(ctx context.Context) {
+		allLabelsCorrect.Lock()
+		defer allLabelsCorrect.Unlock()
+		if !allLabelsCorrect.correct {
+			return
+		}
+
+		m := make(map[string]string)
+		pprof.ForLabels(ctx, func(k, v string) bool {
+			m[k] = v
+			return true
+		})
+
+		allLabelsCorrect.correct =
+			m[defaultLabel.k] == defaultLabel.v && m[label1.k] == label1.v && m[label2.k] == label2.v
+	}
+
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	require.NoError(t, err)
+	initialScanDone := make(chan struct{})
+
+	// We'll emit keyD a bit later, once initial scan completes.
+	keyD := mkKey("d")
+	var keyDSeen sync.Once
+	keyDSeenCh := make(chan struct{})
+
+	r, err := f.RangeFeed(ctx, rangefeedName, []roachpb.Span{sp}, afterB,
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+			verifyLabels(ctx)
+			if value.Key.Equal(keyD) {
+				keyDSeen.Do(func() { close(keyDSeenCh) })
+			}
+		},
+		rangefeed.WithPProfLabel(label1.k, label1.v),
+		rangefeed.WithPProfLabel(label2.k, label2.v),
+		rangefeed.WithInitialScanParallelismFn(func() int { return 3 }),
+		rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) error {
+			verifyLabels(ctx)
+			return nil
+		}),
+		rangefeed.WithInitialScan(func(ctx context.Context) {
+			verifyLabels(ctx)
+			close(initialScanDone)
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	<-initialScanDone
+
+	// Write a new value for "a" and make sure it is seen.
+	require.NoError(t, db.Put(ctx, keyD, 5))
+	<-keyDSeenCh
+	allLabelsCorrect.Lock()
+	defer allLabelsCorrect.Unlock()
+	require.True(t, allLabelsCorrect.correct)
 }
