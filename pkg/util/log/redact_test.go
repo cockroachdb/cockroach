@@ -120,16 +120,13 @@ func TestRedactedDecodeFile(t *testing.T) {
 
 			// Retrieve the log writer and log location for this test.
 			debugSink := debugLog.getFileSink()
-			info, ok := debugSink.mu.file.(*syncBuffer)
-			if !ok {
-				t.Fatalf("buffer wasn't created")
-			}
+			fileName := debugSink.getFileName(t)
 
 			// Ensure our log message above made it to the file.
 			debugSink.flushAndMaybeSyncLocked(false)
 
 			// Prepare reading the entries from the file.
-			infoName := filepath.Base(info.file.Name())
+			infoName := filepath.Base(fileName)
 			reader, err := GetLogReader(infoName)
 			if err != nil {
 				t.Fatal(err)
