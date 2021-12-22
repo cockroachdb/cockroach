@@ -13,6 +13,7 @@ package descpb
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -390,4 +391,8 @@ func (ni NameInfo) GetParentSchemaID() ID {
 // GetName implements the catalog.NameKeyHaver interface.
 func (ni NameInfo) GetName() string {
 	return ni.Name
+}
+
+func init() {
+	protoreflect.RegisterShorthands((*Descriptor)(nil), "descriptor", "desc")
 }
