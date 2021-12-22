@@ -110,6 +110,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	manualClock := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manualClock.UnixNano, 50*time.Millisecond)
 	cfg := kvserver.TestStoreConfig(clock)
+	// We use the system config span infra for the few (old) tests written using
+	// LocalTestCluster.
+	//
+	// TODO(irfansharif): This was because of circular dependency reasons.
+	// Because we create the stores from scratch here, enabling span configs
+	// requires initializing the spanconfigkvsubscriber -- a dependency we can't
+	// (easily) pick up here.
+	cfg.SpanConfigsDisabled = true
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
 	ltc.Manual = manualClock

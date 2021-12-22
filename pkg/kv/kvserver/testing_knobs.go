@@ -367,6 +367,10 @@ type StoreTestingKnobs struct {
 	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
 	// unavailable to queues that ask for it.
 	MakeSystemConfigSpanUnavailableToQueues bool
+	// UseSystemConfigSpanForQueues uses the system config span infrastructure
+	// for internal queues (as opposed to the span configs infrastructure). This
+	// is used only for (old) tests written with the system config span in mind.
+	UseSystemConfigSpanForQueues bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

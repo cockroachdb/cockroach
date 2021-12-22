@@ -1014,6 +1014,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
+				// This test was written with the SystemConfigSpan in mind.
+				UseSystemConfigSpanForQueues: true,
 			},
 		},
 	})
@@ -1083,6 +1085,8 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
+				// This test was written with the system config span in mind.
+				UseSystemConfigSpanForQueues: true,
 			},
 		},
 	})
@@ -1308,7 +1312,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// Intentionally leave the merge queue enabled. This indirectly tests that the
 	// merge queue respects these split points.
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// This test was written with the system config span in mind.
+		DisableSpanConfigs: true,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	userTableMax := keys.TestingUserDescID(4)
@@ -3557,8 +3564,10 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue:     true,
-				TestingResponseFilter: respFilter,
+				DisableMergeQueue: true,
+				// This test was written with the system config span in mind.
+				UseSystemConfigSpanForQueues: true,
+				TestingResponseFilter:        respFilter,
 			},
 		},
 	})

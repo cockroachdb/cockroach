@@ -50,7 +50,13 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	dir, cleanupDir := testutils.TempDir(t)
 
 	tc := testcluster.StartTestCluster(t, nodes,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir, UseDatabase: "test"}},
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				ExternalIODir:      dir,
+				UseDatabase:        "test",
+				DisableSpanConfigs: true,
+			},
+		},
 	)
 	conn := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(conn)
