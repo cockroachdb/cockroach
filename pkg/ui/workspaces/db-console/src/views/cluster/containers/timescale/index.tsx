@@ -51,7 +51,7 @@ const TimeScaleDropdownWithSearchParams = (
       ) {
         timeScale.key = "Custom";
       }
-      timeScale.windowEnd = end;
+      timeScale.windowEnd = null;
       timeScale.windowSize = moment.duration(end.diff(start));
       props.setTimeScale(timeScale);
     };
