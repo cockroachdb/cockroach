@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tracingui",
+    srcs = ["span_registry_ui.go"],
+    embedsrcs = [
+        "html_template.html",
+        "list.js",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/sysutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
