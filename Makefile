@@ -1211,7 +1211,7 @@ ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
 	$(OPTGEN_TARGETS) \
-	pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+	pkg/ui/distccl/assets pkg/ui/distoss/assets pkg/ui/dist_vendor
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
@@ -1442,7 +1442,7 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 ui-clean: ## Remove build artifacts.
 	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
 	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
-	rm -rf pkg/ui/dist/*
+	rm -rf pkg/ui/dist_vendor/*
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
 	rm -f pkg/ui/workspaces/db-console/*manifest.json
 	rm -rf pkg/ui/workspaces/cluster-ui/dist

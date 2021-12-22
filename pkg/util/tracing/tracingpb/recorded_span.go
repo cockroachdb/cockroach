@@ -25,6 +25,25 @@ type TraceID uint64
 // SpanID is a probabilistically-unique span id.
 type SpanID uint64
 
+// Recording represents a group of RecordedSpans rooted at a fixed root span, as
+// returned by GetRecording. Spans are sorted by StartTime.
+type Recording []RecordedSpan
+
+// Less implements sort.Interface.
+func (r Recording) Less(i, j int) bool {
+	return r[i].StartTime.Before(r[j].StartTime)
+}
+
+// Swap implements sort.Interface.
+func (r Recording) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+// Len implements sort.Interface.
+func (r Recording) Len() int {
+	return len(r)
+}
+
 // LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 

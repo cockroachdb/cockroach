@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    .sort.asc, .sort.desc {
+      background-color: yellow;
+    }
+    .sort.asc::after {
+      content: "\002B06";
+      padding-left: 3px;
+    }
+    .sort.desc::after {
+      content: "\002B07";
+      padding-left: 3px
+    }
+
+    .link-button {
+      background: none!important;
+      border: none;
+      padding: 0!important;
+      font-family: arial, sans-serif;
+      color: #069;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+  </style>
+</head>
+
+<script src="/debug/assets/list.min.js" type="text/javascript"></script>
+
+<a href="?snap=new">Take a snapshot of current operations</a>
+<div style="float:right">
+Stored snapshots (ID: capture time):
+{{$id := .SnapshotID}}
+{{range $i, $s := .AllSnapshots}}
+  <span style="{{if ne $i 0}}margin-left:0.5em;{{end}}">
+    {{if eq $s.ID $id}}
+      [current] {{$s.ID}}: {{formatTimeNoMillis .CapturedAt}}
+    {{else}}
+      <a href="?snap={{$s.ID}}">{{$s.ID}}: {{formatTimeNoMillis .CapturedAt}}</a>
+    {{end}}
+  </span>
+{{end}}
+</div>
+
+<p>Spans currently open: {{len .SpansList.Spans}}. Snapshot captured at: {{formatTime .CapturedAt}} UTC. Page generated at: {{formatTime .Now}} UTC.</p>
+{{if ne .Err nil}}
+<p><b>There was an error producing this snapshot; it might be incomplete: {{.Err}}</b></p>
+{{end}}
+
+<div id="spans-list">
+  <table>
+    <thead>
+    <input class="search" placeholder="Search" />
+    <tr>
+      <th>
+        <button class="sort link-button" data-sort="operation"> Operation </button>
+      </th>
+      <th>
+        <button class="sort link-button" data-sort="startTimeMicros"> Started at </button>
+      </th>
+      <th>
+        <button class="sort link-button" data-sort="goroutineID"> Goroutine ID </button>
+      </th>
+    </tr>
+    </thead>
+    <tbody class="list">
+      <!-- This will be populated by spansList. -->
+    </tbody>
+  </table>
+</div>
+
+<script>
+
+// Some fields are strings because JS doesn't do 64-bit numbers properly.
+var values = [
+  {{$capturedAt := .CapturedAt}}
+  {{$stacks := .SpansList.Stacks}}
+  {{range .SpansList.Spans}}
+    {
+      operation: {{.Operation}},
+      spanID: "{{.SpanID}}",
+      startTime: {{formatTime .StartTime}},
+      relativeTime: {{since .StartTime $capturedAt}},
+      startTimeMicros: {{timeRaw .StartTime}},
+      goroutineID: {{.GoroutineID}},
+      traceID: "{{.TraceID}}",
+      stack: {{index $stacks .GoroutineID}}
+    },
+  {{end}}
+];
+
+function toggleStackVisibility(spanID) {
+  var div = document.getElementById("stack-"+spanID);
+  if (div.style.display === "none") {
+    div.style.display = "block";
+  } else {
+    div.style.display = "none";
+  }
+};
+
+
+// openTrace opens the requested trace in a new window.
+function openTrace(traceID) {
+   const urlParams = new URLSearchParams(window.location.search);
+   const snapID = urlParams.get('snap');
+   window.open(`show-trace?snap=${snapID}&trace=${traceID}`, "_blank");
+}
+
+var options = {
+  valueNames: ['operation', 'startTime', 'relativeTime', 'goroutineID', 'spanID', 'stack', 'traceID'],
+  item: function (values) {
+    return `
+        <tr>
+          <td>
+            ${values.operation} <a href="javascript:openTrace('${values.traceID}')">[+]</a>
+          </td>
+          <td>
+            <div style="min-width:12em">
+              <span class="startTime"></span>
+              <span class="relativeTime" style="float:right"></span>
+            </div>
+          </td>>
+          <td style="text-align:center">
+            <div class="goroutineID link-button" onclick="toggleStackVisibility('${values.spanID}');"></div>
+            <div style="display:none; text-align:left;" id="stack-${values.spanID}"><pre>${values.stack}</pre></div>
+          </td>
+        </tr>`;
+  },
+};
+
+// Create the list of spans.
+var spansList = new List('spans-list', options, values);
+// Start with spans sorted newest first.
+spansList.sort('startTimeMicros', {order: "desc"});
+
+</script>
+</html>

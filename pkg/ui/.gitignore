@@ -14,6 +14,7 @@ assets.oss.installed
 # Generated intermediates
 .cache-loader
 dist*/**
+dist_vendor
 !dist*/_empty_assets/assets/index.html
 !distccl/assets/.gitkeep
 !distccl/distccl.go
