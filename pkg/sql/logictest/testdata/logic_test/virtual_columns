@@ -1241,3 +1241,22 @@ query ITI
 SELECT * FROM t73372
 ----
 0  foo  0
+
+# Regression test for #73745. Cfetcher should never try to fetch virtual
+# computed columns from a primary index.
+subtest 73745
+
+statement ok
+CREATE TABLE t73745 (
+  i INT PRIMARY KEY,
+  v INT NOT NULL AS ((i * 2)) VIRTUAL
+)
+
+statement ok
+INSERT INTO t73745 VALUES (1), (2), (3);
+
+# Use kvtrace to simulate \set auto_trace=on,kv.
+query T kvtrace
+SELECT * FROM t73745
+----
+Scan /Table/87/{1-2}
