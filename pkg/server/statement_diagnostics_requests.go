@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -115,10 +116,11 @@ func (s *statusServer) CancelStatementDiagnosticsReport(
 	return &response, nil
 }
 
-// StatementDiagnosticsRequests retrieves all of the statement
-// diagnostics requests in the `system.statement_diagnostics_requests` table.
+// StatementDiagnosticsRequests retrieves all statement diagnostics
+// requests in the `system.statement_diagnostics_requests` table that
+// have not yet expired.
 func (s *statusServer) StatementDiagnosticsRequests(
-	ctx context.Context, req *serverpb.StatementDiagnosticsReportsRequest,
+	ctx context.Context, _ *serverpb.StatementDiagnosticsReportsRequest,
 ) (*serverpb.StatementDiagnosticsReportsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
@@ -179,6 +181,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			}
 			if expiresAt, ok := row[6].(*tree.DTimestampTZ); ok {
 				req.ExpiresAt = expiresAt.Time
+				// Don't return already expired requests.
+				if req.ExpiresAt.Before(timeutil.Now()) {
+					continue
+				}
 			}
 		}
 

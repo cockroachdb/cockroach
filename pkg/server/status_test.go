@@ -2446,6 +2446,48 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	}
 }
 
+func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	statementFingerPrint := "INSERT INTO test VALUES (_)"
+	expiresAfter := 5 * time.Millisecond
+
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: statementFingerPrint,
+		MinExecutionLatency: 500 * time.Millisecond,
+		ExpiresAfter: expiresAfter,
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(expiresAfter)
+
+	// Check that created statement diagnostics report is incomplete.
+	report := db.QueryStr(t, `
+SELECT completed
+FROM system.statement_diagnostics_requests
+WHERE statement_fingerprint = $1`, statementFingerPrint)
+
+	require.Equal(t, report[0][0], "false")
+
+	// Check that expired report is not returned in API response.
+	var respGet serverpb.StatementDiagnosticsReportsResponse
+	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, report := range respGet.Reports {
+		require.NotEqual(t, report.StatementFingerprint, statementFingerPrint)
+	}
+}
+
 func TestJobStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

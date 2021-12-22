@@ -18,6 +18,7 @@ import {
   TimestampToNumber,
   LongToMoment,
   DurationToNumber,
+  NumberToDuration,
 } from "./convert";
 import { fromNumber } from "long";
 
@@ -111,6 +112,23 @@ describe("Test convert functions", (): void => {
 
     it("should return the provided default value if Duration is null", (): void => {
       expect(DurationToNumber(null, 5)).toEqual(5);
+    });
+  });
+
+  describe("NumberToDuration", (): void => {
+    it("should convert a number representing seconds to a Duration", (): void => {
+      SECONDS.forEach((seconds: number) => {
+        const duration = NumberToDuration(seconds);
+        expect(DurationToNumber(duration)).toEqual(seconds);
+      });
+    });
+
+    it("should convert a number representing seconds and milliseconds to a Duration", (): void => {
+      const MixedTimes = [0.005, 11.035, 1.003, 0, 0.025];
+      MixedTimes.forEach((time: number) => {
+        const duration = NumberToDuration(time);
+        expect(DurationToNumber(duration)).toEqual(time);
+      });
     });
   });
 });
