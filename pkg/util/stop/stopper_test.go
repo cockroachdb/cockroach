@@ -270,12 +270,13 @@ func TestStopperCloserConcurrent(t *testing.T) {
 func TestStopperNumTasks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
-	defer s.Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stop(ctx)
 	var tasks []chan bool
 	for i := 0; i < 3; i++ {
 		c := make(chan bool)
 		tasks = append(tasks, c)
-		if err := s.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
+		if err := s.RunAsyncTask(ctx, "test", func(_ context.Context) {
 			// Wait for channel to close
 			<-c
 		}); err != nil {

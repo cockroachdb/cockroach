@@ -123,7 +123,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			fileName := debugSink.getFileName(t)
 
 			// Ensure our log message above made it to the file.
-			debugSink.flushAndMaybeSyncLocked(false)
+			debugSink.lockAndFlushAndMaybeSync(false)
 
 			// Prepare reading the entries from the file.
 			infoName := filepath.Base(fileName)
