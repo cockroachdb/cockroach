@@ -25,6 +25,7 @@ go_library(
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm/aws",

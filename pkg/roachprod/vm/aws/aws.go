@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -384,7 +385,7 @@ func (p *Provider) ConfigSSH(zones []string) error {
 
 // Create is part of the vm.Provider interface.
 func (p *Provider) Create(
-	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	expandedZones, err := vm.ExpandZonesFlag(providerOpts.CreateZones)
@@ -445,7 +446,7 @@ func (p *Provider) Create(
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	return p.waitForIPs(names, regions, providerOpts)
+	return p.waitForIPs(l, names, regions, providerOpts)
 }
 
 // waitForIPs waits until AWS reports both internal and external IP addresses
@@ -453,7 +454,9 @@ func (p *Provider) Create(
 // list the new VMs after the creation might find VMs without an external IP.
 // We do a bad job at higher layers detecting this lack of IP which can lead to
 // commands hanging indefinitely.
-func (p *Provider) waitForIPs(names []string, regions []string, opts *ProviderOpts) error {
+func (p *Provider) waitForIPs(
+	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
+) error {
 	waitForIPRetry := retry.Start(retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
@@ -467,7 +470,7 @@ func (p *Provider) waitForIPs(names []string, regions []string, opts *ProviderOp
 		return m
 	}
 	for waitForIPRetry.Next() {
-		vms, err := p.listRegions(regions, *opts)
+		vms, err := p.listRegions(l, regions, *opts)
 		if err != nil {
 			return err
 		}
@@ -609,18 +612,20 @@ func (p *Provider) stsGetCallerIdentity() (string, error) {
 }
 
 // List is part of the vm.Provider interface.
-func (p *Provider) List() (vm.List, error) {
+func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
 	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-	return p.listRegions(regions, *defaultOpts)
+	return p.listRegions(l, regions, *defaultOpts)
 }
 
 // listRegions lists VMs in the regions passed.
 // It ignores region-specific errors.
-func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, error) {
+func (p *Provider) listRegions(
+	l *logger.Logger, regions []string, opts ProviderOpts,
+) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
 	var g errgroup.Group
@@ -631,7 +636,7 @@ func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, er
 		g.Go(func() error {
 			vms, err := p.listRegion(region, opts)
 			if err != nil {
-				fmt.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
+				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
 				return nil
 			}
 			mux.Lock()

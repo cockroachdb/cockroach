@@ -25,9 +25,9 @@ import (
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	WaitFor3XReplication(t, db)
@@ -91,7 +91,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	// Kill node 2 and wait for it to be marked as !is_available and !is_live.
-	c.Stop(ctx, option.DefaultStopOpts(), c.Node(2))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(2))
 	waitUntil([]string{
 		"is_available is_live",
 		"true true",
@@ -104,7 +104,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// longer write to the liveness range due to lack of quorum. This test is
 	// verifying that "node status" still returns info in this situation since
 	// it only accesses gossip info.
-	c.Stop(ctx, option.DefaultStopOpts(), c.Node(3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
 	waitUntil([]string{
 		"is_available is_live",
 		"false true",
@@ -114,8 +114,8 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
 	// show up in the node status output.
-	c.Stop(ctx, option.DefaultStopOpts(), c.Range(1, 2))
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 2))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
 
 	waitUntil([]string{
 		"is_available is_live",
@@ -125,5 +125,5 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	})
 
 	// Start node again to satisfy roachtest.
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
 }

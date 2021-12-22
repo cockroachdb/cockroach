@@ -29,12 +29,12 @@ import (
 
 func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)
 	urlMap := make(map[int]string)
-	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.All())
 	if err != nil {
 		t.Fatal(err)
 	}

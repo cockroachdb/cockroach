@@ -100,7 +100,7 @@ func runVersionUpgradePublicSchema(
 
 func createDatabaseStep(dbName string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn, err := u.c.ConnE(ctx, loadNode)
+		conn, err := u.c.ConnE(ctx, t.L(), loadNode)
 		defer func() {
 			_ = conn.Close()
 		}()
@@ -112,7 +112,7 @@ func createDatabaseStep(dbName string) versionStep {
 
 func createTableInDatabasePublicSchema(dbName string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn, err := u.c.ConnE(ctx, loadNode)
+		conn, err := u.c.ConnE(ctx, t.L(), loadNode)
 		defer func() {
 			_ = conn.Close()
 		}()
@@ -124,7 +124,7 @@ func createTableInDatabasePublicSchema(dbName string) versionStep {
 
 func dropTableInDatabase(dbName string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn, err := u.c.ConnE(ctx, loadNode)
+		conn, err := u.c.ConnE(ctx, t.L(), loadNode)
 		defer func() {
 			_ = conn.Close()
 		}()
@@ -136,7 +136,7 @@ func dropTableInDatabase(dbName string) versionStep {
 
 func insertIntoTable(dbName string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn, err := u.c.ConnE(ctx, loadNode)
+		conn, err := u.c.ConnE(ctx, t.L(), loadNode)
 		defer func() {
 			_ = conn.Close()
 		}()
@@ -148,7 +148,7 @@ func insertIntoTable(dbName string) versionStep {
 
 func selectFromTable(dbName string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn, err := u.c.ConnE(ctx, loadNode)
+		conn, err := u.c.ConnE(ctx, t.L(), loadNode)
 		defer func() {
 			_ = conn.Close()
 		}()
@@ -171,7 +171,7 @@ func selectFromTable(dbName string) versionStep {
 
 func tryReparentingDatabase(shouldError bool, errRe string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn, err := u.c.ConnE(ctx, loadNode)
+		conn, err := u.c.ConnE(ctx, t.L(), loadNode)
 		defer func() {
 			_ = conn.Close()
 		}()

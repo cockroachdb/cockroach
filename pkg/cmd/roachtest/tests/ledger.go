@@ -38,7 +38,7 @@ func registerLedger(r registry.Registry) {
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, roachNodes)

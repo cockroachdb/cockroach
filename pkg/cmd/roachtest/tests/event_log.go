@@ -31,11 +31,11 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Verify that "node joined" and "node restart" events are recorded whenever
 	// a node starts and contacts the cluster.
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 	WaitFor3XReplication(t, db)
 
@@ -86,8 +86,8 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	// Stop and Start Node 3, and verify the node restart message.
-	c.Stop(ctx, option.DefaultStopOpts(), c.Node(3))
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
 
 	err = retry.ForDuration(10*time.Second, func() error {
 		// Query all node restart events. There should only be one.

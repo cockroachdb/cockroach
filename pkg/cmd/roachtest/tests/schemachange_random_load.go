@@ -137,7 +137,7 @@ func runSchemaChangeRandomLoad(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
@@ -170,7 +170,7 @@ func runSchemaChangeRandomLoad(
 	// the workload itself (if we even still want it, considering that the
 	// workload itself would be running DROP DATABASE CASCADE).
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	t.Status("performing validation after workload")
@@ -186,7 +186,7 @@ func runSchemaChangeRandomLoad(
 
 // saveArtifacts saves important test artifacts in the artifacts directory.
 func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDirectory string) {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	// Save a backup file called schemachange to the store directory.

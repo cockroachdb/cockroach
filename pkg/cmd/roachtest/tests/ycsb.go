@@ -58,8 +58,8 @@ func registerYCSB(r registry.Registry) {
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
-		WaitFor3XReplication(t, c.Conn(ctx, 1))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+		WaitFor3XReplication(t, c.Conn(ctx, t.L(), 1))
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))

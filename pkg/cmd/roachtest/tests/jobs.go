@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type jobStarter func(c cluster.Cluster) (string, error)
+type jobStarter func(c cluster.Cluster, t test.Test) (string, error)
 
 // jobSurvivesNodeShutdown is a helper that tests that a given job,
 // running on the specified gatewayNode will still complete successfully
@@ -53,7 +53,7 @@ func jobSurvivesNodeShutdown(
 	m.Go(func(ctx context.Context) error {
 		defer close(jobIDCh)
 
-		watcherDB := c.Conn(ctx, watcherNode)
+		watcherDB := c.Conn(ctx, t.L(), watcherNode)
 		defer watcherDB.Close()
 
 		// Wait for 3x replication to ensure that the cluster
@@ -64,7 +64,7 @@ func jobSurvivesNodeShutdown(
 
 		t.Status("running job")
 		var jobID string
-		jobID, err := startJob(c)
+		jobID, err := startJob(c, t)
 		if err != nil {
 			return errors.Wrap(err, "starting the job")
 		}
@@ -105,7 +105,7 @@ func jobSurvivesNodeShutdown(
 		}
 
 		// Check once a second to see if the job has started running.
-		watcherDB := c.Conn(ctx, watcherNode)
+		watcherDB := c.Conn(ctx, t.L(), watcherNode)
 		defer watcherDB.Close()
 		timeToWait := time.Second
 		timer := timeutil.Timer{}
@@ -140,7 +140,7 @@ func jobSurvivesNodeShutdown(
 		}
 
 		t.L().Printf(`stopping node %s`, target)
-		if err := c.StopE(ctx, option.DefaultStopOpts(), target); err != nil {
+		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
 			return errors.Wrapf(err, "could not stop node %s", target)
 		}
 		t.L().Printf("stopped node %s", target)
@@ -154,7 +154,7 @@ func jobSurvivesNodeShutdown(
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.
 	t.Status(fmt.Sprintf("restarting %s (node restart test is done)\n", target))
-	if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), target); err != nil {
+	if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), target); err != nil {
 		t.Fatal(errors.Wrapf(err, "could not restart node %s", target))
 	}
 }
