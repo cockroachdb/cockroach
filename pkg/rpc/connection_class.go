@@ -36,6 +36,8 @@ const (
 	DefaultClass ConnectionClass = iota
 	// SystemClass is the ConnectionClass used for system traffic.
 	SystemClass
+	// RangefeedClass is the ConnectionClass used for rangefeeds.
+	RangefeedClass
 
 	// NumConnectionClasses is the number of valid ConnectionClass values.
 	NumConnectionClasses int = iota
@@ -43,8 +45,9 @@ const (
 
 // connectionClassName maps classes to their name.
 var connectionClassName = map[ConnectionClass]string{
-	DefaultClass: "default",
-	SystemClass:  "system",
+	DefaultClass:   "default",
+	SystemClass:    "system",
+	RangefeedClass: "rangefeed",
 }
 
 // String implements the fmt.Stringer interface.
