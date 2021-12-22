@@ -26,7 +26,6 @@ if ! timeout -s INT 12h bin/roachtest run \
   --cluster-id "${TC_BUILD_ID-$(date +"%Y%m%d%H%M%S")}" \
   --cloud "gce" \
   --cockroach "true" \
-  --roachprod "$PWD/bin/roachprod" \
   --workload "true" \
   --artifacts "$artifacts" \
   --parallelism 2 \

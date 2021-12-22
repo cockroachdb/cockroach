@@ -127,7 +127,6 @@ trap 'echo Build artifacts dir is ${abase}' EXIT
 
 # Locations of the binaries.
 rt="${abase}/roachtest"
-rp="${abase}/roachprod"
 wl="${abase}/workload${local}"
 cr="${abase}/cockroach${local}"
 
@@ -154,8 +153,7 @@ if [ ! -f "${wl}" ] || [ "${force_build}" = "y" ]; then
     make bin/workload
     cp bin/workload "${wl}"
   fi
-  make bin/roach{prod,test}
-  cp bin/roachprod "${rp}"
+  make bin/roachtest
   cp bin/roachtest "${rt}"
 fi
 
@@ -167,7 +165,6 @@ trap 'echo Find run artifacts in ${a}' EXIT
 args=(
   "run" "${test}"
   "--port" "$((8080+RANDOM % 1000))"
-  "--roachprod" "${rp}"
   "--workload" "${wl}"
   "--cockroach" "${cr}"
   "--artifacts" "${a}"
