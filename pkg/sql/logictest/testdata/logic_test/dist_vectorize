@@ -109,3 +109,35 @@ EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
     └ *colexecbase.castIntInt2Op
       └ *rowexec.noopProcessor
         └ *colfetcher.ColBatchScan
+
+# Regression test for nested tuple enum hydration (#74189)
+statement ok
+CREATE TYPE greeting AS ENUM ('hello')
+
+statement ok
+CREATE TABLE IF NOT EXISTS seed AS
+	SELECT
+		enum_range('hello'::greeting)[g] as _enum
+	FROM
+		generate_series(1, 1) AS g
+
+query TT nodeidx=3
+WITH with_19744 (col_118473)
+				AS (
+					SELECT
+						*
+					FROM
+						(
+							VALUES
+								(
+									((('hello':::greeting, 0), 0))
+								)
+						)
+						AS tab_47866 (col_118473)
+				)
+		SELECT
+			tab_47876._enum AS col_118488, cte_ref_5817.col_118473 AS col_118489
+		FROM
+			with_19744 AS cte_ref_5817, seed AS tab_47876
+----
+hello     ("(hello,0)",0)
