@@ -173,6 +173,7 @@ func newProxyHandler(
 	)
 
 	if handler.DirectoryAddr != "" {
+		//lint:ignore SA1019 grpc.WithInsecure is deprecated
 		conn, err := grpc.Dial(handler.DirectoryAddr, grpc.WithInsecure())
 		if err != nil {
 			return nil, err

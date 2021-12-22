@@ -50,6 +50,7 @@ load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
+# gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 
 # These packages use github.com/golang/mock to generate mocks. The target
 # generating mocks for a given package necessarily depends on the package's

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1438,5 +1439,234 @@ func (f *webhookFeed) Close() error {
 		return err
 	}
 	f.mockSink.Close()
+	return nil
+}
+
+type mockPubsubMessage struct {
+	data string
+	// TODO: implement error injection
+	// err error
+}
+type mockPubsubMessageBuffer struct {
+	mu   syncutil.Mutex
+	rows []mockPubsubMessage
+}
+
+func (p *mockPubsubMessageBuffer) pop() *mockPubsubMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.rows) == 0 {
+		return nil
+	}
+	var head mockPubsubMessage
+	head, p.rows = p.rows[0], p.rows[1:]
+	return &head
+}
+
+func (p *mockPubsubMessageBuffer) push(m mockPubsubMessage) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rows = append(p.rows, m)
+}
+
+type fakePubsubClient struct {
+	buffer *mockPubsubMessageBuffer
+}
+
+var _ pubsubClient = (*fakePubsubClient)(nil)
+
+func (p *fakePubsubClient) openTopics() error {
+	return nil
+}
+
+func (p *fakePubsubClient) closeTopics() {
+}
+
+// sendMessage sends a message to the topic
+func (p *fakePubsubClient) sendMessage(m []byte, _ descpb.ID, _ string) error {
+	message := mockPubsubMessage{data: string(m)}
+	p.buffer.push(message)
+	return nil
+}
+
+func (p *fakePubsubClient) sendMessageToAllTopics(m []byte) error {
+	message := mockPubsubMessage{data: string(m)}
+	p.buffer.push(message)
+	return nil
+}
+
+func (p *fakePubsubClient) getTopicName(_ descpb.ID) string {
+	return ""
+}
+
+func (p *fakePubsubClient) flushTopics() {
+}
+
+type fakePubsubSink struct {
+	Sink
+	client *fakePubsubClient
+	sync   *sinkSynchronizer
+}
+
+var _ Sink = (*fakePubsubSink)(nil)
+
+func (p *fakePubsubSink) Dial() error {
+	s := p.Sink.(*pubsubSink)
+	s.client = p.client
+	s.setupWorkers()
+	return nil
+}
+
+func (p *fakePubsubSink) Flush(ctx context.Context) error {
+	defer p.sync.addFlush()
+	return p.Sink.Flush(ctx)
+}
+
+type pubsubFeedFactory struct {
+	enterpriseFeedFactory
+}
+
+var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
+
+// makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
+func makePubsubFeedFactory(
+	srv serverutils.TestServerInterface, db *gosql.DB,
+) cdctest.TestFeedFactory {
+	return &pubsubFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:  srv,
+			db: db,
+			di: newDepInjector(srv),
+		},
+	}
+}
+
+// Feed implements cdctest.TestFeedFactory
+func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal(GcpScheme + "://testfeed?region=testfeedRegion")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	ss := &sinkSynchronizer{}
+
+	client := &fakePubsubClient{
+		buffer: &mockPubsubMessageBuffer{
+			rows: make([]mockPubsubMessage, 0),
+		},
+	}
+
+	wrapSink := func(s Sink) Sink {
+		return &fakePubsubSink{
+			Sink:   s,
+			client: client,
+			sync:   ss,
+		}
+	}
+
+	c := &pubsubFeed{
+		jobFeed:        newJobFeed(p.db, wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		ss:             ss,
+		client:         client,
+	}
+
+	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		return nil, err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Server implements TestFeedFactory
+func (p *pubsubFeedFactory) Server() serverutils.TestServerInterface {
+	return p.s
+}
+
+type pubsubFeed struct {
+	*jobFeed
+	seenTrackerMap
+	ss     *sinkSynchronizer
+	client *fakePubsubClient
+}
+
+var _ cdctest.TestFeed = (*pubsubFeed)(nil)
+
+// Partitions implements TestFeed
+func (p *pubsubFeed) Partitions() []string {
+	return []string{``}
+}
+
+// extractJSONMessagePubsub extracts the value, key, and topic from a pubsub message
+func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error) {
+	parsed := payload{}
+	err = gojson.Unmarshal(wrapped, &parsed)
+	if err != nil {
+		return
+	}
+	valueParsed := parsed.Value
+	keyParsed := parsed.Key
+	topic = parsed.Topic
+
+	value, err = reformatJSON(valueParsed)
+	if err != nil {
+		return
+	}
+	key, err = reformatJSON(keyParsed)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// Next implements TestFeed
+func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
+	for {
+		msg := p.client.buffer.pop()
+		if msg != nil {
+			m := &cdctest.TestFeedMessage{}
+			resolved, err := isResolvedTimestamp([]byte(msg.data))
+			if err != nil {
+				return nil, err
+			}
+			msgBytes := []byte(msg.data)
+			if resolved {
+				m.Resolved = msgBytes
+			} else {
+				m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
+				if err != nil {
+					return nil, err
+				}
+				if isNew := p.markSeen(m); !isNew {
+					continue
+				}
+			}
+			return m, nil
+		}
+		select {
+		case <-p.ss.eventReady():
+		case <-p.shutdown:
+			return nil, p.terminalJobError()
+		}
+	}
+}
+
+// Close implements TestFeed
+func (p *pubsubFeed) Close() error {
+	err := p.jobFeed.Close()
+	if err != nil {
+		return err
+	}
 	return nil
 }
