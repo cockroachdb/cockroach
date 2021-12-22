@@ -2029,3 +2029,48 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+###### check the value out of bounds
+## cache = 1
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_1 INCREMENT  BY 3  MINVALUE 6 MAXVALUE 10
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+----
+6
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+----
+9
+
+query error pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_1" \(10\)
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+
+query I
+SELECT last_value from customer_seq_check_cache_and_bounds_1
+----
+12
+
+## cache = 2
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_2 MINVALUE -2 MAXVALUE 2 START WITH 1 CACHE 5 INCREMENT BY -2
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+----
+1
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+----
+-1
+
+query error pq: nextval\(\): reached minimum value of sequence "customer_seq_check_cache_and_bounds_2" \(-2\)
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+
+query I
+SELECT last_value from customer_seq_check_cache_and_bounds_2
+----
+-17
