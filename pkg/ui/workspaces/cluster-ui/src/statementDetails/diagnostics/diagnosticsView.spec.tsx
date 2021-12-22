@@ -11,7 +11,7 @@
 import React from "react";
 import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
-import sinon, { SinonSpy } from "sinon";
+import sinon from "sinon";
 import Long from "long";
 import { MemoryRouter } from "react-router-dom";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -20,10 +20,13 @@ import { Button } from "@cockroachlabs/ui-components";
 import { DiagnosticsView } from "./diagnosticsView";
 import { Table } from "src/table";
 import { TestStoreProvider } from "src/test-utils";
+import { ActivateDiagnosticsModalRef } from "../../statementsDiagnostics";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const sandbox = sinon.createSandbox();
+
+const activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef> = React.createRef();
 
 function generateDiagnosticsRequest(
   extendObject: Partial<IStatementDiagnosticsReport> = {},
@@ -42,12 +45,11 @@ function generateDiagnosticsRequest(
 
 describe("DiagnosticsView", () => {
   let wrapper: ReactWrapper;
-  let activateFn: SinonSpy;
   const statementFingerprint = "some-id";
+  activateDiagnosticsRef.current.showModalFor = jest.fn();
 
   beforeEach(() => {
     sandbox.reset();
-    activateFn = sandbox.spy();
   });
 
   describe("With Empty state", () => {
@@ -55,8 +57,8 @@ describe("DiagnosticsView", () => {
       wrapper = mount(
         <MemoryRouter>
           <DiagnosticsView
+            activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            activate={activateFn}
             hasData={false}
             diagnosticsReports={[]}
             dismissAlertMessage={() => {}}
@@ -65,10 +67,12 @@ describe("DiagnosticsView", () => {
       );
     });
 
-    it("calls activate callback with statementFingerprintId when click on Activate button", () => {
+    it("opens the statement diagnostics modal when Activate button is clicked", () => {
       const activateButtonComponent = wrapper.find(Button).first();
       activateButtonComponent.simulate("click");
-      activateFn.calledOnceWith(statementFingerprint);
+      expect(activateDiagnosticsRef.current.showModalFor).toBeCalledWith(
+        statementFingerprint,
+      );
     });
   });
 
@@ -82,8 +86,8 @@ describe("DiagnosticsView", () => {
       wrapper = mount(
         <TestStoreProvider>
           <DiagnosticsView
+            activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            activate={activateFn}
             hasData={true}
             diagnosticsReports={diagnosticsRequests}
             dismissAlertMessage={() => {}}
@@ -96,12 +100,14 @@ describe("DiagnosticsView", () => {
       assert.isTrue(wrapper.find(Table).exists());
     });
 
-    it("calls activate callback with statementFingerprintId when click on Activate button", () => {
+    it("opens the statement diagnostics modal when Activate button is clicked", () => {
       const activateButtonComponent = wrapper
         .findWhere(n => n.prop("children") === "Activate diagnostics")
         .first();
       activateButtonComponent.simulate("click");
-      activateFn.calledOnceWith(statementFingerprint);
+      expect(activateDiagnosticsRef.current.showModalFor).toBeCalledWith(
+        statementFingerprint,
+      );
     });
 
     it("Activate button is hidden if diagnostics is requested and waiting query", () => {
@@ -112,8 +118,8 @@ describe("DiagnosticsView", () => {
       wrapper = mount(
         <TestStoreProvider>
           <DiagnosticsView
+            activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            activate={activateFn}
             hasData={true}
             diagnosticsReports={diagnosticsRequests}
             dismissAlertMessage={() => {}}

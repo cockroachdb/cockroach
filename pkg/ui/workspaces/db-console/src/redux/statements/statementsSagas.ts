@@ -14,7 +14,7 @@ import { PayloadAction } from "src/interfaces/action";
 import { createStatementDiagnosticsReport } from "src/util/api";
 import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
-  DiagnosticsReportPayload,
+  CreateStatementDiagnosticsReportPayload,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
   SET_COMBINED_STATEMENTS_TIME_SCALE,
@@ -34,14 +34,21 @@ import { TimeScale, toDateRange } from "@cockroachlabs/cluster-ui";
 import Long from "long";
 
 export function* createDiagnosticsReportSaga(
-  action: PayloadAction<DiagnosticsReportPayload>,
+  action: PayloadAction<CreateStatementDiagnosticsReportPayload>,
 ) {
-  const { statementFingerprint } = action.payload;
-  const diagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest({
-    statement_fingerprint: statementFingerprint,
-  });
+  const { statementFingerprint, minExecLatency, expiresAfter } = action.payload;
+  const createDiagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest(
+    {
+      statement_fingerprint: statementFingerprint,
+      min_execution_latency: minExecLatency,
+      expires_after: expiresAfter,
+    },
+  );
   try {
-    yield call(createStatementDiagnosticsReport, diagnosticsReportRequest);
+    yield call(
+      createStatementDiagnosticsReport,
+      createDiagnosticsReportRequest,
+    );
     yield put(createStatementDiagnosticsReportCompleteAction());
     yield put(invalidateStatementDiagnosticsRequests());
     // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface
