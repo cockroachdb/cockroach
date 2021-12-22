@@ -38,6 +38,11 @@ func (s *MaskedSetting) Visibility() Visibility {
 	return s.setting.Visibility()
 }
 
+// Key returns the key string for the underlying setting.
+func (s *MaskedSetting) Key() string {
+	return s.setting.Key()
+}
+
 // Description returns the description string for the underlying setting.
 func (s *MaskedSetting) Description() string {
 	return s.setting.Description()

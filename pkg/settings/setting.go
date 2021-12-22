@@ -30,6 +30,9 @@ type Setting interface {
 	// CLUSTER SETTING <setting-name>`.
 	String(sv *Values) string
 
+	// Key returns the name of the specific cluster setting.
+	Key() string
+
 	// Description contains a helpful text explaining what the specific cluster
 	// setting is for.
 	Description() string
