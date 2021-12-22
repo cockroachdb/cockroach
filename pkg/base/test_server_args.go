@@ -139,9 +139,14 @@ type TestServerArgs struct {
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 
-	// If set, the span configs infrastructure will be enabled. This is
-	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
-	EnableSpanConfigs bool
+	// DisableSpanConfigs disables the use of the span configs infrastructure
+	// (in favor of the gossiped system config span). It's equivalent to setting
+	// COCKROACH_DISABLE_SPAN_CONFIGS, and is only intended for tests written
+	// with the system config span in mind.
+	//
+	// TODO(irfansharif): Remove all uses of this when we rip out the system
+	// config span.
+	DisableSpanConfigs bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

@@ -40,7 +40,6 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	blockReconcilerCh := make(chan struct{})
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
@@ -117,7 +116,6 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 			}
 		}
 		serverArgs[i] = base.TestServerArgs{
-			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
@@ -194,7 +192,6 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 	blockSubscriberCh := make(chan struct{})
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
