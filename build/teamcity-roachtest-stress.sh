@@ -14,7 +14,7 @@ export GCE_PROJECT=${GCE_PROJECT-cockroach-roachstress}
 
 mkdir -p artifacts
 
-build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest bin/roachprod \
+build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest \
   > artifacts/build.txt 2>&1 || (cat artifacts/build.txt; false)
 
 build/teamcity-roachtest-invoke.sh \
