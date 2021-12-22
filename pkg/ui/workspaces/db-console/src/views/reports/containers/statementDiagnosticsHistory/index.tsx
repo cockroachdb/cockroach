@@ -29,7 +29,6 @@ import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
 } from "src/redux/apiReducers";
-import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -43,6 +42,7 @@ import {
   EmptyTable,
   shortStatement,
   getDiagnosticsStatus,
+  DiagnosticStatusBadge,
   SortedTable,
   SortSetting,
   ColumnDescriptor,

@@ -17,7 +17,7 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 import { format as d3Format } from "d3-format";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
 
 import {
@@ -67,6 +67,11 @@ import moment from "moment";
 import { TimeScale, toDateRange } from "../timeScaleDropdown";
 import { StatementsRequest } from "src/api/statementsApi";
 import SQLActivityError from "../sqlActivity/errorComponent";
+import {
+  ActivateDiagnosticsModalRef,
+  ActivateStatementDiagnosticsModal,
+} from "../statementsDiagnostics";
+type IDuration = google.protobuf.IDuration;
 
 const { TabPane } = Tabs;
 
@@ -135,9 +140,14 @@ export interface StatementDetailsDispatchProps {
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
-  createStatementDiagnosticsReport: (statementFingerprint: string) => void;
+  createStatementDiagnosticsReport: (
+    statementFingerprint: string,
+    minExecLatency: IDuration,
+    expiresAfter: IDuration,
+  ) => void;
   dismissStatementDiagnosticsAlertMessage?: () => void;
   onTabChanged?: (tabName: string) => void;
+  onDiagnosticsModalOpen?: (statementFingerprint: string) => void;
   onDiagnosticBundleDownload?: (statementFingerprint?: string) => void;
   onSortingChange?: (
     name: string,
@@ -321,6 +331,7 @@ export class StatementDetails extends React.Component<
   StatementDetailsProps,
   StatementDetailsState
 > {
+  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
   constructor(props: StatementDetailsProps) {
     super(props);
     const searchParams = new URLSearchParams(props.history.location.search);
@@ -332,6 +343,7 @@ export class StatementDetails extends React.Component<
       },
       currentTab: searchParams.get("tab") || "overview",
     };
+    this.activateDiagnosticsRef = React.createRef();
   }
 
   static defaultProps: Partial<StatementDetailsProps> = {
@@ -396,6 +408,11 @@ export class StatementDetails extends React.Component<
   };
 
   render(): React.ReactElement {
+    const {
+      refreshStatementDiagnosticsRequests,
+      createStatementDiagnosticsReport,
+      onDiagnosticsModalOpen,
+    } = this.props;
     const app = queryByName(this.props.location, appAttr);
     return (
       <div className={cx("root")}>
@@ -426,6 +443,12 @@ export class StatementDetails extends React.Component<
               })
             }
           />
+          <ActivateStatementDiagnosticsModal
+            ref={this.activateDiagnosticsRef}
+            activate={createStatementDiagnosticsReport}
+            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
+            onOpenModal={onDiagnosticsModalOpen}
+          />
         </section>
       </div>
     );
@@ -433,7 +456,6 @@ export class StatementDetails extends React.Component<
 
   renderContent = (): React.ReactElement => {
     const {
-      createStatementDiagnosticsReport,
       diagnosticsReports,
       dismissStatementDiagnosticsAlertMessage,
       onDiagnosticBundleDownload,
@@ -796,7 +818,7 @@ export class StatementDetails extends React.Component<
             key="diagnostics"
           >
             <DiagnosticsView
-              activate={createStatementDiagnosticsReport}
+              activateDiagnosticsRef={this.activateDiagnosticsRef}
               diagnosticsReports={diagnosticsReports}
               dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
               hasData={hasDiagnosticReports}

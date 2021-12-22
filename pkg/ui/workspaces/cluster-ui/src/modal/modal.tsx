@@ -22,6 +22,7 @@ export interface ModalProps {
   okText?: string;
   cancelText?: string;
   visible: boolean;
+  className?: string;
 }
 
 const cx = classNames.bind(styles);
@@ -34,11 +35,12 @@ export const Modal: React.FC<ModalProps> = ({
   cancelText,
   visible,
   title,
+  className,
 }) => {
   return (
     <AntModal
       title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}
-      className={cx("crl-modal")}
+      className={cx("crl-modal", className)}
       visible={visible}
       closeIcon={
         <div className={cx("crl-modal__close-icon")} onClick={onCancel}>
