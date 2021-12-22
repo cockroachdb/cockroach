@@ -279,14 +279,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			// point.
 			Description: "Retriable err; will auto-retry",
 			Next:        stateOpen{ImplicitTxn: fsm.Var("implicitTxn")},
-			Action: func(args fsm.Args) error {
-				// The caller will call rewCap.rewindAndUnlock().
-				args.Extended.(*txnState).setAdvanceInfo(
-					rewind,
-					args.Payload.(eventRetriableErrPayload).rewCap,
-					txnRestart)
-				return nil
-			},
+			Action:      prepareTxnForRetryAndRestart,
 		},
 	},
 	// Handle the errors in implicit txns. They move us to NoTxn.
@@ -321,13 +314,8 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
-			Next: stateAborted{},
-			Action: func(args fsm.Args) error {
-				// Note: Preparing the KV txn for restart has already happened by this
-				// point.
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
-				return nil
-			},
+			Next:   stateAborted{},
+			Action: prepareTxnForRetry,
 		},
 		eventTxnReleased{}: {
 			Description: "RELEASE SAVEPOINT cockroach_restart",
@@ -386,10 +374,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			// This event doesn't change state, but it returns a skipBatch code.
 			Description: "ROLLBACK TO SAVEPOINT (not cockroach_restart) failed because txn needs restart",
 			Next:        stateAborted{},
-			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
-				return nil
-			},
+			Action:      prepareTxnForRetry,
 		},
 		// ROLLBACK TO SAVEPOINT cockroach_restart.
 		eventTxnRestart{}: {
@@ -473,6 +458,24 @@ func cleanupAndFinishOnError(args fsm.Args) error {
 	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 	ts.finishSQLTxn()
 	ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
+	return nil
+}
+
+func prepareTxnForRetry(args fsm.Args) error {
+	ts := args.Extended.(*txnState)
+	ts.mu.txn.PrepareForRetry(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+	ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
+	return nil
+}
+
+func prepareTxnForRetryAndRestart(args fsm.Args) error {
+	ts := args.Extended.(*txnState)
+	ts.mu.txn.PrepareForRetry(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+	// The caller will call rewCap.rewindAndUnlock().
+	ts.setAdvanceInfo(
+		rewind,
+		args.Payload.(eventRetriableErrPayload).rewCap,
+		txnRestart)
 	return nil
 }
 

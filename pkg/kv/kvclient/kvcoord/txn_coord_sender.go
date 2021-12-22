@@ -50,6 +50,12 @@ const (
 	// txnPending is the normal state for ongoing transactions.
 	txnPending txnState = iota
 
+	// txnRetryableError means that the transaction encountered a
+	// TransactionRetryWithProtoRefreshError, and calls to Send() fail in this
+	// state. It is possible to move back to txnPending by calling
+	// ClearTxnRetryableErr().
+	txnRetryableError
+
 	// txnError means that a batch encountered a non-retriable error. Further
 	// batches except EndTxn(commit=false) will be rejected.
 	txnError
@@ -105,6 +111,11 @@ type TxnCoordSender struct {
 		syncutil.Mutex
 
 		txnState txnState
+
+		// storedRetryableErr is set when txnState == txnRetryableError. This
+		// storedRetryableErr is returned to clients on Send().
+		storedRetryableErr *roachpb.TransactionRetryWithProtoRefreshError
+
 		// storedErr is set when txnState == txnError. This storedErr is returned to
 		// clients on Send().
 		storedErr *roachpb.Error
@@ -686,6 +697,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	switch tc.mu.txnState {
 	case txnPending:
 		// All good.
+	case txnRetryableError:
+		return roachpb.NewError(tc.mu.storedRetryableErr)
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
@@ -815,6 +828,11 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		pErr.String(),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
+
+	// Move to a retryable error state, where all Send() calls fail until the
+	// state is cleared.
+	tc.mu.txnState = txnRetryableError
+	tc.mu.storedRetryableErr = retErr
 
 	// If the ID changed, it means we had to start a new transaction and the
 	// old one is toast. This TxnCoordSender cannot be used any more - future
@@ -1358,5 +1376,27 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 			return nil
 		}
 		return tc.maybeCommitWait(ctx, true /* deferred */)
+	}
+}
+
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		tc.mu.storedRetryableErr = nil
+		tc.mu.txnState = txnPending
 	}
 }
