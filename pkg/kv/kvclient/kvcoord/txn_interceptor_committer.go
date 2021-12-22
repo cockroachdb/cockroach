@@ -313,7 +313,7 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 	// transaction is trying to commit.
 	if et.Commit {
 		deadline := et.Deadline
-		if deadline != nil && deadline.LessEq(br.Txn.WriteTimestamp) {
+		if deadline != nil && !deadline.IsEmpty() && deadline.LessEq(br.Txn.WriteTimestamp) {
 			return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
 		}
 	}
