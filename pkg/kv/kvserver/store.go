@@ -1049,12 +1049,12 @@ type StoreConfig struct {
 	// tests.
 	KVMemoryMonitor *mon.BytesMonitor
 
-	// SpanConfigsEnabled determines whether we're able to use the span configs
-	// infrastructure.
-	SpanConfigsEnabled bool
+	// SpanConfigsDisabled determines whether we're able to use the span configs
+	// infrastructure or not.
+	SpanConfigsDisabled bool
 	// Used to subscribe to span configuration changes, keeping up-to-date a
 	// data structure useful for retrieving span configs. Only available if
-	// SpanConfigsEnabled.
+	// SpanConfigsDisabled is unset.
 	SpanConfigSubscriber spanconfig.KVSubscriber
 
 	// KVAdmissionController is an optional field used for admission control.
@@ -1945,7 +1945,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	if s.cfg.SpanConfigsEnabled {
+	if !s.cfg.SpanConfigsDisabled {
 		s.cfg.SpanConfigSubscriber.Subscribe(func(update roachpb.Span) {
 			s.onSpanConfigUpdate(ctx, update)
 		})
@@ -2130,9 +2130,10 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 	// in the following cluster version gate:
 	_ = clusterversion.EnableSpanConfigStore
 
-	if !s.cfg.SpanConfigsEnabled ||
+	if s.cfg.SpanConfigsDisabled ||
 		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-		!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) {
+		!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) ||
+		s.TestingKnobs().UseSystemConfigSpanForQueues {
 		return sysCfg, nil
 	}
 
@@ -3374,7 +3375,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 // WaitForSpanConfigSubscription waits until the store is wholly subscribed to
 // the global span configurations state.
 func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
-	if !s.cfg.SpanConfigsEnabled {
+	if s.cfg.SpanConfigsDisabled {
 		return nil // nothing to do here
 	}
 
