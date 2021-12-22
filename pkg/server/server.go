@@ -1671,6 +1671,19 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
+	// Start the protected timestamp subsystem. Note that this needs to happen
+	// before the modeOperational switch below, as the protected timestamps
+	// subsystem will crash if accessed before being Started (and serving general
+	// traffic may access it).
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/73897.
+	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
 	s.grpc.setMode(modeOperational)
@@ -1714,14 +1727,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Begin recording status summaries.
 	if err := s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval); err != nil {
-		return err
-	}
-
-	// Start the protected timestamp subsystem.
-	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
-		return err
-	}
-	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
 		return err
 	}
 
