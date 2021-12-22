@@ -31,10 +31,10 @@ func registerEncryption(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.EncryptedStores = true
-		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		// Check that /_status/stores/local endpoint has encryption status.
-		adminAddrs, err := c.InternalAdminUIAddr(ctx, c.Range(1, nodes))
+		adminAddrs, err := c.InternalAdminUIAddr(ctx, t.L(), c.Range(1, nodes))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,13 +45,13 @@ func registerEncryption(r registry.Registry) {
 		}
 
 		for i := 1; i <= nodes; i++ {
-			if err := c.StopCockroachGracefullyOnNode(ctx, i); err != nil {
+			if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), i); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.

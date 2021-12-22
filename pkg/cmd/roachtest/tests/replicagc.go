@@ -63,7 +63,7 @@ func runReplicaGCChangedPeers(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
-	c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(1, 3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, 3))
 
 	h := &replicagcTestHelper{c: c, t: t}
 
@@ -76,10 +76,10 @@ func runReplicaGCChangedPeers(
 	// Kill the third node so it won't know that all of its replicas are moved
 	// elsewhere (we don't use the first because that's what roachprod will
 	// join new nodes to).
-	c.Stop(ctx, option.DefaultStopOpts(), c.Node(3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
 
 	// Start three new nodes that will take over all data.
-	c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(4, 6))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(4, 6))
 
 	// Decommission n1-3, with n3 in absentia, moving the replicas to n4-6.
 	if err := h.decommission(ctx, c.Range(1, 3), 2, "--wait=none"); err != nil {
@@ -100,10 +100,10 @@ func runReplicaGCChangedPeers(
 	//
 	// https://github.com/cockroachdb/cockroach/issues/67910#issuecomment-884856356
 	t.Status("waiting for zero replicas on n3")
-	waitForZeroReplicasOnN3(ctx, t, c.Conn(ctx, 1))
+	waitForZeroReplicasOnN3(ctx, t, c.Conn(ctx, t.L(), 1))
 
 	// Stop the remaining two old nodes, no replicas remaining there.
-	c.Stop(ctx, option.DefaultStopOpts(), c.Range(1, 2))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 2))
 
 	// Set up zone configs to isolate out nodes with the `deadNodeAttr`
 	// attribute. We'll later start n3 using this attribute to test GC replica
@@ -128,28 +128,28 @@ func runReplicaGCChangedPeers(
 		// rebalancing and repair attempts. Lacking this information it does not
 		// do that within the store dead interval (5m, i.e. too long for this
 		// test).
-		c.Stop(ctx, option.DefaultStopOpts(), c.Range(4, 6))
-		c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(4, 6))
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(4, 6))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(4, 6))
 	}
 
 	// Restart n3. We have to manually tell it where to find a new node or it
 	// won't be able to connect. Give it the deadNodeAttr attribute that we've
 	// used as a negative constraint for "everything", which should prevent new
 	// replicas from being added to it.
-	internalAddrs, err := c.InternalAddr(ctx, c.Node(4))
+	internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(4))
 	if err != nil {
 		t.Fatal(err)
 	}
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+internalAddrs[0], "--attrs="+deadNodeAttr, "--vmodule=raft=5,replicate_queue=5,allocator=5")
-	c.Start(ctx, startOpts, settings, c.Node(3))
+	c.Start(ctx, t.L(), startOpts, settings, c.Node(3))
 
 	// Loop for two metric sample intervals (10s) to make sure n3 doesn't see any
 	// underreplicated ranges.
 	h.waitForZeroReplicas(ctx, 3)
 
 	// Restart the remaining nodes to satisfy the dead node detector.
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
 }
 
 type replicagcTestHelper struct {
@@ -158,7 +158,7 @@ type replicagcTestHelper struct {
 }
 
 func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {
-	db := h.c.Conn(ctx, 1)
+	db := h.c.Conn(ctx, h.t.L(), 1)
 	defer func() {
 		_ = db.Close()
 	}()
@@ -179,7 +179,7 @@ func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {
 }
 
 func (h *replicagcTestHelper) waitForZeroReplicas(ctx context.Context, targetNode int) {
-	db := h.c.Conn(ctx, targetNode)
+	db := h.c.Conn(ctx, h.t.L(), targetNode)
 	defer func() {
 		_ = db.Close()
 	}()
@@ -243,7 +243,7 @@ func (h *replicagcTestHelper) recommission(
 // nodes started with deadNodeAttr. This can then be used as a negative
 // constraint for everything.
 func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int) {
-	db := h.c.Conn(ctx, runNode)
+	db := h.c.Conn(ctx, h.t.L(), runNode)
 	defer func() {
 		_ = db.Close()
 	}()

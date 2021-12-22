@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -138,20 +139,20 @@ func (c *Cluster) String() string {
 }
 
 // PrintDetails TODO(peter): document
-func (c *Cluster) PrintDetails() {
-	fmt.Printf("%s: %s ", c.Name, c.Clouds())
+func (c *Cluster) PrintDetails(logger *logger.Logger) {
+	logger.Printf("%s: %s ", c.Name, c.Clouds())
 	if !c.IsLocal() {
 		l := c.LifetimeRemaining().Round(time.Second)
 		if l <= 0 {
-			fmt.Printf("expired %s ago\n", -l)
+			logger.Printf("expired %s ago", -l)
 		} else {
-			fmt.Printf("%s remaining\n", l)
+			logger.Printf("%s remaining", l)
 		}
 	} else {
-		fmt.Printf("(no expiration)\n")
+		logger.Printf("(no expiration)")
 	}
 	for _, vm := range c.VMs {
-		fmt.Printf("  %s\t%s\t%s\t%s\n", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP)
+		logger.Printf("  %s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP)
 	}
 }
 
@@ -177,7 +178,7 @@ func namesFromVM(v vm.VM) (userName string, clusterName string, _ error) {
 
 // ListCloud returns information about all instances (across all available
 // providers).
-func ListCloud() (*Cloud, error) {
+func ListCloud(l *logger.Logger) (*Cloud, error) {
 	cloud := &Cloud{
 		Clusters: make(Clusters),
 	}
@@ -191,7 +192,7 @@ func ListCloud() (*Cloud, error) {
 		provider := vm.Providers[providerName]
 		g.Go(func() error {
 			var err error
-			providerVMs[index], err = provider.List()
+			providerVMs[index], err = provider.List(l)
 			return err
 		})
 	}
@@ -247,7 +248,10 @@ func ListCloud() (*Cloud, error) {
 
 // CreateCluster TODO(peter): document
 func CreateCluster(
-	nodes int, opts vm.CreateOpts, providerOptsContainer vm.ProviderOptionsContainer,
+	l *logger.Logger,
+	nodes int,
+	opts vm.CreateOpts,
+	providerOptsContainer vm.ProviderOptionsContainer,
 ) error {
 	providerCount := len(opts.VMProviders)
 	if providerCount == 0 {
@@ -265,7 +269,7 @@ func CreateCluster(
 	}
 
 	return vm.ProvidersParallel(opts.VMProviders, func(p vm.Provider) error {
-		return p.Create(vmLocations[p.Name()], opts, providerOptsContainer[p.Name()])
+		return p.Create(l, vmLocations[p.Name()], opts, providerOptsContainer[p.Name()])
 	})
 }
 

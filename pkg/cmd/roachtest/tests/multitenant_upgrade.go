@@ -93,11 +93,11 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		tn.httpPort, tn.sqlPort,
 		extraArgs...,
 	)
-	externalUrls, err := c.ExternalPGUrl(ctx, c.Node(tn.node))
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node))
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
-	internalUrls, err := c.ExternalIP(ctx, c.Node(tn.node))
+	internalUrls, err := c.ExternalIP(ctx, t.L(), c.Node(tn.node))
 	require.NoError(t, err)
 	u.Host = internalUrls[0] + ":" + strconv.Itoa(tn.sqlPort)
 	tn.pgURL = u.String()
@@ -164,14 +164,14 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	kvNodes := c.Node(1)
 
 	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary))
-	c.Start(ctx, option.DefaultStartOpts(), settings, kvNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
 
-	kvAddrs, err := c.ExternalAddr(ctx, kvNodes)
+	kvAddrs, err := c.ExternalAddr(ctx, t.L(), kvNodes)
 	require.NoError(t, err)
 
 	const tenant11HTTPPort, tenant11SQLPort = 8011, 20011
 	const tenant11ID = 11
-	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, 1))
+	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
 	// We'll sometimes have to wait out the backoff of the host cluster
 	// auto-update loop (at the time of writing 30s), plus some migrations may be
 	// genuinely long-running.
@@ -208,9 +208,9 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	}
 
 	t.Status("upgrading host server")
-	c.Stop(ctx, option.DefaultStopOpts(), kvNodes)
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), kvNodes)
 	settings.Binary = currentBinary
-	c.Start(ctx, option.DefaultStartOpts(), settings, kvNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
 	time.Sleep(time.Second)
 
 	t.Status("checking the pre-upgrade sql server still works after the KV binary upgrade")

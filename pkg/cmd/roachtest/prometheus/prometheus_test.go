@@ -12,12 +12,26 @@ package prometheus
 
 import (
 	"context"
+	"io/ioutil"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
+
+func nilLogger() *logger.Logger {
+	lcfg := logger.Config{
+		Stdout: ioutil.Discard,
+		Stderr: ioutil.Discard,
+	}
+	l, err := lcfg.NewLogger("" /* path */)
+	if err != nil {
+		panic(err)
+	}
+	return l
+}
 
 func TestMakeYAMLConfig(t *testing.T) {
 	ctx := context.Background()
@@ -34,13 +48,13 @@ func TestMakeYAMLConfig(t *testing.T) {
 			mockCluster: func(ctrl *gomock.Controller) Cluster {
 				c := NewMockCluster(ctrl)
 				c.EXPECT().
-					ExternalIP(ctx, []int{1}).
+					ExternalIP(ctx, nilLogger(), []int{1}).
 					Return([]string{"127.0.0.1"}, nil)
 				c.EXPECT().
-					ExternalIP(ctx, []int{3, 4, 5}).
+					ExternalIP(ctx, nilLogger(), []int{3, 4, 5}).
 					Return([]string{"127.0.0.3", "127.0.0.4", "127.0.0.5"}, nil)
 				c.EXPECT().
-					ExternalIP(ctx, []int{6}).
+					ExternalIP(ctx, nilLogger(), []int{6}).
 					Return([]string{"127.0.0.6"}, nil)
 				return c
 			},
@@ -94,13 +108,13 @@ scrape_configs:
 			mockCluster: func(ctrl *gomock.Controller) Cluster {
 				c := NewMockCluster(ctrl)
 				c.EXPECT().
-					ExternalIP(ctx, []int{3, 4, 5}).
+					ExternalIP(ctx, nilLogger(), []int{3, 4, 5}).
 					Return([]string{"127.0.0.3", "127.0.0.4", "127.0.0.5"}, nil)
 				c.EXPECT().
-					ExternalIP(ctx, []int{6}).
+					ExternalIP(ctx, nilLogger(), []int{6}).
 					Return([]string{"127.0.0.6"}, nil)
 				c.EXPECT().
-					ExternalIP(ctx, []int{8, 9}).
+					ExternalIP(ctx, nilLogger(), []int{8, 9}).
 					Return([]string{"127.0.0.8", "127.0.0.9"}, nil)
 				return c
 			},
@@ -152,6 +166,7 @@ scrape_configs:
 
 			cfg, err := makeYAMLConfig(
 				ctx,
+				nilLogger(),
 				tc.mockCluster(ctrl),
 				tc.scrapeConfigs,
 			)

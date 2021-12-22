@@ -34,8 +34,8 @@ func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--attrs=A")
-	c.Start(ctx, startOpts, settings, c.Range(1, 5))
-	db := c.Conn(ctx, 1)
+	c.Start(ctx, t.L(), startOpts, settings, c.Range(1, 5))
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `SELECT target FROM crdb_internal.zones`)
@@ -50,7 +50,7 @@ func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	startOpts = option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--attrs=B")
-	c.Start(ctx, startOpts, settings, c.Range(6, 8))
+	c.Start(ctx, t.L(), startOpts, settings, c.Range(6, 8))
 	_, err = db.Exec(`CREATE TABLE lostrange (id INT PRIMARY KEY, v STRING)`)
 	require.NoError(t, err)
 
@@ -104,7 +104,7 @@ OR
 	// Now 'lostrange' is on n6-n8 and nothing else is. The nodes go down
 	// permanently (the wiping prevents the test runner from failing the
 	// test after it has passed - we cannot restart those nodes).
-	c.Stop(ctx, option.DefaultStopOpts(), c.Range(6, 8))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(6, 8))
 	c.Wipe(ctx, c.Range(6, 8))
 
 	// Should not be able to read from it even (generously) after a lease timeout.

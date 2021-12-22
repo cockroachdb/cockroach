@@ -97,18 +97,18 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	WaitFor3XReplication(t, c.Conn(ctx, allNodes[0]))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+	WaitFor3XReplication(t, c.Conn(ctx, t.L(), allNodes[0]))
 
 	t.Status("installing haproxy")
-	if err := c.Install(ctx, loadNode, "haproxy"); err != nil {
+	if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 

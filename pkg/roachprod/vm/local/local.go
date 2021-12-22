@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -70,13 +71,13 @@ func AddCluster(cluster *cloud.Cluster) {
 
 // DeleteCluster destroys a local cluster. It assumes that the cockroach
 // processes are stopped.
-func DeleteCluster(name string) error {
+func DeleteCluster(l *logger.Logger, name string) error {
 	p := vm.Providers[ProviderName].(*Provider)
 	c := p.clusters[name]
 	if c == nil {
 		return fmt.Errorf("local cluster %s does not exist", name)
 	}
-	fmt.Printf("Deleting local cluster %s\n", name)
+	l.Printf("Deleting local cluster %s\n", name)
 
 	for i := range c.VMs {
 		if err := os.RemoveAll(VMDir(c.Name, i+1)); err != nil {
@@ -139,7 +140,7 @@ func (p *Provider) ConfigSSH(zones []string) error {
 
 // Create just creates fake host-info entries in the local filesystem
 func (p *Provider) Create(
-	names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,
+	l *logger.Logger, names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,
 ) error {
 	now := timeutil.Now()
 	c := &cloud.Cluster{
@@ -233,7 +234,7 @@ func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
 }
 
 // List reports all the local cluster "VM" instances.
-func (p *Provider) List() (vm.List, error) {
+func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 	var result vm.List
 	for _, clusterName := range p.clusters.Names() {
 		c := p.clusters[clusterName]

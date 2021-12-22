@@ -59,7 +59,7 @@ func (q *quitTest) init(ctx context.Context) {
 	settings := install.MakeClusterSettings(install.EnvOption(q.env))
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
-	q.c.Start(ctx, startOpts, settings)
+	q.c.Start(ctx, q.t.L(), startOpts, settings)
 }
 
 func (q *quitTest) Fatal(args ...interface{}) {
@@ -103,7 +103,7 @@ func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 	settings := install.MakeClusterSettings(install.EnvOption(q.env))
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
-	q.c.Start(ctx, startOpts, settings, q.c.Node(nodeID))
+	q.c.Start(ctx, q.t.L(), startOpts, settings, q.c.Node(nodeID))
 
 	q.t.L().Printf("waiting for readiness of node %d\n", nodeID)
 	// Now perform a SQL query. This achieves two goals:
@@ -111,7 +111,7 @@ func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 	// - the particular query forces a cluster-wide RPC; which
 	//   forces any circuit breaker to trip and re-establish
 	//   the RPC connection if needed.
-	db := q.c.Conn(ctx, nodeID)
+	db := q.c.Conn(ctx, q.t.L(), nodeID)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `TABLE crdb_internal.cluster_sessions`); err != nil {
 		q.Fatal(err)
@@ -119,7 +119,7 @@ func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 }
 
 func (q *quitTest) waitForUpReplication(ctx context.Context) {
-	db := q.c.Conn(ctx, 1)
+	db := q.c.Conn(ctx, q.t.L(), 1)
 	defer db.Close()
 
 	// We'll want rebalancing to be a bit faster than normal, so
@@ -160,7 +160,7 @@ func (q *quitTest) runWithTimeout(ctx context.Context, fn func(ctx context.Conte
 // to transfer all leases. This way, we exercise the iterating code in
 // quit/node drain.
 func (q *quitTest) setupIncrementalDrain(ctx context.Context) {
-	db := q.c.Conn(ctx, 1)
+	db := q.c.Conn(ctx, q.t.L(), 1)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `
 SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
@@ -176,7 +176,7 @@ SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
 func (q *quitTest) createRanges(ctx context.Context) {
 	const numRanges = 500
 
-	db := q.c.Conn(ctx, 1)
+	db := q.c.Conn(ctx, q.t.L(), 1)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 CREATE TABLE t(x, y, PRIMARY KEY(x)) AS SELECT @1, 1 FROM generate_series(1,%[1]d)`,
@@ -246,7 +246,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			// Get the report via HTTP.
 			// Flag -s is to remove progress on stderr, so that the buffer
 			// contains the JSON of the response and nothing else.
-			adminAddrs, err := q.c.InternalAdminUIAddr(ctx, q.c.Node(otherNodeID))
+			adminAddrs, err := q.c.InternalAdminUIAddr(ctx, q.t.L(), q.c.Node(otherNodeID))
 			if err != nil {
 				q.Fatal(err)
 			}
@@ -334,7 +334,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 		q.Fatal(err)
 	}
 
-	db := q.c.Conn(ctx, otherNodeID)
+	db := q.c.Conn(ctx, q.t.L(), otherNodeID)
 	defer db.Close()
 	// For good measure, also write to the table. This ensures it
 	// remains available.
@@ -361,7 +361,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		stopOpts := option.DefaultStopOpts()
 		stopOpts.RoachprodOpts.Sig = 15
 		stopOpts.RoachprodOpts.Wait = true
-		c.Stop(ctx, stopOpts, c.Node(nodeID)) // graceful shutdown
+		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID)) // graceful shutdown
 
 	})
 
@@ -388,7 +388,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// the log.
 		stopOpts := option.DefaultStopOpts()
 		stopOpts.RoachprodOpts.Sig = 1
-		c.Stop(ctx, stopOpts, c.Node(nodeID))
+		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID))
 		// We use SIGKILL to terminate nodes here. Of course, an operator
 		// should not do this and instead terminate with SIGTERM even
 		// after a complete graceful drain. However, what this test is
@@ -404,7 +404,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		stopOpts = option.DefaultStopOpts()
 		stopOpts.RoachprodOpts.Sig = 9
 		stopOpts.RoachprodOpts.Wait = true
-		c.Stop(ctx, stopOpts, c.Node(nodeID))
+		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID))
 	})
 
 	// Same as "drain" above, but issuing the drain command from
@@ -432,11 +432,11 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// to understand what the following signals are for.
 		stopOpts := option.DefaultStopOpts()
 		stopOpts.RoachprodOpts.Sig = 1
-		c.Stop(ctx, stopOpts, c.Node(nodeID))
+		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID))
 
 		stopOpts.RoachprodOpts.Sig = 9
 		stopOpts.RoachprodOpts.Wait = true
-		c.Stop(ctx, stopOpts, c.Node(nodeID))
+		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID))
 	})
 }
 
@@ -456,7 +456,7 @@ func runQuit(
 	stopOpts := option.DefaultStopOpts()
 	stopOpts.RoachprodOpts.Sig = 0
 	stopOpts.RoachprodOpts.Wait = true
-	c.Stop(ctx, stopOpts, c.Node(nodeID)) // no shutdown, just wait for exit
+	c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID)) // no shutdown, just wait for exit
 
 	return []byte(output)
 }
@@ -506,7 +506,7 @@ func registerQuitAllNodes(r registry.Registry) {
 			settings := install.MakeClusterSettings(install.EnvOption(q.env))
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
-			q.c.Start(ctx, startOpts, settings)
+			q.c.Start(ctx, t.L(), startOpts, settings)
 		},
 	})
 }

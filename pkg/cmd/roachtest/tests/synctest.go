@@ -60,7 +60,7 @@ fi
 			c.Run(ctx, n, "mkdir -p {store-dir}/{real,faulty} || true")
 			t.Status("setting up charybdefs")
 
-			if err := c.Install(ctx, n, "charybdefs"); err != nil {
+			if err := c.Install(ctx, t.L(), n, "charybdefs"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real && chmod 777 {store-dir}/{real,faulty}")
