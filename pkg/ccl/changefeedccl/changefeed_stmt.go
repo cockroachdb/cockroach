@@ -233,7 +233,8 @@ func changefeedPlanHook(
 			return err
 		}
 
-		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
+		tables := make(jobspb.ChangefeedTargets, len(targetDescs))
+		targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDescs))
 		for _, desc := range targetDescs {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
 				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
@@ -244,23 +245,29 @@ func changefeedPlanHook(
 				if err != nil {
 					return err
 				}
-				targets[table.GetID()] = jobspb.ChangefeedTarget{
+				tables[table.GetID()] = jobspb.ChangefeedTargetTable{
 					StatementTimeName: name,
 				}
+				ts := jobspb.ChangefeedTargetSpecification{
+					Type:    jobspb.ChangefeedTargetSpecification_FULL_TABLE,
+					TableID: table.GetID(),
+				}
+				targets = append(targets, ts)
 				if err := changefeedbase.ValidateTable(targets, table); err != nil {
 					return err
 				}
-				for _, warning := range changefeedbase.WarningsForTable(targets, table, opts) {
+				for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
 					p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 				}
 			}
 		}
 
 		details := jobspb.ChangefeedDetails{
-			Targets:       targets,
-			Opts:          opts,
-			SinkURI:       sinkURI,
-			StatementTime: statementTime,
+			Tables:               tables,
+			Opts:                 opts,
+			SinkURI:              sinkURI,
+			StatementTime:        statementTime,
+			TargetSpecifications: targets,
 		}
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{},
@@ -313,7 +320,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
+		if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
 			return err
 		}
 
@@ -339,7 +346,7 @@ func changefeedPlanHook(
 		}
 		telemetry.Count(`changefeed.create.sink.` + telemetrySink)
 		telemetry.Count(`changefeed.create.format.` + details.Opts[changefeedbase.OptFormat])
-		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
+		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(tables)))
 
 		if scope, ok := opts[changefeedbase.OptMetricsScope]; ok {
 			if err := utilccl.CheckEnterpriseEnabled(
@@ -418,8 +425,8 @@ func changefeedPlanHook(
 			shouldProtectTimestamp := initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
 			if shouldProtectTimestamp {
 				protectedTimestampID = uuid.MakeV4()
-				deprecatedSpansToProtect := makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
-				targetToProtect := makeTargetToProtect(details.Targets)
+				deprecatedSpansToProtect := makeSpansToProtect(p.ExecCfg().Codec, AllTargets(details))
+				targetToProtect := makeTargetToProtect(AllTargets(details))
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
 				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), statementTime,
 					deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
@@ -880,7 +887,7 @@ func (b *changefeedResumer) OnPauseRequest(
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
 	pts := execCfg.ProtectedTimestampProvider
 	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, b.job.ID(),
-		details.Targets, *resolved, cp)
+		AllTargets(details), *resolved, cp)
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
@@ -917,4 +924,28 @@ func getChangefeedTargetName(
 		return getQualifiedTableName(ctx, execCfg, txn, desc)
 	}
 	return desc.GetName(), nil
+}
+
+// AllTargets gets all the targets listed in a ChangefeedDetails,
+// from the statement time name map in old protos
+// or the TargetSpecifications in new ones.
+func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetSpecification) {
+	if len(cd.TargetSpecifications) > 0 {
+		for _, ts := range cd.TargetSpecifications {
+			if ts.TableID > 0 {
+				ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
+				targets = append(targets, ts)
+			}
+		}
+	} else {
+		for id, t := range cd.Tables {
+			ct := jobspb.ChangefeedTargetSpecification{
+				Type:              jobspb.ChangefeedTargetSpecification_FULL_TABLE,
+				TableID:           id,
+				StatementTimeName: t.StatementTimeName,
+			}
+			targets = append(targets, ct)
+		}
+	}
+	return
 }

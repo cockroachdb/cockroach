@@ -295,7 +295,7 @@ func WrapPayloadDetails(details Details) interface {
 }
 
 // ChangefeedTargets is a set of id targets with metadata.
-type ChangefeedTargets map[descpb.ID]ChangefeedTarget
+type ChangefeedTargets map[descpb.ID]ChangefeedTargetTable
 
 // SchemaChangeDetailsFormatVersion is the format version for
 // SchemaChangeDetails.

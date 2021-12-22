@@ -209,11 +209,12 @@ func TestEncoders(t *testing.T) {
 				t.Fatalf(`unknown format: %s`, o[changefeedbase.OptFormat])
 			}
 
-			target := jobspb.ChangefeedTarget{
+			target := jobspb.ChangefeedTargetSpecification{
+				Type:              jobspb.ChangefeedTargetSpecification_FULL_TABLE,
+				TableID:           tableDesc.GetID(),
 				StatementTimeName: tableDesc.GetName(),
 			}
-			targets := jobspb.ChangefeedTargets{}
-			targets[tableDesc.GetID()] = target
+			targets := []jobspb.ChangefeedTargetSpecification{target}
 
 			e, err := getEncoder(o, targets)
 			if len(expected.err) > 0 {
@@ -360,11 +361,12 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			return string(avroToJSON(t, reg, r))
 		}
 
-		target := jobspb.ChangefeedTarget{
+		target := jobspb.ChangefeedTargetSpecification{
+			Type:              jobspb.ChangefeedTargetSpecification_FULL_TABLE,
+			TableID:           tableDesc.GetID(),
 			StatementTimeName: tableDesc.GetName(),
 		}
-		targets := jobspb.ChangefeedTargets{}
-		targets[tableDesc.GetID()] = target
+		targets := []jobspb.ChangefeedTargetSpecification{target}
 
 		e, err := getEncoder(opts, targets)
 		require.NoError(t, err)

@@ -78,7 +78,7 @@ func New(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	events changefeedbase.SchemaChangeEventClass,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
 ) SchemaFeed {
@@ -114,7 +114,7 @@ type schemaFeed struct {
 	db       *kv.DB
 	clock    *hlc.Clock
 	settings *cluster.Settings
-	targets  jobspb.ChangefeedTargets
+	targets  []jobspb.ChangefeedTargetSpecification
 	ie       sqlutil.InternalExecutor
 	metrics  *Metrics
 
@@ -278,10 +278,10 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range tf.targets {
+		for _, table := range tf.targets {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
 			if err != nil {
 				return err
 			}
@@ -636,8 +636,15 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				if err != nil {
 					return err
 				}
-
-				origName, isTable := tf.targets[descpb.ID(id)]
+				var origName string
+				var isTable bool
+				for _, cts := range tf.targets {
+					if cts.TableID == descpb.ID(id) {
+						origName = cts.StatementTimeName
+						isTable = true
+						break
+					}
+				}
 				isType := tf.mu.typeDeps.containsType(descpb.ID(id))
 				// Check if the descriptor is an interesting table or type.
 				if !(isTable || isType) {
@@ -647,7 +654,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 
 				unsafeValue := it.UnsafeValue()
 				if unsafeValue == nil {
-					name := origName.StatementTimeName
+					name := origName
 					if name == "" {
 						name = fmt.Sprintf("desc(%d)", id)
 					}
