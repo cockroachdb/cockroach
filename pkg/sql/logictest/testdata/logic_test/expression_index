@@ -318,7 +318,16 @@ CREATE INDEX err ON other ((t.a + 10))
 # An inaccessible column used in an expression index cannot be referenced in
 # queries.
 statement error column \"crdb_internal_idx_expr\" does not exist
+SELECT crdb_internal_idx_expr FROM t
+
+statement error column \"crdb_internal_idx_expr\" does not exist
 SELECT * FROM t WHERE crdb_internal_idx_expr > 0
+
+statement error column \"t.crdb_internal_idx_expr\" does not exist
+SELECT t.crdb_internal_idx_expr FROM t
+
+statement error column \"t.crdb_internal_idx_expr\" does not exist
+SELECT * FROM t WHERE t.crdb_internal_idx_expr > 0
 
 # An inaccessible column cannot be used in a view.
 statement error column \"crdb_internal_idx_expr\" does not exist
