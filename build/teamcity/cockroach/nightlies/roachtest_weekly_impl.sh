@@ -48,7 +48,6 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/bin/cockroach" \
-  --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \
   --artifacts "/artifacts/${artifacts_subdir}" \
   --artifacts-literal="${artifacts}" \
