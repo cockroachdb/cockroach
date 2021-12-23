@@ -1254,6 +1254,12 @@ func (u *UniqueConstraint) Validated() bool {
 	return u.validated
 }
 
+// UniquenessGuaranteedByAnotherIndex is part of the cat.UniqueConstraint
+// interface.
+func (u *UniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
+	return false
+}
+
 // Sequence implements the cat.Sequence interface for testing purposes.
 type Sequence struct {
 	SeqID      cat.StableID
