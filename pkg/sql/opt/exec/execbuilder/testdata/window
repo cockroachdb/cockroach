@@ -31,23 +31,23 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/kv_pkey/1/v/w/f/b -> /2/3/1.0/true
+fetched: /kv/kv_pkey/1/v -> /2
 fetched: /kv/kv_pkey/1/d -> 1
-fetched: /kv/kv_pkey/1/s -> 'a'
-fetched: /kv/kv_pkey/3/v/w/f/b -> /4/5/2.0/true
+fetched: /kv/kv_pkey/1 -> NULL
+fetched: /kv/kv_pkey/3/v -> /4
 fetched: /kv/kv_pkey/3/d -> 8
-fetched: /kv/kv_pkey/3/s -> 'a'
-fetched: /kv/kv_pkey/5/w/f/b -> /5/9.9/false
+fetched: /kv/kv_pkey/3 -> NULL
+fetched: /kv/kv_pkey/5 -> NULL
 fetched: /kv/kv_pkey/5/d -> -321
-fetched: /kv/kv_pkey/6/v/w/f/b -> /2/3/4.4/true
+fetched: /kv/kv_pkey/6/v -> /2
 fetched: /kv/kv_pkey/6/d -> 4.4
-fetched: /kv/kv_pkey/6/s -> 'b'
-fetched: /kv/kv_pkey/7/v/w/f/b -> /2/2/6.0/true
+fetched: /kv/kv_pkey/6 -> NULL
+fetched: /kv/kv_pkey/7/v -> /2
 fetched: /kv/kv_pkey/7/d -> 7.9
-fetched: /kv/kv_pkey/7/s -> 'b'
-fetched: /kv/kv_pkey/8/v/w/f/b -> /4/2/3.0/false
+fetched: /kv/kv_pkey/7 -> NULL
+fetched: /kv/kv_pkey/8/v -> /4
 fetched: /kv/kv_pkey/8/d -> 3
-fetched: /kv/kv_pkey/8/s -> 'A'
+fetched: /kv/kv_pkey/8 -> NULL
 output row: [5 NULL]
 output row: [1 3.4501207708330056852]
 output row: [6 3.4501207708330056852]

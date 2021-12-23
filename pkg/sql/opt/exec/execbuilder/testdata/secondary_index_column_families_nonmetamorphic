@@ -59,7 +59,7 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/nonuniqueidx/%'
 ----
-fetched: /t1/nonuniqueidx/1/1 -> NULL
+fetched: /t1/nonuniqueidx/1/? -> NULL
 
 query I
 SET TRACING=on,kv,results;
@@ -72,7 +72,7 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/uniqueidx/%'
 ----
-fetched: /t1/uniqueidx/1 -> /1
+fetched: /t1/uniqueidx/1 -> /?
 
 query IIIII
 SET TRACING=on,kv,results;

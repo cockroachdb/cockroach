@@ -180,9 +180,6 @@ func populateTableArgs(
 // remapping that needs to be used for column ordinals from neededColumns.
 // post is updated accordingly to refer to new ordinals of columns. The method
 // also populates tableArgs.ColIdxMap.
-//
-// If traceKV is true, then all columns are considered as needed, and
-// neededColumns is ignored.
 func keepOnlyNeededColumns(
 	flowCtx *execinfra.FlowCtx,
 	tableArgs *cFetcherTableArgs,
@@ -191,9 +188,9 @@ func keepOnlyNeededColumns(
 	post *execinfrapb.PostProcessSpec,
 	helper *colexecargs.ExprHelper,
 ) error {
-	if !flowCtx.TraceKV && len(neededColumns) < len(tableArgs.cols) {
-		// If the tracing is not enabled and we don't need all of the available
-		// columns, we will prune all of the not needed columns away.
+	if len(neededColumns) < len(tableArgs.cols) {
+		// If we don't need all of the available columns, we will prune all of
+		// the not needed columns away.
 
 		// First, populate a set of needed columns.
 		var neededColumnsSet util.FastIntSet
