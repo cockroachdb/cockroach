@@ -377,10 +377,35 @@ query T
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
 ·
-• insert fast path
-  into: t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
-  auto commit
-  size: 7 columns, 1 row
+• root
+│
+├── • insert
+│   │ into: t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 7 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join
+            │ table: t@t_pkey
+            │ equality: (lookup_join_const_col_@21, column2) = (crdb_internal_y_shard_10,y)
+            │ equality cols are key
+            │ pred: crdb_internal_y_shard_10_cast != crdb_internal_y_shard_10
+            │
+            └── • cross join
+                │ estimated row count: 10
+                │
+                ├── • values
+                │     size: 1 column, 10 rows
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 # Ensure that all of the indexes have been rewritten.
 query IT

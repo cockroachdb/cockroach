@@ -842,6 +842,18 @@ func newOptTable(
 				validity: descpb.ConstraintValidity_Validated,
 			})
 		}
+
+		// Add unique constraint for hash sharded indexes.
+		if idx.IsUnique() && idx.IsSharded() {
+			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+				name:         idx.GetName(),
+				table:        ot.ID(),
+				columns:      idx.IndexDesc().KeyColumnIDs[1:],
+				withoutIndex: true,
+				predicate:    idx.GetPredicate(),
+				validity:     descpb.ConstraintValidity_Validated,
+			})
+		}
 	}
 
 	_ = ot.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {

@@ -807,3 +807,49 @@ INSERT INTO parent VALUES (1,1)
 
 statement ok
 INSERT INTO child VALUES (1,1)
+
+# make sure that uniqueness is guaranteed with hash index
+subtest unique_hash_sharded_index
+
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t (
+    x INT PRIMARY KEY,
+    y INT,
+    z INT,
+    duped BOOL DEFAULT false
+)
+
+statement ok
+CREATE UNIQUE INDEX t_uniq_idx_y_z ON t(y, z) USING HASH WITH BUCKET_COUNT = 8
+
+statement ok
+INSERT INTO t (x, y, z) VALUES (1, 11, 111) ON CONFLICT (y, z) DO UPDATE SET duped = true
+
+query IIIB colnames
+SELECT * FROM t
+----
+x  y   z    duped
+1  11  111  false
+
+statement ok
+INSERT INTO t (x, y, z) VALUES (2, 22, 222) ON CONFLICT (y, z) DO UPDATE SET duped = true
+
+query IIIB colnames,rowsort
+SELECT * FROM t
+----
+x  y   z    duped
+1  11  111  false
+2  22  222  false
+
+statement ok
+INSERT INTO t (x, y, z) VALUES (1, 11, 111) ON CONFLICT (y, z) DO UPDATE SET duped = true
+
+query IIIB colnames,rowsort
+SELECT * FROM t
+----
+x  y   z    duped
+1  11  111  true
+2  22  222  false
