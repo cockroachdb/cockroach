@@ -46,12 +46,8 @@ import (
 // Test portal implicit destruction. Unless destroying a portal is explicitly
 // requested, portals live until the end of the transaction in which they're
 // created. If they're created outside of a transaction, they live until
-// the next transaction completes (so until the next statement is executed,
-// which statement is expected to be the execution of the portal that was just
-// created).
-// For the non-transactional case, our behavior is different than Postgres',
-// which states that, outside of transactions, portals live until the next Sync
-// protocol command.
+// the implicit transaction completes. As per the PostgreSQL docs, the implicit
+// transaction completes when the next Sync protocol command is handled.
 func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -104,7 +100,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	require.NoError(t, err)
 
 	cmdPos++
-	failedDescribePos := cmdPos
+	secondSuccessfulDescribePos := cmdPos
 	if err = buf.Push(ctx, DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
@@ -124,6 +120,29 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 	if err = results[successfulDescribePos].err; err != nil {
 		t.Fatalf("expected first Describe to succeed, got err: %s", err)
+	}
+	if err = results[secondSuccessfulDescribePos].err; err != nil {
+		t.Fatalf("expected second Describe to succeed, got err: %s", err)
+	}
+
+	// cmdPos gets reset after the Sync.
+	cmdPos = 0
+	failedDescribePos := cmdPos
+	if err = buf.Push(ctx, DescribeStmt{
+		Name: "portal1",
+		Type: pgwirebase.PreparePortal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cmdPos++
+	if err = buf.Push(ctx, Sync{}); err != nil {
+		t.Fatal(err)
+	}
+
+	results = <-syncResults
+	numResults = len(results)
+	if numResults != cmdPos+1 {
+		t.Fatalf("expected %d results, got: %d", cmdPos+1, len(results))
 	}
 	if !testutils.IsError(results[failedDescribePos].err, "unknown portal") {
 		t.Fatalf("expected error \"unknown portal\", got: %v", results[failedDescribePos].err)
@@ -181,7 +200,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	require.NoError(t, err)
 
 	cmdPos++
-	failedDescribePos = cmdPos
+	secondSuccessfulDescribePos = cmdPos
 	if err = buf.Push(ctx, DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
@@ -204,7 +223,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if err = results[succDescIdx].err; err != nil {
 		t.Fatalf("expected first Describe to succeed, got err: %s", err)
 	}
-	failDescIdx := failedDescribePos - numResults
+	failDescIdx := secondSuccessfulDescribePos - numResults
 	if !testutils.IsError(results[failDescIdx].err, "unknown portal") {
 		t.Fatalf("expected error \"unknown portal\", got: %v", results[failDescIdx].err)
 	}
