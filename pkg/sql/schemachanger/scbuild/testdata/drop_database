@@ -376,6 +376,7 @@ DROP DATABASE db1 CASCADE
     keyColumnIds:
     - 1
     shardedDescriptor: {}
+    sourceIndexId: 1
     storingColumnIds:
     - 2
     - 3
@@ -390,6 +391,7 @@ DROP DATABASE db1 CASCADE
     keyColumnIds:
     - 1
     shardedDescriptor: {}
+    sourceIndexId: 1
     storingColumnIds:
     - 2
     - 3

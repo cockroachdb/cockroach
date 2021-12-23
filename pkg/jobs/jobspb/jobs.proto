@@ -312,7 +312,7 @@ message RestoreDetails {
   BackupEncryptionOptions encryption = 12;
 
   message RevalidateIndex {
-     uint32 id = 1 [
+    uint32 id = 1 [
       (gogoproto.customname) = "TableID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
@@ -494,7 +494,48 @@ message TypeSchemaChangeProgress {
 // TypeSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
   repeated cockroach.sql.schemachanger.scpb.Target targets = 1;
+
+  // BackfillProgress stores the progress for index backfills which may
+  // be ongoing.
+  repeated BackfillProgress backfill_progress = 4 [(gogoproto.nullable) = false];
 }
+
+// BackfillProgress is used to track backfill progress in the declarative
+// schema changer.
+message BackfillProgress {
+
+  // ID is the ID of the descriptor to which this checkpoint corresponds.
+  uint32 id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  // SourceIndexID is the ID of the source index for the backfill.
+  // This could be a primary index or it could be a temporary index for
+  // a merge.
+  uint32 source_index_id = 2 [
+    (gogoproto.customname) = "SourceIndexID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
+
+  // DestIndexIDs is the set of IDs which are being backfilled from the
+  // SourceIndexID.
+  repeated uint32 dest_index_ids = 3 [
+    (gogoproto.customname) = "DestIndexIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
+
+  // MinimumWriteTimestamp is the timestamp at which a backfill may want to
+  // write, e.g. a time that has been identified via a scan as safe for
+  // writing.
+  util.hlc.Timestamp write_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // CompletedSpans are the set of spans of the source index which have been
+  // backfilled into the destination indexes. Note that this will never contain
+  // tenant prefixes even if the data corresponds to a secondary tenant.
+  repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
+}
+
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {

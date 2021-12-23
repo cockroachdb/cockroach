@@ -23,8 +23,9 @@ func (backfillOp) Type() Type { return BackfillType }
 // BackfillIndex specifies an index backfill operation.
 type BackfillIndex struct {
 	backfillOp
-	TableID descpb.ID
-	IndexID descpb.IndexID
+	TableID       descpb.ID
+	SourceIndexID descpb.IndexID
+	IndexID       descpb.IndexID
 }
 
 // Make sure baseOp is used for linter.

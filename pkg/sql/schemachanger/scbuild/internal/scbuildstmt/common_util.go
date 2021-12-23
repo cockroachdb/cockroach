@@ -45,7 +45,8 @@ func primaryIndexElemFromDescriptor(
 			panic(errors.AssertionFailedf("Unknown direction type %s", dir))
 		}
 	}
-	return &scpb.PrimaryIndex{TableID: tbl.GetID(),
+	return &scpb.PrimaryIndex{
+			TableID:             tbl.GetID(),
 			IndexID:             indexDesc.ID,
 			Unique:              indexDesc.Unique,
 			KeyColumnIDs:        indexDesc.KeyColumnIDs,
@@ -54,8 +55,9 @@ func primaryIndexElemFromDescriptor(
 			StoringColumnIDs:    indexDesc.StoreColumnIDs,
 			CompositeColumnIDs:  indexDesc.CompositeColumnIDs,
 			Inverted:            indexDesc.Type == descpb.IndexDescriptor_INVERTED,
-			ShardedDescriptor:   &indexDesc.Sharded},
-		&scpb.IndexName{
+			ShardedDescriptor:   &indexDesc.Sharded,
+			SourceIndexID:       tbl.GetPrimaryIndexID(),
+		}, &scpb.IndexName{
 			TableID: tbl.GetID(),
 			IndexID: indexDesc.ID,
 			Name:    indexDesc.Name,

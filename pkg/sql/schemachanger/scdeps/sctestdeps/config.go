@@ -13,6 +13,7 @@ package sctestdeps
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -70,8 +71,29 @@ func WithCurrentDatabase(db string) Option {
 	})
 }
 
+// WithBackfillTracker injects a BackfillTracker to be provided by the
+// TestState. If this option is not provided, the default tracker will
+// resolve any descriptor referenced and return an empty backfill progress.
+// All writes in the default tracker are ignored.
+func WithBackfillTracker(backfillTracker scexec.BackfillTracker) Option {
+	return optionFunc(func(state *TestState) {
+		state.backfillTracker = backfillTracker
+	})
+}
+
+// WithBackfiller injects a Backfiller to be provided by the TestState.
+// The default backfiller logs the backfill event into the test state.
+func WithBackfiller(backfiller scexec.Backfiller) Option {
+	return optionFunc(func(state *TestState) {
+		state.backfiller = backfiller
+	})
+}
+
 var defaultOptions = []Option{
 	optionFunc(func(state *TestState) {
 		state.namespace = make(map[descpb.NameInfo]descpb.ID)
+		state.backfillTracker = &testBackfillTracker{deps: state}
+		state.backfiller = &testBackfiller{s: state}
+		state.indexSpanSplitter = &indexSpanSplitter{}
 	}),
 }
