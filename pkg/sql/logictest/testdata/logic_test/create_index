@@ -236,6 +236,10 @@ subtest pause
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow'
 
+# Lower the job registry loop interval to accelerate the test.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms'
+
 statement ok
 CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL)
 
@@ -244,3 +248,6 @@ INSERT INTO tbl VALUES (1, 100), (2, 200), (3, 300);
 
 statement error job .* was paused before it completed with reason: pause point "indexbackfill.before_flow" hit
 CREATE INDEX idx ON tbl(j);
+
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.cancel = DEFAULT;
