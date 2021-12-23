@@ -1662,7 +1662,7 @@ func (s *adminServer) Settings(
 ) (*serverpb.SettingsResponse, error) {
 	keys := req.Keys
 	if len(keys) == 0 {
-		keys = settings.Keys()
+		keys = settings.Keys(settings.ForSystemTenant)
 	}
 
 	_, isAdmin, err := s.getUserAndRole(ctx)
@@ -1686,7 +1686,7 @@ func (s *adminServer) Settings(
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
-		v, ok := settings.Lookup(k, lookupPurpose)
+		v, ok := settings.Lookup(k, lookupPurpose, settings.ForSystemTenant)
 		if !ok {
 			continue
 		}

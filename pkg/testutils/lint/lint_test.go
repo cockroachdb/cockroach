@@ -1508,6 +1508,7 @@ func TestLint(t *testing.T) {
 				case strings.HasSuffix(s, "protoutil"):
 				case strings.HasSuffix(s, "testutils"):
 				case strings.HasSuffix(s, "syncutil"):
+				case strings.HasSuffix(s, "buildutil"):
 				case strings.HasSuffix(s, settingsPkgPrefix):
 				default:
 					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)

@@ -27,6 +27,10 @@ import (
 // read concurrently by different callers.
 var registry = make(map[string]internalSetting)
 
+// slotTable stores the same settings as the registry, but accessible by the
+// slot index.
+var slotTable [MaxSettings]internalSetting
+
 // TestingSaveRegistry can be used in tests to save/restore the current
 // contents of the registry.
 func TestingSaveRegistry() func() {
@@ -145,16 +149,20 @@ func register(class Class, key, desc string, s internalSetting) {
 	slot := slotIdx(len(registry))
 	s.init(class, key, desc, slot)
 	registry[key] = s
+	slotTable[slot] = s
 }
 
 // NumRegisteredSettings returns the number of registered settings.
 func NumRegisteredSettings() int { return len(registry) }
 
 // Keys returns a sorted string array with all the known keys.
-func Keys() (res []string) {
+func Keys(forSystemTenant bool) (res []string) {
 	res = make([]string, 0, len(registry))
-	for k := range registry {
-		if registry[k].isRetired() {
+	for k, v := range registry {
+		if v.isRetired() {
+			continue
+		}
+		if !forSystemTenant && v.Class() == SystemOnly {
 			continue
 		}
 		res = append(res, k)
@@ -166,13 +174,18 @@ func Keys() (res []string) {
 // Lookup returns a Setting by name along with its description.
 // For non-reportable setting, it instantiates a MaskedSetting
 // to masquerade for the underlying setting.
-func Lookup(name string, purpose LookupPurpose) (Setting, bool) {
-	v, ok := registry[name]
-	var setting Setting = v
-	if ok && purpose == LookupForReporting && !v.isReportable() {
-		setting = &MaskedSetting{setting: v}
+func Lookup(name string, purpose LookupPurpose, forSystemTenant bool) (Setting, bool) {
+	s, ok := registry[name]
+	if !ok {
+		return nil, false
 	}
-	return setting, ok
+	if !forSystemTenant && s.Class() == SystemOnly {
+		return nil, false
+	}
+	if purpose == LookupForReporting && !s.isReportable() {
+		return &MaskedSetting{setting: s}, true
+	}
+	return s, true
 }
 
 // LookupPurpose indicates what is being done with the setting.
@@ -187,6 +200,10 @@ const (
 	// all values should be accessible
 	LookupForLocalAccess
 )
+
+// ForSystemTenant can be passed to Lookup for code that runs only on the system
+// tenant.
+const ForSystemTenant = true
 
 // ReadableTypes maps our short type identifiers to friendlier names.
 var ReadableTypes = map[string]string{
@@ -204,8 +221,8 @@ var ReadableTypes = map[string]string{
 // RedactedValue returns a string representation of the value for settings
 // types the are not considered sensitive (numbers, bools, etc) or
 // <redacted> for those with values could store sensitive things (i.e. strings).
-func RedactedValue(name string, values *Values) string {
-	if setting, ok := Lookup(name, LookupForReporting); ok {
+func RedactedValue(name string, values *Values, forSystemTenant bool) string {
+	if setting, ok := Lookup(name, LookupForReporting, forSystemTenant); ok {
 		return setting.String(values)
 	}
 	return "<unknown>"

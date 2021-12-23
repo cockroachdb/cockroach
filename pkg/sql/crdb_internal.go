@@ -1423,11 +1423,13 @@ CREATE TABLE crdb_internal.cluster_settings (
 						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING)
 			}
 		}
-		for _, k := range settings.Keys() {
+		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
 			if !hasAdmin && settings.AdminOnly(k) {
 				continue
 			}
-			setting, _ := settings.Lookup(k, settings.LookupForLocalAccess)
+			setting, _ := settings.Lookup(
+				k, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
+			)
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
