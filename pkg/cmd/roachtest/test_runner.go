@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -923,11 +922,11 @@ func (r *testRunner) maybePostGithubIssue(
 		projColID = teams[sl[0]].TriageColumnID
 	}
 
-	branch := "<unknown branch>"
-
-	if b := envutil.EnvOrDefaultString("TC_BUILD_BRANCH", ""); b != "" {
-		branch = b
+	branch := os.Getenv("TC_BUILD_BRANCH")
+	if branch == "" {
+		branch = "<unknown branch>"
 	}
+
 	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
 		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
 	artifacts := fmt.Sprintf("/%s", t.Name())
