@@ -92,6 +92,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			TestingKnobs:      execCtx.ExecCfg().MigrationTestingKnobs,
 		}
 		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
+		tenantDeps.SpanConfig.Reconciler = execCtx.ExecCfg().SpanConfigReconciler
 		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
 
 		err = m.Run(ctx, cv, tenantDeps, r.j)
