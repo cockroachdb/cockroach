@@ -27,8 +27,9 @@ func (j StreamID) SafeValue() {}
 // InvalidStreamID is the zero value for StreamID corresponding to no stream.
 const InvalidStreamID StreamID = 0
 
-// GetReplicationStreamManagerHook is the hook to get a collection of APIs that streaming replication supports.
-var GetReplicationStreamManagerHook func() (ReplicationStreamManager, error)
+// GetReplicationStreamManagerHook is the hook to get access to the replication API.
+// Used by builtin functions to trigger streaming replication.
+var GetReplicationStreamManagerHook func(evalCtx *tree.EvalContext) (ReplicationStreamManager, error)
 
 // ReplicationStreamManager represents a collection of APIs that streaming replication supports.
 type ReplicationStreamManager interface {
@@ -65,9 +66,9 @@ type ReplicationStreamManager interface {
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.
-func GetReplicationStreamManager() (ReplicationStreamManager, error) {
+func GetReplicationStreamManager(evalCtx *tree.EvalContext) (ReplicationStreamManager, error) {
 	if GetReplicationStreamManagerHook == nil {
 		return nil, errors.New("replication streaming requires a CCL binary")
 	}
-	return GetReplicationStreamManagerHook()
+	return GetReplicationStreamManagerHook(evalCtx)
 }
