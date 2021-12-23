@@ -408,7 +408,14 @@ func joinASTs(stmts []tree.NodeFormatter) string {
 		if i > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(tree.Pretty(stmt))
+		cfg := tree.PrettyCfg{
+			LineWidth: 100,
+			TabWidth:  2,
+			Align:     tree.PrettyAlignAndDeindent,
+			UseTabs:   false,
+			Simplify:  true,
+		}
+		sb.WriteString(cfg.Pretty(stmt))
 		sb.WriteString(";")
 	}
 	return sb.String()
