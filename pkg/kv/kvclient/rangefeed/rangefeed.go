@@ -292,7 +292,8 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		}
 
 		err := f.processEvents(ctx, frontier, eventCh, errCh)
-		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) {
+		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) ||
+			errors.HasType(err, &roachpb.MVCCHistoryMutationError{}) {
 			if errCallback := f.onUnrecoverableError; errCallback != nil {
 				errCallback(ctx, err)
 			}

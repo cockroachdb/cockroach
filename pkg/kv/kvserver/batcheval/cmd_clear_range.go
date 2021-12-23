@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -66,12 +67,19 @@ func ClearRange(
 	args := cArgs.Args.(*roachpb.ClearRangeRequest)
 	from := args.Key
 	to := args.EndKey
-	var pd result.Result
 
 	if !args.Deadline.IsEmpty() {
 		if now := cArgs.EvalCtx.Clock().Now(); args.Deadline.LessEq(now) {
 			return result.Result{}, errors.Errorf("ClearRange has deadline %s <= %s", args.Deadline, now)
 		}
+	}
+
+	pd := result.Result{
+		Replicated: kvserverpb.ReplicatedEvalResult{
+			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+				Spans: []roachpb.Span{{Key: from, EndKey: to}},
+			},
+		},
 	}
 
 	// Check for any intents, and return them for the caller to resolve. This

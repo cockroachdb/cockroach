@@ -83,6 +83,7 @@ go_test(
         "//build/bazelutil:noop",
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",

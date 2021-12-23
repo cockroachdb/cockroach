@@ -123,6 +123,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/abortspan",
+        "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/gc",
         "//pkg/kv/kvserver/readsummary",

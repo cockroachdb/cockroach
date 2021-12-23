@@ -452,6 +452,18 @@ func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *roach
 	r.unsetRangefeedProcessor(p)
 }
 
+// disconnectRangefeedSpanWithErr broadcasts the provided error to all rangefeed
+// registrations that overlap the given span. Tears down the rangefeed Processor
+// if it has no remaining registrations.
+func (r *Replica) disconnectRangefeedSpanWithErr(span roachpb.Span, pErr *roachpb.Error) {
+	p := r.getRangefeedProcessor()
+	if p == nil {
+		return
+	}
+	p.DisconnectSpanWithErr(span, pErr)
+	r.maybeDisconnectEmptyRangefeed(p)
+}
+
 // disconnectRangefeedWithReason broadcasts the provided rangefeed retry reason
 // to all rangefeed registrations and tears down the active rangefeed Processor.
 // No-op if a rangefeed is not active.

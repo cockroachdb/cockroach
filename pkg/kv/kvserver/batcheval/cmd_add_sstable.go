@@ -251,6 +251,11 @@ func EvalAddSSTable(
 			sstIter.Next()
 		}
 		return result.Result{
+			Replicated: kvserverpb.ReplicatedEvalResult{
+				MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+					Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
+				},
+			},
 			Local: result.LocalResult{
 				Metrics: &result.Metrics{
 					AddSSTableAsWrites: 1,
@@ -264,6 +269,9 @@ func EvalAddSSTable(
 			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
 				Data:  sst,
 				CRC32: util.CRC32(sst),
+			},
+			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+				Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
 			},
 		},
 	}, nil
