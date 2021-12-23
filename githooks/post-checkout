@@ -2,6 +2,6 @@
 set -e
 
 if [ "$1" != "$2" ]; then # previous ref != new ref.
-  git clean pkg -fd
+  git clean -fd "pkg/**.pb.go" "pkg/**.pb.gw.go" "pkg/**.eg.go" "pkg/**.og.go" "pkg/**generated.go"
   exec git submodule update --init --recursive
 fi
