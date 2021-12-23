@@ -79,8 +79,10 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), jobID, txn); err != nil {
 				return err
 			}
+			deprecatedSpansToProtect := roachpb.Spans{{keys.MinKey, keys.MaxKey}}
+			targetToProtect := ptpb.MakeRecordClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(jobID), ts,
-				[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, jobsprotectedts.Jobs)
+				deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 			return ptp.Protect(ctx, txn, rec)
 		}))
 		return j, rec
@@ -163,8 +165,10 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 		require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj = mkScheduledJobRec(scheduleLabel)
 			require.NoError(t, sj.Create(ctx, s0.InternalExecutor().(sqlutil.InternalExecutor), txn))
+			deprecatedSpansToProtect := roachpb.Spans{{keys.MinKey, keys.MaxKey}}
+			targetToProtect := ptpb.MakeRecordClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), sj.ScheduleID(), ts,
-				[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, jobsprotectedts.Schedules)
+				deprecatedSpansToProtect, jobsprotectedts.Schedules, targetToProtect)
 			return ptp.Protect(ctx, txn, rec)
 		}))
 		return sj, rec
