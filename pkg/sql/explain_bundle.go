@@ -536,6 +536,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "datestyle_enabled", clusterSetting: dateStyleEnabled, convFunc: boolToOnOff},
 		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
 		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
+		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}

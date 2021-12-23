@@ -80,6 +80,7 @@ sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references 
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
+sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	setting to true uses the same size for all columns to compute scan cost
 sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 sql.defaults.datestyle.enabled	boolean	false	default value for datestyle_enabled session setting
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type

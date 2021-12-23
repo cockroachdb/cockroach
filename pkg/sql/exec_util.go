@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -693,6 +693,13 @@ var largeFullScanRows = settings.RegisterFloatSetting(
 		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
 		"is set to true",
 	1000.0,
+).WithPublic()
+
+var costScansWithDefaultColSize = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	`sql.defaults.cost_scans_with_default_col_size.enabled`,
+	"setting to true uses the same size for all columns to compute scan cost",
+	false,
 ).WithPublic()
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
@@ -3028,6 +3035,12 @@ func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
 
 func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) {
 	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
+}
+
+// TODO(harding): Remove this when costing scans based on average column size
+// is fully supported.
+func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {
+	m.data.CostScansWithDefaultColSize = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
