@@ -349,7 +349,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 		if expectedStatus == "" {
 			return nil
 		}
-		st, err := rts.job.CurrentStatus(rts.ctx, nil /* txn */)
+		st, err := rts.job.TestingCurrentStatus(rts.ctx, nil /* txn */)
 		if err != nil {
 			return err
 		}
@@ -2587,7 +2587,7 @@ func TestStartableJob(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, txn.Commit(ctx))
 		require.NoError(t, sj.Cancel(ctx))
-		status, err := sj.CurrentStatus(ctx, nil /* txn */)
+		status, err := sj.TestingCurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusCancelRequested, status)
 		// Start should fail since we have already called cancel on the job.
@@ -2661,7 +2661,7 @@ func TestStartableJob(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			loaded, err := jr.LoadJob(ctx, sj.ID())
 			require.NoError(t, err)
-			st, err := loaded.CurrentStatus(ctx, nil /* txn */)
+			st, err := loaded.TestingCurrentStatus(ctx, nil /* txn */)
 			require.NoError(t, err)
 			if st != jobs.StatusSucceeded {
 				return errors.Errorf("expected %s, got %s", jobs.StatusSucceeded, st)
@@ -3402,7 +3402,7 @@ func TestPausepoints(t *testing.T) {
 			}))
 			require.NoError(t, sj.Start(ctx))
 			require.NoError(t, sj.AwaitCompletion(ctx))
-			status, err := sj.CurrentStatus(ctx, nil)
+			status, err := sj.TestingCurrentStatus(ctx, nil)
 			// Map pause-requested to paused to avoid races.
 			if status == jobs.StatusPauseRequested {
 				status = jobs.StatusPaused
