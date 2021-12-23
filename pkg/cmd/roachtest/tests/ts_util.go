@@ -101,7 +101,7 @@ func verifyTxnPerSecond(
 	txnTarget, maxPercentTimeUnderTarget float64,
 ) {
 	// Query needed information over the timespan of the query.
-	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, adminNode)
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), adminNode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func verifyLookupsPerSec(
 	rangeLookupsTarget float64,
 ) {
 	// Query needed information over the timespan of the query.
-	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, adminNode)
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), adminNode)
 	if err != nil {
 		t.Fatal(err)
 	}

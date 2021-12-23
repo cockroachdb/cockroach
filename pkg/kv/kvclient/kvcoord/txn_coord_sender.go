@@ -442,7 +442,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	et := ba.Requests[0].GetEndTxn()
 	if et.Commit {
 		deadline := et.Deadline
-		if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
+		if deadline != nil && !deadline.IsEmpty() && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
 			txn := tc.mu.txn.Clone()
 			pErr := generateTxnDeadlineExceededErr(txn, *deadline)
 			// We need to bump the epoch and transform this retriable error.

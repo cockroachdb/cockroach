@@ -39,8 +39,8 @@ func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string,
 }
 
 func registerImportNodeShutdown(r registry.Registry) {
-	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
-		startImport := func(c cluster.Cluster) (jobID string, err error) {
+	getImportRunner := func(ctx context.Context, t test.Test, gatewayNode int) jobStarter {
+		startImport := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
 			if c.IsLocal() {
@@ -60,7 +60,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|', detached
 			`, tableName)
-			gatewayDB := c.Conn(ctx, gatewayNode)
+			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 			defer gatewayDB.Close()
 
 			createStmt, err := readCreateTableFromFixture(
@@ -87,10 +87,10 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
 			nodeToShutdown := 3
-			startImport := getImportRunner(ctx, gatewayNode)
+			startImport := getImportRunner(ctx, t, gatewayNode)
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
 		},
@@ -101,10 +101,10 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
 			nodeToShutdown := 2
-			startImport := getImportRunner(ctx, gatewayNode)
+			startImport := getImportRunner(ctx, t, gatewayNode)
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
 		},
@@ -119,7 +119,7 @@ func registerImportTPCC(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
@@ -214,8 +214,8 @@ func registerImportTPCH(r registry.Registry) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
-				conn := c.Conn(ctx, 1)
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				conn := c.Conn(ctx, t.L(), 1)
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 					t.Fatal(err)
 				}
@@ -376,7 +376,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		// Decommission a node.

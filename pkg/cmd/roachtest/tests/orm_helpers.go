@@ -26,9 +26,9 @@ import (
 // cause thousands of table descriptors and schema change jobs to accumulate
 // rapidly, thereby decreasing performance.
 func alterZoneConfigAndClusterSettings(
-	ctx context.Context, version string, c cluster.Cluster, nodeIdx int,
+	ctx context.Context, t test.Test, version string, c cluster.Cluster, nodeIdx int,
 ) error {
-	db, err := c.ConnE(ctx, nodeIdx)
+	db, err := c.ConnE(ctx, t.L(), nodeIdx)
 	if err != nil {
 		return err
 	}

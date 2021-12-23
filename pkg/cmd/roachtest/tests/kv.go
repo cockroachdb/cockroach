@@ -81,9 +81,9 @@ func registerKV(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.EncryptedStores = opts.encryption
-		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 		if opts.disableLoadSplits {
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
@@ -289,9 +289,9 @@ func registerKVContention(r registry.Registry) {
 			// QPS threshold check in the test is guaranteed to fail.
 			settings := install.MakeClusterSettings()
 			settings.Env = append(settings.Env, "COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
-			c.Start(ctx, option.DefaultStartOpts(), settings, c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, nodes))
 
-			conn := c.Conn(ctx, 1)
+			conn := c.Conn(ctx, t.L(), 1)
 			// Enable request tracing, which is a good tool for understanding
 			// how different transactions are interacting.
 			if _, err := conn.Exec(`
@@ -352,7 +352,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
 				n := nodes
@@ -368,7 +368,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 				m.Wait()
 			}
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			WaitFor3XReplication(t, db)
@@ -404,14 +404,14 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			})
 			// Gracefully shut down third node (doesn't matter whether it's graceful or not).
 			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
-			c.Stop(ctx, option.DefaultStopOpts(), c.Node(nodes))
+			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
 				// Use a different seed to make sure it's not just stepping into the
 				// other earlier kv invocation's footsteps.
 				run(kv+" --seed 2 {pgurl:1}", true)
 			})
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes)) // satisfy dead node detector, even if test fails below
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
@@ -441,9 +441,9 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// failure will likely be thankful for this additional logging.
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
-			c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			WaitFor3XReplication(t, db)
@@ -489,7 +489,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 				// Before we start shutting down nodes, wait for the performance
 				// of the workload to stabilize at the expected allowed level.
 
-				adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+				adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(1))
 				if err != nil {
 					return err
 				}
@@ -575,14 +575,14 @@ func registerKVGracefulDraining(r registry.Registry) {
 					}
 					m.ExpectDeath()
 					c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
-					c.Stop(ctx, option.DefaultStopOpts(), c.Node(nodes))
+					c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
 					t.Status("letting workload run with one node down")
 					select {
 					case <-ctx.Done():
 						return nil
 					case <-time.After(1 * time.Minute):
 					}
-					c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes))
+					c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes))
 					m.ResetDeaths()
 				}
 
@@ -657,7 +657,7 @@ func registerKVSplits(r registry.Registry) {
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=256MiB")
-				c.Start(ctx, startOpts, settings, c.Range(1, nodes))
+				c.Start(ctx, t.L(), startOpts, settings, c.Range(1, nodes))
 
 				t.Status("running workload")
 				workloadCtx, workloadCancel := context.WithCancel(ctx)
@@ -690,7 +690,7 @@ func registerKVScalability(r registry.Registry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -740,13 +740,13 @@ func registerKVRangeLookups(r registry.Registry) {
 		doneWorkload := make(chan struct{})
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 		t.Status("running workload")
 
 		conns := make([]*gosql.DB, nodes)
 		for i := 0; i < nodes; i++ {
-			conns[i] = c.Conn(ctx, i+1)
+			conns[i] = c.Conn(ctx, t.L(), i+1)
 		}
 		defer func() {
 			for i := 0; i < nodes; i++ {
@@ -862,9 +862,9 @@ func registerKVMultiStoreWithOverload(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.StoreCount = 2
-		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 		// db1 on store1 and db2 on store2. Writes to db2 will overload store2 and
 		// cause admission control to maintain health by queueing these

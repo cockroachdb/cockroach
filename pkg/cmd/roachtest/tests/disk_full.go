@@ -37,7 +37,7 @@ func registerDiskFull(r registry.Registry) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -66,7 +66,7 @@ func registerDiskFull(r registry.Registry) {
 
 				// Node 1 should forcibly exit due to a full disk.
 				for isLive := true; isLive; {
-					db := c.Conn(ctx, 2)
+					db := c.Conn(ctx, t.L(), 2)
 					err := db.QueryRow(`SELECT is_live FROM crdb_internal.gossip_nodes WHERE node_id = 1;`).Scan(&isLive)
 					if err != nil {
 						t.Fatal(err)
@@ -91,7 +91,7 @@ func registerDiskFull(r registry.Registry) {
 					// monitor detects the death, expect it.
 					m.ExpectDeath()
 
-					err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n))
+					err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n))
 					t.L().Printf("starting n%d: error %v", n, err)
 					if err == nil {
 						t.Fatal("node successfully started unexpectedly")
@@ -122,7 +122,7 @@ func registerDiskFull(r registry.Registry) {
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
 				m.ResetDeaths()
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
-				if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
+				if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
 

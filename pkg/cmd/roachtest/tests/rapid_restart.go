@@ -47,7 +47,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		for i := 0; i < 3; i++ {
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.SkipInit = true
-			if err := c.StartE(ctx, startOpts, install.MakeClusterSettings(), node); err != nil {
+			if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), node); err != nil {
 				t.Fatalf("error during start: %v", err)
 			}
 
@@ -61,7 +61,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			sig := [2]int{2, 9}[rand.Intn(2)]
 			stopOpts := option.DefaultStopOpts()
 			stopOpts.RoachprodOpts.Sig = sig
-			if err := c.StopE(ctx, stopOpts, node); err != nil {
+			if err := c.StopE(ctx, t.L(), stopOpts, node); err != nil {
 				t.Fatalf("error during stop: %v", err)
 			}
 		}
@@ -73,7 +73,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Verify the cluster is ok by torturing the prometheus endpoint until it
 		// returns success. A side-effect is to prevent regression of #19559.
 		for !done() {
-			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, node)
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), node)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,6 +95,6 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Clean up for the test harness. Usually we want to leave nodes running so
 	// that consistency checks can be run, but in this case there's not much
 	// there in the first place anyway.
-	c.Stop(ctx, option.DefaultStopOpts(), node)
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), node)
 	c.Wipe(ctx, node)
 }

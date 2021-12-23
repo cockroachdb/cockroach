@@ -76,7 +76,7 @@ func importBankDataSplit(
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	runImportBankDataSplit(ctx, rows, ranges, t, c)
 	return dest
 }
@@ -125,8 +125,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster) (jobID string, err error) {
-				gatewayDB := c.Conn(ctx, gatewayNode)
+			startBackup := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -145,8 +145,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster) (jobID string, err error) {
-				gatewayDB := c.Conn(ctx, gatewayNode)
+			startBackup := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -188,7 +188,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 					backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s' %s",
 						nodeID, destinationName(c), backupOpts)
 
-					gatewayDB := c.Conn(ctx, nodeID)
+					gatewayDB := c.Conn(ctx, t.L(), nodeID)
 					defer gatewayDB.Close()
 					t.Status("Running: ", backupQuery)
 					_, err := gatewayDB.ExecContext(ctx, backupQuery)
@@ -297,7 +297,7 @@ func registerBackup(r registry.Registry) {
 			}
 			dest := importBankData(ctx, rows, t, c)
 
-			conn := c.Conn(ctx, 1)
+			conn := c.Conn(ctx, t.L(), 1)
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx, `
@@ -409,8 +409,8 @@ func registerBackup(r registry.Registry) {
 			c.EncryptAtRandom(true)
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-			c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
-			conn := c.Conn(ctx, 1)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			conn := c.Conn(ctx, t.L(), 1)
 
 			duration := 5 * time.Minute
 			if c.IsLocal() {

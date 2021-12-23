@@ -33,7 +33,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	{
 		m := c.NewMonitor(ctx, crdbNodes)
@@ -49,7 +49,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m.Wait()
 	}
 
-	c.Stop(ctx, option.DefaultStopOpts(), crdbNodes)
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), crdbNodes)
 
 	for _, node := range corruptNodes {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node),
@@ -80,7 +80,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	if err := c.StartE(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes); err != nil {
+	if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes); err != nil {
 		// Node detected corruption on start and crashed. This is good. No need
 		// to run workload; the test is complete.
 		_ = c.WipeE(ctx, t.L(), corruptNodes)
