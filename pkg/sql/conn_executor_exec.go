@@ -490,7 +490,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		if retEv != nil || retErr != nil {
 			return
 		}
-		if os.ImplicitTxn.Get() {
+		// The postgres docs say that commands in the extended protocol are
+		// all treated as an implicit transaction that does not get committed
+		// until a Sync message is received.
+		if os.ImplicitTxn.Get() && prepared == nil {
 			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
 			return
 		}

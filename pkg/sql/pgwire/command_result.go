@@ -356,6 +356,9 @@ func (c *conn) newCommandResult(
 	portalName string,
 	implicitTxn bool,
 ) sql.CommandResult {
+	if portalName == "C_1" {
+		fmt.Println()
+	}
 	r := c.allocCommandResult()
 	*r = commandResult{
 		conn:           c,
@@ -454,13 +457,6 @@ func (r *limitedCommandResult) SupportsAddBatch() bool {
 // requests for rows from the active portal, during the "execute portal" flow
 // when a limit has been specified.
 func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
-	// In an implicit transaction, a portal suspension is immediately
-	// followed by closing the portal.
-	if r.implicitTxn {
-		r.typ = noCompletionMsg
-		return sql.ErrLimitedResultClosed
-	}
-
 	// Keep track of the previous CmdPos so we can rewind if needed.
 	prevPos := r.conn.stmtBuf.AdvanceOne()
 	for {
@@ -491,6 +487,11 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			r.rowsAffected = 0
 			return nil
 		case sql.Sync:
+			if r.implicitTxn {
+				// Implicit transactions should treat a Sync as an auto-commit. This
+				// needs to be handled in conn_executor.
+				return r.rewindAndClosePortal(ctx, prevPos)
+			}
 			// The client wants to see a ready for query message
 			// back. Send it then run the for loop again.
 			r.conn.stmtBuf.AdvanceOne()
@@ -498,9 +499,8 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// here as the conn_executor cleanup is not executed because of the
 			// limitedCommandResult side state machine.
 			r.conn.stmtBuf.Ltrim(ctx, prevPos)
-			// We can hard code InTxnBlock here because we don't
-			// support implicit transactions, so we know we're in
-			// a transaction.
+			// We can hard code InTxnBlock here because implicit transactions are
+			// handled above.
 			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
 			if err := r.conn.Flush(r.pos); err != nil {
 				return err
