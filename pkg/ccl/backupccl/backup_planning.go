@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -859,8 +860,7 @@ func backupPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
 		if err := protectTimestampForBackup(
-			ctx, p, plannerTxn, jobID, backupManifest.Spans,
-			backupManifest.StartTime, endTime, backupDetails,
+			ctx, p, plannerTxn, jobID, backupManifest, backupDetails,
 		); err != nil {
 			return err
 		}
@@ -1205,25 +1205,62 @@ func makeNewEncryptionOptions(
 	return encryptionOptions, encryptionInfo, nil
 }
 
+func getProtectedTimestampTargetForBackup(backupManifest BackupManifest) *ptpb.Target {
+	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
+		return ptpb.MakeRecordClusterTarget()
+	}
+
+	if len(backupManifest.Tenants) > 0 {
+		tenantID := make([]roachpb.TenantID, 0)
+		for _, tenant := range backupManifest.Tenants {
+			tenantID = append(tenantID, roachpb.MakeTenantID(tenant.ID))
+		}
+		return ptpb.MakeRecordTenantsTarget(tenantID)
+	}
+
+	// ResolvedCompleteDBs contains all the "complete" databases being backed up.
+	//
+	// This includes explicit `BACKUP DATABASE` targets as well as expansions as a
+	// result of `BACKUP TABLE db.*`. In both cases we want to write a protected
+	// timestamp record that covers the entire database.
+	if len(backupManifest.CompleteDbs) > 0 {
+		return ptpb.MakeRecordSchemaObjectsTarget(backupManifest.CompleteDbs)
+	}
+
+	// At this point we are dealing with a `BACKUP TABLE`, so we write a protected
+	// timestamp record on each table being backed up.
+	tableIDs := make(descpb.IDs, 0)
+	for _, desc := range backupManifest.Descriptors {
+		t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, hlc.Timestamp{})
+		if t != nil {
+			tableIDs = append(tableIDs, t.GetID())
+		}
+	}
+	return ptpb.MakeRecordSchemaObjectsTarget(tableIDs)
+}
+
 func protectTimestampForBackup(
 	ctx context.Context,
 	p sql.PlanHookState,
 	txn *kv.Txn,
 	jobID jobspb.JobID,
-	spans []roachpb.Span,
-	startTime, endTime hlc.Timestamp,
+	backupManifest BackupManifest,
 	backupDetails jobspb.BackupDetails,
 ) error {
 	if backupDetails.ProtectedTimestampRecord == nil {
 		return nil
 	}
-	if len(spans) > 0 {
-		tsToProtect := endTime
-		if !startTime.IsEmpty() {
-			tsToProtect = startTime
+	if len(backupManifest.Spans) > 0 {
+		tsToProtect := backupManifest.EndTime
+		if !backupManifest.StartTime.IsEmpty() {
+			tsToProtect = backupManifest.StartTime
 		}
+
+		// Resolve the target that the PTS record will protect as part of this
+		// backup.
+		target := getProtectedTimestampTargetForBackup(backupManifest)
 		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
-			tsToProtect, spans, jobsprotectedts.Jobs)
+			tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
 		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
 		if err != nil {
 			return err

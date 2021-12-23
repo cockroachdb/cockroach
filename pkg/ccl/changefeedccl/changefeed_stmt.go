@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -415,16 +414,16 @@ func changefeedPlanHook(
 		{
 
 			var protectedTimestampID uuid.UUID
-			var spansToProtect []roachpb.Span
 			var ptr *ptpb.Record
 
 			shouldProtectTimestamp := initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
 			if shouldProtectTimestamp {
 				protectedTimestampID = uuid.MakeV4()
-				spansToProtect = makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
+				deprecatedSpansToProtect := makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
+				targetToProtect := makeTargetToProtect(details.Targets)
 				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
 				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), statementTime,
-					spansToProtect, jobsprotectedts.Jobs)
+					deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 			}
 
 			jr := jobs.Record{
