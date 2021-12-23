@@ -56,9 +56,10 @@ import {
 import { ISortedTablePagination } from "../sortedtable";
 import styles from "./statementsPage.module.scss";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IDuration = google.protobuf.IDuration;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -88,7 +89,11 @@ export interface StatementsPageDispatchProps {
   refreshStatementDiagnosticsRequests: () => void;
   resetSQLStats: () => void;
   dismissAlertMessage: () => void;
-  onActivateStatementDiagnostics: (statement: string) => void;
+  onActivateStatementDiagnostics: (
+    statement: string,
+    minExecLatency: IDuration,
+    expiresAfter: IDuration,
+  ) => void;
   onDiagnosticsModalOpen?: (statement: string) => void;
   onSearchComplete?: (query: string) => void;
   onPageChanged?: (newPage: number) => void;
