@@ -1566,3 +1566,18 @@ vectorized: true
           missing stats
           table: t65343@t65343_c_idx
           spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+# Regression test for the cFetcher trying to fetch virtual computed columns from
+# a primary index (#73745).
+statement ok
+CREATE TABLE t73745 (
+  i INT PRIMARY KEY,
+  v INT NOT NULL AS ((i * 2)) VIRTUAL
+);
+INSERT INTO t73745 VALUES (1), (2), (3);
+
+# Use kvtrace to simulate \set auto_trace=on,kv.
+query T kvtrace
+SELECT * FROM t73745
+----
+Scan /Table/61/{1-2}

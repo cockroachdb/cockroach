@@ -45,7 +45,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 Scan /Table/56/{1-2}
 fetched: /tu/tu_pkey/1 -> NULL
-fetched: /tu/tu_pkey/1/b -> 2
+fetched: /tu/tu_pkey/1 -> NULL
 fetched: /tu/tu_pkey/1/c/d -> /3/4
 Put /Table/56/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
 fast path completed

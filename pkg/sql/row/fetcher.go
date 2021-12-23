@@ -694,7 +694,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 	if unchangedPrefix {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
-	} else if rf.mustDecodeIndexKey || rf.traceKV {
+	} else if rf.mustDecodeIndexKey {
 		rf.keyRemainingBytes, moreKVs, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
 		if err != nil {
 			return false, err
@@ -767,14 +767,12 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) string {
 	var buf strings.Builder
 	for i, v := range vals {
-		if err := v.EnsureDecoded(types[i], rf.alloc); err != nil {
-			buf.WriteString("/{error decoding: ")
-			buf.WriteString(err.Error())
-			buf.WriteByte('}')
-			continue
-		}
 		buf.WriteByte('/')
-		buf.WriteString(v.Datum.String())
+		if err := v.EnsureDecoded(types[i], rf.alloc); err != nil {
+			buf.WriteByte('?')
+		} else {
+			buf.WriteString(v.Datum.String())
+		}
 	}
 	return buf.String()
 }
@@ -1008,7 +1006,7 @@ func (rf *Fetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	if rf.traceKV || table.neededCols.Contains(int(colID)) {
+	if table.neededCols.Contains(int(colID)) {
 		if idx, ok := table.colIdxMap.Get(colID); ok {
 			if rf.traceKV {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
