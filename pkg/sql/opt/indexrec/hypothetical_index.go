@@ -222,3 +222,8 @@ func (hi *hypotheticalIndex) PartitionCount() int {
 func (hi *hypotheticalIndex) Partition(i int) cat.Partition {
 	return nil
 }
+
+// HasShardColumn is part of the cat.Index interface.
+func (hi *hypotheticalIndex) HasShardColumn() (int, bool) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}

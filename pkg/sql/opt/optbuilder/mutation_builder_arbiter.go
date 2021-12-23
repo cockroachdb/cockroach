@@ -94,17 +94,22 @@ func (mb *mutationBuilder) findArbiters(
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		index := mb.tab.Index(idx)
 
-		// Skip non-unique indexes. Use lax key columns, which always contain
-		// the minimum columns that ensure uniqueness. Null values are
-		// considered to be *not* equal, but that's OK because the join
-		// condition rejects nulls anyway.
-		if !index.IsUnique() || index.LaxKeyColumnCount() != conflictOrds.Len() {
+		// Skip non-unique indexes. Use lax key columns (excluding shard column if
+		// hash-sharded index), which always contain the minimum columns that ensure
+		// uniqueness. Null values are considered to be *not* equal, but that's OK
+		// because the join condition rejects nulls anyway.
+		if !index.IsUnique() {
+			continue
+		}
+		if _, isSharded := index.HasShardColumn(); isSharded && index.LaxKeyColumnCount() != conflictOrds.Len()+1 {
+			continue
+		} else if !isSharded && index.LaxKeyColumnCount() != conflictOrds.Len() {
 			continue
 		}
 
 		// Determine whether the conflict columns match the columns in the lax
 		// key. If not, the index cannot be an arbiter index.
-		indexOrds := getIndexLaxKeyOrdinals(index)
+		indexOrds := getIndexLaxKeyOrdinalsWithoutShardCol(index)
 		if !indexOrds.Equals(conflictOrds) {
 			continue
 		}

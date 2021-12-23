@@ -1576,3 +1576,52 @@ insert uniq_computed_pk
                      └── filters
                           ├── d:44 = uniq_computed_pk.d:35
                           └── (i:42 != uniq_computed_pk.i:33) OR (c_i_expr:45 != uniq_computed_pk.c_i_expr:36)
+
+exec-ddl
+CREATE TABLE uniq_hash (
+  k INT PRIMARY KEY,
+  x INT,
+  y INT,
+  UNIQUE INDEX uniq_hash_idx_x_y (x, y) USING HASH WITH BUCKET_COUNT = 8
+)
+----
+
+build
+INSERT INTO uniq_hash VALUES (1, 11, 111) ON CONFLICT (x, y) DO NOTHING
+----
+insert uniq_hash
+ ├── columns: <none>
+ ├── arbiter indexes: uniq_hash_idx_x_y
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => x:2
+ │    ├── column3:9 => y:3
+ │    └── crdb_internal_x_y_shard_8_comp:10 => crdb_internal_x_y_shard_8:6
+ └── upsert-distinct-on
+      ├── columns: column1:7!null column2:8!null column3:9!null crdb_internal_x_y_shard_8_comp:10
+      ├── grouping columns: column2:8!null column3:9!null crdb_internal_x_y_shard_8_comp:10
+      ├── anti-join (hash)
+      │    ├── columns: column1:7!null column2:8!null column3:9!null crdb_internal_x_y_shard_8_comp:10
+      │    ├── project
+      │    │    ├── columns: crdb_internal_x_y_shard_8_comp:10 column1:7!null column2:8!null column3:9!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    └── (1, 11, 111)
+      │    │    └── projections
+      │    │         └── mod(fnv32(crdb_internal.datums_to_bytes(column2:8, column3:9)), 8) [as=crdb_internal_x_y_shard_8_comp:10]
+      │    ├── project
+      │    │    ├── columns: crdb_internal_x_y_shard_8:16 k:11!null x:12 y:13
+      │    │    ├── scan uniq_hash
+      │    │    │    ├── columns: k:11!null x:12 y:13
+      │    │    │    └── computed column expressions
+      │    │    │         └── crdb_internal_x_y_shard_8:16
+      │    │    │              └── mod(fnv32(crdb_internal.datums_to_bytes(x:12, y:13)), 8)
+      │    │    └── projections
+      │    │         └── mod(fnv32(crdb_internal.datums_to_bytes(x:12, y:13)), 8) [as=crdb_internal_x_y_shard_8:16]
+      │    └── filters
+      │         ├── column2:8 = x:12
+      │         ├── column3:9 = y:13
+      │         └── crdb_internal_x_y_shard_8_comp:10 = crdb_internal_x_y_shard_8:16
+      └── aggregations
+           └── first-agg [as=column1:7]
+                └── column1:7

@@ -714,6 +714,37 @@ func (tt *Table) addIndexWithVersion(
 		tt.deleteOnlyIdxCount++
 	}
 
+	// Add shard column if sharded.
+	if def.Sharded != nil {
+		idx.isSharded = true
+		shardColOrdinal := len(tt.Columns)
+		idx.shardColOrd = shardColOrdinal
+
+		colNames := make([]string, 0, len(def.Columns))
+		for _, colDef := range def.Columns {
+			colNames = append(colNames, string(colDef.Column))
+		}
+		buckets, _ := def.Sharded.ShardBuckets.(*tree.NumVal).AsInt32()
+
+		var shardCol cat.Column
+		shardCol.InitVirtualComputed(
+			shardColOrdinal,
+			cat.StableID(1+shardColOrdinal),
+			tree.Name(tabledesc.GetShardColumnName(colNames, buckets)),
+			types.Int,
+			false,
+			cat.Hidden,
+			fmt.Sprintf(
+				"mod(fnv32(crdb_internal.datums_to_bytes(%s)), %d:::INT8)",
+				strings.Join(colNames, ","),
+				buckets,
+			),
+		)
+
+		tt.Columns = append(tt.Columns, shardCol)
+		idx.addColumnByOrdinal(tt, shardColOrdinal, tree.Ascending, keyCol)
+	}
+
 	// Add explicit columns and mark primary key columns as not null.
 	// Add the geoConfig if applicable.
 	idx.ExplicitColCount = len(def.Columns)

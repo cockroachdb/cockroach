@@ -868,6 +868,9 @@ type Index struct {
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
+
+	isSharded   bool
+	shardColOrd int
 }
 
 // ID is part of the cat.Index interface.
@@ -981,6 +984,11 @@ func (ti *Index) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
+}
+
+// HasShardColumn is part of the cat.Index interface.
+func (ti *Index) HasShardColumn() (int, bool) {
+	return ti.shardColOrd, ti.isSharded
 }
 
 // Partition implements the cat.Partition interface for testing purposes.

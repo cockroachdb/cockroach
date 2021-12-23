@@ -1320,6 +1320,18 @@ func getIndexLaxKeyOrdinals(index cat.Index) util.FastIntSet {
 	return keyOrds
 }
 
+// getIndexLaxKeyOrdinalsWithoutShardCol is basically the same as
+// getIndexLaxKeyOrdinals but excluding the shard column ordinal if the index is
+// sharded.
+func getIndexLaxKeyOrdinalsWithoutShardCol(index cat.Index) util.FastIntSet {
+	keyOrds := getIndexLaxKeyOrdinals(index)
+	if shardColOrd, isSharded := index.HasShardColumn(); isSharded {
+		keyOrds.Remove(shardColOrd)
+	}
+
+	return keyOrds
+}
+
 // getUniqueConstraintOrdinals returns the ordinals of all columns in the given
 // unique constraint. A column's ordinal is the ordered position of that column
 // in the owning table.

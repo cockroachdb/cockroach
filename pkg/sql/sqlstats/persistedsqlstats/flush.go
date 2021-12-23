@@ -265,7 +265,7 @@ func (s *PersistedSQLStats) insertTransactionStats(
 	insertStmt := `
 INSERT INTO system.transaction_statistics
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
+ON CONFLICT (aggregated_ts, fingerprint_id, app_name, node_id)
 DO NOTHING
 `
 
@@ -427,8 +427,7 @@ func (s *PersistedSQLStats) insertStatementStats(
 	insertStmt := `
 INSERT INTO system.statement_statistics
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
-             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
+ON CONFLICT (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
 DO NOTHING
 `
 	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)

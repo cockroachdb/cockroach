@@ -1197,6 +1197,9 @@ type optIndex struct {
 	// the ordinal of the inverted column created to refer to the key of this
 	// index. It is -1 if this is not an inverted index.
 	invertedColOrd int
+
+	isSharded       bool
+	shardColOrdinal int
 }
 
 var _ cat.Index = &optIndex{}
@@ -1325,6 +1328,17 @@ func (oi *optIndex) init(
 		}
 		oi.columnOrds[i] = ord
 	}
+
+	if idx.IsSharded() {
+		oi.isSharded = true
+		for ord := 0; ord < idx.NumKeyColumns(); ord++ {
+			if idx.GetKeyColumnName(ord) == idx.GetShardColumnName() {
+				colID := idx.GetKeyColumnID(ord)
+				oi.shardColOrdinal, _ = oi.tab.lookupColumnOrdinal(colID)
+				break
+			}
+		}
+	}
 }
 
 // ID is part of the cat.Index interface.
@@ -1451,6 +1465,11 @@ func (oi *optIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optIndex) Partition(i int) cat.Partition {
 	return &oi.partitions[i]
+}
+
+// HasShardColumn is part of the cat.Index interface.
+func (oi *optIndex) HasShardColumn() (int, bool) {
+	return oi.shardColOrdinal, oi.isSharded
 }
 
 // optPartition implements cat.Partition and represents a PARTITION BY LIST
@@ -2208,6 +2227,11 @@ func (oi *optVirtualIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 	return nil
+}
+
+// HasShardColumn is part of the cat.Index interface.
+func (oi *optVirtualIndex) HasShardColumn() (int, bool) {
+	panic(errors.AssertionFailedf("unimplemented"))
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

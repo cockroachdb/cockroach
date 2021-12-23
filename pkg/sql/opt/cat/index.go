@@ -192,6 +192,10 @@ type Index interface {
 	// Partition returns the ith PARTITION BY LIST partition within the index
 	// definition, where i < PartitionCount.
 	Partition(i int) Partition
+
+	// HasShardColumn returns a column ordinal corresponding to a hash shard
+	// column and true if such a column exists. Otherwise, false is returned.
+	HasShardColumn() (int, bool)
 }
 
 // IndexColumn describes a single column that is part of an index definition.
