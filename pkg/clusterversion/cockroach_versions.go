@@ -328,6 +328,16 @@ const (
 	SeedTenantSpanConfigs
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
+	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
+	// reconciliation process at least once.
+	EnsureSpanConfigReconciliation
+	// EnsureSpanConfigSubscription ensures that all KV nodes are subscribed to
+	// the global span configuration state, observing the entries installed as
+	// in EnsureSpanConfigReconciliation.
+	EnsureSpanConfigSubscription
+	// EnableSpanConfigStore enables the use of the span configs infrastructure
+	// in KV.
+	EnableSpanConfigStore
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -576,6 +586,18 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PublicSchemasWithDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
+	},
+	{
+		Key:     EnsureSpanConfigReconciliation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
+	},
+	{
+		Key:     EnsureSpanConfigSubscription,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 38},
+	},
+	{
+		Key:     EnableSpanConfigStore,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
 	},
 
 	// *************************************************
