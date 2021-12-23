@@ -1229,9 +1229,9 @@ type ExecutorConfig struct {
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory
 
-	// SpanConfigReconciliationJobDeps are used to drive the span config
-	// reconciliation job.
-	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+	// SpanConfigReconciler is used to drive the span config reconciliation job
+	// and related migrations.
+	SpanConfigReconciler spanconfig.Reconciler
 
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
