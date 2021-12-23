@@ -903,7 +903,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			spanConfigKnobs,
 		)
 
-		execCfg.SpanConfigReconciliationJobDeps = spanConfig.manager
+		execCfg.SpanConfigReconciler = spanConfigReconciler
 	}
 	execCfg.SpanConfigKVAccessor = cfg.sqlServerOptionalKVArgs.spanConfigKVAccessor
 

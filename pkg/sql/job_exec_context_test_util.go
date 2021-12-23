@@ -70,7 +70,7 @@ func (p *FakeJobExecContext) MigrationJobDeps() migration.JobDeps {
 	panic("unimplemented")
 }
 
-// SpanConfigReconciliationJobDeps implements the JobExecContext interface.
-func (p *FakeJobExecContext) SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies {
+// SpanConfigReconciler implements the JobExecContext interface.
+func (p *FakeJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 	panic("unimplemented")
 }
