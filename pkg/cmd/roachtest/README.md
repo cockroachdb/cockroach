@@ -2,7 +2,7 @@
 
 `roachtest` is a tool for performing large-scale (multi-machine)
 automated tests. It relies on the concurrently-developed (but
-separate) tool `roachprod`.
+separate) library `roachprod`.
 
 # Setup
 
@@ -31,10 +31,9 @@ acceptance/cli/node-status [server]
 
 To run a test, the `roachtest run` command is used. Since a test typically
 deploys a CockroachDB cluster, `roachtest` needs to know which cockroach binary
-to use. It also needs to know where to find `roachprod`, and also generically
-requires the `workload` binary which is used by many tests to deploy load
-against the cluster. To that effect, `roachtest run` takes the `--cockroach`,
-`--roachprod`, and `--workload` flags. The default values for these are set up
+to use. It also generically requires the `workload` binary which is used by many 
+tests to deploy load against the cluster. To that effect, `roachtest run` takes 
+the `--cockroach`, and `--workload` flags. The default values for these are set up
 so that they do not need to be specified in the common case. Besides, when
 the binaries have nonstandard names, it is often more convenient to move them
 to the location `roachtest` expects (it will tell you) rather than to specify
@@ -59,7 +58,7 @@ where `roachtest` will find them:
 `roachtest` will look first in `$PATH`, then (except when `--local` is
 specified) in `bin.docker_amd64` in the repo root, followed by `bin`. This
 is complicated enough to be surprising, which might be another reason to
-pass the `--cockroach`, `--workload`, `--roachprod` flags explicitly.
+pass the `--cockroach` and  `--workload` flags explicitly.
 
 Some roachtests can also be run with the `--local` flag, i.e. will use a
 cluster on the local machine created via `roachprod create local`. In that
@@ -108,7 +107,7 @@ $ roachtest run acceptance/build-info
 
 If this doesn't work, the output should tell you why. Perhaps the binaries you
 use are not in the canonical locations and need to be specified via the
-`--cockroach`, `--workload`, `--roachprod` flags. Common other errors include
+`--cockroach` and `--workload` flags. Common other errors include
 not having set up roachprod properly (does `roachprod create -n 1 $USER-foo &&
 roachprod destroy $USER-foo` work?), or having the binaries for the wrong
 architecture in place (reminder: `roachtest` and `roachprod` run on your own
