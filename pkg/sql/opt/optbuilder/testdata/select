@@ -1434,6 +1434,11 @@ SELECT v FROM inaccessible
 error (42703): column "v" does not exist
 
 build
+SELECT inaccessible.v FROM inaccessible
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
 INSERT INTO inaccessible VALUES (1)
 ----
 insert inaccessible
@@ -1453,6 +1458,11 @@ build
 INSERT INTO inaccessible VALUES (1) RETURNING v
 ----
 error (42703): column "v" does not exist
+
+build
+INSERT INTO inaccessible VALUES (1) RETURNING inaccessible.v
+----
+error (42703): column "inaccessible.v" does not exist
 
 build
 INSERT INTO inaccessible(k, v) VALUES (1, 1)
@@ -1485,9 +1495,19 @@ UPDATE inaccessible SET k=k+1 WHERE v=1
 error (42703): column "v" does not exist
 
 build
+UPDATE inaccessible SET k=k+1 WHERE inaccessible.v=1
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
 UPDATE inaccessible SET k=v+1
 ----
 error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET k=inaccessible.v+1
+----
+error (42703): column "inaccessible.v" does not exist
 
 build
 UPDATE inaccessible SET v=1
@@ -1500,9 +1520,19 @@ DELETE FROM inaccessible WHERE v=1
 error (42703): column "v" does not exist
 
 build
+DELETE FROM inaccessible WHERE inaccessible.v=1
+----
+error (42703): column "inaccessible.v" does not exist
+
+build
 DELETE FROM inaccessible RETURNING v
 ----
 error (42703): column "v" does not exist
+
+build
+DELETE FROM inaccessible RETURNING inaccessible.v
+----
+error (42703): column "inaccessible.v" does not exist
 
 exec-ddl
 CREATE TABLE same_name (
