@@ -1853,6 +1853,17 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		ev = eventNonRetriableErr{IsCommit: fsm.False}
 		payload = eventNonRetriableErrPayload{err: tcmd.Err}
 	case Sync:
+		// The Postgres docs say: "At completion of each series of extended-query
+		// messages, the frontend should issue a Sync message. This parameterless
+		// message causes the backend to close the current transaction if it's not
+		// inside a BEGIN/COMMIT transaction block (“close” meaning to commit if no
+		// error, or roll back if error)."
+		// In other words, Sync is treated as auto-commit for implicit transactions.
+		if op, ok := ex.machine.CurState().(stateOpen); ok {
+			if op.ImplicitTxn.Get() {
+				ev, payload = ex.handleAutoCommit(ctx, &tree.CommitTransaction{})
+			}
+		}
 		// Note that the Sync result will flush results to the network connection.
 		res = ex.clientComm.CreateSyncResult(pos)
 		if ex.draining {
@@ -2053,8 +2064,12 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			case ExecStmt:
 				canAdvance = ex.stmtDoesntNeedRetry(tcmd.AST)
 			case ExecPortal:
-				portal := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
-				canAdvance = ex.stmtDoesntNeedRetry(portal.Stmt.AST)
+				canAdvance = true
+				// The portal might have been deleted if DEALLOCATE was executed.
+				portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
+				if ok {
+					canAdvance = ex.stmtDoesntNeedRetry(portal.Stmt.AST)
+				}
 			case PrepareStmt:
 				canAdvance = true
 			case DescribeStmt:
