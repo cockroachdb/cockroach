@@ -23,17 +23,17 @@ message LocalOnlySessionData {
   string save_tables_prefix = 1;
   // OptimizerFKCascadesLimit is the maximum number of cascading operations that
   // are run for a single query.
-  int64 optimizer_fk_cascades_limit = 2 [(gogoproto.customname)="OptimizerFKCascadesLimit"];
+  int64 optimizer_fk_cascades_limit = 2 [(gogoproto.customname) = "OptimizerFKCascadesLimit"];
   // StmtTimeout is the duration a query is permitted to run before it is
   // canceled by the session. If set to 0, there is no timeout.
-  int64 stmt_timeout = 3 [(gogoproto.casttype)="time.Duration"];
+  int64 stmt_timeout = 3 [(gogoproto.casttype) = "time.Duration"];
   // IdleInSessionTimeout is the duration a session is permitted to idle before
   // the session is canceled. If set to 0, there is no timeout.
-  int64 idle_in_session_timeout = 4 [(gogoproto.casttype)="time.Duration"];
+  int64 idle_in_session_timeout = 4 [(gogoproto.casttype) = "time.Duration"];
   // IdleInTransactionSessionTimeout is the duration a session is permitted to
   // idle in a transaction before the session is canceled.
   // If set to 0, there is no timeout.
-  int64 idle_in_transaction_session_timeout = 5 [(gogoproto.casttype)="time.Duration"];
+  int64 idle_in_transaction_session_timeout = 5 [(gogoproto.casttype) = "time.Duration"];
   // NoticeDisplaySeverity indicates the level of Severity to send notices for the given
   // session. This should ideally be of type pgnotice.DisplaySeverity, but cannot be done
   // due to a circular dependency.
@@ -76,7 +76,7 @@ message LocalOnlySessionData {
   bool safe_updates = 15;
   // PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
   // joins.
-  bool prefer_lookup_joins_for_fks = 16 [(gogoproto.customname)="PreferLookupJoinsForFKs"];
+  bool prefer_lookup_joins_for_fks = 16 [(gogoproto.customname) = "PreferLookupJoinsForFKs"];
   // ZigzagJoinEnabled indicates whether the optimizer should try and plan a
   // zigzag join.
   bool zigzag_join_enabled = 17;
@@ -140,29 +140,29 @@ message LocalOnlySessionData {
   // ResultsBufferSize specifies the size at which the pgwire results buffer
   // will self-flush.
   int64 results_buffer_size = 38;
-	// PropagateInputOrdering indicates that when planning a subquery or CTE, the
-	// inner ordering should be propagated to the outer scope if the outer scope
-	// is unordered. PropagateInputOrdering is currently experimental.
-	bool propagate_input_ordering = 39;
+  // PropagateInputOrdering indicates that when planning a subquery or CTE, the
+  // inner ordering should be propagated to the outer scope if the outer scope
+  // is unordered. PropagateInputOrdering is currently experimental.
+  bool propagate_input_ordering = 39;
   // ExperimentalDistSQLPlanningMode indicates whether the experimental
   // DistSQL planning driven by the optimizer is enabled.
   int64 experimental_distsql_planning_mode = 40 [
-    (gogoproto.customname)="ExperimentalDistSQLPlanningMode",
-    (gogoproto.casttype)="ExperimentalDistSQLPlanningMode"
+    (gogoproto.customname) = "ExperimentalDistSQLPlanningMode",
+    (gogoproto.casttype) = "ExperimentalDistSQLPlanningMode"
   ];
   // DistSQLMode indicates whether to run queries using the distributed
   // execution engine.
   int64 dist_sql_mode = 41 [
-    (gogoproto.customname)="DistSQLMode",
-    (gogoproto.casttype)="DistSQLExecMode"
+    (gogoproto.customname) = "DistSQLMode",
+    (gogoproto.casttype) = "DistSQLExecMode"
   ];
   // SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
-  int64 serial_normalization_mode = 42 [(gogoproto.casttype)="SerialNormalizationMode"];
+  int64 serial_normalization_mode = 42 [(gogoproto.casttype) = "SerialNormalizationMode"];
   // NewSchemaChangerMode indicates whether to use the new schema changer.
-  int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
+  int64 new_schema_changer_mode = 43 [(gogoproto.casttype) = "NewSchemaChangerMode"];
   // SequenceCache stores sequence values which have been cached using the
   // CACHE sequence option.
-  map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype)="SequenceCache"];
+  map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype) = "SequenceCache"];
   // PlacementEnabled indicates whether PLACEMENT can be used or not.
   bool placement_enabled = 45;
   // SessionUserProto is the name of the user which has performed a SET ROLE
@@ -222,6 +222,10 @@ message LocalOnlySessionData {
   // CheckFunctionBodies indicates whether functions are validated during
   // creation.
   bool check_function_bodies = 60;
+  // CostScansWithDefaultColSize is true when the optimizer should cost scans
+  // and joins using the same default number of bytes per column instead of
+  // column sizes from the AvgSize table statistic.
+  bool cost_scans_with_default_col_size = 61;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
