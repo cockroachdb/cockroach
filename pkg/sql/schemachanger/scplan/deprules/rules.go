@@ -70,7 +70,7 @@ func init() {
 
 			screl.JoinTargetNode(parent, parentTarget, parentNode),
 			parentTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			parentNode.AttrIn(screl.Status, scpb.Status_ABSENT),
+			parentNode.AttrEq(screl.Status, scpb.Status_ABSENT),
 
 			joinTargetNode(other, otherTarget, otherNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
@@ -437,7 +437,7 @@ func init() {
 
 			screl.JoinTargetNode(index, indexTarget, indexNode),
 			indexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			indexNode.AttrIn(screl.Status, scpb.Status_VALIDATED, scpb.Status_BACKFILLED, scpb.Status_DELETE_AND_WRITE_ONLY),
+			indexNode.AttrEq(screl.Status, scpb.Status_VALIDATED),
 			joinTargetNode(indexName, indexNameTarget, indexNameNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)

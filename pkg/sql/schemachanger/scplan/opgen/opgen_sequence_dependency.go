@@ -17,14 +17,16 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.SequenceDependency)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.SequenceDependency) scop.Op {
 					return notImplemented(this)
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.SequenceDependency) scop.Op {
 					return notImplemented(this)

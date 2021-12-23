@@ -34,7 +34,8 @@ func convertSecondaryIndexColumnDir(
 
 func init() {
 	opRegistry.register((*scpb.SecondaryIndex)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
@@ -72,11 +73,6 @@ func init() {
 					}
 				}),
 			),
-			// If this index is unique (which primary indexes should be) and
-			// there's not already a covering primary index, then we'll need to
-			// validate that this index indeed is unique.
-			//
-			// TODO(ajwerner): Rationalize this and hook up the optimization.
 			to(scpb.Status_VALIDATED,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.ValidateUniqueIndex{
@@ -94,8 +90,9 @@ func init() {
 				}),
 			),
 		),
-		drop(
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+		toAbsent(
+			scpb.Status_PUBLIC,
+			to(scpb.Status_VALIDATED,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					// Most of this logic is taken from MakeMutationComplete().
 					return &scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly{
@@ -104,9 +101,12 @@ func init() {
 					}
 				}),
 			),
-			to(scpb.Status_DELETE_ONLY,
+			to(scpb.Status_DELETE_AND_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				revertible(false),
+			),
+			equiv(scpb.Status_BACKFILLED),
+			to(scpb.Status_DELETE_ONLY,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeDroppedIndexDeleteOnly{
 						TableID: this.TableID,
@@ -114,10 +114,7 @@ func init() {
 					}
 				}),
 			),
-			equiv(scpb.Status_VALIDATED, scpb.Status_DELETE_AND_WRITE_ONLY),
-			equiv(scpb.Status_BACKFILLED, scpb.Status_DELETE_AND_WRITE_ONLY),
 			to(scpb.Status_ABSENT,
-				revertible(false),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,
@@ -129,7 +126,8 @@ func init() {
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
-				})),
+				}),
+			),
 		),
 	)
 }

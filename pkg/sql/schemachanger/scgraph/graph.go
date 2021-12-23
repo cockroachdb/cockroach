@@ -202,7 +202,7 @@ func (g *Graph) AddOpEdges(
 			oe, existing)
 	}
 	g.edges = append(g.edges, oe)
-	var typ scop.Type
+	typ := scop.MutationType
 	for i, op := range ops {
 		if i == 0 {
 			typ = op.Type()
@@ -256,7 +256,7 @@ func (g *Graph) MarkAsNoOp(edge *OpEdge) {
 
 // IsNoOp checks if an edge is marked as an edge that should emit no operations.
 func (g *Graph) IsNoOp(edge *OpEdge) bool {
-	return g.noOpOpEdges[edge]
+	return len(edge.op) == 0 || g.noOpOpEdges[edge]
 }
 
 // GetMetadataFromTarget returns the metadata for a given target node.

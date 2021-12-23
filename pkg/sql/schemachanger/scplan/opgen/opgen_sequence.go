@@ -17,18 +17,18 @@ import (
 
 func init() {
 
-	// TODO(ajwerner): This needs more steps.
 	opRegistry.register((*scpb.Sequence)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
+			equiv(scpb.Status_TXN_DROPPED),
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Sequence) scop.Op {
 					return notImplemented(this)
 				}),
 			),
-			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
-			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		drop(
+		toAbsent(scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Sequence) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
@@ -47,7 +47,6 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				revertible(false),
 				emit(func(this *scpb.Sequence, md *scpb.ElementMetadata) scop.Op {
 					return &scop.LogEvent{
 						Metadata:     *md,

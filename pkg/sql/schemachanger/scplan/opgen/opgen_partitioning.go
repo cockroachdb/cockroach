@@ -17,7 +17,8 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.Partitioning)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Partitioning) scop.Op {
@@ -31,7 +32,8 @@ func init() {
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Partitioning) scop.Op {
 					return notImplemented(this)
@@ -39,5 +41,4 @@ func init() {
 			),
 		),
 	)
-
 }

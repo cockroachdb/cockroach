@@ -17,7 +17,8 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.CheckConstraintTypeReference)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.CheckConstraintTypeReference) scop.Op {
@@ -28,7 +29,8 @@ func init() {
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PreCommitPhase),
 				revertible(false),

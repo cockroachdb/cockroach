@@ -12,6 +12,7 @@ package opgen
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
 
@@ -33,7 +34,7 @@ func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
 		return nil, err
 	}
 	// Iterate through each match of initial state target's to target rules
-	// and apply the relevant op edges to thr graph. Copy out the elements
+	// and apply the relevant op edges to the graph. Copy out the elements
 	// to not mutate the database in place.
 	type toAdd struct {
 		transition
@@ -59,8 +60,12 @@ func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
 		}
 		for _, op := range edgesToAdd {
 			metadata := g.GetMetadataFromTarget(op.n.Target)
+			var ops []scop.Op
+			if op.ops != nil {
+				ops = op.ops(op.n.Element(), &metadata)
+			}
 			if err := g.AddOpEdges(
-				op.n.Target, op.from, op.to, op.revertible, op.minPhase, op.ops(op.n.Element(), &metadata)...,
+				op.n.Target, op.from, op.to, op.revertible, op.minPhase, ops...,
 			); err != nil {
 				return nil, err
 			}

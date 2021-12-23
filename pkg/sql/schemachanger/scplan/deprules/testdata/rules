@@ -12,7 +12,7 @@ rules
     - $parent-node[Type] = '*scpb.Node'
     - $parent-node[Target] = $parent-target
     - $parent-target[TargetStatus] = ABSENT
-    - $parent-node[Status] IN [ABSENT]
+    - $parent-node[Status] = ABSENT
     - $other-target[Type] = '*scpb.Target'
     - $other-target[Element] = $other
     - $other-node[Type] = '*scpb.Node'
@@ -355,7 +355,7 @@ rules
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
     - $index-target[TargetStatus] = ABSENT
-    - $index-node[Status] IN [VALIDATED, BACKFILLED, DELETE_AND_WRITE_ONLY]
+    - $index-node[Status] = VALIDATED
     - $index-name-target[Type] = '*scpb.Target'
     - $index-name-target[Element] = $index-name
     - $index-name-node[Type] = '*scpb.Node'
