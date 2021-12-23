@@ -666,6 +666,8 @@ func TestEvalAddSSTable(t *testing.T) {
 					require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
 					require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
 				}
+				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+				require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans, []roachpb.Span{{Key: start, EndKey: end}})
 
 				// Scan resulting data from engine.
 				iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{

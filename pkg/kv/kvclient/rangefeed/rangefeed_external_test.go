@@ -15,8 +15,10 @@ import (
 	"runtime/pprof"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -511,6 +513,83 @@ func TestUnrecoverableErrors(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestMVCCHistoryMutationError verifies that applying a MVCC history mutation
+// emits an unrecoverable error.
+func TestMVCCHistoryMutationError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	srv0 := tc.Server(0)
+	db0 := srv0.DB()
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	sp := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+
+	_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	require.NoError(t, err)
+
+	// Set up a rangefeed.
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, srv0.ClusterSettings(), nil)
+	require.NoError(t, err)
+
+	var once sync.Once
+	checkpointC := make(chan struct{})
+	errC := make(chan error)
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, srv0.Clock().Now(),
+		func(context.Context, *roachpb.RangeFeedValue) {},
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+			once.Do(func() {
+				close(checkpointC)
+			})
+		}),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			select {
+			case errC <- err:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Wait for initial checkpoint.
+	select {
+	case <-checkpointC:
+	case err := <-errC:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		require.Fail(t, "timed out waiting for checkpoint")
+	}
+
+	// Send a ClearRange request that mutates MVCC history.
+	_, pErr := kv.SendWrapped(ctx, db0.NonTransactionalSender(), &roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    sp.Key,
+			EndKey: sp.EndKey,
+		},
+	})
+	require.Nil(t, pErr)
+
+	// Wait for the MVCCHistoryMutationError.
+	select {
+	case err := <-errC:
+		var mvccErr *roachpb.MVCCHistoryMutationError
+		require.ErrorAs(t, err, &mvccErr)
+		require.Equal(t, &roachpb.MVCCHistoryMutationError{Span: sp}, err)
+	case <-time.After(time.Second):
+		require.Fail(t, "timed out waiting for error")
+	}
 }
 
 // TestRangefeedWithLabelsOption verifies go routines started by rangefeed are

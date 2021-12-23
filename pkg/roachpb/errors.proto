@@ -467,6 +467,12 @@ message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
 }
 
+// A MVCCHistoryMutationError indicates that MVCC history was unexpectedly
+// mutated.
+message MVCCHistoryMutationError {
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+}
+
 // An IntentMissingError indicates that a QueryIntent request expected
 // an intent to be present at its specified key but the intent was
 // not there.
@@ -600,6 +606,8 @@ message ErrorDetail {
     OptimisticEvalConflictsError optimistic_eval_conflicts = 41;
     MinTimestampBoundUnsatisfiableError min_timestamp_bound_unsatisfiable = 42;
     RefreshFailedError refresh_failed_error = 43;
+    MVCCHistoryMutationError mvcc_history_mutation = 44
+      [(gogoproto.customname) = "MVCCHistoryMutation"];
   }
 }
 

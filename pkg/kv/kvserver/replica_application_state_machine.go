@@ -616,6 +616,19 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 ) error {
 	res := cmd.replicatedResult()
 
+	// MVCC history mutations violate the closed timestamp, modifying data that
+	// has already been emitted and checkpointed via a rangefeed. Callers are
+	// expected to ensure that no rangefeeds are currently active across such
+	// spans, but as a safeguard we disconnect the overlapping rangefeeds
+	// with a non-retriable error anyway.
+	if res.MVCCHistoryMutation != nil {
+		for _, span := range res.MVCCHistoryMutation.Spans {
+			b.r.disconnectRangefeedSpanWithErr(span, roachpb.NewError(&roachpb.MVCCHistoryMutationError{
+				Span: span,
+			}))
+		}
+	}
+
 	// AddSSTable ingestions run before the actual batch gets written to the
 	// storage engine. This makes sure that when the Raft command is applied,
 	// the ingestion has definitely succeeded. Note that we have taken

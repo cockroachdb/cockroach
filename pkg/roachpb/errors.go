@@ -323,6 +323,7 @@ const (
 	OptimisticEvalConflictsErrType          ErrorDetailType = 41
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
 	RefreshFailedErrType                    ErrorDetailType = 43
+	MVCCHistoryMutationErrType              ErrorDetailType = 44
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -332,7 +333,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 44
+	NumErrors int = 45
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1155,6 +1156,21 @@ func (e *BatchTimestampBeforeGCError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
+
+func (e *MVCCHistoryMutationError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MVCCHistoryMutationError) message(_ *Error) string {
+	return fmt.Sprintf("unexpected MVCC history mutation in span %s", e.Span)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *MVCCHistoryMutationError) Type() ErrorDetailType {
+	return MVCCHistoryMutationErrType
+}
+
+var _ ErrorDetailInterface = &MVCCHistoryMutationError{}
 
 // NewIntentMissingError creates a new IntentMissingError.
 func NewIntentMissingError(key Key, wrongIntent *Intent) *IntentMissingError {

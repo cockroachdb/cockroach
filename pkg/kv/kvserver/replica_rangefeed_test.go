@@ -785,6 +785,94 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	})
 }
 
+// TestReplicaRangefeedMVCCHistoryMutationError tests that rangefeeds are
+// disconnected when an MVCC history mutation is applied.
+func TestReplicaRangefeedMVCCHistoryMutationError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	splitKey := roachpb.Key("a")
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Servers[0]
+	store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	tc.SplitRangeOrFatal(t, splitKey)
+	tc.AddVotersOrFatal(t, splitKey, tc.Target(1), tc.Target(2))
+	rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
+
+	// Write to the RHS of the split and wait for all replicas to process it.
+	// This ensures that all replicas have seen the split before we move on.
+	incArgs := incrementArgs(splitKey, 9)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+	require.Nil(t, pErr)
+	tc.WaitForValues(t, splitKey, []int64{9, 9, 9})
+
+	// Set up a rangefeed across a-c.
+	stream := newTestStream()
+	streamErrC := make(chan *roachpb.Error, 1)
+	go func() {
+		req := roachpb.RangeFeedRequest{
+			Header: roachpb.Header{RangeID: rangeID},
+			Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+		}
+		timer := time.AfterFunc(10*time.Second, stream.Cancel)
+		defer timer.Stop()
+		streamErrC <- store.RangeFeed(&req, stream)
+	}()
+
+	// Wait for a checkpoint.
+	require.Eventually(t, func() bool {
+		if len(streamErrC) > 0 {
+			require.Fail(t, "unexpected rangefeed error", "%v", <-streamErrC)
+		}
+		events := stream.Events()
+		for _, event := range events {
+			require.NotNil(t, event.Checkpoint, "received non-checkpoint event: %v", event)
+		}
+		return len(events) > 0
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Apply a ClearRange command that mutates MVCC history across c-e.
+	// This does not overlap with the rangefeed registration, and should
+	// not disconnect it.
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), &roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("c"),
+			EndKey: roachpb.Key("e"),
+		},
+	})
+	require.Nil(t, pErr)
+	if len(streamErrC) > 0 {
+		require.Fail(t, "unexpected rangefeed error", "%v", <-streamErrC)
+	}
+
+	// Apply a ClearRange command that mutates MVCC history across b-e.
+	// This overlaps with the rangefeed, and should disconnect it.
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), &roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("b"),
+			EndKey: roachpb.Key("e"),
+		},
+	})
+	require.Nil(t, pErr)
+	select {
+	case pErr = <-streamErrC:
+		require.NotNil(t, pErr)
+		var mvccErr *roachpb.MVCCHistoryMutationError
+		require.ErrorAs(t, pErr.GoError(), &mvccErr)
+		require.Equal(t, &roachpb.MVCCHistoryMutationError{
+			Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("e")},
+		}, mvccErr)
+	case <-time.After(time.Second):
+		require.Fail(t, "timed out waiting for rangefeed disconnection")
+	}
+}
+
 // TestReplicaRangefeedPushesTransactions tests that rangefeed detects intents
 // that are holding up its resolved timestamp and periodically pushes them to
 // ensure that its resolved timestamp continues to advance.
