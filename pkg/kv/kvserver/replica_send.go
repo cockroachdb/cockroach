@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -407,6 +408,21 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// to ensure that the request has full isolation during evaluation. This
 		// returns a request guard that must be eventually released.
 		var resp []roachpb.ResponseUnion
+		ctx, cancel := context.WithCancel(ctx)
+		// HACK: without this, if a request got stuck and is abandoned, it will
+		// still hold its latches and so subsequent requests will time out on
+		// SequenceReq if we don't do this.
+		go func() {
+			select {
+			case <-r.breaker.Signal().C():
+				// Sleep a second so that a request that is supposed to hear about the
+				// breaker tripping while waiting for replication doesn't get a ctx
+				// cancellation instead. Yes, this is another hack.
+				time.Sleep(time.Second)
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
 		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
 			Txn:             ba.Txn,
 			Timestamp:       ba.Timestamp,

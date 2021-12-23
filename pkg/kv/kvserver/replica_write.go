@@ -100,6 +100,21 @@ func withCircuitBreakerProbeMarker(ctx context.Context) context.Context {
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+	// The circuit breaker is checked very early to successfully fail-fast the
+	// majority of requests even if there's a truly bad problem like a deadlock.
+	//
+	// TODO(tbg): consider doing this in `(*Replica).Send` already.
+	// TODO(tbg): DistSender needs to understand the circuit breaker errors.
+	// Otherwise, if its caching info is stale, it might persistently contact
+	// unavailable replicas despite there possibly existing a healthy alternative.
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+	if err := brSig.Err(); err != nil {
+		return nil, nil, roachpb.NewError(err)
+	}
+
 	startTime := timeutil.Now()
 
 	// Even though we're not a read-only operation by definition, we have to
@@ -195,7 +210,9 @@ func (r *Replica) executeWriteBatch(
 	startPropTime := timeutil.Now()
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
-	slowTimer.Reset(r.store.cfg.SlowReplicationThreshold)
+
+	slowThreshold := r.determineSlowThreshold(ba)
+	slowTimer.Reset(slowThreshold)
 	// NOTE: this defer was moved from a case in the select statement to here
 	// because escape analysis does a better job avoiding allocations to the
 	// heap when defers are unconditional. When this was in the slowTimer select
@@ -213,10 +230,6 @@ func (r *Replica) executeWriteBatch(
 		}
 	}()
 
-	brSig := r.breaker.Signal()
-	if isCircuitBreakerProbe(ctx) {
-		brSig = neverTripSignaller{}
-	}
 	for {
 		select {
 		case <-brSig.C():
@@ -337,6 +350,12 @@ func (r *Replica) executeWriteBatch(
 			log.Errorf(ctx, "%s", err)
 			// Continue waiting. If the breaker is now tripped, the breaker channel
 			// will fail-fast the request on the next loop around.
+			select {
+			case <-brSig.C():
+				log.Infof(ctx, "tripped: %s", brSig.Err())
+			default:
+				log.Infof(ctx, "not tripped")
+			}
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -385,6 +404,16 @@ func (r *Replica) executeWriteBatch(
 			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
 		}
 	}
+}
+
+func (r *Replica) determineSlowThreshold(ba *roachpb.BatchRequest) time.Duration {
+	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
+		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
+			return dur
+		}
+		// Fall through.
+	}
+	return r.store.cfg.SlowReplicationThreshold
 }
 
 func rangeUnavailableMessage(
