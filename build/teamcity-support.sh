@@ -142,6 +142,7 @@ function maybe_stress() {
 
   block="Maybe ${target} pull request"
   tc_start_block "${block}"
+  run build/builder.sh make protobuf
   run build/builder.sh go install ./pkg/cmd/github-pull-request-make
   run_json_test build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET="${target}" github-pull-request-make
   tc_end_block "${block}"

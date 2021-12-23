@@ -28,10 +28,10 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1221463063  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                T              {bar=U/,foo=U/}
-1221463063  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+1221463063  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                T              {bar=U*/,foo=U*/}
+1221463063  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 
 statement ok
 GRANT foo, bar TO root;
@@ -47,18 +47,18 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-4119266190  1791217281  0                r              {foo=Cadrw/}
-4119266190  1791217281  0                S              {foo=Cadrw/}
-4119266190  1791217281  0                T              {foo=U/}
-4119266190  1791217281  0                n              {foo=CU/}
-3682459869  2026795574  0                r              {bar=Cadrw/}
-3682459869  2026795574  0                S              {bar=Cadrw/}
-3682459869  2026795574  0                T              {bar=U/}
-3682459869  2026795574  0                n              {bar=CU/}
-1221463063  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                T              {bar=U/,foo=U/}
-1221463063  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,foo=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/,foo=C*U*/}
+3682459869  2026795574  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+3682459869  2026795574  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {bar=U*/,foo=U*/,=U/}
+3682459869  2026795574  0                n              {bar=C*U*/,foo=C*U*/}
+1221463063  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                T              {bar=U*/,foo=U*/}
+1221463063  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
@@ -80,10 +80,10 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 3682459869  2026795574  0                S              {}
 3682459869  2026795574  0                T              {=U/}
 3682459869  2026795574  0                n              {}
-1221463063  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                T              {bar=U/,foo=U/}
-1221463063  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+1221463063  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                T              {bar=U*/,foo=U*/}
+1221463063  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON TABLES TO foo;
@@ -101,10 +101,18 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1221463063  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                T              {bar=U/,foo=U/}
-1221463063  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
+1221463063  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                T              {bar=U*/,foo=U*/}
+1221463063  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 
 # Revoke SELECT from foo and GRANT it back with foo being the creator role.
 # Ensure revoking a single privilege reflects correctly.
@@ -115,11 +123,18 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-3682459869  2026795574  0                r              {foo=Cadw/}
-1221463063  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                T              {bar=U/,foo=U/}
-1221463063  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*w*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
+1221463063  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                T              {bar=U*/,foo=U*/}
+1221463063  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT SELECT ON TABLES TO foo;
@@ -128,10 +143,18 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1221463063  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r/}
-1221463063  1546506610  0                T              {bar=U/,foo=U/}
-1221463063  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
+1221463063  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1221463063  1546506610  0                T              {bar=U*/,foo=U*/}
+1221463063  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
@@ -145,7 +168,15 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1221463063  1546506610  0                r              {bar=Cadw/,foo=Cadw/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
+1221463063  1546506610  0                r              {bar=C*a*d*w*/,foo=C*a*d*w*/}
 
 # GRANT, DROP and ZONECONFIG should not show up in defaclacl.
 statement ok
@@ -156,6 +187,14 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
 1221463063  1546506610  0                r              {foo=/}
 
 statement ok
@@ -173,10 +212,18 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-2946850071  0           0                r              {bar=Cadrw/,foo=Cadrw/}
-2946850071  0           0                S              {bar=Cadrw/,foo=Cadrw/}
-2946850071  0           0                T              {bar=U/,foo=U/}
-2946850071  0           0                n              {bar=CU/,foo=CU/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
+2946850071  0           0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+2946850071  0           0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+2946850071  0           0                T              {bar=U*/,foo=U*/}
+2946850071  0           0                n              {bar=C*U*/,foo=C*U*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON TABLES FROM foo, bar;
@@ -187,7 +234,15 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE ALL ON SEQUENCES FROM foo, bar;
 query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
-oid  defaclrole  defaclnamespace  defaclobjtype  defaclacl
+oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
 
 user testuser
 
@@ -203,6 +258,14 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
 4278550838  2264919399  0                r              {}
 4278550838  2264919399  0                S              {}
 4278550838  2264919399  0                T              {=U/}
@@ -216,6 +279,14 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
 4278550838  2264919399  0                r              {}
 4278550838  2264919399  0                S              {}
 4278550838  2264919399  0                T              {}
@@ -231,9 +302,17 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
 4278550838  2264919399  0                r              {}
 4278550838  2264919399  0                S              {}
-4278550838  2264919399  0                T              {testuser=U/}
+4278550838  2264919399  0                T              {testuser=U*/}
 4278550838  2264919399  0                n              {}
 
 statement ok
@@ -248,7 +327,15 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-4278550838  2264919399  0                r              {foo=Cadrw/}
-4278550838  2264919399  0                S              {foo=Cadrw/}
-4278550838  2264919399  0                T              {foo=U/,testuser=U/}
-4278550838  2264919399  0                n              {foo=CU/}
+4119266190  1791217281  0                r              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                S              {bar=C*a*d*r*w*/}
+4119266190  1791217281  0                T              {bar=U*/,=U/}
+4119266190  1791217281  0                n              {bar=C*U*/}
+3682459869  2026795574  0                r              {foo=C*a*d*rw*/}
+3682459869  2026795574  0                S              {foo=C*a*d*r*w*/}
+3682459869  2026795574  0                T              {foo=U*/,=U/}
+3682459869  2026795574  0                n              {foo=C*U*/}
+4278550838  2264919399  0                r              {foo=C*a*d*r*w*/}
+4278550838  2264919399  0                S              {foo=C*a*d*r*w*/}
+4278550838  2264919399  0                T              {foo=U*/,testuser=U*/}
+4278550838  2264919399  0                n              {foo=C*U*/}

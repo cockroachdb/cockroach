@@ -4,6 +4,7 @@ go_library(
     name = "arrowserde",
     srcs = [
         "doc.go",
+        # These files should be generated in the sandbox: see #72292.
         "file_generated.go",  # keep
         "message_generated.go",  # keep
         "schema_generated.go",  # keep

@@ -25,9 +25,9 @@ CREATE TABLE testdb.sc.othertable (a INT);
 # Give some grants to user1.
 # User1 has access to testdb.sc.othertable.
 exec-sql
-GRANT ALL ON DATABASE testdb TO user1;
-GRANT ALL ON SCHEMA public TO user1;
-GRANT ALL ON SCHEMA public TO testuser;
+GRANT ALL ON DATABASE testdb TO user1 WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO user1 WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO testuser WITH GRANT OPTION;
 GRANT USAGE ON SCHEMA sc TO user1;
 GRANT SELECT ON testdb.sc.othertable TO user1;
 ----
@@ -35,7 +35,7 @@ GRANT SELECT ON testdb.sc.othertable TO user1;
 # Grant privs to testuser.
 # Test user has access to testdb.testtable_greeting_usage and testtable_greeting_owner.
 exec-sql
-GRANT ALL ON DATABASE testdb TO testuser;
+GRANT ALL ON DATABASE testdb TO testuser WITH GRANT OPTION;
 GRANT USAGE ON TYPE testdb.greeting_usage TO testuser;
 GRANT UPDATE ON testdb.testtable_greeting_usage TO testuser;
 ----
