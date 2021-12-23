@@ -326,7 +326,7 @@ const (
 	// This version comes with a migration to populate the same seed data
 	// for existing tenants.
 	SeedTenantSpanConfigs
-	// Public schema is backed by a descriptor.
+	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
 
 	// *************************************************
