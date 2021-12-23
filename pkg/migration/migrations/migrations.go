@@ -75,6 +75,17 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		alterTableProtectedTimestampRecords,
 	),
+	migration.NewTenantMigration(
+		"ensure span config reconciliation",
+		toCV(clusterversion.EnsureSpanConfigReconciliation),
+		NoPrecondition,
+		ensureSpanConfigReconciliation,
+	),
+	migration.NewSystemMigration(
+		"ensure span config subscription",
+		toCV(clusterversion.EnsureSpanConfigSubscription),
+		ensureSpanConfigSubscription,
+	),
 }
 
 func init() {
