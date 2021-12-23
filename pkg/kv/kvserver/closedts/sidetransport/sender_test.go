@@ -394,7 +394,7 @@ func (m *mockDialer) Dial(
 	if !ok {
 		return nil, errors.Errorf("node not configured in mockDialer: n%d", nodeID)
 	}
-
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	c, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err == nil {
 		m.mu.conns = append(m.mu.conns, c)

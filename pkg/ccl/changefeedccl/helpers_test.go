@@ -604,6 +604,19 @@ func webhookTestWithOptions(testFn cdcTestFn, options feedTestOptions) func(*tes
 	}
 }
 
+func pubsubTest(testFn cdcTestFn, testOpts ...feedTestOption) func(t *testing.T) {
+	return pubsubTestWithOptions(testFn, makeOptions(testOpts...))
+}
+
+func pubsubTestWithOptions(testFn cdcTestFn, options feedTestOptions) func(*testing.T) {
+	return func(t *testing.T) {
+		s, db, stopServer := startTestServer(t, options)
+		defer stopServer()
+		f := makePubsubFeedFactory(s, db)
+		testFn(t, db, f)
+	}
+}
+
 func serverArgsRegion(args base.TestServerArgs) string {
 	for _, tier := range args.Locality.Tiers {
 		if tier.Key == "region" {

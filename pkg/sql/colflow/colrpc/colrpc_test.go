@@ -180,6 +180,7 @@ func TestOutboxInbox(t *testing.T) {
 		cancellationScenarioName = "transportBreaks"
 	}
 
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
 	require.NoError(t, err)
 	if cancellationScenario != transportBreaks {
@@ -488,6 +489,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
 	require.NoError(t, err)
 	defer func() {
@@ -574,6 +576,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
 	require.NoError(t, err)
 	defer func() {
@@ -756,6 +759,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	)
 	require.NoError(b, err)
 
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
 	require.NoError(b, err)
 	defer func() {

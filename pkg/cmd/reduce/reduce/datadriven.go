@@ -11,7 +11,7 @@
 package reduce
 
 import (
-	"io"
+	"log"
 	"os"
 	"testing"
 
@@ -53,9 +53,9 @@ func RunTest(
 	passes []Pass,
 ) {
 	var contains string
-	var log io.Writer
+	var logger *log.Logger
 	if testing.Verbose() {
-		log = os.Stderr
+		logger = log.New(os.Stderr, "", 0)
 	}
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -71,7 +71,7 @@ func RunTest(
 					t.Fatal(err)
 				}
 			}
-			output, err := Reduce(log, input, interesting(contains), 0, mode, cr, passes...)
+			output, err := Reduce(logger, input, interesting(contains), 0, mode, cr, passes...)
 			if err != nil {
 				t.Fatal(err)
 			}
