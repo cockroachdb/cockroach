@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type wrappedBatch struct {
@@ -122,9 +123,10 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			}
 			cArgs.Stats = &enginepb.MVCCStats{}
 
-			if _, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{}); err != nil {
-				t.Fatal(err)
-			}
+			result, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{})
+			require.NoError(t, err)
+			require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+			require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans, []roachpb.Span{{Key: startKey, EndKey: endKey}})
 
 			// Verify cArgs.Stats is equal to the stats we wrote.
 			newStats := stats

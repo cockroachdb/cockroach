@@ -119,6 +119,7 @@ type Processor struct {
 	filterReqC chan struct{}
 	filterResC chan *Filter
 	eventC     chan *event
+	spanErrC   chan spanErr
 	stopC      chan *roachpb.Error
 	stoppedC   chan struct{}
 }
@@ -155,6 +156,13 @@ type event struct {
 	testRegCatchupSpan roachpb.Span
 }
 
+// spanErr is an error across a key span that will disconnect overlapping
+// registrations.
+type spanErr struct {
+	span roachpb.Span
+	pErr *roachpb.Error
+}
+
 // NewProcessor creates a new rangefeed Processor. The corresponding goroutine
 // should be launched using the Start method.
 func NewProcessor(cfg Config) *Processor {
@@ -172,6 +180,7 @@ func NewProcessor(cfg Config) *Processor {
 		filterReqC: make(chan struct{}),
 		filterResC: make(chan *Filter),
 		eventC:     make(chan *event, cfg.EventChanCap),
+		spanErrC:   make(chan spanErr),
 		stopC:      make(chan *roachpb.Error, 1),
 		stoppedC:   make(chan struct{}),
 	}
@@ -288,6 +297,11 @@ func (p *Processor) run(
 		case r := <-p.unregC:
 			p.reg.Unregister(r)
 
+		// Send errors to registrations overlapping the span and disconnect them.
+		// Requested via DisconnectSpanWithErr().
+		case e := <-p.spanErrC:
+			p.reg.DisconnectWithErr(e.span, e.pErr)
+
 		// Respond to answers about the processor goroutine state.
 		case <-p.lenReqC:
 			p.lenResC <- p.reg.Len()
@@ -375,6 +389,19 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 	p.syncEventC()
 	// Send the processor a stop signal.
 	p.sendStop(pErr)
+}
+
+// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
+// the given span with the given error.
+func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *roachpb.Error) {
+	if p == nil {
+		return
+	}
+	select {
+	case p.spanErrC <- spanErr{span: span, pErr: pErr}:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
 }
 
 func (p *Processor) sendStop(pErr *roachpb.Error) {

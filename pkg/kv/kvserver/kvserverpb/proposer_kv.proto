@@ -140,6 +140,19 @@ message ReplicatedEvalResult {
   ChangeReplicas change_replicas = 12;
   int64 raft_log_delta = 13;
 
+  // MVCCHistoryMutation describes mutations of MVCC history that may violate
+  // the closed timestamp, timestamp cache, and guarantees that rely on these
+  // (e.g. linearizability and serializability). It is currently used to
+  // disconnect rangefeeds that overlap these spans, as a safeguard -- the
+  // caller is expected to ensure there are no rangefeeds over such spans in the
+  // first place.
+  //
+  // This is a separate message type to keep the base struct comparable in Go.
+  message MVCCHistoryMutation {
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  }
+  MVCCHistoryMutation mvcc_history_mutation = 24 [(gogoproto.customname) = "MVCCHistoryMutation"];
+
   // AddSSTable is a side effect that must execute before the Raft application
   // is committed. It must be idempotent to account for an ill-timed crash after
   // applying the side effect, but before committing the batch.
