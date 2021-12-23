@@ -18,14 +18,16 @@ import (
 func init() {
 	opRegistry.register(
 		(*scpb.DatabaseSchemaEntry)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.DatabaseSchemaEntry) scop.Op {
 					return notImplemented(this)
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PreCommitPhase),
 				revertible(false),

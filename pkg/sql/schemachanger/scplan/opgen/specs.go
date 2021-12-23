@@ -15,8 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
 
-// transitionSpec is used to describe a transition. It is used to build a
-// transitions. Its fields are not validated.
+type targetSpec struct {
+	from, to        scpb.Status
+	transitionSpecs []transitionSpec
+}
+
 type transitionSpec struct {
 	from       scpb.Status
 	to         scpb.Status

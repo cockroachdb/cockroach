@@ -17,16 +17,17 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.Schema)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
+			equiv(scpb.Status_TXN_DROPPED),
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Schema) scop.Op {
 					return notImplemented(this)
 				}),
 			),
-			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
-			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		drop(
+		toAbsent(scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Schema) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
@@ -46,8 +47,6 @@ func init() {
 				// TODO(ajwerner): The minPhase here feels like it should be PostCommit.
 				// Also, this definitely is not revertible. Leaving to make this commit
 				// a port.
-				minPhase(scop.PreCommitPhase),
-				revertible(false),
 				emit(func(this *scpb.Schema) scop.Op {
 					return &scop.DrainDescriptorName{
 						TableID: this.SchemaID,
