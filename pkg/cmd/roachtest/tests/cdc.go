@@ -842,6 +842,7 @@ func registerCDC(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/bank",
+		Skip:            "#72904",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
