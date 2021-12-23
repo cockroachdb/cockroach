@@ -32,7 +32,6 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
-        "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
