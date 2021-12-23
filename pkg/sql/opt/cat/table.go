@@ -287,6 +287,11 @@ type UniqueConstraint interface {
 	// cannot make any assumptions about the data. An unvalidated constraint still
 	// needs to be enforced on new mutations.
 	Validated() bool
+
+	// UniquenessGuaranteedByAnotherIndex is a hack to make unique hash sharded
+	// index work before issue #75070 is resolved. Optimizer will omit uniqueness
+	// check if this method returns true.
+	UniquenessGuaranteedByAnotherIndex() bool
 }
 
 // UniqueOrdinal identifies a unique constraint (in the context of a Table).
