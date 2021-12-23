@@ -14,10 +14,12 @@ package backfill
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -35,6 +37,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+)
+
+// IndexBackfillCheckpointInterval is the duration between backfill detail updates.
+//
+// Note: it might be surprising to find this defined here given this layer does
+// not actually perform any checkpointing. The reason it has been moved here from
+// sql is to avoid any dependency cycles inside the declarative schema changer.
+var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"bulkio.index_backfill.checkpoint_interval",
+	"the amount of time between index backfill checkpoint updates",
+	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.

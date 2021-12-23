@@ -66,8 +66,9 @@ func init() {
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.PrimaryIndex) scop.Op {
 					return &scop.BackfillIndex{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
+						TableID:       this.TableID,
+						SourceIndexID: this.SourceIndexID,
+						IndexID:       this.IndexID,
 					}
 				}),
 			),
