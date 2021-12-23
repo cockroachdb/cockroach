@@ -161,17 +161,24 @@ type Reconciler interface {
 	// timestamp. If it does not find MVCC history going far back enough[1], it
 	// falls back to a scan of all descriptors and zone configs before being
 	// able to do more incremental work. The provided callback is invoked
-	// with timestamps that can be safely checkpointed. A future Reconciliation
-	// attempt can make use of this timestamp to reduce the amount of necessary
-	// work (provided the MVCC history is still available).
+	// whenever incremental progress has been made and a Checkpoint() timestamp
+	// is available. A future Reconcile() attempt can make use of this timestamp
+	// to reduce the amount of necessary work (provided the MVCC history is
+	// still available).
 	//
 	// [1]: It's possible for system.{zones,descriptor} to have been GC-ed away;
 	//      think suspended tenants.
 	Reconcile(
 		ctx context.Context,
 		startTS hlc.Timestamp,
-		callback func(checkpoint hlc.Timestamp) error,
+		onCheckpoint func() error,
 	) error
+
+	// Checkpoint returns a timestamp suitable for checkpointing. A future
+	// Reconcile() attempt can make use of this timestamp to reduce the
+	// amount of necessary work (provided the MVCC history is
+	// still available).
+	Checkpoint() hlc.Timestamp
 }
 
 // ReconciliationDependencies captures what's needed by the span config
