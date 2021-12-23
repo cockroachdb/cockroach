@@ -18,16 +18,17 @@ import (
 func init() {
 	opRegistry.register(
 		(*scpb.ForeignKeyBackReference)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.ForeignKeyBackReference) scop.Op {
 					return notImplemented(this)
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				// TODO(ajwerner): This probably cannot happen until post-commit.
 				minPhase(scop.PreCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.ForeignKeyBackReference) scop.Op {

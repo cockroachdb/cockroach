@@ -17,7 +17,8 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.Column)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
@@ -68,7 +69,8 @@ func init() {
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_DELETE_AND_WRITE_ONLY,
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteAndWriteOnly{
@@ -86,8 +88,8 @@ func init() {
 				}),
 			),
 			to(scpb.Status_DELETE_ONLY,
-				revertible(false),
 				minPhase(scop.PostCommitPhase),
+				revertible(false),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteOnly{
 						TableID:  this.TableID,
@@ -96,7 +98,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeColumnAbsent{
 						TableID:  this.TableID,
