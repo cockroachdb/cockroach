@@ -77,6 +77,7 @@ type Job struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
+		status   Status
 		runStats *RunStats
 	}
 }
@@ -713,6 +714,14 @@ func (j *Job) Details() jobspb.Details {
 	return j.mu.payload.UnwrapDetails()
 }
 
+// Status returns the status of the job. It will be "" if the status has
+// not been set or the job has never been loaded.
+func (j *Job) Status() Status {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.mu.status
+}
+
 // FractionCompleted returns completion according to the in-memory job state.
 func (j *Job) FractionCompleted() float32 {
 	progress := j.Progress()
@@ -763,10 +772,11 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	var createdBy *CreatedByInfo
+	var status Status
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		const (
-			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id, status FROM system.jobs WHERE id = $1"
 			queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
 		)
 		sess := sessiondata.InternalExecutorOverride{User: security.RootUserName()}
@@ -795,12 +805,17 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 			return err
 		}
 		createdBy, err = unmarshalCreatedBy(row[2], row[3])
+		if err != nil {
+			return err
+		}
+		status, err = unmarshalStatus(row[4])
 		return err
 	}); err != nil {
 		return err
 	}
 	j.mu.payload = *payload
 	j.mu.progress = *progress
+	j.mu.status = status
 	j.createdBy = createdBy
 	return nil
 }
@@ -852,25 +867,12 @@ func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, 
 		"job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
 }
 
-// CurrentStatus returns the current job status from the jobs table or error.
-func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
-	var statusString tree.DString
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, j.ID())
-		if err != nil {
-			return errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
-		}
-		if row == nil {
-			return errors.Errorf("job %d: not found in system.jobs", j.ID())
-		}
-
-		statusString = tree.MustBeDString(row[0])
-		return nil
-	}); err != nil {
-		return "", err
+func unmarshalStatus(datum tree.Datum) (Status, error) {
+	statusString, ok := datum.(*tree.DString)
+	if !ok {
+		return "", errors.AssertionFailedf("expected string status, but got %T", datum)
 	}
-	return Status(statusString), nil
+	return Status(*statusString), nil
 }
 
 // getRunStats returns the RunStats for a job. If they are not set, it will
