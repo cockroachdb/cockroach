@@ -72,7 +72,7 @@ message SessionData {
   // attempting to acquire a lock on a key or while blocking on an existing
   // lock in order to perform a non-locking read on a key.
   google.protobuf.Duration lock_timeout = 15 [(gogoproto.nullable) = false,
-                                              (gogoproto.stdduration) = true];
+    (gogoproto.stdduration) = true];
   // Internal is true if this query came from InternalExecutor or an internal
   // planner.
   bool internal = 16;
@@ -88,6 +88,10 @@ message SessionData {
   // increase the speed of lookup joins when each input row might get multiple
   // looked up rows at the cost of increased memory usage.
   bool parallelize_multi_key_lookup_joins_enabled = 19;
+  // CostScansWithDefaultColSize is true when the optimizer should cost scans
+  // and joins using the same default number of bytes per column instead of
+  // column sizes from the AvgSize table statistic.
+  bool cost_scans_with_default_col_size = 20;
 }
 
 // DataConversionConfig contains the parameters that influence the output
@@ -103,7 +107,7 @@ message DataConversionConfig {
   // IntervalStyle indicates the style to parse and display intervals as.
   util.duration.IntervalStyle interval_style = 3;
   // DateStyle indicates the style to parse and display dates as.
-  util.timeutil.pgdate.DateStyle date_style = 4 [(gogoproto.nullable)=false];
+  util.timeutil.pgdate.DateStyle date_style = 4 [(gogoproto.nullable) = false];
 }
 
 // BytesEncodeFormat is the configuration for bytes to string conversions.
