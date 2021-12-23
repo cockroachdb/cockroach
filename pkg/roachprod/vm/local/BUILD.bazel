@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/util",
         "//pkg/util/timeutil",

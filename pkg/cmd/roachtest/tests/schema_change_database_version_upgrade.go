@@ -55,7 +55,7 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		startOpts.RoachtestOpts.DontEncrypt = true
 		startOpts.RoachprodOpts.Sequential = false
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
-		u.c.Start(ctx, startOpts, settings, nodes)
+		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}
 }
 

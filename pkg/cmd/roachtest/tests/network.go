@@ -44,9 +44,9 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 		t.Fatal(err)
 	}
 
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-	db := c.Conn(ctx, 1) // unaffected by toxiproxy
+	db := c.Conn(ctx, t.L(), 1) // unaffected by toxiproxy
 	defer db.Close()
 	WaitFor3XReplication(t, db)
 
@@ -124,8 +124,8 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// we don't want. Starting all nodes at once ensures
 	// that they use coherent certs.
 	settings := install.MakeClusterSettings(install.SecureOption(true))
-	c.Start(ctx, option.DefaultStartOpts(), settings, serverNodes)
-	require.NoError(t, c.StopE(ctx, option.DefaultStopOpts(), serverNodes))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, serverNodes)
+	require.NoError(t, c.StopE(ctx, t.L(), option.DefaultStopOpts(), serverNodes))
 
 	t.L().Printf("restarting nodes...")
 	// For troubleshooting the test, the engineer can add the following
@@ -137,17 +137,17 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=1", "--accept-sql-without-tls")
-	c.Start(ctx, startOpts, settings, c.Node(1))
+	c.Start(ctx, t.L(), startOpts, settings, c.Node(1))
 
 	// See comment above about env vars.
 	// "--env=COCKROACH_SCAN_INTERVAL=200ms",
 	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
 	startOpts = option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=other", "--accept-sql-without-tls")
-	c.Start(ctx, startOpts, settings, c.Range(2, n-1))
+	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, n-1))
 
 	t.L().Printf("retrieving server addresses...")
-	serverAddrs, err := c.InternalAddr(ctx, serverNodes)
+	serverAddrs, err := c.InternalAddr(ctx, t.L(), serverNodes)
 	require.NoError(t, err)
 
 	t.L().Printf("fetching certs...")
@@ -168,7 +168,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	}))
 
 	t.L().Printf("connecting to cluster from roachtest...")
-	db, err := c.ConnE(ctx, 1)
+	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -377,10 +377,10 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	}
 
 	const warehouses = 1
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), serverNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), serverNodes)
 	c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 	WaitFor3XReplication(t, db)
 
@@ -414,7 +414,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 		// us over the threshold.
 		const thresh = 350
 
-		uiAddrs, err := c.ExternalAdminUIAddr(ctx, serverNodes)
+		uiAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), serverNodes)
 		if err != nil {
 			t.Fatal(err)
 		}

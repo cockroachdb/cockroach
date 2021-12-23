@@ -33,7 +33,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.L().Printf("retrieving VM addresses")
-	addrs, err := c.InternalAddr(ctx, c.All())
+	addrs, err := c.InternalAddr(ctx, t.L(), c.All())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +63,10 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// that all nodes can discover the init'ed node (transitively)
 		// via their join flags.
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+strings.Join(addrs, ","))
-		c.Start(ctx, startOpts, install.MakeClusterSettings())
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 
 		urlMap := make(map[int]string)
-		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.All())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,7 +91,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		var dbs []*gosql.DB
 		for i := 1; i <= c.Spec().NodeCount; i++ {
-			db := c.Conn(ctx, i)
+			db := c.Conn(ctx, t.L(), i)
 			defer db.Close()
 			dbs = append(dbs, db)
 		}

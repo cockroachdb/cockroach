@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
         "//pkg/util/timeutil",

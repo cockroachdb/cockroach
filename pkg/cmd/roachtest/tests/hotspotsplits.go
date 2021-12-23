@@ -35,7 +35,7 @@ func registerHotSpotSplits(r registry.Registry) {
 		appNode := c.Node(c.Spec().NodeCount)
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
@@ -57,7 +57,7 @@ func registerHotSpotSplits(r registry.Registry) {
 			t.Status("starting checks for range sizes")
 			const sizeLimit = 3 * (1 << 29) // 3*512 MB (512 mb is default size)
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			var size = float64(0)

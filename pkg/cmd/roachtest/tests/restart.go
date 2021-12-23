@@ -32,7 +32,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=raft_log_queue=3")
-	c.Start(ctx, startOpts, install.MakeClusterSettings(), crdbNodes)
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
@@ -56,7 +56,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	time.Sleep(11 * time.Minute)
 
 	// Stop a node.
-	c.Stop(ctx, option.DefaultStopOpts(), c.Node(restartNode))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(restartNode))
 
 	// Wait for between 10s and `server.time_until_store_dead` while sending
 	// traffic to one of the nodes that are not down. This used to cause lots of
@@ -67,7 +67,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(restartNode))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(restartNode))
 
 	// Dialing the formerly down node may still be prevented by the circuit breaker
 	// for a short moment (seconds) after n3 restarts. If it happens, the COUNT(*)
@@ -78,7 +78,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	time.Sleep(15 * time.Second)
 
 	start := timeutil.Now()
-	restartNodeDB := c.Conn(ctx, restartNode)
+	restartNodeDB := c.Conn(ctx, t.L(), restartNode)
 	if _, err := restartNodeDB.Exec(`SELECT count(*) FROM tpcc.order_line`); err != nil {
 		t.Fatal(err)
 	}

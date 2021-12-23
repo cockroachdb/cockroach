@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,10 +42,12 @@ type expander struct {
 }
 
 // expanderFunc is a function which may expand a string with a templated value.
-type expanderFunc func(context.Context, *SyncedCluster, string) (expanded string, didExpand bool, err error)
+type expanderFunc func(context.Context, *logger.Logger, *SyncedCluster, string) (expanded string, didExpand bool, err error)
 
 // expand will expand arg if it contains an expander template.
-func (e *expander) expand(ctx context.Context, c *SyncedCluster, arg string) (string, error) {
+func (e *expander) expand(
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, arg string,
+) (string, error) {
 	var err error
 	s := parameterRe.ReplaceAllStringFunc(arg, func(s string) string {
 		if err != nil {
@@ -60,7 +63,7 @@ func (e *expander) expand(ctx context.Context, c *SyncedCluster, arg string) (st
 			e.maybeExpandCertsDir,
 		}
 		for _, f := range expanders {
-			v, expanded, fErr := f(ctx, c, s)
+			v, expanded, fErr := f(ctx, l, c, s)
 			if fErr != nil {
 				err = fErr
 				return ""
@@ -108,7 +111,7 @@ func (e *expander) maybeExpandMap(
 
 // maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>}
 func (e *expander) maybeExpandPgURL(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	m := pgURLRe.FindStringSubmatch(s)
 	if m == nil {
@@ -117,7 +120,7 @@ func (e *expander) maybeExpandPgURL(
 
 	if e.pgURLs == nil {
 		var err error
-		e.pgURLs, err = c.pgurls(ctx, allNodes(len(c.VMs)))
+		e.pgURLs, err = c.pgurls(ctx, l, allNodes(len(c.VMs)))
 		if err != nil {
 			return "", false, err
 		}
@@ -129,7 +132,7 @@ func (e *expander) maybeExpandPgURL(
 
 // maybeExpandPgHost is an expanderFunc for {pghost:<nodeSpec>}
 func (e *expander) maybeExpandPgHost(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	m := pgHostRe.FindStringSubmatch(s)
 	if m == nil {
@@ -138,7 +141,7 @@ func (e *expander) maybeExpandPgHost(
 
 	if e.pgHosts == nil {
 		var err error
-		e.pgHosts, err = c.pghosts(ctx, allNodes(len(c.VMs)))
+		e.pgHosts, err = c.pghosts(ctx, l, allNodes(len(c.VMs)))
 		if err != nil {
 			return "", false, err
 		}
@@ -150,7 +153,7 @@ func (e *expander) maybeExpandPgHost(
 
 // maybeExpandPgURL is an expanderFunc for {pgport:<nodeSpec>}
 func (e *expander) maybeExpandPgPort(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	m := pgPortRe.FindStringSubmatch(s)
 	if m == nil {
@@ -170,7 +173,7 @@ func (e *expander) maybeExpandPgPort(
 
 // maybeExpandPgURL is an expanderFunc for {uiport:<nodeSpec>}
 func (e *expander) maybeExpandUIPort(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	m := uiPortRe.FindStringSubmatch(s)
 	if m == nil {
@@ -190,7 +193,7 @@ func (e *expander) maybeExpandUIPort(
 
 // maybeExpandStoreDir is an expanderFunc for "{store-dir}"
 func (e *expander) maybeExpandStoreDir(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	if !storeDirRe.MatchString(s) {
 		return s, false, nil
@@ -200,7 +203,7 @@ func (e *expander) maybeExpandStoreDir(
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"
 func (e *expander) maybeExpandLogDir(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	if !logDirRe.MatchString(s) {
 		return s, false, nil
@@ -210,7 +213,7 @@ func (e *expander) maybeExpandLogDir(
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"
 func (e *expander) maybeExpandCertsDir(
-	ctx context.Context, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
 	if !certsDirRe.MatchString(s) {
 		return s, false, nil

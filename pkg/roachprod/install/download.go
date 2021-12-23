@@ -15,9 +15,10 @@ import (
 	_ "embed" // required for go:embed
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 const (
@@ -29,7 +30,12 @@ var downloadScript string
 
 // Download downloads the remote resource, preferring a GCS cache if available.
 func Download(
-	ctx context.Context, c *SyncedCluster, sourceURLStr string, sha string, dest string,
+	ctx context.Context,
+	l *logger.Logger,
+	c *SyncedCluster,
+	sourceURLStr string,
+	sha string,
+	dest string,
 ) error {
 	// https://example.com/foo/bar.txt
 	sourceURL, err := url.Parse(sourceURLStr)
@@ -66,7 +72,7 @@ func Download(
 		sha,
 		dest,
 	)
-	if err := c.Run(ctx, os.Stdout, os.Stderr,
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr,
 		downloadNodes,
 		fmt.Sprintf("downloading %s", basename),
 		downloadCmd,
@@ -79,7 +85,7 @@ func Download(
 	if c.IsLocal() && !filepath.IsAbs(dest) {
 		src := filepath.Join(c.localVMDir(downloadNodes[0]), dest)
 		cpCmd := fmt.Sprintf(`cp "%s" "%s"`, src, dest)
-		return c.Run(ctx, os.Stdout, os.Stderr, c.Nodes[1:], "copying to remaining nodes", cpCmd)
+		return c.Run(ctx, l, l.Stdout, l.Stderr, c.Nodes[1:], "copying to remaining nodes", cpCmd)
 	}
 
 	return nil

@@ -64,14 +64,14 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.Status("restoring fixture")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
 	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
-	c.Stop(ctx, option.DefaultStopOpts())
+	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	t.Status()
 
 	settings := install.MakeClusterSettings()
@@ -83,7 +83,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		settings.Env = append(settings.Env, []string{"COCKROACH_CONSISTENCY_AGGRESSIVE=true", "COCKROACH_ENFORCE_CONSISTENT_STATS=true"}...)
 	}
 
-	c.Start(ctx, option.DefaultStartOpts(), settings)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that
@@ -92,7 +92,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	defer t.WorkerStatus()
 
 	if t.BuildVersion().AtLeast(version.MustParse("v19.2.0")) {
-		conn := c.Conn(ctx, 1)
+		conn := c.Conn(ctx, t.L(), 1)
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +111,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	// Set up a convenience function that we can call to learn the number of
 	// ranges for the bigbank.bank table (even after it's been dropped).
 	numBankRanges := func() func() int {
-		conn := c.Conn(ctx, 1)
+		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()
 
 		var startHex string
@@ -121,7 +121,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 			t.Fatal(err)
 		}
 		return func() int {
-			conn := c.Conn(ctx, 1)
+			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 			var n int
 			if err := conn.QueryRow(
@@ -140,7 +140,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
-		conn := c.Conn(ctx, 1)
+		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()
 
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`); err != nil {

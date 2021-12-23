@@ -18,8 +18,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/cmd/roachtest/logger",
         "//pkg/cmd/roachtest/option",
+        "//pkg/roachprod/logger",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
@@ -30,6 +30,7 @@ go_test(
     embed = [":with-mocks"],  # keep
     deps = [
         "//pkg/cmd/roachtest/option",
+        "//pkg/roachprod/logger",
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
     ],

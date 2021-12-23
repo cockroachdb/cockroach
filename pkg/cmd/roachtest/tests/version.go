@@ -41,7 +41,7 @@ func registerVersion(r registry.Registry) {
 		// TODO(mberhault): allow it once version >= 2.1.
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachtestOpts.DontEncrypt = true
-		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -88,7 +88,7 @@ func registerVersion(r registry.Registry) {
 				// Make sure everyone is still running.
 				for i := 1; i <= nodes; i++ {
 					t.WorkerStatus("checking ", i)
-					db := c.Conn(ctx, i)
+					db := c.Conn(ctx, t.L(), i)
 					defer db.Close()
 					rows, err := db.Query(`SHOW DATABASES`)
 					if err != nil {
@@ -112,7 +112,7 @@ func registerVersion(r registry.Registry) {
 				return nil
 			}
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 			// See analogous comment in the upgrade/mixedWith roachtest.
 			db.SetMaxIdleConns(0)
@@ -125,7 +125,7 @@ func registerVersion(r registry.Registry) {
 			stop := func(node int) error {
 				m.ExpectDeath()
 				l.Printf("stopping node %d\n", node)
-				return c.StopCockroachGracefullyOnNode(ctx, node)
+				return c.StopCockroachGracefullyOnNode(ctx, t.L(), node)
 			}
 
 			var oldVersion string
@@ -143,7 +143,7 @@ func registerVersion(r registry.Registry) {
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
 
-				c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -167,7 +167,7 @@ func registerVersion(r registry.Registry) {
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
-			c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(nodes))
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(nodes))
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func registerVersion(r registry.Registry) {
 				if err := c.Stage(ctx, t.L(), "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
-				c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -196,7 +196,7 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Node(i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}

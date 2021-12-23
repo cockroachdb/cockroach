@@ -44,11 +44,11 @@ func registerCopy(r registry.Registry) {
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			// Disable load-based splitting so that we can more accurately

@@ -135,11 +135,11 @@ func registerLoadSplits(r registry.Registry) {
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
 		t.Status("disable load based splitting")
@@ -261,9 +261,9 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	rangeCount := func(t test.Test) (int, string) {
@@ -326,7 +326,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	// Phase 2: add other nodes, wait for full replication of bank table.
 	t.Status("waiting for full replication")
 	{
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(2, numNodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(2, numNodes))
 		m := c.NewMonitor(ctx, c.All())
 		// NB: we do a round-about thing of making sure that there's at least one
 		// range that has 3 replicas (rather than waiting that there are no ranges

@@ -62,7 +62,7 @@ func registerFollowerReads(r registry.Registry) {
 			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
@@ -169,7 +169,7 @@ func runFollowerReadsTest(
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
-		conns = append(conns, c.Conn(ctx, i+1))
+		conns = append(conns, c.Conn(ctx, t.L(), i+1))
 		defer conns[i].Close()
 	}
 	db := conns[0]
@@ -266,7 +266,7 @@ func runFollowerReadsTest(
 	// the delta and protect from follower reads which might have happened due to
 	// system queries.
 	time.Sleep(10 * time.Second) // wait a bit, otherwise sometimes I get a 404 below.
-	followerReadsBefore, err := getFollowerReadCounts(ctx, c)
+	followerReadsBefore, err := getFollowerReadCounts(ctx, t, c)
 	if err != nil {
 		t.Fatalf("failed to get follower read counts: %v", err)
 	}
@@ -293,7 +293,7 @@ func runFollowerReadsTest(
 	// Verify that the follower read count increments on at least two nodes -
 	// which we expect to be in the non-primary regions.
 	expNodesToSeeFollowerReads := 2
-	followerReadsAfter, err := getFollowerReadCounts(ctx, c)
+	followerReadsAfter, err := getFollowerReadCounts(ctx, t, c)
 	if err != nil {
 		t.Fatalf("failed to get follower read counts: %v", err)
 	}
@@ -314,7 +314,7 @@ func runFollowerReadsTest(
 		if topology.deadPrimaryRegion && i <= 3 {
 			stopOpts := option.DefaultStopOpts()
 			stopOpts.RoachprodOpts.Sig = 9
-			c.Stop(ctx, stopOpts, c.Node(i))
+			c.Stop(ctx, t.L(), stopOpts, c.Node(i))
 			deadNodes[i] = struct{}{}
 		} else {
 			liveNodes[i] = struct{}{}
@@ -385,7 +385,7 @@ func runFollowerReadsTest(
 
 	// Restart dead nodes, if necessary.
 	for i := range deadNodes {
-		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
 }
 
@@ -394,7 +394,7 @@ func runFollowerReadsTest(
 func initFollowerReadsDB(
 	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later
@@ -619,7 +619,7 @@ func verifySQLLatency(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -686,7 +686,7 @@ func verifyHighFollowerReadRatios(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	require.NoError(t, err)
 	url := "http://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
@@ -788,11 +788,11 @@ const followerReadsMetric = "follower_reads_success_count"
 
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
-func getFollowerReadCounts(ctx context.Context, c cluster.Cluster) ([]int, error) {
+func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) ([]int, error) {
 	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
-			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(node))
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(node))
 			if err != nil {
 				return err
 			}
@@ -873,7 +873,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	// Start the cluster at the old version.
 	settings := install.MakeClusterSettings()
 	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
-	c.Start(ctx, option.DefaultStartOpts(), settings, c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)
 

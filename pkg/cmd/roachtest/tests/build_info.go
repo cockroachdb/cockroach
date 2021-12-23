@@ -26,10 +26,10 @@ import (
 // RunBuildInfo is a test that sanity checks the build info.
 func RunBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	var details serverpb.DetailsResponse
-	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(1))
 	if err != nil {
 		t.Fatal(err)
 	}
