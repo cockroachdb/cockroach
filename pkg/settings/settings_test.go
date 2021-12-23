@@ -216,6 +216,15 @@ func TestValidation(t *testing.T) {
 	})
 }
 
+func TestIntrospection(t *testing.T) {
+	require.Equal(t, "b", boolTA.Typ())
+	require.Equal(t, "bool.t", boolTA.Key())
+	require.Equal(t, "desc", boolTA.Description())
+	require.Equal(t, settings.Reserved, boolTA.Visibility())
+	require.Equal(t, settings.SystemOnly, boolTA.Class())
+	require.Equal(t, true, boolTA.Default())
+}
+
 func TestCache(t *testing.T) {
 	ctx := context.Background()
 	sv := &settings.Values{}

@@ -17,6 +17,7 @@ import (
 
 // common implements basic functionality used by all setting types.
 type common struct {
+	key         string
 	description string
 	class       Class
 	visibility  Visibility
@@ -27,7 +28,7 @@ type common struct {
 }
 
 // init must be called to initialize the fields that don't have defaults.
-func (i *common) init(class Class, slotIdx int, description string) {
+func (i *common) init(class Class, slotIdx int, key string, description string) {
 	i.class = class
 	if slotIdx < 1 {
 		panic(fmt.Sprintf("Invalid slot index %d", slotIdx))
@@ -36,6 +37,7 @@ func (i *common) init(class Class, slotIdx int, description string) {
 		panic("too many settings; increase MaxSettings")
 	}
 	i.slotIdx = slotIdx
+	i.key = key
 	i.description = description
 }
 
@@ -45,6 +47,10 @@ func (i *common) isRetired() bool {
 
 func (i *common) getSlotIdx() int {
 	return i.slotIdx
+}
+
+func (i common) Key() string {
+	return i.key
 }
 
 func (i common) Description() string {
@@ -103,7 +109,7 @@ func (i *common) SetOnChange(sv *Values, fn func(ctx context.Context)) {
 type internalSetting interface {
 	NonMaskedSetting
 
-	init(class Class, slotIdx int, desc string)
+	init(class Class, slotIdx int, key string, desc string)
 	isRetired() bool
 	setToDefault(ctx context.Context, sv *Values)
 	getSlotIdx() int
