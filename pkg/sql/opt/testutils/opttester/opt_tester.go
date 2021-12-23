@@ -2137,6 +2137,7 @@ func (ot *OptTester) optimizeExpr(
 		return nil, err
 	}
 	if ot.Flags.PerturbCost != 0 {
+		o.Memo().ResetLogProps(&ot.evalCtx)
 		o.RecomputeCost()
 	}
 	return root, nil
