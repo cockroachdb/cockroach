@@ -565,7 +565,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	{
-		confReader, err := tc.store.GetConfReader()
+		confReader, err := tc.store.GetConfReader(ctx)
 		require.Nil(t, confReader)
 		require.True(t, errors.Is(err, errSysCfgUnavailable))
 	}

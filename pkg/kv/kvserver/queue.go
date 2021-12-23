@@ -611,7 +611,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	var confReader spanconfig.StoreReader
 	if bq.needsSystemConfig {
 		var err error
-		confReader, err = bq.store.GetConfReader()
+		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
 			if errors.Is(err, errSysCfgUnavailable) && log.V(1) {
 				log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
@@ -901,7 +901,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 	var confReader spanconfig.StoreReader
 	if bq.needsSystemConfig {
 		var err error
-		confReader, err = bq.store.GetConfReader()
+		confReader, err = bq.store.GetConfReader(ctx)
 		if errors.Is(err, errSysCfgUnavailable) {
 			if log.V(1) {
 				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)

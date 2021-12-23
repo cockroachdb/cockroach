@@ -2841,7 +2841,7 @@ func (s *Store) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	confReader, err := s.GetConfReader()
+	confReader, err := s.GetConfReader(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "can't relocate range")
 	}

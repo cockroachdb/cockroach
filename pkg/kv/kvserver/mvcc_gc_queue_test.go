@@ -1001,7 +1001,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	confReader, err := tc.store.GetConfReader()
+	confReader, err := tc.store.GetConfReader(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1062,7 +1062,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	confReader, err := tc.store.GetConfReader()
+	confReader, err := tc.store.GetConfReader(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1167,7 +1167,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	confReader, err := tc.store.GetConfReader()
+	confReader, err := tc.store.GetConfReader(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
