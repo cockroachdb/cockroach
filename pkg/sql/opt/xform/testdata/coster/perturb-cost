@@ -35,7 +35,7 @@ sort
       ├── fd: (1)-->(2), (1)==(5), (5)==(1)
       ├── scan a
       │    ├── columns: a.x:1!null y:2
-      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
       │    ├── cost: 1064.42
       │    ├── key: (1)
       │    └── fd: (1)-->(2)

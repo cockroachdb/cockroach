@@ -55,7 +55,7 @@ SELECT * FROM ab WHERE b=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1094.77
+  Cost: 1114.97
 ================================================================================
   project
    ├── columns: a:1(int!null) b:2(int!null)
@@ -208,7 +208,7 @@ SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
 ----
 ================================================================================
 Initial expression
-  Cost: 2259.83
+  Cost: 2300.23
 ================================================================================
   project
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -240,7 +240,7 @@ Initial expression
                   └── variable: customers.id:6 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 2259.83
+  Cost: 2300.23
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -274,7 +274,7 @@ NormalizeInConst
                    └── variable: customers.id:6 [type=int]
 ================================================================================
 PruneJoinLeftCols
-  Cost: 2239.63
+  Cost: 2259.83
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -442,56 +442,21 @@ CommuteLeftJoin (higher cost)
 GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-GenerateLookupJoins (higher cost)
+GenerateLookupJoins (no changes)
 --------------------------------------------------------------------------------
-  -left-join (hash)
-  +left-join (lookup customers)
-    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
-  - ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-  + ├── key columns: [2] = [6]
-  + ├── lookup columns are key
-    ├── key: (1)
-    ├── fd: (1)-->(2,3,6-8), (6)-->(7,8)
-    ├── scan orders
-    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
-    │    ├── check constraint expressions
-    │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
-    │    │         ├── variable: status:3 [type=string]
-    │    │         └── tuple [type=tuple{string, string, string}]
-    │    │              ├── const: 'cancelled' [type=string]
-    │    │              ├── const: 'complete' [type=string]
-    │    │              └── const: 'open' [type=string]
-    │    ├── key: (1)
-    │    └── fd: (1)-->(2,3)
-  - ├── scan customers
-  - │    ├── columns: customers.id:6(int!null) name:7(string!null) address:8(string)
-  - │    ├── key: (6)
-  - │    └── fd: (6)-->(7,8)
-  - └── filters
-  -      └── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-  -           ├── variable: customer_id:2 [type=int]
-  -           └── variable: customers.id:6 [type=int]
-  + └── filters (true)
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
-  -left-join (lookup customers)
+  -left-join (hash)
   +right-join (merge)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
-  - ├── key columns: [2] = [6]
-  - ├── lookup columns are key
+  - ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
   + ├── left ordering: +6
   + ├── right ordering: +2
     ├── key: (1)
     ├── fd: (1)-->(2,3,6-8), (6)-->(7,8)
   - ├── scan orders
-  + ├── scan customers
-  + │    ├── columns: customers.id:6(int!null) name:7(string!null) address:8(string)
-  + │    ├── key: (6)
-  + │    ├── fd: (6)-->(7,8)
-  + │    └── ordering: +6
-  + ├── sort
-    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  - │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
   - │    ├── check constraint expressions
   - │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
   - │    │         ├── variable: status:3 [type=string]
@@ -499,8 +464,21 @@ GenerateMergeJoins (higher cost)
   - │    │              ├── const: 'cancelled' [type=string]
   - │    │              ├── const: 'complete' [type=string]
   - │    │              └── const: 'open' [type=string]
-    │    ├── key: (1)
+  - │    ├── key: (1)
   - │    └── fd: (1)-->(2,3)
+    ├── scan customers
+    │    ├── columns: customers.id:6(int!null) name:7(string!null) address:8(string)
+    │    ├── key: (6)
+  - │    └── fd: (6)-->(7,8)
+  - └── filters
+  -      └── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+  -           ├── variable: customer_id:2 [type=int]
+  -           └── variable: customers.id:6 [type=int]
+  + │    ├── fd: (6)-->(7,8)
+  + │    └── ordering: +6
+  + ├── sort
+  + │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │    ├── key: (1)
   + │    ├── fd: (1)-->(2,3)
   + │    ├── ordering: +2
   + │    └── scan orders
@@ -514,7 +492,7 @@ GenerateMergeJoins (higher cost)
   + │         │              └── const: 'open' [type=string]
   + │         ├── key: (1)
   + │         └── fd: (1)-->(2,3)
-    └── filters (true)
+  + └── filters (true)
 ================================================================================
 Final best expression
   Cost: 2209.41
@@ -560,7 +538,7 @@ SELECT * FROM comp WHERE k=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1114.97
+  Cost: 1135.17
 ================================================================================
   project
    ├── columns: k:1(int!null) c:2(bool)
@@ -587,7 +565,7 @@ Initial expression
                   └── const: 1 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 1114.97
+  Cost: 1135.17
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
@@ -764,7 +742,7 @@ SELECT i FROM (SELECT i FROM t WHERE i > 10 AND i < 20) AS t2 WHERE i = 5
 ----
 ================================================================================
 Initial expression
-  Cost: 1096.50
+  Cost: 1116.70
 ================================================================================
   select
    ├── columns: i:1(int!null)
@@ -793,7 +771,7 @@ Initial expression
              └── const: 5 [type=int]
 ================================================================================
 SimplifySelectFilters
-  Cost: 1101.38
+  Cost: 1121.58
 ================================================================================
    select
     ├── columns: i:1(int!null)
@@ -828,7 +806,7 @@ SimplifySelectFilters
               └── const: 5 [type=int]
 ================================================================================
 ConsolidateSelectFilters
-  Cost: 1096.50
+  Cost: 1116.70
 ================================================================================
    select
     ├── columns: i:1(int!null)

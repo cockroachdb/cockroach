@@ -35,7 +35,7 @@ select
  │    ├── fd: (1)-->(2,5), (5)-->(1,2)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4]
+ │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -74,7 +74,7 @@ project
  │    ├── stats: [rows=4000]
  │    ├── key: (5)
  │    └── scan a
- │         └── stats: [rows=4000]
+ │         └── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4]
  └── projections
       └── 1 [as=x:6, type=int]
 
@@ -99,7 +99,7 @@ project
       │    ├── fd: (1)-->(5), (5)-->(1)
       │    └── scan a
       │         ├── columns: x:1(int!null)
-      │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4]
+      │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4]
       │         └── key: (1)
       └── filters
            └── (ordinality:5 > 0) AND (ordinality:5 <= 10) [type=bool, outer=(5), constraints=(/5: [/1 - /10]; tight)]
@@ -121,7 +121,7 @@ select
  │    ├── fd: (1)-->(2,5), (5)-->(1,2)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4]
+ │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -151,6 +151,6 @@ distinct-on
                 ├── fd: (1)-->(2-5), (5)-->(1-4)
                 └── scan a
                      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
-                     ├── stats: [rows=4000]
+                     ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4, distinct(3)=400, null(3)=40, avgsize(3)=4, distinct(4)=400, null(4)=40, avgsize(4)=4]
                      ├── key: (1)
                      └── fd: (1)-->(2-4)

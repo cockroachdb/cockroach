@@ -14,12 +14,12 @@ SELECT f FROM a ORDER BY f DESC
 ----
 sort
  ├── columns: f:2!null
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
  ├── cost: 1304.00194
  ├── ordering: -2
  └── scan a
       ├── columns: f:2!null
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
       └── cost: 1074.52
 
 # Test sort on 0 rows.
@@ -52,12 +52,12 @@ SELECT * FROM abc ORDER BY b, c, a
 ----
 sort
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
  ├── cost: 1356.2643
  ├── ordering: +2,+3,+1
  └── scan abc
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       └── cost: 1094.72
 
 # The sort ordering has a common prefix with the ordering provided with index ab
@@ -66,12 +66,12 @@ SELECT * FROM abc ORDER BY a, b, c
 ----
 sort (segmented)
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1, avgsize(1,2)=8]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(1,2)=1000, null(1,2)=0.1, avgsize(1,2)=8]
  ├── cost: 1164.74
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1, avgsize(1,2)=8]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(1,2)=1000, null(1,2)=0.1, avgsize(1,2)=8]
       ├── cost: 1094.72
       └── ordering: +1,+2
 
@@ -81,12 +81,12 @@ SELECT * FROM abc ORDER BY c, b, a
 ----
 sort (segmented)
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1, avgsize(2,3)=8]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(2,3)=1000, null(2,3)=0.1, avgsize(2,3)=8]
  ├── cost: 1164.74
  ├── ordering: +3,+2,+1
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1, avgsize(2,3)=8]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(2,3)=1000, null(2,3)=0.1, avgsize(2,3)=8]
       ├── cost: 1094.72
       └── ordering: +3,+2
 
@@ -96,12 +96,12 @@ SELECT * FROM abc ORDER BY c, a, b
 ----
 sort (segmented)
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=1000, distinct(3)=100, null(3)=10, avgsize(3)=4]
+ ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
  ├── cost: 1225.50049
  ├── ordering: +3,+1,+2
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=1000, distinct(3)=100, null(3)=10, avgsize(3)=4]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       ├── cost: 1094.72
       └── ordering: +3
 
@@ -129,12 +129,12 @@ SELECT * FROM abc ORDER BY a, b, c
 ----
 sort (segmented)
  ├── columns: a:1 b:2 c:3
- ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=1000, null(3)=100, avgsize(3)=4, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(1,2)=10, null(1,2)=0, avgsize(1,2)=8]
  ├── cost: 13419.3594
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
-      ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=1000, null(3)=100, avgsize(3)=4, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(1,2)=10, null(1,2)=0, avgsize(1,2)=8]
       ├── cost: 10724.72
       └── ordering: +1,+2
 
@@ -157,7 +157,7 @@ sort (segmented)
       ├── scan abc@ab
       │    ├── columns: a:1!null b:2 c:3
       │    ├── constraint: /1/2/4: (/NULL - ]
-      │    ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4]
+      │    ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(3)=1000, null(3)=100, avgsize(3)=4, distinct(4)=10000, null(4)=0, avgsize(4)=4]
       │    ├── cost: 10714.02
       │    └── ordering: +1
       └── filters

@@ -87,7 +87,7 @@ SELECT * FROM t@j_idx WHERE j @> '{}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -119,14 +119,14 @@ SELECT * FROM t WHERE j @> '{"c": "d"}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
       │    └── spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      ├── stats: [rows=100, distinct(5)=1, null(5)=0, avgsize(5)=4]
+      ├── stats: [rows=100, distinct(1)=90.0900901, null(1)=0, avgsize(1)=4, distinct(5)=1, null(5)=0, avgsize(5)=4]
       │   histogram(5)=  0          100           0           0
       │                <--- '\x3763000112640001' --- '\x3763000112640002'
       └── key: (1)
@@ -139,14 +139,14 @@ SELECT * FROM t WHERE j->'c' = '"d"'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
       │    └── spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      ├── stats: [rows=100, distinct(5)=1, null(5)=0, avgsize(5)=4]
+      ├── stats: [rows=100, distinct(1)=90.0900901, null(1)=0, avgsize(1)=4, distinct(5)=1, null(5)=0, avgsize(5)=4]
       │   histogram(5)=  0          100           0           0
       │                <--- '\x3763000112640001' --- '\x3763000112640002'
       └── key: (1)
@@ -159,7 +159,7 @@ SELECT * FROM t WHERE j @> '{"c": "d"}' OR j @> '{"e": "f"}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=666.666667, distinct(2)=10, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -190,7 +190,7 @@ SELECT * FROM t@j_idx WHERE j @> '[]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -222,14 +222,14 @@ SELECT * FROM t WHERE j @> '[2]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
       │    └── spans: ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      ├── stats: [rows=100, distinct(5)=1, null(5)=0, avgsize(5)=4]
+      ├── stats: [rows=100, distinct(1)=90.0900901, null(1)=0, avgsize(1)=4, distinct(5)=1, null(5)=0, avgsize(5)=4]
       │   histogram(5)=  0          100           0           0
       │                <--- '\x37000300012a0400' --- '\x37000300012a0401'
       └── key: (1)
@@ -242,7 +242,7 @@ SELECT * FROM t WHERE j @> '[2]' OR j @> '[3]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=666.666667, distinct(2)=10, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -279,14 +279,14 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=10]
+ │    ├── stats: [rows=10, distinct(1)=9.00900901, null(1)=0, avgsize(1)=4, distinct(2)=6.33042178, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t@j_idx
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
  │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
- │         ├── stats: [rows=10, distinct(5)=1, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=10, distinct(1)=9.00900901, null(1)=0, avgsize(1)=4, distinct(5)=1, null(5)=0, avgsize(5)=4]
  │         │   histogram(5)=  0       10       0       0
  │         │                <--- '\x37000138' --- '\x37000139'
  │         └── key: (1)
@@ -306,14 +306,14 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=10]
+ │    ├── stats: [rows=10, distinct(1)=9.00900901, null(1)=0, avgsize(1)=4, distinct(2)=6.33042178, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t@j_idx
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
  │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
- │         ├── stats: [rows=10, distinct(5)=1, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=10, distinct(1)=9.00900901, null(1)=0, avgsize(1)=4, distinct(5)=1, null(5)=0, avgsize(5)=4]
  │         │   histogram(5)=  0       10       0       0
  │         │                <--- '\x37000139' --- '\x3700013a'
  │         └── key: (1)
@@ -333,7 +333,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=110, distinct(1)=99.0990991, null(1)=0, avgsize(1)=4, distinct(2)=9.999878, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -343,7 +343,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
- │         ├── stats: [rows=110]
+ │         ├── stats: [rows=110, distinct(1)=99.0990991, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -372,7 +372,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4, distinct(2)=9.99995777, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -383,7 +383,7 @@ select
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
  │         │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -413,7 +413,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4, distinct(2)=9.99995777, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -428,7 +428,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -459,7 +459,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=110]
+ │    ├── stats: [rows=110, distinct(1)=99.0990991, null(1)=0, avgsize(1)=4, distinct(2)=9.999878, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -470,7 +470,7 @@ select
  │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
  │         │         ├── ["7\x00\x018", "7\x00\x018"]
  │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │         ├── stats: [rows=110]
+ │         ├── stats: [rows=110, distinct(1)=99.0990991, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -500,7 +500,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4, distinct(2)=9.99995777, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -513,7 +513,7 @@ select
  │         │         ├── ["7\x00\x018", "7\x00\x018"]
  │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
  │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -545,7 +545,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=120]
+ │    ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4, distinct(2)=9.99995777, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -564,7 +564,7 @@ select
  │         │              └── union spans
  │         │                   ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
  │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │         ├── stats: [rows=120]
+ │         ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -646,7 +646,7 @@ SELECT * FROM t WHERE j @> '{}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -678,7 +678,7 @@ SELECT * FROM t WHERE j @> '[]'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb!null)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -715,14 +715,14 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t@j_idx
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
  │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
- │         ├── stats: [rows=2e-07, distinct(5)=2e-07, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(5)=2e-07, null(5)=0, avgsize(5)=4]
  │         │   histogram(5)=
  │         └── key: (1)
  └── filters
@@ -741,14 +741,14 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t@j_idx
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
  │         │    └── spans: ["7a\x00\x02b\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02b\x00\x02c\x00\x01\x12d\x00\x01"]
- │         ├── stats: [rows=2e-07, distinct(5)=2e-07, null(5)=0, avgsize(5)=4]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(5)=2e-07, null(5)=0, avgsize(5)=4]
  │         │   histogram(5)=
  │         └── key: (1)
  └── filters
@@ -763,12 +763,12 @@ SELECT * FROM t WHERE j->'a' = '{"b": "c", "d": "e"}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -783,7 +783,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02d\x00\x01\x12e\x00\x01", "7a\x00\x02d\x00\x01\x12e\x00\x01"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -806,12 +806,12 @@ SELECT * FROM t WHERE j->'a' = '["b", "c", "d", "e"]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -840,7 +840,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -866,12 +866,12 @@ SELECT * FROM t WHERE j->'a' = '{"b": ["c", "d", "e"]}'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -893,7 +893,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -922,7 +922,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -932,7 +932,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
  │         │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -960,7 +960,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -970,7 +970,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
  │         │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -992,7 +992,7 @@ SELECT * FROM t WHERE j->'a' @> '1'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -1028,7 +1028,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=4.99999999, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -1038,7 +1038,7 @@ select
  │         │    └── union spans
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         └── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
- │         ├── stats: [rows=100]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -1061,7 +1061,7 @@ SELECT * FROM t WHERE j->'a'->'b' @> '"c"'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -1097,7 +1097,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=4.99999999, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -1108,7 +1108,7 @@ select
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
  │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
- │         ├── stats: [rows=100]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -1133,14 +1133,14 @@ SELECT * FROM t WHERE j->'a' @> '{"b": "c"}'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=222.222222]
+ ├── stats: [rows=222.222222, distinct(1)=222.222222, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@j_idx
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
       │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      ├── stats: [rows=2e-07, distinct(5)=2e-07, null(5)=0, avgsize(5)=4]
+      ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(5)=2e-07, null(5)=0, avgsize(5)=4]
       │   histogram(5)=
       └── key: (1)
 
@@ -1157,7 +1157,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=4.99999999, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -1168,7 +1168,7 @@ select
  │         │         ├── ["7\x00\x019", "7\x00\x019"]
  │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
  │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
- │         ├── stats: [rows=100]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -1193,12 +1193,12 @@ SELECT * FROM t WHERE j->'a' @> '[1, 2]'
 select
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=24.691358]
+ ├── stats: [rows=24.691358, distinct(1)=24.691358, null(1)=0, avgsize(1)=4, distinct(2)=4.9652498, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=2e-07]
+ │    ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4, distinct(2)=2e-07, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -1213,7 +1213,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
  │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
- │         ├── stats: [rows=2e-07]
+ │         ├── stats: [rows=2e-07, distinct(1)=1.99999931e-07, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -1241,7 +1241,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=4.99999999, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -1255,7 +1255,7 @@ select
  │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
  │         │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
  │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
- │         ├── stats: [rows=100]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
@@ -1283,7 +1283,7 @@ SELECT * FROM t WHERE  '"c"' <@ j->'a'->'b'
 index-join t
  ├── columns: k:1(int!null) j:2(jsonb)
  ├── immutable
- ├── stats: [rows=666.666667]
+ ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, avgsize(1)=4, distinct(2)=5, null(2)=0, avgsize(2)=4]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -1319,7 +1319,7 @@ select
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) j:2(jsonb)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=4.99999999, null(2)=0, avgsize(2)=4]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -1334,7 +1334,7 @@ select
  │         │         ├── ["7a\x00\x02b\x00\x018", "7a\x00\x02b\x00\x018"]
  │         │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00"]
  │         │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00"]
- │         ├── stats: [rows=100]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4]
  │         ├── key: (1)
  │         └── scan t@j_idx
  │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)

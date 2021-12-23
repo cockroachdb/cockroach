@@ -83,7 +83,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=60.7847521]
+      │    ├── stats: [rows=60.7847521, distinct(1)=17.367072, null(1)=0, avgsize(1)=4, distinct(2)=6.99896393, null(2)=0, avgsize(2)=4, distinct(3)=31.4520677, null(3)=3.03923761, avgsize(3)=4, distinct(4)=1, null(4)=60.7847521, avgsize(4)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -96,7 +96,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=60.7847521]
+      │         ├── stats: [rows=60.7847521, distinct(1)=17.367072, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan t@m
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -135,7 +135,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=60.7847521]
+      │    ├── stats: [rows=60.7847521, distinct(1)=17.367072, null(1)=0, avgsize(1)=4, distinct(2)=6.99896393, null(2)=0, avgsize(2)=4, distinct(3)=31.4520677, null(3)=3.03923761, avgsize(3)=4, distinct(4)=1, null(4)=60.7847521, avgsize(4)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -148,7 +148,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=60.7847521]
+      │         ├── stats: [rows=60.7847521, distinct(1)=17.367072, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan t@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:8(geometry!null)
@@ -198,7 +198,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.569504]
+      │    ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4, distinct(2)=6.99999988, null(2)=0, avgsize(2)=4, distinct(3)=38.2609314, null(3)=6.07847521, avgsize(3)=4, distinct(4)=1, null(4)=121.569504, avgsize(4)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -211,7 +211,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.569504]
+      │         ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan t@m
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -253,7 +253,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.569504]
+      │    ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4, distinct(2)=6.99999988, null(2)=0, avgsize(2)=4, distinct(3)=38.2609314, null(3)=6.07847521, avgsize(3)=4, distinct(4)=1, null(4)=121.569504, avgsize(4)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -266,7 +266,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.569504]
+      │         ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan t@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:9(geometry!null)
@@ -316,7 +316,7 @@ project
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=9.53273514]
+      │    ├── stats: [rows=9.53273514, distinct(1)=2.72363861, null(1)=0, avgsize(1)=4, distinct(2)=5.21246956, null(2)=0, avgsize(2)=4, distinct(3)=8.4998815, null(3)=0.476636757, avgsize(3)=4, distinct(4)=8.52370429, null(4)=0.142991027, avgsize(4)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -329,7 +329,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=9.53273514]
+      │         ├── stats: [rows=9.53273514, distinct(1)=2.72363861, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan t@mp,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(geometry!null)
@@ -372,7 +372,7 @@ project
       ├── fd: (1)-->(2-4)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=19.0654703]
+      │    ├── stats: [rows=19.0654703, distinct(1)=5.44727722, null(1)=0, avgsize(1)=4, distinct(2)=6.54651515, null(2)=0, avgsize(2)=4, distinct(3)=15.2219959, null(3)=0.953273514, avgsize(3)=4, distinct(4)=15.3041373, null(4)=0.285982054, avgsize(4)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -385,7 +385,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=19.0654703]
+      │         ├── stats: [rows=19.0654703, distinct(1)=5.44727722, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan t@mp,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(geometry!null)

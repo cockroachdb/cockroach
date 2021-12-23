@@ -57,13 +57,13 @@ sort
       │    ├── save-table-name: q4_lookup_join_3
       │    ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null)
       │    ├── key columns: [1] = [12]
-      │    ├── stats: [rows=62887.5, distinct(1)=62887.5, null(1)=0, avgsize(1)=4, distinct(5)=92, null(5)=0, avgsize(5)=4, distinct(6)=4, null(6)=0, avgsize(6)=4]
+      │    ├── stats: [rows=62887.5, distinct(1)=62887.5, null(1)=0, avgsize(1)=4, distinct(5)=92, null(5)=0, avgsize(5)=4, distinct(6)=4, null(6)=0, avgsize(6)=4, distinct(12)=1, null(12)=0, avgsize(12)=4, distinct(13)=1, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=1, null(15)=0, avgsize(15)=4, distinct(16)=1, null(16)=0, avgsize(16)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4, distinct(19)=1, null(19)=0, avgsize(19)=4, distinct(20)=1, null(20)=0, avgsize(20)=4, distinct(21)=1, null(21)=0, avgsize(21)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(23)=1, null(23)=0, avgsize(23)=4, distinct(24)=1, null(24)=0, avgsize(24)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(26)=1, null(26)=0, avgsize(26)=4, distinct(27)=1, null(27)=0, avgsize(27)=4]
       │    ├── key: (1)
       │    ├── fd: (1)-->(5,6)
       │    ├── index-join orders
       │    │    ├── save-table-name: q4_index_join_4
       │    │    ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null)
-      │    │    ├── stats: [rows=62887.5, distinct(1)=62887.5, null(1)=0, avgsize(1)=4, distinct(5)=92, null(5)=0, avgsize(5)=4, distinct(6)=4, null(6)=0, avgsize(6)=4]
+      │    │    ├── stats: [rows=62887.5, distinct(1)=62887.5, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(5)=92, null(5)=0, avgsize(5)=4, distinct(6)=4, null(6)=0, avgsize(6)=4, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=1, null(9)=0, avgsize(9)=4]
       │    │    │   histogram(5)=  0       0        7200      300       7200      600       6600      750       7200      900       6900      900       6900      450       6600      750       6750      1200      1125     562.5
       │    │    │                <--- '1993-06-30' ------ '1993-07-11' ------ '1993-07-22' ------ '1993-08-02' ------ '1993-08-14' ------ '1993-08-25' ------ '1993-09-05' ------ '1993-09-16' ------ '1993-09-27' ------ '1993-09-30'
       │    │    ├── key: (1)

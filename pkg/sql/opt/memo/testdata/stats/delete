@@ -58,7 +58,7 @@ with &1
  │         ├── fd: ()-->(8), (6)-->(7,9,10)
  │         ├── scan xyz
  │         │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │         │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4]
  │         │    ├── key: (6)
  │         │    └── fd: (6)-->(7-10)
  │         └── filters
@@ -100,7 +100,7 @@ delete xyz
       ├── fd: (6)-->(7-10)
       ├── scan xyz
       │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
-      │    ├── stats: [rows=1000]
+      │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4]
       │    ├── key: (6)
       │    └── fd: (6)-->(7-10)
       └── filters

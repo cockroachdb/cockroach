@@ -8,7 +8,7 @@ select
  ├── fd: ()-->(3)
  ├── scan schemata
  │    ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5 crdb_is_user_defined:6
- │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=100, null(3)=0, avgsize(3)=4]
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=100, null(3)=0, avgsize(3)=4, distinct(4)=100, null(4)=10, avgsize(4)=4, distinct(5)=100, null(5)=10, avgsize(5)=4, distinct(6)=100, null(6)=10, avgsize(6)=4]
  │    └── cost: 1235.12
  └── filters
       └── schema_name:3 = 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]

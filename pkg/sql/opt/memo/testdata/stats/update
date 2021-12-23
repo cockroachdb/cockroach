@@ -65,7 +65,7 @@ with &1
  │         │    ├── fd: ()-->(8), (6)-->(7,9,10)
  │         │    ├── scan xyz
  │         │    │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4]
  │         │    │    ├── key: (6)
  │         │    │    └── fd: (6)-->(7-10)
  │         │    └── filters
@@ -116,7 +116,7 @@ update xyz
       │    ├── fd: (6)-->(7-10)
       │    ├── scan xyz
       │    │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
-      │    │    ├── stats: [rows=1000]
+      │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4]
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7-10)
       │    └── filters
@@ -170,12 +170,12 @@ with &2 (q)
  │         │    │    ├── fd: (8)-->(6,7,9,10), (11)-->(12,13)
  │         │    │    ├── scan child
  │         │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │         │    │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4]
  │         │    │    │    ├── key: (8)
  │         │    │    │    └── fd: (8)-->(6,7,9,10)
  │         │    │    ├── scan parent
  │         │    │    │    ├── columns: parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0, avgsize(11)=4]
+ │         │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0, avgsize(11)=4, distinct(12)=100, null(12)=10, avgsize(12)=4, distinct(13)=100, null(13)=10, avgsize(13)=4]
  │         │    │    │    ├── key: (11)
  │         │    │    │    └── fd: (11)-->(12,13)
  │         │    │    └── filters (true)

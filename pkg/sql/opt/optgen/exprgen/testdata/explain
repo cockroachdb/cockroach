@@ -17,7 +17,7 @@ explain
  ├── cost: 1074.54
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       ├── cost: 1074.52
       ├── prune: (1)
       └── interesting orderings: (+1)
@@ -37,7 +37,7 @@ explain
  ├── cost: 1074.54
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       ├── cost: 1074.52
       ├── prune: (1)
       └── interesting orderings: (+1)
@@ -57,7 +57,7 @@ explain
  ├── cost: 1074.54
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       ├── cost: 1074.52
       ├── prune: (1)
       └── interesting orderings: (+1)
@@ -84,13 +84,13 @@ explain
  ├── cost: 1324.12194
  └── sort
       ├── columns: a:1(int)  [hidden: t.public.abc.b:2(int)]
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       ├── cost: 1324.10194
       ├── ordering: +2
       ├── interesting orderings: (+1,+2)
       └── scan t.public.abc
            ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
-           ├── stats: [rows=1000]
+           ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
            ├── cost: 1084.62
            └── interesting orderings: (+1,+2)
 
@@ -109,7 +109,7 @@ explain
  ├── cost: 1074.54
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4]
       ├── cost: 1074.52
       ├── prune: (1)
       └── interesting orderings: (+1)
