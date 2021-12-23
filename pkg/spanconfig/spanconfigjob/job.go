@@ -30,7 +30,7 @@ var _ jobs.Resumer = (*resumer)(nil)
 // Resume implements the jobs.Resumer interface.
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
-	rc := execCtx.SpanConfigReconciliationJobDeps()
+	rc := execCtx.SpanConfigReconciler()
 
 	// TODO(irfansharif): #73086 bubbles up retryable errors from the
 	// reconciler/underlying watcher in the (very) unlikely event that it's
