@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
         "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

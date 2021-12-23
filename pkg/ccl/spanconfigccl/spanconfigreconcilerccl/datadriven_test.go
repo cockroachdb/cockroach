@@ -145,8 +145,8 @@ func TestDataDriven(t *testing.T) {
 			case "reconcile":
 				tsBeforeReconcilerStart := tenant.Clock().Now()
 				go func() {
-					err := tenant.Reconciler().Reconcile(ctx, hlc.Timestamp{}, func(checkpoint hlc.Timestamp) error {
-						tenant.Checkpoint(checkpoint)
+					err := tenant.Reconciler().Reconcile(ctx, hlc.Timestamp{} /* startTS */, func() error {
+						tenant.RecordCheckpoint()
 						return nil
 					})
 					require.NoError(t, err)

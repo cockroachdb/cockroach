@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,6 +39,11 @@ type Reconciler struct {
 	codec   keys.SQLCodec
 	tenID   roachpb.TenantID
 	knobs   *spanconfig.TestingKnobs
+
+	mu struct {
+		syncutil.RWMutex
+		lastCheckpoint hlc.Timestamp
+	}
 }
 
 var _ spanconfig.Reconciler = &Reconciler{}
@@ -122,7 +128,7 @@ func New(
 // checkpoint. For changes to, say, RANGE DEFAULT, the RPC request proto is
 // proportional to the number of schema objects.
 func (r *Reconciler) Reconcile(
-	ctx context.Context, startTS hlc.Timestamp, callback func(checkpoint hlc.Timestamp) error,
+	ctx context.Context, startTS hlc.Timestamp, onCheckpoint func() error,
 ) error {
 	// TODO(irfansharif): Check system.{zones,descriptors} for last GC timestamp
 	// and avoid the full reconciliation pass if the startTS provided is
@@ -136,15 +142,20 @@ func (r *Reconciler) Reconcile(
 		codec:         r.codec,
 		tenID:         r.tenID,
 	}
-	latestStore, reconciledUpto, err := full.reconcile(ctx)
+	latestStore, reconciledUpUntil, err := full.reconcile(ctx)
 	if err != nil {
 		return err
 	}
 
-	if err := callback(reconciledUpto); err != nil {
+	r.mu.Lock()
+	r.mu.lastCheckpoint = reconciledUpUntil
+	r.mu.Unlock()
+
+	if err := onCheckpoint(); err != nil {
 		return err
 	}
 
+	incrementalStartTS := reconciledUpUntil
 	incremental := incrementalReconciler{
 		sqlTranslator:       r.sqlTranslator,
 		sqlWatcher:          r.sqlWatcher,
@@ -154,7 +165,21 @@ func (r *Reconciler) Reconcile(
 		codec:               r.codec,
 		knobs:               r.knobs,
 	}
-	return incremental.reconcile(ctx, reconciledUpto, callback)
+	return incremental.reconcile(ctx, incrementalStartTS, func(reconciledUpUntil hlc.Timestamp) error {
+		r.mu.Lock()
+		r.mu.lastCheckpoint = reconciledUpUntil
+		r.mu.Unlock()
+
+		return onCheckpoint()
+	})
+}
+
+// Checkpoint is part of the spanconfig.Reconciler interface.
+func (r *Reconciler) Checkpoint() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.mu.lastCheckpoint
 }
 
 // fullReconciler is a single-use orchestrator for the full reconciliation
