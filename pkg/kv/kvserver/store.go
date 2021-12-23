@@ -2111,7 +2111,7 @@ func (s *Store) startGossip() {
 var errSysCfgUnavailable = errors.New("system config not available in gossip")
 
 // GetConfReader exposes access to a configuration reader.
-func (s *Store) GetConfReader() (spanconfig.StoreReader, error) {
+func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
 		return nil, errSysCfgUnavailable
 	}
@@ -3267,7 +3267,7 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	confReader, err := s.GetConfReader()
+	confReader, err := s.GetConfReader(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err,
 			"unable to retrieve conf reader, cannot run queue; make sure "+
