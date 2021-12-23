@@ -1046,6 +1046,24 @@ func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 	return res[0]
 }
 
+// writeDecodedCols writes the stringified representation of the decoded columns
+// specified by colOrdinals. -1 in colOrdinals indicates that a column wasn't
+// actually decoded (this is represented as "?" in the result). separator is
+// inserted between each two consequent decoded column values (but not before
+// the first one).
+func (rf *cFetcher) writeDecodedCols(buf *strings.Builder, colOrdinals []int, separator byte) {
+	for i, idx := range colOrdinals {
+		if i > 0 {
+			buf.WriteByte(separator)
+		}
+		if idx != -1 {
+			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
+		} else {
+			buf.WriteByte('?')
+		}
+	}
+}
+
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
@@ -1065,12 +1083,8 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		buf.WriteString(rf.table.desc.GetName())
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.index.GetName())
-		// Note that because rf.traceKV is true, rf.table.indexColOrdinals will
-		// not include any -1, so idx values will all be valid.
-		for _, idx := range rf.table.indexColOrdinals {
-			buf.WriteByte('/')
-			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
-		}
+		buf.WriteByte('/')
+		rf.writeDecodedCols(&buf, rf.table.indexColOrdinals, '/')
 		prettyKey = buf.String()
 	}
 
@@ -1147,12 +1161,10 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 				if err != nil {
 					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
-				if rf.traceKV {
+				if rf.traceKV && len(table.extraValColOrdinals) > 0 {
 					var buf strings.Builder
-					for _, idx := range table.extraValColOrdinals {
-						buf.WriteByte('/')
-						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
-					}
+					buf.WriteByte('/')
+					rf.writeDecodedCols(&buf, table.extraValColOrdinals, '/')
 					prettyValue = buf.String()
 				}
 			}
@@ -1181,8 +1193,8 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 }
 
 // processValueSingle processes the given value (of column
-// family.DefaultColumnID), setting values in table.row accordingly. The key is
-// only used for logging.
+// family.DefaultColumnID), setting values in rf.machine.colvecs accordingly.
+// The key is only used for logging.
 func (rf *cFetcher) processValueSingle(
 	ctx context.Context,
 	table *cTableInfo,
@@ -1232,7 +1244,7 @@ func (rf *cFetcher) processValueSingle(
 	if row.DebugRowFetch {
 		log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 	}
-	return "", "", nil
+	return prettyKey, prettyValue, nil
 }
 
 func (rf *cFetcher) processValueBytes(
@@ -1333,18 +1345,12 @@ func (rf *cFetcher) fillNulls() error {
 			continue
 		}
 		if !table.cols[i].IsNullable() {
-			var indexColValues []string
-			for _, idx := range table.indexColOrdinals {
-				if idx != -1 {
-					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx).String())
-				} else {
-					indexColValues = append(indexColValues, "?")
-				}
-			}
+			var indexColValues strings.Builder
+			rf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
 			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 				table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
-				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ",")))
+				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), indexColValues.String()))
 		}
 		rf.machine.colvecs.Nulls[i].SetNull(rf.machine.rowIdx)
 	}

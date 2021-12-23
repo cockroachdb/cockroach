@@ -317,8 +317,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/ba/2/1/3 -> NULL
-fetched: /abc/ba/5/4/6 -> NULL
+fetched: /abc/ba/2/1/? -> NULL
+fetched: /abc/ba/5/4/? -> NULL
 output row: [1 2]
 output row: [4 5]
 
@@ -464,8 +464,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/bc/2/3 -> /1
-fetched: /abc/bc/5/6 -> /4
+fetched: /abc/bc/2/3 -> /?
+fetched: /abc/bc/5/6 -> /?
 output row: [2 3]
 output row: [5 6]
 
