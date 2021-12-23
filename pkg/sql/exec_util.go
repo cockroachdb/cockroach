@@ -698,6 +698,13 @@ var largeFullScanRows = settings.RegisterFloatSetting(
 	1000.0,
 ).WithPublic()
 
+var costScansWithDefaultColSize = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	`sql.defaults.cost_scans_with_default_col_size.enabled`,
+	"setting to true uses the same size for all columns to compute scan cost",
+	false,
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -3057,6 +3064,12 @@ func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
 
 func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) {
 	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
+}
+
+// TODO(harding): Remove this when costing scans based on average column size
+// is fully supported.
+func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {
+	m.data.CostScansWithDefaultColSize = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
