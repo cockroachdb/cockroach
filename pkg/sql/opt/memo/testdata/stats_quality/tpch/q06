@@ -57,7 +57,7 @@ scalar-group-by
  │    │    ├── index-join lineitem
  │    │    │    ├── save-table-name: q6_index_join_4
  │    │    │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipdate:11(date!null)
- │    │    │    ├── stats: [rows=945631.624, distinct(5)=50, null(5)=0, avgsize(5)=4, distinct(6)=634562.989, null(6)=0, avgsize(6)=4, distinct(7)=11, null(7)=0, avgsize(7)=4, distinct(11)=365, null(11)=0, avgsize(11)=4]
+ │    │    │    ├── stats: [rows=945631.624, distinct(1)=748680.878, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=945631.624, avgsize(2)=4, distinct(3)=1, null(3)=945631.624, avgsize(3)=4, distinct(4)=7, null(4)=0, avgsize(4)=4, distinct(5)=50, null(5)=0, avgsize(5)=4, distinct(6)=634562.989, null(6)=0, avgsize(6)=4, distinct(7)=11, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=945631.624, avgsize(8)=4, distinct(9)=1, null(9)=945631.624, avgsize(9)=4, distinct(10)=1, null(10)=945631.624, avgsize(10)=4, distinct(11)=365, null(11)=0, avgsize(11)=4, distinct(12)=1, null(12)=945631.624, avgsize(12)=4, distinct(13)=1, null(13)=945631.624, avgsize(13)=4, distinct(14)=1, null(14)=945631.624, avgsize(14)=4, distinct(15)=1, null(15)=945631.624, avgsize(15)=4, distinct(16)=1, null(16)=945631.624, avgsize(16)=4]
  │    │    │    └── scan lineitem@l_sd
  │    │    │         ├── save-table-name: q6_scan_5
  │    │    │         ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)

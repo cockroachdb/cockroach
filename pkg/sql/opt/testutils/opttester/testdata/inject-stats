@@ -24,7 +24,7 @@ SELECT * FROM rides WHERE city = 'rome'
 scan rides
  ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
  ├── constraint: /2/1: [/'rome' - /'rome']
- ├── stats: [rows=10, distinct(2)=1, null(2)=0, avgsize(2)=4]
+ ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=9.5617925, null(3)=0.1, avgsize(3)=4, distinct(4)=9.5617925, null(4)=0.1, avgsize(4)=4, distinct(5)=9.5617925, null(5)=0.1, avgsize(5)=4, distinct(6)=9.5617925, null(6)=0.1, avgsize(6)=4, distinct(7)=9.5617925, null(7)=0.1, avgsize(7)=4, distinct(8)=9.5617925, null(8)=0.1, avgsize(8)=4, distinct(9)=9.5617925, null(9)=0.1, avgsize(9)=4, distinct(10)=9.5617925, null(10)=0.1, avgsize(10)=4]
  ├── key: (1)
  └── fd: ()-->(2), (1)-->(3-10)
 
@@ -37,7 +37,7 @@ SELECT * FROM rides WHERE city = 'rome'
 scan rides
  ├── columns: id:1(uuid!null) city:2(varchar!null) vehicle_city:3(varchar) rider_id:4(uuid) vehicle_id:5(uuid) start_address:6(varchar) end_address:7(varchar) start_time:8(timestamp) end_time:9(timestamp) revenue:10(decimal)
  ├── constraint: /2/1: [/'rome' - /'rome']
- ├── stats: [rows=55, distinct(2)=1, null(2)=0, avgsize(2)=6]
+ ├── stats: [rows=55, distinct(1)=55, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=8.98611403, null(3)=0, avgsize(3)=4, distinct(4)=34.40914, null(4)=0, avgsize(4)=4, distinct(5)=14.6916163, null(5)=0, avgsize(5)=4, distinct(6)=55, null(6)=0, avgsize(6)=4, distinct(7)=55, null(7)=0, avgsize(7)=4, distinct(8)=25.6984858, null(8)=0, avgsize(8)=4, distinct(9)=53.8768916, null(9)=0, avgsize(9)=4, distinct(10)=44.1594055, null(10)=0, avgsize(10)=4]
  │   histogram(2)=  0    55
  │                <--- 'rome'
  ├── key: (1)

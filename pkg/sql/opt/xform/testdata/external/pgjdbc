@@ -171,85 +171,22 @@ sort
       │    ├── window partition=(44) ordering=+49 opt(3,7,44,60)
       │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:70!null typtype:76 typnotnull:93 typbasetype:94 typtypmod:95 adrelid:103 adnum:104 adbin:105 objoid:108 classoid:109 objsubid:110 description:111 dc.oid:113 dc.relname:114 dc.relnamespace:115 dn.oid:150 dn.nspname:151 row_number:154
       │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7), (46)==(70), (70)==(46)
-      │    │    ├── inner-join (hash)
+      │    │    ├── right-join (hash)
       │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:70!null typtype:76 typnotnull:93 typbasetype:94 typtypmod:95 adrelid:103 adnum:104 adbin:105 objoid:108 classoid:109 objsubid:110 description:111 dc.oid:113 dc.relname:114 dc.relnamespace:115 dn.oid:150 dn.nspname:151
       │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7), (46)==(70), (70)==(46)
-      │    │    │    ├── scan pg_type [as=t]
-      │    │    │    │    └── columns: t.oid:70!null typtype:76 typnotnull:93 typbasetype:94 typtypmod:95
-      │    │    │    ├── left-join (hash)
-      │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null adrelid:103 adnum:104 adbin:105 objoid:108 classoid:109 objsubid:110 description:111 dc.oid:113 dc.relname:114 dc.relnamespace:115 dn.oid:150 dn.nspname:151
-      │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: adrelid:103!null adnum:104!null adbin:105
+      │    │    │    │    ├── scan pg_attrdef [as=def]
+      │    │    │    │    │    └── columns: adrelid:103!null adnum:104 adbin:105
+      │    │    │    │    └── filters
+      │    │    │    │         └── adnum:104 > 0 [outer=(104), constraints=(/104: [/1 - ]; tight)]
+      │    │    │    ├── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
+      │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:70!null typtype:76 typnotnull:93 typbasetype:94 typtypmod:95 objoid:108 classoid:109 objsubid:110 description:111 dc.oid:113 dc.relname:114 dc.relnamespace:115 dn.oid:150 dn.nspname:151
+      │    │    │    │    ├── key columns: [46] = [70]
+      │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (46)==(70), (70)==(46), (2)==(9), (9)==(2)
       │    │    │    │    ├── right-join (hash)
-      │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null adrelid:103 adnum:104 adbin:105 objoid:108 classoid:109 objsubid:110 description:111
+      │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null objoid:108 classoid:109 objsubid:110 description:111 dc.oid:113 dc.relname:114 dc.relnamespace:115 dn.oid:150 dn.nspname:151
       │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
-      │    │    │    │    │    ├── select
-      │    │    │    │    │    │    ├── columns: adrelid:103!null adnum:104!null adbin:105
-      │    │    │    │    │    │    ├── scan pg_attrdef [as=def]
-      │    │    │    │    │    │    │    └── columns: adrelid:103!null adnum:104 adbin:105
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── adnum:104 > 0 [outer=(104), constraints=(/104: [/1 - ]; tight)]
-      │    │    │    │    │    ├── right-join (hash)
-      │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null objoid:108 classoid:109 objsubid:110 description:111
-      │    │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: objoid:108 classoid:109 objsubid:110!null description:111
-      │    │    │    │    │    │    │    ├── scan pg_description [as=dsc]
-      │    │    │    │    │    │    │    │    └── columns: objoid:108 classoid:109 objsubid:110 description:111
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── objsubid:110 > 0 [outer=(110), constraints=(/110: [/1 - ]; tight)]
-      │    │    │    │    │    │    ├── inner-join (hash)
-      │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
-      │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7)
-      │    │    │    │    │    │    │    ├── inner-join (merge)
-      │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
-      │    │    │    │    │    │    │    │    ├── left ordering: +44
-      │    │    │    │    │    │    │    │    ├── right ordering: +7
-      │    │    │    │    │    │    │    │    ├── fd: ()-->(60), (7)==(44), (44)==(7)
-      │    │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
-      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(60)
-      │    │    │    │    │    │    │    │    │    ├── ordering: +44 opt(60) [actual: +44]
-      │    │    │    │    │    │    │    │    │    ├── scan pg_attribute@pg_attribute_attrelid_idx [as=a]
-      │    │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49 atttypmod:52 a.attnotnull:56 attisdropped:60
-      │    │    │    │    │    │    │    │    │    │    └── ordering: +44
-      │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │         ├── attnum:49 > 0 [outer=(49), constraints=(/49: [/1 - ]; tight)]
-      │    │    │    │    │    │    │    │    │         └── NOT attisdropped:60 [outer=(60), constraints=(/60: [/false - /false]; tight), fd=()-->(60)]
-      │    │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
-      │    │    │    │    │    │    │    │    │    ├── ordering: +7
-      │    │    │    │    │    │    │    │    │    ├── scan pg_class@pg_class_oid_idx [as=c]
-      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
-      │    │    │    │    │    │    │    │    │    │    └── ordering: +7
-      │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │         ├── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
-      │    │    │    │    │    │    │    │    │         └── c.relname:8 LIKE '%' [outer=(8), constraints=(/8: (/NULL - ])]
-      │    │    │    │    │    │    │    │    └── filters (true)
-      │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null
-      │    │    │    │    │    │    │    │    ├── fd: ()-->(3)
-      │    │    │    │    │    │    │    │    ├── scan pg_namespace [as=n]
-      │    │    │    │    │    │    │    │    │    └── columns: n.oid:2 n.nspname:3!null
-      │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │         └── n.nspname:3 LIKE 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── c.relnamespace:9 = n.oid:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         ├── c.oid:7 = objoid:108 [outer=(7,108), constraints=(/7: (/NULL - ]; /108: (/NULL - ]), fd=(7)==(108), (108)==(7)]
-      │    │    │    │    │    │         └── attnum:49 = objsubid:110 [outer=(49,110), constraints=(/49: (/NULL - ]; /110: (/NULL - ]), fd=(49)==(110), (110)==(49)]
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         ├── attrelid:44 = adrelid:103 [outer=(44,103), constraints=(/44: (/NULL - ]; /103: (/NULL - ]), fd=(44)==(103), (103)==(44)]
-      │    │    │    │    │         └── attnum:49 = adnum:104 [outer=(49,104), constraints=(/49: (/NULL - ]; /104: (/NULL - ]), fd=(49)==(104), (104)==(49)]
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: dc.oid:113!null dc.relname:114!null dc.relnamespace:115 dn.oid:150 dn.nspname:151
-      │    │    │    │    │    ├── fd: ()-->(114)
-      │    │    │    │    │    ├── select
-      │    │    │    │    │    │    ├── columns: dc.oid:113!null dc.relname:114!null dc.relnamespace:115
-      │    │    │    │    │    │    ├── fd: ()-->(114)
-      │    │    │    │    │    │    ├── scan pg_class [as=dc]
-      │    │    │    │    │    │    │    └── columns: dc.oid:113!null dc.relname:114!null dc.relnamespace:115
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── dc.relname:114 = 'pg_class' [outer=(114), constraints=(/114: [/'pg_class' - /'pg_class']; tight), fd=()-->(114)]
       │    │    │    │    │    ├── select
       │    │    │    │    │    │    ├── columns: dn.oid:150 dn.nspname:151!null
       │    │    │    │    │    │    ├── fd: ()-->(151)
@@ -257,12 +194,67 @@ sort
       │    │    │    │    │    │    │    └── columns: dn.oid:150 dn.nspname:151!null
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── dn.nspname:151 = 'pg_catalog' [outer=(151), constraints=(/151: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(151)]
+      │    │    │    │    │    ├── left-join (lookup pg_class@pg_class_oid_idx [as=dc])
+      │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null objoid:108 classoid:109 objsubid:110 description:111 dc.oid:113 dc.relname:114 dc.relnamespace:115
+      │    │    │    │    │    │    ├── key columns: [109] = [113]
+      │    │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    │    │    ├── right-join (hash)
+      │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null objoid:108 classoid:109 objsubid:110 description:111
+      │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    ├── columns: objoid:108 classoid:109 objsubid:110!null description:111
+      │    │    │    │    │    │    │    │    ├── scan pg_description [as=dsc]
+      │    │    │    │    │    │    │    │    │    └── columns: objoid:108 classoid:109 objsubid:110 description:111
+      │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │         └── objsubid:110 > 0 [outer=(110), constraints=(/110: [/1 - ]; tight)]
+      │    │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7)
+      │    │    │    │    │    │    │    │    ├── inner-join (merge)
+      │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
+      │    │    │    │    │    │    │    │    │    ├── left ordering: +44
+      │    │    │    │    │    │    │    │    │    ├── right ordering: +7
+      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(60), (7)==(44), (44)==(7)
+      │    │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
+      │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(60)
+      │    │    │    │    │    │    │    │    │    │    ├── ordering: +44 opt(60) [actual: +44]
+      │    │    │    │    │    │    │    │    │    │    ├── scan pg_attribute@pg_attribute_attrelid_idx [as=a]
+      │    │    │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49 atttypmod:52 a.attnotnull:56 attisdropped:60
+      │    │    │    │    │    │    │    │    │    │    │    └── ordering: +44
+      │    │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │    │         ├── attnum:49 > 0 [outer=(49), constraints=(/49: [/1 - ]; tight)]
+      │    │    │    │    │    │    │    │    │    │         └── NOT attisdropped:60 [outer=(60), constraints=(/60: [/false - /false]; tight), fd=()-->(60)]
+      │    │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
+      │    │    │    │    │    │    │    │    │    │    ├── ordering: +7
+      │    │    │    │    │    │    │    │    │    │    ├── scan pg_class@pg_class_oid_idx [as=c]
+      │    │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
+      │    │    │    │    │    │    │    │    │    │    │    └── ordering: +7
+      │    │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │    │         ├── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
+      │    │    │    │    │    │    │    │    │    │         └── c.relname:8 LIKE '%' [outer=(8), constraints=(/8: (/NULL - ])]
+      │    │    │    │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null
+      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(3)
+      │    │    │    │    │    │    │    │    │    ├── scan pg_namespace [as=n]
+      │    │    │    │    │    │    │    │    │    │    └── columns: n.oid:2 n.nspname:3!null
+      │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │         └── n.nspname:3 LIKE 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
+      │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │         └── c.relnamespace:9 = n.oid:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         ├── c.oid:7 = objoid:108 [outer=(7,108), constraints=(/7: (/NULL - ]; /108: (/NULL - ]), fd=(7)==(108), (108)==(7)]
+      │    │    │    │    │    │    │         └── attnum:49 = objsubid:110 [outer=(49,110), constraints=(/49: (/NULL - ]; /110: (/NULL - ]), fd=(49)==(110), (110)==(49)]
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── dc.relname:114 = 'pg_class' [outer=(114), constraints=(/114: [/'pg_class' - /'pg_class']; tight), fd=()-->(114)]
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── dc.relnamespace:115 = dn.oid:150 [outer=(115,150), constraints=(/115: (/NULL - ]; /150: (/NULL - ]), fd=(115)==(150), (150)==(115)]
-      │    │    │    │    └── filters
-      │    │    │    │         └── dc.oid:113 = classoid:109 [outer=(109,113), constraints=(/109: (/NULL - ]; /113: (/NULL - ]), fd=(109)==(113), (113)==(109)]
+      │    │    │    │    └── filters (true)
       │    │    │    └── filters
-      │    │    │         └── atttypid:46 = t.oid:70 [outer=(46,70), constraints=(/46: (/NULL - ]; /70: (/NULL - ]), fd=(46)==(70), (70)==(46)]
+      │    │    │         ├── attrelid:44 = adrelid:103 [outer=(44,103), constraints=(/44: (/NULL - ]; /103: (/NULL - ]), fd=(44)==(103), (103)==(44)]
+      │    │    │         └── attnum:49 = adnum:104 [outer=(49,104), constraints=(/49: (/NULL - ]; /104: (/NULL - ]), fd=(49)==(104), (104)==(49)]
       │    │    └── windows
       │    │         └── row-number [as=row_number:154]
       │    └── filters

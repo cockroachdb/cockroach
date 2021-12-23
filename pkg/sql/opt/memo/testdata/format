@@ -42,7 +42,7 @@ project
  │         │    ├── interesting orderings: (+3)
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
- │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
  │         │    │    ├── cost: 1084.62
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
@@ -86,7 +86,7 @@ project
  │         │    ├── cost: 1094.65
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
- │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
  │         │    │    └── cost: 1084.62
  │         │    └── filters
  │         │         └── lt [type=bool]
@@ -306,7 +306,7 @@ project
  │         │    ├── fd: (3)-->(1,2)
  │         │    ├── interesting orderings: (+3)
  │         │    ├── scan t.public.t
- │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
  │         │    │    ├── cost: 1084.62
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
@@ -430,10 +430,12 @@ project
  │         │    ├── interesting orderings: (+3)
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
- │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, avgsize(1)=4, distinct(2)=40, null(2)=0, avgsize(2)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, avgsize(1)=4, distinct(2)=40, null(2)=0, avgsize(2)=4, distinct(3)=40, null(3)=0, avgsize(3)=4]
  │         │    │    │   histogram(1)=  0  0  100  100  100  100  100  200  100  200
  │         │    │    │                <--- 0 ----- 100 ----- 200 ----- 300 ----- 400
  │         │    │    │   histogram(2)=  0  0  100  100  100  100  100  200  100  200
+ │         │    │    │                <--- 0 ----- 100 ----- 200 ----- 300 ----- 400
+ │         │    │    │   histogram(3)=  0  0  100  100  100  100  100  200  100  200
  │         │    │    │                <--- 0 ----- 100 ----- 200 ----- 300 ----- 400
  │         │    │    ├── cost: 1084.62
  │         │    │    ├── key: (3)
@@ -495,7 +497,7 @@ project
  │         │    ├── interesting orderings: (+3)
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
- │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, avgsize(1)=4, distinct(2)=40, null(2)=0, avgsize(2)=4]
+ │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, avgsize(1)=4, distinct(2)=40, null(2)=0, avgsize(2)=4, distinct(3)=40, null(3)=0, avgsize(3)=4]
  │         │    │    ├── cost: 1084.62
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)

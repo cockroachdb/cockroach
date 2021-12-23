@@ -224,7 +224,7 @@ distinct-on
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, avgsize(1)=4, distinct(1,2)=20.0617284, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, avgsize(1)=4, distinct(2)=9.8265847, null(2)=30, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1,2)=20.0617284, null(1,2)=0, avgsize(1,2)=8]
       ├── cost: 50.6866667
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -244,7 +244,7 @@ distinct-on
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, avgsize(1)=4, distinct(1,2)=33.3333333, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, avgsize(1)=4, distinct(2)=9.8265847, null(2)=30, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1,2)=33.3333333, null(1,2)=0, avgsize(1,2)=8]
       ├── cost: 50.6866667
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -264,7 +264,7 @@ distinct-on
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=100, distinct(1)=20, null(1)=0, avgsize(1)=4, distinct(1,2)=100, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=100, distinct(1)=20, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=90, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1,2)=100, null(1,2)=0, avgsize(1,2)=8]
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
       ├── cost: 124.02
@@ -286,7 +286,7 @@ distinct-on
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=100, distinct(1)=20, null(1)=0, avgsize(1)=4, distinct(1,2)=25, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=100, distinct(1)=20, null(1)=0, avgsize(1)=4, distinct(2)=10, null(2)=90, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(1,2)=25, null(1,2)=0, avgsize(1,2)=8]
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
       ├── cost: 124.02
@@ -321,7 +321,7 @@ limit
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
- │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=1000, null(2)=0, avgsize(2)=4]
  │    │    ├── cost: 120.019999
  │    │    ├── limit hint: 100.00
  │    │    └── prune: (1)
@@ -340,20 +340,22 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 19.42
+ ├── cost: 19.795
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1, avgsize(1)=9]
- │    ├── cost: 19.4
+ │    ├── cost: 19.775
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
- │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1, avgsize(1)=9]
- │    │    ├── cost: 19.32
+ │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1, avgsize(1)=9, distinct(2)=5, null(2)=0, avgsize(2)=9]
+ │    │    │   histogram(2)=  0          1           0          1           0          1           0          1           0          1
+ │    │    │                <--- 725334818804039681 --- 725334818804105217 --- 725334818804137985 --- 725334818804170753 --- 725334818804203521
+ │    │    ├── cost: 19.695
  │    │    ├── limit hint: 5.00
  │    │    └── prune: (1)
  │    └── filters

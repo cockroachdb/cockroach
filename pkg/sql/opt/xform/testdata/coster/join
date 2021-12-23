@@ -23,12 +23,12 @@ project
       ├── columns: k:1!null d:4!null x:7!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── immutable
-      ├── stats: [rows=99, distinct(1)=10, null(1)=0, avgsize(1)=4, distinct(7)=10, null(7)=0, avgsize(7)=4]
+      ├── stats: [rows=99, distinct(1)=10, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=99, null(4)=0, avgsize(4)=4, distinct(7)=10, null(7)=0, avgsize(7)=4]
       ├── cost: 2172.755
       ├── fd: ()-->(4), (1)==(7), (7)==(1)
       ├── scan b
       │    ├── columns: x:7
-      │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+      │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=0, avgsize(8)=4, distinct(9)=1000, null(9)=0, avgsize(9)=4]
       │    └── cost: 1064.42
       ├── select
       │    ├── columns: k:1!null d:4!null
@@ -39,7 +39,7 @@ project
       │    ├── fd: ()-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1!null d:4!null
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
       │    │    ├── cost: 1084.62
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
@@ -62,18 +62,18 @@ inner-join (merge)
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
  │    ├── cost: 1074.52
  │    ├── key: (1)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: x:7
- │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=0, avgsize(8)=4, distinct(9)=1000, null(9)=0, avgsize(9)=4]
  │    ├── cost: 1293.90194
  │    ├── ordering: +7
  │    └── scan b
  │         ├── columns: x:7
- │         ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+ │         ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=0, avgsize(8)=4, distinct(9)=1000, null(9)=0, avgsize(9)=4]
  │         └── cost: 1064.42
  └── filters (true)
 
@@ -87,12 +87,12 @@ inner-join (lookup a)
  ├── flags: force lookup join (into right side)
  ├── key columns: [1] = [6]
  ├── lookup columns are key
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, avgsize(1)=4, distinct(6)=99, null(6)=0, avgsize(6)=4]
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, avgsize(1)=4, distinct(6)=99, null(6)=0, avgsize(6)=4, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=1, null(9)=0, avgsize(9)=4]
  ├── cost: 7103.84
  ├── fd: (1)==(6), (6)==(1)
  ├── scan b
  │    ├── columns: x:1
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
  │    └── cost: 1064.42
  └── filters (true)
 
@@ -111,12 +111,12 @@ inner-join (hash)
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
  │    ├── cost: 1074.52
  │    └── key: (1)
  ├── scan b
  │    ├── columns: x:7
- │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4]
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=0, avgsize(8)=4, distinct(9)=1000, null(9)=0, avgsize(9)=4]
  │    └── cost: 1064.42
  └── filters
       └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
@@ -130,7 +130,7 @@ inner-join (lookup g [as=g2])
  ├── key columns: [11] = [6]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=9801]
+ ├── stats: [rows=9801, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=4]
  ├── cost: 1101964.47
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
@@ -139,7 +139,7 @@ inner-join (lookup g [as=g2])
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
  │    │    └── st_contains(g1.geom:2, g2.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4, distinct(15)=1, null(15)=0, avgsize(15)=4]
  │    ├── cost: 41464.44
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
@@ -168,13 +168,13 @@ inner-join (cross)
  ├── fd: (1)-->(2), (6)-->(7)
  ├── scan g [as=g1]
  │    ├── columns: g1.k:1!null g1.geom:2
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
  │    ├── cost: 1064.42
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── scan g [as=g2]
  │    ├── columns: g2.k:6!null g2.geom:7
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4]
  │    ├── cost: 1064.42
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
@@ -188,7 +188,8 @@ ALTER TABLE a INJECT STATISTICS '[
     "columns": ["k"],
     "created_at": "2019-02-08 04:10:40.001179+00:00",
     "row_count": 100000,
-    "distinct_count": 100000
+    "distinct_count": 100000,
+    "avg_size": 3
   }
 ]'
 ----
@@ -199,7 +200,8 @@ ALTER TABLE b INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2019-02-08 04:10:40.001179+00:00",
     "row_count": 10000,
-    "distinct_count": 1000
+    "distinct_count": 1000,
+    "avg_size": 2
   }
 ]'
 ----
@@ -212,17 +214,17 @@ inner-join (lookup a)
  ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
  ├── key columns: [8] = [1]
  ├── lookup columns are key
- ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- ├── cost: 71524.57
+ ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=3, distinct(2)=6321.22398, null(2)=100, avgsize(2)=4, distinct(3)=6321.22398, null(3)=100, avgsize(3)=4, distinct(4)=6321.22398, null(4)=0, avgsize(4)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ ├── cost: 71374.47
  ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  ├── select
  │    ├── columns: x:7!null z:8!null
- │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    ├── cost: 10624.55
+ │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=2, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │    ├── cost: 10524.45
  │    ├── scan b
  │    │    ├── columns: x:7 z:8!null
- │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    │    └── cost: 10524.52
+ │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=2, distinct(8)=1000, null(8)=0, avgsize(8)=4, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │    │    └── cost: 10424.42
  │    └── filters
  │         └── (x:7 > 0) AND (x:7 <= 5000) [outer=(7), constraints=(/7: [/1 - /5000]; tight)]
  └── filters (true)
@@ -235,25 +237,25 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
  ├── cardinality: [0 - 6000]
  ├── stats: [rows=6000]
- ├── cost: 42974.08
+ ├── cost: 42884.08
  ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
  │    ├── key columns: [8] = [1]
  │    ├── lookup columns are key
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    ├── cost: 42914.07
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=3, distinct(2)=6321.22398, null(2)=100, avgsize(2)=4, distinct(3)=6321.22398, null(3)=100, avgsize(3)=4, distinct(4)=6321.22398, null(4)=0, avgsize(4)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │    ├── cost: 42824.07
  │    ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  │    ├── limit hint: 6000.00
  │    ├── select
  │    │    ├── columns: x:7!null z:8!null
- │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    │    ├── cost: 6374.05
+ │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=2, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │    │    ├── cost: 6314.05
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:7 z:8!null
- │    │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    │    │    ├── cost: 6314.02
+ │    │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=2, distinct(8)=1000, null(8)=0, avgsize(8)=4, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │    │    │    ├── cost: 6254.02
  │    │    │    └── limit hint: 6000.00
  │    │    └── filters
  │    │         └── (x:7 > 0) AND (x:7 <= 5000) [outer=(7), constraints=(/7: [/1 - /5000]; tight)]
@@ -270,25 +272,25 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
  ├── cardinality: [0 - 5950]
  ├── stats: [rows=5950]
- ├── cost: 42973.58
+ ├── cost: 42883.58
  ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
  │    ├── key columns: [8] = [1]
  │    ├── lookup columns are key
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    ├── cost: 42914.07
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=3, distinct(2)=6321.22398, null(2)=100, avgsize(2)=4, distinct(3)=6321.22398, null(3)=100, avgsize(3)=4, distinct(4)=6321.22398, null(4)=0, avgsize(4)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │    ├── cost: 42824.07
  │    ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  │    ├── limit hint: 5950.00
  │    ├── select
  │    │    ├── columns: x:7!null z:8!null
- │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    │    ├── cost: 6374.05
+ │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=2, distinct(8)=1000, null(8)=0, avgsize(8)=4]
+ │    │    ├── cost: 6314.05
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:7 z:8!null
- │    │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=4, distinct(8)=1000, null(8)=0, avgsize(8)=4]
- │    │    │    ├── cost: 6314.02
+ │    │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, avgsize(7)=2, distinct(8)=1000, null(8)=0, avgsize(8)=4, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+ │    │    │    ├── cost: 6254.02
  │    │    │    └── limit hint: 6000.00
  │    │    └── filters
  │    │         └── (x:7 > 0) AND (x:7 <= 5000) [outer=(7), constraints=(/7: [/1 - /5000]; tight)]
@@ -354,7 +356,7 @@ limit
  │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3!null amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:16!null s.name:17!null s.gender:18 s.email:19 s.first_name:20 s.last_name:21 s.creation_date:22!null s.situation:23 s.balance:24!null s.is_blocked:25 r.id:28!null r.name:29!null r.gender:30 r.email:31 r.first_name:32 r.last_name:33 r.creation_date:34!null r.situation:35 r.balance:36!null r.is_blocked:37
  │    ├── key columns: [3] = [28]
  │    ├── lookup columns are key
- │    ├── stats: [rows=980.1, distinct(3)=98.9950071, null(3)=0, avgsize(3)=4, distinct(28)=98.9950071, null(28)=0, avgsize(28)=4]
+ │    ├── stats: [rows=980.1, distinct(3)=98.9950071, null(3)=0, avgsize(3)=4, distinct(16)=624.90857, null(16)=0, avgsize(16)=4, distinct(17)=99.9944872, null(17)=0, avgsize(17)=4, distinct(18)=99.9944872, null(18)=9.801, avgsize(18)=4, distinct(19)=99.9944872, null(19)=9.801, avgsize(19)=4, distinct(20)=99.9944872, null(20)=9.801, avgsize(20)=4, distinct(21)=99.9944872, null(21)=9.801, avgsize(21)=4, distinct(22)=99.9944872, null(22)=0, avgsize(22)=4, distinct(23)=99.9944872, null(23)=9.801, avgsize(23)=4, distinct(24)=99.9944872, null(24)=0, avgsize(24)=4, distinct(25)=3, null(25)=9.801, avgsize(25)=4, distinct(28)=98.9950071, null(28)=0, avgsize(28)=4, distinct(29)=99.9944872, null(29)=0, avgsize(29)=4, distinct(30)=99.9944872, null(30)=9.801, avgsize(30)=4, distinct(31)=99.9944872, null(31)=9.801, avgsize(31)=4, distinct(32)=99.9944872, null(32)=9.801, avgsize(32)=4, distinct(33)=99.9944872, null(33)=9.801, avgsize(33)=4, distinct(34)=99.9944872, null(34)=0, avgsize(34)=4, distinct(35)=99.9944872, null(35)=9.801, avgsize(35)=4, distinct(36)=99.9944872, null(36)=0, avgsize(36)=4, distinct(37)=3, null(37)=9.801, avgsize(37)=4]
  │    ├── cost: 2122.43
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-13), (16)-->(17-25), (2)==(16), (16)==(2), (28)-->(29-37), (3)==(28), (28)==(3)
@@ -363,14 +365,14 @@ limit
  │    │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:16!null s.name:17!null s.gender:18 s.email:19 s.first_name:20 s.last_name:21 s.creation_date:22!null s.situation:23 s.balance:24!null s.is_blocked:25
  │    │    ├── key columns: [2] = [16]
  │    │    ├── lookup columns are key
- │    │    ├── stats: [rows=990, distinct(1)=628.605476, null(1)=0, avgsize(1)=4, distinct(2)=99, null(2)=0, avgsize(2)=4, distinct(3)=99.9950071, null(3)=9.9, avgsize(3)=4, distinct(4)=99.9950071, null(4)=0, avgsize(4)=4, distinct(5)=99.9950071, null(5)=0, avgsize(5)=4, distinct(16)=99, null(16)=0, avgsize(16)=4, distinct(17)=99.9950071, null(17)=0, avgsize(17)=4, distinct(22)=99.9950071, null(22)=0, avgsize(22)=4, distinct(24)=99.9950071, null(24)=0, avgsize(24)=4]
+ │    │    ├── stats: [rows=990, distinct(1)=628.605476, null(1)=0, avgsize(1)=4, distinct(2)=99, null(2)=0, avgsize(2)=4, distinct(3)=99.9950071, null(3)=9.9, avgsize(3)=4, distinct(4)=99.9950071, null(4)=0, avgsize(4)=4, distinct(5)=99.9950071, null(5)=0, avgsize(5)=4, distinct(6)=99.9944872, null(6)=9.9, avgsize(6)=4, distinct(7)=99.9944872, null(7)=9.9, avgsize(7)=4, distinct(8)=99.9944872, null(8)=9.9, avgsize(8)=4, distinct(9)=99.9944872, null(9)=9.9, avgsize(9)=4, distinct(10)=99.9944872, null(10)=9.9, avgsize(10)=4, distinct(11)=99.9944872, null(11)=9.9, avgsize(11)=4, distinct(12)=99.9944872, null(12)=9.9, avgsize(12)=4, distinct(13)=99.9944872, null(13)=9.9, avgsize(13)=4, distinct(16)=99, null(16)=0, avgsize(16)=4, distinct(17)=99.9950071, null(17)=0, avgsize(17)=4, distinct(18)=99.9950071, null(18)=9.9, avgsize(18)=4, distinct(19)=99.9950071, null(19)=9.9, avgsize(19)=4, distinct(20)=99.9950071, null(20)=9.9, avgsize(20)=4, distinct(21)=99.9950071, null(21)=9.9, avgsize(21)=4, distinct(22)=99.9950071, null(22)=0, avgsize(22)=4, distinct(23)=99.9950071, null(23)=9.9, avgsize(23)=4, distinct(24)=99.9950071, null(24)=0, avgsize(24)=4, distinct(25)=3, null(25)=9.9, avgsize(25)=4]
  │    │    ├── cost: 1503.62
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (16)-->(17-25), (2)==(16), (16)==(2)
  │    │    ├── limit hint: 100.00
  │    │    ├── scan transaction [as=t]
  │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
- │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4, distinct(5)=100, null(5)=0, avgsize(5)=4]
+ │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4, distinct(5)=100, null(5)=0, avgsize(5)=4, distinct(6)=100, null(6)=10, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4, distinct(11)=100, null(11)=10, avgsize(11)=4, distinct(12)=100, null(12)=10, avgsize(12)=4, distinct(13)=100, null(13)=10, avgsize(13)=4]
  │    │    │    ├── cost: 266.02
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-13)
@@ -400,14 +402,14 @@ SELECT * FROM abc WHERE c = 1
 ----
 index-join abc
  ├── columns: a:1!null b:2 c:3!null
- ├── stats: [rows=9.9005002, distinct(3)=1, null(3)=0, avgsize(3)=4]
+ ├── stats: [rows=9.9005002, distinct(1)=9.90050018, null(1)=0, avgsize(1)=4, distinct(2)=9.9004993, null(2)=0.099005002, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
  ├── cost: 84.2345464
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1!null c:3!null
       ├── constraint: /3/1: [/1 - /1]
-      ├── stats: [rows=9.9005002, distinct(3)=1, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=9.9005002, distinct(1)=9.90050018, null(1)=0, avgsize(1)=4, distinct(3)=1, null(3)=0, avgsize(3)=4]
       ├── cost: 24.3165202
       ├── key: (1)
       └── fd: ()-->(3)
@@ -497,7 +499,7 @@ project
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null a:8!null b:9!null c:10!null
       ├── key columns: [1 2 3] = [8 9 10]
-      ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=25, null(3)=0, avgsize(3)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=1, null(9)=0, avgsize(9)=4, distinct(10)=25, null(10)=0, avgsize(10)=4]
+      ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=25, null(3)=0, avgsize(3)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=1, null(9)=0, avgsize(9)=4, distinct(10)=25, null(10)=0, avgsize(10)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(13)=1, null(13)=0, avgsize(13)=4]
       ├── cost: 3180
       ├── fd: ()-->(1,2,8,9), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
       ├── select
@@ -507,7 +509,7 @@ project
       │    ├── fd: ()-->(1,2)
       │    ├── scan wxyz
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null
-      │    │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=25, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=4]
+      │    │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=25, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=4, distinct(5)=100, null(5)=0, avgsize(5)=4]
       │    │    └── cost: 133.92
       │    └── filters
       │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
@@ -607,7 +609,7 @@ project
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:14!null b:15!null c:16!null
       ├── key columns: [1 2 3] = [14 15 16]
-      ├── stats: [rows=4.50439933, distinct(1)=0.9000001, null(1)=0, avgsize(1)=4, distinct(2)=0.9000001, null(2)=0, avgsize(2)=4, distinct(3)=0.88403183, null(3)=0, avgsize(3)=4, distinct(14)=0.9000001, null(14)=0, avgsize(14)=4, distinct(15)=0.9000001, null(15)=0, avgsize(15)=4, distinct(16)=0.88403183, null(16)=0, avgsize(16)=4]
+      ├── stats: [rows=4.50439933, distinct(1)=0.9000001, null(1)=0, avgsize(1)=4, distinct(2)=0.9000001, null(2)=0, avgsize(2)=4, distinct(3)=0.88403183, null(3)=0, avgsize(3)=4, distinct(14)=0.9000001, null(14)=0, avgsize(14)=4, distinct(15)=0.9000001, null(15)=0, avgsize(15)=4, distinct(16)=0.88403183, null(16)=0, avgsize(16)=4, distinct(17)=0.999877693, null(17)=0, avgsize(17)=4, distinct(19)=0.999877693, null(19)=0, avgsize(19)=4]
       ├── cost: 12253.665
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
@@ -617,7 +619,7 @@ project
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5 j:6 k:7 l:8 m:9 n:10
-      │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=25, null(3)=0, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(5)=10000, null(5)=0, avgsize(5)=4, distinct(6)=10000, null(6)=0, avgsize(6)=4, distinct(7)=10000, null(7)=0, avgsize(7)=4, distinct(8)=10000, null(8)=0, avgsize(8)=4, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(5-10)=10000, null(5-10)=0, avgsize(5-10)=24]
+      │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=25, null(3)=0, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(5)=10000, null(5)=0, avgsize(5)=4, distinct(6)=10000, null(6)=0, avgsize(6)=4, distinct(7)=10000, null(7)=0, avgsize(7)=4, distinct(8)=10000, null(8)=0, avgsize(8)=4, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=10000, null(11)=0, avgsize(11)=4, distinct(5-10)=10000, null(5-10)=0, avgsize(5-10)=24]
       │    │    └── cost: 12126.12
       │    └── filters
       │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
@@ -742,7 +744,7 @@ project
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null a:7!null b:8!null c:9!null d:10!null
       │    ├── key columns: [7 8 9] = [1 2 3]
       │    ├── lookup columns are key
-      │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=2500, null(3)=0, avgsize(3)=4, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=2500, null(9)=0, avgsize(9)=4]
+      │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=2500, null(3)=0, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=2500, null(9)=0, avgsize(9)=4, distinct(10)=50048.8759, null(10)=0, avgsize(10)=4, distinct(11)=1, null(11)=0, avgsize(11)=4]
       │    ├── cost: 605.74172
       │    ├── key: (9)
       │    ├── fd: ()-->(1,2,7,8), (3)-->(4), (9)-->(10), (10)-->(9), (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3)
@@ -751,7 +753,7 @@ project
       │    ├── scan abcde@idx_abd
       │    │    ├── columns: a:7!null b:8!null c:9!null d:10!null
       │    │    ├── constraint: /7/8/10: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
-      │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=24975.5859, null(9)=0, avgsize(9)=4, distinct(10)=93750, null(10)=0, avgsize(10)=4]
+      │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, avgsize(7)=4, distinct(8)=1, null(8)=0, avgsize(8)=4, distinct(9)=24975.5859, null(9)=0, avgsize(9)=4, distinct(10)=93750, null(10)=0, avgsize(10)=4, distinct(11)=24975.5859, null(11)=0, avgsize(11)=4]
       │    │    ├── cost: 122.02
       │    │    ├── key: (9)
       │    │    ├── fd: ()-->(7,8), (9)-->(10), (10)-->(9)
@@ -797,7 +799,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1e-10, distinct(8)=1e-10, null(8)=0, avgsize(8)=4]
                 ├── cost: 12.08
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -837,7 +839,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1e-10, distinct(8)=1e-10, null(8)=0, avgsize(8)=4]
                 ├── cost: 0.02001206
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -889,7 +891,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1e-10, distinct(8)=1e-10, null(8)=0, avgsize(8)=4]
                 ├── cost: 6.05
                 ├── key: ()
                 ├── fd: ()-->(7)
@@ -927,12 +929,12 @@ project
       ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
       ├── left ordering: +28
       ├── right ordering: +4
-      ├── stats: [rows=198, distinct(4)=17.2927193, null(4)=0, avgsize(4)=4, distinct(28)=17.2927193, null(28)=0, avgsize(28)=4]
+      ├── stats: [rows=198, distinct(4)=17.2927193, null(4)=0, avgsize(4)=4, distinct(27)=1, null(27)=0, avgsize(27)=4, distinct(28)=17.2927193, null(28)=0, avgsize(28)=4, distinct(29)=1, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(31)=1, null(31)=0, avgsize(31)=4, distinct(32)=1, null(32)=0, avgsize(32)=4, distinct(33)=1, null(33)=0, avgsize(33)=4, distinct(34)=86.3286279, null(34)=1.98, avgsize(34)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(36)=1, null(36)=0, avgsize(36)=4, distinct(37)=1, null(37)=0, avgsize(37)=4, distinct(38)=1, null(38)=0, avgsize(38)=4, distinct(39)=1, null(39)=0, avgsize(39)=4, distinct(40)=1, null(40)=0, avgsize(40)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4, distinct(43)=1, null(43)=0, avgsize(43)=4, distinct(44)=1, null(44)=0, avgsize(44)=4, distinct(45)=1, null(45)=0, avgsize(45)=4, distinct(46)=1, null(46)=0, avgsize(46)=4, distinct(47)=1, null(47)=0, avgsize(47)=4, distinct(48)=1, null(48)=0, avgsize(48)=4, distinct(49)=1, null(49)=0, avgsize(49)=4, distinct(50)=1, null(50)=0, avgsize(50)=4, distinct(51)=1, null(51)=0, avgsize(51)=4, distinct(52)=86.3286279, null(52)=1.98, avgsize(52)=4, distinct(53)=1, null(53)=0, avgsize(53)=4, distinct(54)=1, null(54)=0, avgsize(54)=4, distinct(55)=1, null(55)=0, avgsize(55)=4, distinct(56)=1, null(56)=0, avgsize(56)=4, distinct(57)=1, null(57)=0, avgsize(57)=4, distinct(58)=1, null(58)=0, avgsize(58)=4]
       ├── cost: 2908.13877
       ├── fd: (4)==(28), (28)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
       │    ├── columns: oid:28!null typtype:34 typbasetype:52
-      │    ├── stats: [rows=1000, distinct(28)=100, null(28)=0, avgsize(28)=4]
+      │    ├── stats: [rows=1000, distinct(27)=100, null(27)=0, avgsize(27)=4, distinct(28)=100, null(28)=0, avgsize(28)=4, distinct(29)=100, null(29)=0, avgsize(29)=4, distinct(30)=100, null(30)=10, avgsize(30)=4, distinct(31)=100, null(31)=10, avgsize(31)=4, distinct(32)=100, null(32)=10, avgsize(32)=4, distinct(33)=3, null(33)=10, avgsize(33)=4, distinct(34)=100, null(34)=10, avgsize(34)=4, distinct(35)=100, null(35)=10, avgsize(35)=4, distinct(36)=3, null(36)=10, avgsize(36)=4, distinct(37)=3, null(37)=10, avgsize(37)=4, distinct(38)=100, null(38)=10, avgsize(38)=4, distinct(39)=100, null(39)=10, avgsize(39)=4, distinct(40)=100, null(40)=10, avgsize(40)=4, distinct(41)=100, null(41)=10, avgsize(41)=4, distinct(42)=100, null(42)=10, avgsize(42)=4, distinct(43)=100, null(43)=10, avgsize(43)=4, distinct(44)=100, null(44)=10, avgsize(44)=4, distinct(45)=100, null(45)=10, avgsize(45)=4, distinct(46)=100, null(46)=10, avgsize(46)=4, distinct(47)=100, null(47)=10, avgsize(47)=4, distinct(48)=100, null(48)=10, avgsize(48)=4, distinct(49)=100, null(49)=10, avgsize(49)=4, distinct(50)=100, null(50)=10, avgsize(50)=4, distinct(51)=3, null(51)=10, avgsize(51)=4, distinct(52)=100, null(52)=10, avgsize(52)=4, distinct(53)=100, null(53)=10, avgsize(53)=4, distinct(54)=100, null(54)=10, avgsize(54)=4, distinct(55)=100, null(55)=10, avgsize(55)=4, distinct(56)=100, null(56)=10, avgsize(56)=4, distinct(57)=100, null(57)=10, avgsize(57)=4, distinct(58)=100, null(58)=10, avgsize(58)=4]
       │    ├── cost: 1477.52
       │    └── ordering: +28
       ├── sort
@@ -946,7 +948,7 @@ project
       │         ├── cost: 1416.85
       │         ├── scan pg_attribute [as=a]
       │         │    ├── columns: attname:3 atttypid:4
-      │         │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=10, avgsize(4)=4]
+      │         │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=10, avgsize(4)=4, distinct(5)=100, null(5)=10, avgsize(5)=4, distinct(6)=100, null(6)=10, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4, distinct(11)=3, null(11)=10, avgsize(11)=4, distinct(12)=100, null(12)=10, avgsize(12)=4, distinct(13)=100, null(13)=10, avgsize(13)=4, distinct(14)=3, null(14)=10, avgsize(14)=4, distinct(15)=3, null(15)=10, avgsize(15)=4, distinct(16)=100, null(16)=10, avgsize(16)=4, distinct(17)=100, null(17)=10, avgsize(17)=4, distinct(18)=3, null(18)=10, avgsize(18)=4, distinct(19)=3, null(19)=10, avgsize(19)=4, distinct(20)=100, null(20)=10, avgsize(20)=4, distinct(21)=100, null(21)=10, avgsize(21)=4, distinct(22)=100, null(22)=10, avgsize(22)=4, distinct(23)=100, null(23)=10, avgsize(23)=4, distinct(24)=100, null(24)=10, avgsize(24)=4, distinct(25)=3, null(25)=10, avgsize(25)=4, distinct(26)=100, null(26)=10, avgsize(26)=4]
       │         │    └── cost: 1406.82
       │         └── filters
       │              └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
@@ -975,7 +977,7 @@ project
  └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
       ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
       ├── key columns: [4] = [28]
-      ├── stats: [rows=99, distinct(4)=8.5617925, null(4)=0, avgsize(4)=4, distinct(28)=8.5617925, null(28)=0, avgsize(28)=4]
+      ├── stats: [rows=99, distinct(4)=8.5617925, null(4)=0, avgsize(4)=4, distinct(27)=1, null(27)=0, avgsize(27)=4, distinct(28)=8.5617925, null(28)=0, avgsize(28)=4, distinct(29)=1, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(31)=1, null(31)=0, avgsize(31)=4, distinct(32)=1, null(32)=0, avgsize(32)=4, distinct(33)=1, null(33)=0, avgsize(33)=4, distinct(34)=63.0251815, null(34)=0.99, avgsize(34)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(36)=1, null(36)=0, avgsize(36)=4, distinct(37)=1, null(37)=0, avgsize(37)=4, distinct(38)=1, null(38)=0, avgsize(38)=4, distinct(39)=1, null(39)=0, avgsize(39)=4, distinct(40)=1, null(40)=0, avgsize(40)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4, distinct(43)=1, null(43)=0, avgsize(43)=4, distinct(44)=1, null(44)=0, avgsize(44)=4, distinct(45)=1, null(45)=0, avgsize(45)=4, distinct(46)=1, null(46)=0, avgsize(46)=4, distinct(47)=1, null(47)=0, avgsize(47)=4, distinct(48)=1, null(48)=0, avgsize(48)=4, distinct(49)=1, null(49)=0, avgsize(49)=4, distinct(50)=1, null(50)=0, avgsize(50)=4, distinct(51)=1, null(51)=0, avgsize(51)=4, distinct(52)=63.0251815, null(52)=0.99, avgsize(52)=4, distinct(53)=1, null(53)=0, avgsize(53)=4, distinct(54)=1, null(54)=0, avgsize(54)=4, distinct(55)=1, null(55)=0, avgsize(55)=4, distinct(56)=1, null(56)=0, avgsize(56)=4, distinct(57)=1, null(57)=0, avgsize(57)=4, distinct(58)=1, null(58)=0, avgsize(58)=4]
       ├── cost: 2850.51
       ├── fd: ()-->(3), (4)==(28), (28)==(4)
       ├── select
@@ -985,8 +987,86 @@ project
       │    ├── fd: ()-->(3)
       │    ├── scan pg_attribute [as=a]
       │    │    ├── columns: attname:3 atttypid:4
-      │    │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=10, avgsize(4)=4]
+      │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=10, avgsize(4)=4, distinct(5)=100, null(5)=10, avgsize(5)=4, distinct(6)=100, null(6)=10, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4, distinct(8)=100, null(8)=10, avgsize(8)=4, distinct(9)=100, null(9)=10, avgsize(9)=4, distinct(10)=100, null(10)=10, avgsize(10)=4, distinct(11)=3, null(11)=10, avgsize(11)=4, distinct(12)=100, null(12)=10, avgsize(12)=4, distinct(13)=100, null(13)=10, avgsize(13)=4, distinct(14)=3, null(14)=10, avgsize(14)=4, distinct(15)=3, null(15)=10, avgsize(15)=4, distinct(16)=100, null(16)=10, avgsize(16)=4, distinct(17)=100, null(17)=10, avgsize(17)=4, distinct(18)=3, null(18)=10, avgsize(18)=4, distinct(19)=3, null(19)=10, avgsize(19)=4, distinct(20)=100, null(20)=10, avgsize(20)=4, distinct(21)=100, null(21)=10, avgsize(21)=4, distinct(22)=100, null(22)=10, avgsize(22)=4, distinct(23)=100, null(23)=10, avgsize(23)=4, distinct(24)=100, null(24)=10, avgsize(24)=4, distinct(25)=3, null(25)=10, avgsize(25)=4, distinct(26)=100, null(26)=10, avgsize(26)=4]
       │    │    └── cost: 1406.82
       │    └── filters
       │         └── attname:3 = 'descriptor_id' [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id']; tight), fd=()-->(3)]
       └── filters (true)
+
+exec-ddl
+CREATE TABLE e (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL, f FLOAT)
+----
+
+exec-ddl
+CREATE INDEX id on e (i, d)
+----
+
+exec-ddl
+CREATE INDEX iss on e (i, s)
+----
+
+exec-ddl
+ALTER TABLE e INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 5
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 11
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["f"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 7
+  }
+]'
+----
+
+# Choose the index with the smallest average column size, and thus cost.
+opt
+SELECT i FROM e;
+----
+scan e@id
+ ├── columns: i:2
+ ├── stats: [rows=100000, distinct(1)=100000, null(1)=0, avgsize(1)=3, distinct(2)=100000, null(2)=0, avgsize(2)=5, distinct(3)=100000, null(3)=0, avgsize(3)=11, distinct(4)=100000, null(4)=0, avgsize(4)=2, distinct(5)=100000, null(5)=0, avgsize(5)=7]
+ └── cost: 103774.395
+
+# Index join cost is based on avg_size.
+opt
+SELECT i, f FROM e WHERE i = 3;
+----
+index-join e
+ ├── columns: i:2!null f:5
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=3, distinct(2)=1, null(2)=0, avgsize(2)=5, distinct(3)=1, null(3)=1, avgsize(3)=11, distinct(4)=1, null(4)=1, avgsize(4)=2, distinct(5)=1, null(5)=0, avgsize(5)=7]
+ ├── cost: 21.1825
+ ├── fd: ()-->(2)
+ └── scan e@id
+      ├── columns: k:1!null i:2!null
+      ├── constraint: /2/4/1: [/3 - /3]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=3, distinct(2)=1, null(2)=0, avgsize(2)=5, distinct(4)=1, null(4)=0, avgsize(4)=2]
+      ├── cost: 15.065
+      ├── key: (1)
+      └── fd: ()-->(2)

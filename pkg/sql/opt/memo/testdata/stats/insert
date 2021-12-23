@@ -66,7 +66,7 @@ with &1
  │              │    ├── computed column expressions
  │              │    │    └── c:8
  │              │    │         └── a:6::FLOAT8 [type=float]
- │              │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, avgsize(6)=4, distinct(7)=10, null(7)=0, avgsize(7)=4, distinct(8)=200, null(8)=20, avgsize(8)=4, distinct(9)=2000, null(9)=0, avgsize(9)=4]
+ │              │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, avgsize(6)=4, distinct(7)=10, null(7)=0, avgsize(7)=4, distinct(8)=200, null(8)=20, avgsize(8)=4, distinct(9)=2000, null(9)=0, avgsize(9)=4, distinct(10)=200, null(10)=20, avgsize(10)=4, distinct(11)=200, null(11)=20, avgsize(11)=4]
  │              │    ├── key: (9)
  │              │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
  │              └── filters
@@ -116,7 +116,7 @@ insert xyz
            │    ├── computed column expressions
            │    │    └── c:8
            │    │         └── a:6::FLOAT8 [type=float]
-           │    ├── stats: [rows=2000]
+           │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, avgsize(6)=4, distinct(7)=10, null(7)=0, avgsize(7)=4, distinct(8)=200, null(8)=20, avgsize(8)=4, distinct(9)=2000, null(9)=0, avgsize(9)=4, distinct(10)=200, null(10)=20, avgsize(10)=4, distinct(11)=200, null(11)=20, avgsize(11)=4]
            │    ├── key: (9)
            │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
            └── filters

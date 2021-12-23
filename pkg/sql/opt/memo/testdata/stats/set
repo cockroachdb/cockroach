@@ -128,7 +128,7 @@ union
  │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(1-3)=5000, null(1-3)=0, avgsize(1-3)=35]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(1-3)=5000, null(1-3)=0, avgsize(1-3)=35]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -138,7 +138,7 @@ union
       ├── fd: (9)-->(6-8)
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(6-9)=10000, null(6-9)=0, avgsize(6-9)=30]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(6-9)=10000, null(6-9)=0, avgsize(6-9)=30]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -157,7 +157,7 @@ union-all
  │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -167,7 +167,7 @@ union-all
       ├── fd: (9)-->(6-8)
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -185,7 +185,7 @@ union
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -193,7 +193,7 @@ union
       ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
       └── scan c
            ├── columns: c.x:6(int) z:7(int!null) c.s:8(string) rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal) c.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=3, distinct(7)=100, null(7)=0, avgsize(7)=1, distinct(8)=10, null(8)=0, avgsize(8)=30, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -211,7 +211,7 @@ union
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -219,7 +219,7 @@ union
       ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -236,7 +236,7 @@ union-all
  │    ├── stats: [rows=5000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -244,7 +244,7 @@ union-all
       ├── stats: [rows=10000]
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -265,7 +265,7 @@ intersect
  │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -285,7 +285,7 @@ intersect
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
                 │    ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(6,7,9)=10000, null(6,7,9)=0, avgsize(6,7,9)=10]
+                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(6,7,9)=10000, null(6,7,9)=0, avgsize(6,7,9)=10]
                 │    ├── key: (9)
                 │    └── fd: (9)-->(6-8,10,11)
                 └── filters
@@ -308,7 +308,7 @@ intersect-all
  │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -328,7 +328,7 @@ intersect-all
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
                 │    ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
                 │    ├── key: (9)
                 │    └── fd: (9)-->(6-8,10,11)
                 └── filters
@@ -348,7 +348,7 @@ intersect
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -356,7 +356,7 @@ intersect
       ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
       └── scan c
            ├── columns: c.x:6(int) z:7(int!null) c.s:8(string) rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal) c.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=3, distinct(7)=100, null(7)=0, avgsize(7)=1, distinct(8)=10, null(8)=0, avgsize(8)=30, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -374,7 +374,7 @@ intersect
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -382,7 +382,7 @@ intersect
       ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -399,7 +399,7 @@ intersect-all
  │    ├── stats: [rows=5000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -407,7 +407,7 @@ intersect-all
       ├── stats: [rows=10000]
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -428,7 +428,7 @@ except
  │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(1,2)=5000, null(1,2)=0, avgsize(1,2)=5]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -446,7 +446,7 @@ except
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
                 │    ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(6,7)=10000, null(6,7)=0, avgsize(6,7)=6]
+                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(6,7)=10000, null(6,7)=0, avgsize(6,7)=6]
                 │    ├── key: (9)
                 │    └── fd: (9)-->(6-8,10,11)
                 └── filters
@@ -469,7 +469,7 @@ except-all
  │    ├── fd: (1)-->(2)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -487,7 +487,7 @@ except-all
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
                 │    ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(9)=10000, null(9)=0, avgsize(9)=4]
+                │    ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
                 │    ├── key: (9)
                 │    └── fd: (9)-->(6-8,10,11)
                 └── filters
@@ -507,7 +507,7 @@ except
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -515,7 +515,7 @@ except
       ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
       └── scan c
            ├── columns: c.x:6(int) z:7(int!null) c.s:8(string) rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal) c.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=3, distinct(7)=100, null(7)=0, avgsize(7)=1, distinct(8)=10, null(8)=0, avgsize(8)=30, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -533,7 +533,7 @@ except
  │    ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4, distinct(2,3)=1000, null(2,3)=0, avgsize(2,3)=8]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -541,7 +541,7 @@ except
       ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(7,8)=200, null(7,8)=0, avgsize(7,8)=8]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -558,7 +558,7 @@ except-all
  │    ├── stats: [rows=5000]
  │    └── scan a
  │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │         ├── stats: [rows=5000]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── project
@@ -566,7 +566,7 @@ except-all
       ├── stats: [rows=10000]
       └── scan b
            ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-           ├── stats: [rows=10000]
+           ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -587,7 +587,7 @@ select
  │    │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, avgsize(2)=3]
  │    │    └── scan a
  │    │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string) a.crdb_internal_mvcc_timestamp:4(decimal) a.tableoid:5(oid)
- │    │         ├── stats: [rows=5000, distinct(2)=400, null(2)=0, avgsize(2)=3]
+ │    │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=10, null(3)=0, avgsize(3)=30, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-5)
  │    └── project
@@ -595,7 +595,7 @@ select
  │         ├── stats: [rows=10000, distinct(7)=100, null(7)=0, avgsize(7)=2]
  │         └── scan b
  │              ├── columns: b.x:6(int) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
- │              ├── stats: [rows=10000, distinct(7)=100, null(7)=0, avgsize(7)=2]
+ │              ├── stats: [rows=10000, distinct(6)=5000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=0, avgsize(7)=2, distinct(8)=10, null(8)=0, avgsize(8)=20, distinct(9)=10000, null(9)=0, avgsize(9)=4, distinct(10)=1000, null(10)=100, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4]
  │              ├── key: (9)
  │              └── fd: (9)-->(6-8,10,11)
  └── filters
@@ -678,7 +678,7 @@ union
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -686,7 +686,7 @@ union
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -704,7 +704,7 @@ intersect
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -712,7 +712,7 @@ intersect
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -730,7 +730,7 @@ except
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -738,7 +738,7 @@ except
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -756,7 +756,7 @@ union
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -764,7 +764,7 @@ union
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -782,7 +782,7 @@ intersect
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -790,7 +790,7 @@ intersect
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -808,7 +808,7 @@ except
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -816,7 +816,7 @@ except
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -833,7 +833,7 @@ union-all
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -841,7 +841,7 @@ union-all
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -858,7 +858,7 @@ intersect-all
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -866,7 +866,7 @@ intersect-all
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 
@@ -883,7 +883,7 @@ except-all
  │    ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │    └── scan b
  │         ├── columns: b.x:1(int) b.z:2(int!null) b.s:3(string) b.rowid:4(int!null) b.crdb_internal_mvcc_timestamp:5(decimal) b.tableoid:6(oid)
- │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
+ │         ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=2, distinct(3)=10, null(3)=5000, avgsize(3)=20, distinct(4)=10000, null(4)=0, avgsize(4)=4, distinct(5)=1000, null(5)=100, avgsize(5)=4, distinct(6)=1000, null(6)=100, avgsize(6)=4, distinct(1,3)=10000, null(1,3)=1250, avgsize(1,3)=24]
  │         ├── key: (4)
  │         └── fd: (4)-->(1-3,5,6)
  └── project
@@ -891,7 +891,7 @@ except-all
       ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
       └── scan c
            ├── columns: c.x:7(int) c.z:8(int!null) c.s:9(string) c.rowid:10(int!null) c.crdb_internal_mvcc_timestamp:11(decimal) c.tableoid:12(oid)
-           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
+           ├── stats: [rows=10000, distinct(7)=5000, null(7)=1000, avgsize(7)=3, distinct(8)=100, null(8)=0, avgsize(8)=1, distinct(9)=10, null(9)=7500, avgsize(9)=30, distinct(10)=10000, null(10)=0, avgsize(10)=4, distinct(11)=1000, null(11)=100, avgsize(11)=4, distinct(12)=1000, null(12)=100, avgsize(12)=4, distinct(7,9)=10000, null(7,9)=750, avgsize(7,9)=33]
            ├── key: (10)
            └── fd: (10)-->(7-9,11,12)
 

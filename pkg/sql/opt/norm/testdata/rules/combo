@@ -21,7 +21,7 @@ SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
 ----
 ================================================================================
 Initial expression
-  Cost: 15593.37
+  Cost: 15633.77
 ================================================================================
   project
    ├── columns: s:4
@@ -43,7 +43,7 @@ Initial expression
              └── (k:1 = x:8) AND ((i:2 + 1) = 10) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
 ================================================================================
 NormalizeCmpPlusConst
-  Cost: 15560.04
+  Cost: 15600.44
 ================================================================================
    project
     ├── columns: s:4
@@ -67,7 +67,7 @@ NormalizeCmpPlusConst
   +           └── (k:1 = x:8) AND (i:2 = (10 - 1)) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /8: (/NULL - ])]
 ================================================================================
 FoldBinary
-  Cost: 12293.37
+  Cost: 12333.77
 ================================================================================
    project
     ├── columns: s:4
@@ -91,7 +91,7 @@ FoldBinary
   +           └── (k:1 = x:8) AND (i:2 = 9) [outer=(1,2,8), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /8: (/NULL - ]), fd=()-->(2)]
 ================================================================================
 SimplifyJoinFilters
-  Cost: 2270.14
+  Cost: 2310.54
 ================================================================================
    project
     ├── columns: s:4
@@ -117,7 +117,7 @@ SimplifyJoinFilters
   +           └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
 ================================================================================
 PushFilterIntoJoinLeft
-  Cost: 2257.88
+  Cost: 2298.28
 ================================================================================
    project
     ├── columns: s:4
@@ -149,7 +149,7 @@ PushFilterIntoJoinLeft
   +           └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 ================================================================================
 PruneJoinLeftCols
-  Cost: 2258.00
+  Cost: 2298.40
 ================================================================================
    project
     ├── columns: s:4
@@ -191,7 +191,7 @@ PruneJoinLeftCols
               └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 ================================================================================
 PruneSelectCols
-  Cost: 2217.60
+  Cost: 2237.80
 ================================================================================
    project
     ├── columns: s:4
@@ -226,7 +226,7 @@ PruneSelectCols
               └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 ================================================================================
 EliminateProject
-  Cost: 2217.48
+  Cost: 2237.68
 ================================================================================
    project
     ├── columns: s:4
@@ -440,39 +440,8 @@ GenerateMergeJoins (higher cost)
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          └── filters (true)
 --------------------------------------------------------------------------------
-GenerateLookupJoinsWithFilter (higher cost)
+GenerateLookupJoinsWithFilter (no changes)
 --------------------------------------------------------------------------------
-   project
-    ├── columns: s:4
-  - └── inner-join (merge)
-  + └── inner-join (lookup a)
-         ├── columns: k:1!null i:2!null s:4 x:8!null
-  -      ├── left ordering: +8
-  -      ├── right ordering: +1
-  +      ├── key columns: [8] = [1]
-  +      ├── lookup columns are key
-         ├── key: (8)
-         ├── fd: ()-->(2), (1)-->(4), (1)==(8), (8)==(1)
-         ├── scan xy
-         │    ├── columns: x:8!null
-  -      │    ├── key: (8)
-  -      │    └── ordering: +8
-  -      ├── select
-  -      │    ├── columns: k:1!null i:2!null s:4
-  -      │    ├── key: (1)
-  -      │    ├── fd: ()-->(2), (1)-->(4)
-  -      │    ├── ordering: +1 opt(2) [actual: +1]
-  -      │    ├── scan a
-  -      │    │    ├── columns: k:1!null i:2 s:4
-  -      │    │    ├── key: (1)
-  -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1
-  -      │    └── filters
-  -      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  -      └── filters (true)
-  +      │    └── key: (8)
-  +      └── filters
-  +           └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
 ================================================================================
 Final best expression
   Cost: 1175.39
@@ -520,7 +489,7 @@ SELECT s, k FROM a WHERE s='foo' AND f>100
 ----
 ================================================================================
 Initial expression
-  Cost: 1155.36
+  Cost: 1175.56
 ================================================================================
   project
    ├── columns: s:4!null k:1!null
@@ -538,7 +507,7 @@ Initial expression
              └── (s:4 = 'foo') AND (f:3 > 100.0) [outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 ================================================================================
 SimplifySelectFilters
-  Cost: 1155.37
+  Cost: 1175.57
 ================================================================================
    project
     ├── columns: s:4!null k:1!null
@@ -647,7 +616,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE y=i)
 ----
 ================================================================================
 Initial expression
-  Cost: 2263.17
+  Cost: 2303.57
 ================================================================================
   project
    ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -681,7 +650,7 @@ Initial expression
                                  └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 ================================================================================
 PruneSelectCols
-  Cost: 2242.97
+  Cost: 2263.17
 ================================================================================
    project
     ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -719,7 +688,7 @@ PruneSelectCols
                                   └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 ================================================================================
 EliminateProject
-  Cost: 2233.05
+  Cost: 2253.25
 ================================================================================
    project
     ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -760,7 +729,7 @@ EliminateProject
   +                          └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 ================================================================================
 HoistSelectExists
-  Cost: 12169.70
+  Cost: 12189.90
 ================================================================================
    project
     ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -808,7 +777,7 @@ HoistSelectExists
   +      └── filters (true)
 ================================================================================
 TryDecorrelateSelect
-  Cost: 2359.65
+  Cost: 2379.85
 ================================================================================
    project
   - ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -849,7 +818,7 @@ TryDecorrelateSelect
          └── filters (true)
 ================================================================================
 DecorrelateJoin
-  Cost: 2357.86
+  Cost: 2378.06
 ================================================================================
    project
   - ├── columns: k:1!null i:2!null f:3 s:4 j:5
@@ -880,7 +849,7 @@ DecorrelateJoin
          └── filters (true)
 ================================================================================
 PruneSemiAntiJoinRightCols
-  Cost: 2347.76
+  Cost: 2367.96
 ================================================================================
    project
     ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -908,7 +877,7 @@ PruneSemiAntiJoinRightCols
          └── filters (true)
 ================================================================================
 EliminateSelect
-  Cost: 2337.74
+  Cost: 2357.94
 ================================================================================
    project
     ├── columns: k:1!null i:2 f:3 s:4 j:5
@@ -1087,7 +1056,7 @@ SELECT 5=ANY(SELECT i FROM a WHERE k=x) AS r FROM xy
 ----
 ================================================================================
 Initial expression
-  Cost: 2259.90
+  Cost: 2300.30
 ================================================================================
   project
    ├── columns: r:12
@@ -1118,7 +1087,7 @@ Initial expression
              └── 5
 ================================================================================
 PruneSelectCols
-  Cost: 2209.40
+  Cost: 2229.60
 ================================================================================
    project
     ├── columns: r:12
@@ -3156,55 +3125,8 @@ GenerateMergeJoins (higher cost)
     └── projections
          └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
-GenerateLookupJoinsWithFilter (higher cost)
+GenerateLookupJoinsWithFilter (no changes)
 --------------------------------------------------------------------------------
-   project
-    ├── columns: r:12
-    ├── group-by (hash)
-    │    ├── columns: x:1!null bool_or:14
-    │    ├── grouping columns: x:1!null
-    │    ├── key: (1)
-    │    ├── fd: (1)-->(14)
-    │    ├── project
-    │    │    ├── columns: notnull:13 x:1!null k:5
-    │    │    ├── key: (1)
-    │    │    ├── fd: (5)-->(13), (1)-->(5,13)
-  - │    │    ├── left-join (merge)
-  + │    │    ├── left-join (lookup a)
-    │    │    │    ├── columns: x:1!null k:5 i:6
-  - │    │    │    ├── left ordering: +1
-  - │    │    │    ├── right ordering: +5
-  + │    │    │    ├── key columns: [1] = [5]
-  + │    │    │    ├── lookup columns are key
-    │    │    │    ├── key: (1)
-    │    │    │    ├── fd: (5)-->(6), (1)-->(5,6)
-    │    │    │    ├── scan xy
-    │    │    │    │    ├── columns: x:1!null
-  - │    │    │    │    ├── key: (1)
-  - │    │    │    │    └── ordering: +1
-  - │    │    │    ├── select
-  - │    │    │    │    ├── columns: k:5!null i:6
-  - │    │    │    │    ├── key: (5)
-  - │    │    │    │    ├── fd: (5)-->(6)
-  - │    │    │    │    ├── ordering: +5
-  - │    │    │    │    ├── scan a
-  - │    │    │    │    │    ├── columns: k:5!null i:6
-  - │    │    │    │    │    ├── key: (5)
-  - │    │    │    │    │    ├── fd: (5)-->(6)
-  - │    │    │    │    │    └── ordering: +5
-  - │    │    │    │    └── filters
-  - │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
-  - │    │    │    └── filters (true)
-  + │    │    │    │    └── key: (1)
-  + │    │    │    └── filters
-  + │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
-    │    │    └── projections
-    │    │         └── CASE k:5 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:6 IS NOT NULL END [as=notnull:13, outer=(5,6)]
-    │    └── aggregations
-    │         └── bool-or [as=bool_or:14, outer=(13)]
-    │              └── notnull:13
-    └── projections
-         └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
@@ -3215,41 +3137,50 @@ GenerateMergeJoins (higher cost)
     │    ├── grouping columns: x:1!null
     │    ├── key: (1)
     │    ├── fd: (1)-->(14)
-    │    ├── project
-    │    │    ├── columns: notnull:13 x:1!null k:5
+  - │    ├── left-join (merge)
+  - │    │    ├── columns: x:1!null k:5 notnull:13
+  - │    │    ├── left ordering: +1
+  - │    │    ├── right ordering: +5
+  + │    ├── project
+  + │    │    ├── columns: notnull:13 x:1!null k:5
     │    │    ├── key: (1)
     │    │    ├── fd: (5)-->(13), (1)-->(5,13)
-  - │    │    ├── left-join (lookup a)
+  - │    │    ├── scan xy
+  - │    │    │    ├── columns: x:1!null
   + │    │    ├── right-join (merge)
-    │    │    │    ├── columns: x:1!null k:5 i:6
-  - │    │    │    ├── key columns: [1] = [5]
-  - │    │    │    ├── lookup columns are key
+  + │    │    │    ├── columns: x:1!null k:5 i:6
   + │    │    │    ├── left ordering: +5
   + │    │    │    ├── right ordering: +1
     │    │    │    ├── key: (1)
-    │    │    │    ├── fd: (5)-->(6), (1)-->(5,6)
-  + │    │    │    ├── select
-  + │    │    │    │    ├── columns: k:5!null i:6
-  + │    │    │    │    ├── key: (5)
-  + │    │    │    │    ├── fd: (5)-->(6)
-  + │    │    │    │    ├── ordering: +5
-  + │    │    │    │    ├── scan a
-  + │    │    │    │    │    ├── columns: k:5!null i:6
-  + │    │    │    │    │    ├── key: (5)
-  + │    │    │    │    │    ├── fd: (5)-->(6)
-  + │    │    │    │    │    └── ordering: +5
-  + │    │    │    │    └── filters
-  + │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
-    │    │    │    ├── scan xy
-    │    │    │    │    ├── columns: x:1!null
-  - │    │    │    │    └── key: (1)
-  - │    │    │    └── filters
-  - │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+  - │    │    │    └── ordering: +1
+  - │    │    ├── project
+  - │    │    │    ├── columns: notnull:13!null k:5!null
+  - │    │    │    ├── key: (5)
+  - │    │    │    ├── fd: (5)-->(13)
+  - │    │    │    ├── ordering: +5
+  + │    │    │    ├── fd: (5)-->(6), (1)-->(5,6)
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    ├── key: (5)
+    │    │    │    │    ├── fd: (5)-->(6)
+    │    │    │    │    ├── ordering: +5
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:5!null i:6
+    │    │    │    │    │    ├── key: (5)
+    │    │    │    │    │    ├── fd: (5)-->(6)
+    │    │    │    │    │    └── ordering: +5
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:6 = 5) IS NOT false [outer=(6)]
+  - │    │    │    └── projections
+  - │    │    │         └── i:6 IS NOT NULL [as=notnull:13, outer=(6)]
+  - │    │    └── filters (true)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
   + │    │    │    │    ├── key: (1)
   + │    │    │    │    └── ordering: +1
   + │    │    │    └── filters (true)
-    │    │    └── projections
-    │    │         └── CASE k:5 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:6 IS NOT NULL END [as=notnull:13, outer=(5,6)]
+  + │    │    └── projections
+  + │    │         └── CASE k:5 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE i:6 IS NOT NULL END [as=notnull:13, outer=(5,6)]
     │    └── aggregations
     │         └── bool-or [as=bool_or:14, outer=(13)]
     │              └── notnull:13

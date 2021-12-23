@@ -46,7 +46,7 @@ with &1 (foo)
  │    ├── fd: (1)-->(2,3)
  │    └── scan a
  │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
- │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ │         ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4, distinct(2)=400, null(2)=0, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=500, null(4)=50, avgsize(4)=4, distinct(5)=500, null(5)=50, avgsize(5)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── with-scan &1 (foo)
@@ -120,7 +120,7 @@ with &1 (t0)
            │    ├── stats: [rows=10000]
            │    ├── fd: ()-->(27)
            │    ├── scan a
-           │    │    └── stats: [rows=5000]
+           │    │    └── stats: [rows=5000, distinct(14)=5000, null(14)=0, avgsize(14)=4, distinct(15)=400, null(15)=0, avgsize(15)=4, distinct(16)=10, null(16)=0, avgsize(16)=4]
            │    ├── inner-join (cross)
            │    │    ├── columns: true_agg:27(bool!null)
            │    │    ├── cardinality: [0 - 2]
@@ -203,7 +203,7 @@ project
  │         │    ├── fd: ()-->(6)
  │         │    ├── scan test [as=c]
  │         │    │    ├── columns: c.id:6(string)
- │         │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10, avgsize(6)=4]
+ │         │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10, avgsize(6)=4, distinct(7)=1000, null(7)=0, avgsize(7)=4]
  │         │    └── filters
  │         │         └── c.id:6 = 'bar' [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar']; tight), fd=()-->(6)]
  │         ├── with-scan &1 (hierarchy)

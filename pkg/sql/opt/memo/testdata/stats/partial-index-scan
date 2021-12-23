@@ -58,12 +58,12 @@ SELECT * FROM a WHERE s = 'foo'
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string)
- ├── stats: [rows=96.4285715, distinct(3)=1, null(3)=0, avgsize(3)=5]
+ ├── stats: [rows=96.4285715, distinct(1)=96.4285715, null(1)=0, avgsize(1)=1, distinct(2)=88.4761406, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(4)=88.4761406, null(4)=0.964285715, avgsize(4)=6]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int)
-      ├── stats: [rows=96.4285715, distinct(3)=1, null(3)=0, avgsize(3)=5]
+      ├── stats: [rows=96.4285715, distinct(1)=96.4285715, null(1)=0, avgsize(1)=1, distinct(2)=88.4761406, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -87,12 +87,12 @@ select
  ├── fd: (1)-->(2-4)
  ├── index-join a
  │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
- │    ├── stats: [rows=490]
+ │    ├── stats: [rows=490, distinct(1)=490, null(1)=0, avgsize(1)=1, distinct(2)=321.747603, null(2)=0, avgsize(2)=2, distinct(3)=49.9983419, null(3)=26.95, avgsize(3)=5, distinct(4)=321.747603, null(4)=4.9, avgsize(4)=6]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan a@idx,partial
  │         ├── columns: k:1(int!null) s:3(string)
- │         ├── stats: [rows=490, distinct(2)=49, null(2)=0, avgsize(2)=2]
+ │         ├── stats: [rows=490, distinct(1)=490, null(1)=0, avgsize(1)=1, distinct(2)=49, null(2)=0, avgsize(2)=2, distinct(3)=49.9983419, null(3)=26.95, avgsize(3)=5]
  │         ├── key: (1)
  │         └── fd: (1)-->(3)
  └── filters
@@ -114,7 +114,7 @@ SELECT * FROM a WHERE i < k AND i % 3 = 0
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
  ├── immutable
- ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, avgsize(1)=1, distinct(2)=500, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, avgsize(1)=1, distinct(2)=500, null(2)=0, avgsize(2)=2, distinct(3)=49.9996165, null(3)=30.5555556, avgsize(3)=5, distinct(4)=346.026926, null(4)=5.55555556, avgsize(4)=6]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
@@ -138,13 +138,13 @@ SELECT * FROM a WHERE i > 15 AND i < 30
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
- ├── stats: [rows=140, distinct(2)=14, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=140, distinct(1)=140, null(1)=0, avgsize(1)=1, distinct(2)=14, null(2)=0, avgsize(2)=2, distinct(3)=47.0785632, null(3)=7.7, avgsize(3)=5, distinct(4)=123.6147, null(4)=1.4, avgsize(4)=6]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/16 - /29]
-      ├── stats: [rows=140, distinct(2)=14, null(2)=0, avgsize(2)=2]
+      ├── stats: [rows=140, distinct(1)=140, null(1)=0, avgsize(1)=1, distinct(2)=14, null(2)=0, avgsize(2)=2]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -153,12 +153,12 @@ SELECT * FROM a WHERE i > 15 AND i < 30
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
- ├── stats: [rows=140, distinct(2)=14, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=140, distinct(1)=140, null(1)=0, avgsize(1)=1, distinct(2)=14, null(2)=0, avgsize(2)=2, distinct(3)=47.0785632, null(3)=7.7, avgsize(3)=5, distinct(4)=123.6147, null(4)=1.4, avgsize(4)=6]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── select
       ├── columns: k:1(int!null) i:2(int!null)
-      ├── stats: [rows=140, distinct(2)=14, null(2)=0, avgsize(2)=2]
+      ├── stats: [rows=140, distinct(1)=140, null(1)=0, avgsize(1)=1, distinct(2)=14, null(2)=0, avgsize(2)=2]
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan a@idx,partial
@@ -174,7 +174,7 @@ SELECT * FROM a WHERE (i > 0 AND i < 10) OR (i > 40 AND i < 50)
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
- ├── stats: [rows=180, distinct(2)=18, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=180, distinct(1)=180, null(1)=0, avgsize(1)=1, distinct(2)=18, null(2)=0, avgsize(2)=2, distinct(3)=48.7215805, null(3)=9.9, avgsize(3)=5, distinct(4)=153.470395, null(4)=1.8, avgsize(4)=6]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
@@ -182,7 +182,7 @@ index-join a
       ├── constraint: /2/1
       │    ├── [/1 - /9]
       │    └── [/41 - /49]
-      ├── stats: [rows=180, distinct(2)=18, null(2)=0, avgsize(2)=2]
+      ├── stats: [rows=180, distinct(1)=180, null(1)=0, avgsize(1)=1, distinct(2)=18, null(2)=0, avgsize(2)=2]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -201,12 +201,12 @@ SELECT * FROM a WHERE s = t AND s LIKE '%foo%' AND t LIKE '%bar%'
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int) s:3(string!null) t:4(string!null)
- ├── stats: [rows=1.04895, distinct(3)=1.04895, null(3)=0, avgsize(3)=5, distinct(4)=1.04895, null(4)=0, avgsize(4)=6, distinct(3,4)=1.04895, null(3,4)=0, avgsize(3,4)=11]
+ ├── stats: [rows=1.04895, distinct(1)=1.0395, null(1)=0, avgsize(1)=1, distinct(2)=1.03852803, null(2)=0, avgsize(2)=2, distinct(3)=1.04895, null(3)=0, avgsize(3)=5, distinct(4)=1.04895, null(4)=0, avgsize(4)=6, distinct(3,4)=1.04895, null(3,4)=0, avgsize(3,4)=11]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)==(4), (4)==(3)
  └── select
       ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
-      ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, avgsize(3)=5, distinct(4)=1.0395, null(4)=0, avgsize(4)=6]
+      ├── stats: [rows=1.0395, distinct(1)=1.0395, null(1)=0, avgsize(1)=1, distinct(3)=1.0395, null(3)=0, avgsize(3)=5, distinct(4)=1.0395, null(4)=0, avgsize(4)=6]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3)==(4), (4)==(3)
       ├── scan a@idx,partial
@@ -233,12 +233,12 @@ SELECT * FROM a WHERE s IS NULL
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
- ├── stats: [rows=275, distinct(3)=1, null(3)=275, avgsize(3)=5]
+ ├── stats: [rows=275, distinct(1)=275, null(1)=0, avgsize(1)=1, distinct(2)=216.019782, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=275, avgsize(3)=5, distinct(4)=216.019782, null(4)=2.75, avgsize(4)=6]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int)
-      ├── stats: [rows=275, distinct(3)=1, null(3)=275, avgsize(3)=5]
+      ├── stats: [rows=275, distinct(1)=275, null(1)=0, avgsize(1)=1, distinct(2)=216.019782, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=275, avgsize(3)=5]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -258,13 +258,13 @@ SELECT * FROM a WHERE i > 10 AND i < 20 AND s IN ('foo', 'bar', 'baz')
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
- ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
+ ├── stats: [rows=24.8207143, distinct(1)=11.5977245, null(1)=0, avgsize(1)=1, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(4)=11.4774137, null(4)=0.248207143, avgsize(4)=6, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/11 - /19]
-      ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
+      ├── stats: [rows=24.8207143, distinct(1)=24.8207143, null(1)=0, avgsize(1)=1, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -278,13 +278,13 @@ select
  ├── fd: ()-->(3), (1)-->(2,4)
  ├── index-join a
  │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
- │    ├── stats: [rows=24.8207143]
+ │    ├── stats: [rows=24.8207143, distinct(1)=24.8207143, null(1)=0, avgsize(1)=1, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=19.6021315, null(3)=1.36513929, avgsize(3)=5, distinct(4)=24.2735296, null(4)=0.248207143, avgsize(4)=6]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan a@idx,partial
  │         ├── columns: k:1(int!null) i:2(int!null)
  │         ├── constraint: /2/1: [/11 - /19]
- │         ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
+ │         ├── stats: [rows=24.8207143, distinct(1)=24.8207143, null(1)=0, avgsize(1)=1, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -300,7 +300,7 @@ select
  ├── fd: (1)-->(2-4)
  ├── index-join a
  │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
- │    ├── stats: [rows=5.51571429]
+ │    ├── stats: [rows=5.51571429, distinct(1)=5.51571429, null(1)=0, avgsize(1)=1, distinct(2)=2, null(2)=0, avgsize(2)=2, distinct(3)=5.22509489, null(3)=0.303364286, avgsize(3)=5, distinct(4)=5.48841388, null(4)=0.0551571429, avgsize(4)=6]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan a@idx,partial
@@ -308,7 +308,7 @@ select
  │         ├── constraint: /2/1
  │         │    ├── [/100 - /100]
  │         │    └── [/200 - /200]
- │         ├── stats: [rows=5.51571429, distinct(2)=2, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=5.51571429, null(2,3)=0, avgsize(2,3)=7]
+ │         ├── stats: [rows=5.51571429, distinct(1)=5.51571429, null(1)=0, avgsize(1)=1, distinct(2)=2, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=5.51571429, null(2,3)=0, avgsize(2,3)=7]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -330,13 +330,13 @@ SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'foo'
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
- ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
+ ├── stats: [rows=8.27357143, distinct(1)=8.27357143, null(1)=0, avgsize(1)=1, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(4)=8.27357143, null(4)=0.0827357143, avgsize(4)=6, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/11 - /19]
-      ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
+      ├── stats: [rows=8.27357143, distinct(1)=8.27357143, null(1)=0, avgsize(1)=1, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -356,13 +356,13 @@ SELECT * FROM a WHERE i > 10 AND i < 20 AND s IN ('foo', 'bar', 'baz')
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
- ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
+ ├── stats: [rows=24.8207143, distinct(1)=11.5977245, null(1)=0, avgsize(1)=1, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(4)=11.4774137, null(4)=0.248207143, avgsize(4)=6, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
       ├── constraint: /2/3/1: [/11 - /19]
-      ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
+      ├── stats: [rows=24.8207143, distinct(1)=24.8207143, null(1)=0, avgsize(1)=1, distinct(2)=9, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=5, distinct(2,3)=24.8207143, null(2,3)=0, avgsize(2,3)=7]
       ├── key: (1)
       └── fd: (1)-->(2,3)
 
@@ -371,7 +371,7 @@ SELECT * FROM a WHERE i > 10 AND i < 50 AND s = 'baz'
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
- ├── stats: [rows=35.8521429, distinct(2)=35.8521429, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=35.8521429, null(2,3)=0, avgsize(2,3)=7]
+ ├── stats: [rows=35.8521429, distinct(1)=35.8521429, null(1)=0, avgsize(1)=1, distinct(2)=35.8521429, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(4)=35.5816197, null(4)=0.358521429, avgsize(4)=6, distinct(2,3)=35.8521429, null(2,3)=0, avgsize(2,3)=7]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  └── select
@@ -404,13 +404,13 @@ SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'foo'
 ----
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
- ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
+ ├── stats: [rows=8.27357143, distinct(1)=8.27357143, null(1)=0, avgsize(1)=1, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(4)=8.27357143, null(4)=0.0827357143, avgsize(4)=6, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
       ├── constraint: /2/3/1: [/11 - /19]
-      ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
+      ├── stats: [rows=8.27357143, distinct(1)=8.27357143, null(1)=0, avgsize(1)=1, distinct(2)=8.27357143, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=5, distinct(2,3)=8.27357143, null(2,3)=0, avgsize(2,3)=7]
       ├── key: (1)
       └── fd: ()-->(3), (1)-->(2)
 
@@ -442,7 +442,7 @@ project
  ├── scan t@t_pk2_idx,partial
  │    ├── columns: pk1:1(int!null) pk2:2(int!null)
  │    ├── constraint: /2/1: [/1 - /1]
- │    ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(2-4)=1, null(2-4)=0, avgsize(2-4)=12]
+ │    ├── stats: [rows=1.245025, distinct(1)=1.23807272, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=0, avgsize(4)=4, distinct(2-4)=1, null(2-4)=0, avgsize(2-4)=12]
  │    ├── key: (1)
  │    └── fd: ()-->(2)
  └── projections
@@ -514,14 +514,16 @@ select
  ├── fd: (1)-->(2,3)
  ├── index-join hist
  │    ├── columns: k:1(int!null) i:2(int) s:3(string)
- │    ├── stats: [rows=90.9090909]
+ │    ├── stats: [rows=90.9090909, distinct(1)=90.9090909, null(1)=0, avgsize(1)=4, distinct(2)=36.9894294, null(2)=2.72727273, avgsize(2)=2, distinct(3)=36.3081601, null(3)=0, avgsize(3)=3]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── scan hist@idx,partial
  │         ├── columns: k:1(int!null) s:3(string)
- │         ├── stats: [rows=90.9090909, distinct(2)=5.45454545, null(2)=0, avgsize(2)=2]
+ │         ├── stats: [rows=90.9090909, distinct(1)=90.9090909, null(1)=0, avgsize(1)=4, distinct(2)=5.45454545, null(2)=0, avgsize(2)=2, distinct(3)=36.3081601, null(3)=0, avgsize(3)=3]
  │         │   histogram(2)=  0   0   89.091 1.8182
  │         │                <--- 100 -------- 150 -
+ │         │   histogram(3)=  0     0     9.0909   9.0909   9.0909   9.0909   9.0909  18.182   9.0909    18.182
+ │         │                <--- 'apple' -------- 'banana' -------- 'cherry' -------- 'mango' -------- 'pineapple'
  │         ├── key: (1)
  │         └── fd: (1)-->(3)
  └── filters
@@ -542,7 +544,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 150
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=43.6363636, distinct(1)=43.6363636, null(1)=0, avgsize(1)=4, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2, distinct(3)=26.8889837, null(3)=0, avgsize(3)=3]
  │   histogram(2)=  0   0   41.818 1.8182
  │                <--- 125 -------- 149 -
  ├── key: (1)
@@ -550,7 +552,7 @@ index-join hist
  └── scan hist@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/126 - /149]
-      ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2]
+      ├── stats: [rows=43.6363636, distinct(1)=43.6363636, null(1)=0, avgsize(1)=4, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2]
       │   histogram(2)=  0   0   41.818 1.8182
       │                <--- 125 -------- 149 -
       ├── key: (1)
@@ -561,14 +563,14 @@ SELECT * FROM hist WHERE i > 125 AND i < 150
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=43.6363636, distinct(1)=43.6363636, null(1)=0, avgsize(1)=4, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2, distinct(3)=26.8889837, null(3)=0, avgsize(3)=3]
  │   histogram(2)=  0   0   41.818 1.8182
  │                <--- 125 -------- 149 -
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  └── select
       ├── columns: k:1(int!null) i:2(int!null)
-      ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2]
+      ├── stats: [rows=43.6363636, distinct(1)=43.6363636, null(1)=0, avgsize(1)=4, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2]
       │   histogram(2)=  0   0   41.818 1.8182
       │                <--- 125 -------- 149 -
       ├── key: (1)
@@ -588,7 +590,7 @@ SELECT * FROM hist WHERE (i > 100 AND i < 125) OR (i > 150 AND i < 175)
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string)
- ├── stats: [rows=87.2727273, distinct(2)=6.18181818, null(2)=0, avgsize(2)=2]
+ ├── stats: [rows=87.2727273, distinct(1)=87.2727273, null(1)=0, avgsize(1)=4, distinct(2)=6.18181818, null(2)=0, avgsize(2)=2, distinct(3)=35.9206997, null(3)=0, avgsize(3)=3]
  │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
  │                <--- 100 -------- 124 ---- 150 -------- 174 -
  ├── key: (1)
@@ -598,7 +600,7 @@ index-join hist
       ├── constraint: /2/1
       │    ├── [/101 - /124]
       │    └── [/151 - /174]
-      ├── stats: [rows=87.2727273, distinct(2)=6.18181818, null(2)=0, avgsize(2)=2]
+      ├── stats: [rows=87.2727273, distinct(1)=87.2727273, null(1)=0, avgsize(1)=4, distinct(2)=6.18181818, null(2)=0, avgsize(2)=2]
       │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
       │                <--- 100 -------- 124 ---- 150 -------- 174 -
       ├── key: (1)
@@ -620,7 +622,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mang
 ----
 index-join hist
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
- ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
+ ├── stats: [rows=4.60955951, distinct(1)=2.90909091, null(1)=0, avgsize(1)=4, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
  │   histogram(2)=  0   0   3.4572 1.1524
  │                <--- 125 -------- 129 -
  │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -630,7 +632,7 @@ index-join hist
  └── scan hist@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
       ├── constraint: /2/1: [/126 - /129]
-      ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
+      ├── stats: [rows=4.60955951, distinct(1)=4.60955951, null(1)=0, avgsize(1)=4, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
       │   histogram(2)=  0   0   3.4572 1.1524
       │                <--- 125 -------- 129 -
       │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -652,13 +654,13 @@ select
  ├── fd: ()-->(3), (1)-->(2)
  ├── index-join hist
  │    ├── columns: k:1(int!null) i:2(int) s:3(string)
- │    ├── stats: [rows=4.60955951]
+ │    ├── stats: [rows=4.60955951, distinct(1)=4.60955951, null(1)=0, avgsize(1)=4, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=4.36336981, null(3)=0, avgsize(3)=3]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── scan hist@idx,partial
  │         ├── columns: k:1(int!null) i:2(int!null)
  │         ├── constraint: /2/1: [/126 - /129]
- │         ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
+ │         ├── stats: [rows=4.60955951, distinct(1)=4.60955951, null(1)=0, avgsize(1)=4, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
  │         │   histogram(2)=  0   0   3.4572 1.1524
  │         │                <--- 125 -------- 129 -
  │         │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -678,7 +680,7 @@ select
  ├── fd: (1)-->(2,3)
  ├── index-join hist
  │    ├── columns: k:1(int!null) i:2(int) s:3(string)
- │    ├── stats: [rows=12.6762887]
+ │    ├── stats: [rows=12.6762887, distinct(1)=12.6762887, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=2, distinct(3)=10.9230287, null(3)=0, avgsize(3)=3]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── scan hist@idx,partial
@@ -686,7 +688,7 @@ select
  │         ├── constraint: /2/1
  │         │    ├── [/100 - /100]
  │         │    └── [/200 - /200]
- │         ├── stats: [rows=12.6762887, distinct(2)=2, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=6, null(2,3)=0, avgsize(2,3)=5]
+ │         ├── stats: [rows=12.6762887, distinct(1)=12.6762887, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=6, null(2,3)=0, avgsize(2,3)=5]
  │         │   histogram(2)=  0 6.3381 0 6.3381
  │         │                <--- 100 ---- 200 -
  │         │   histogram(3)=  0   3.1691   0   3.1691   0  6.3381
@@ -722,7 +724,7 @@ project
  ├── scan hist@idx,partial
  │    ├── columns: k:1(int!null) i:2(int!null)
  │    ├── constraint: /2/1: [/126 - /149]
- │    ├── stats: [rows=6.91433927, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=3.09090909, null(2,3)=0, avgsize(2,3)=5]
+ │    ├── stats: [rows=6.91433927, distinct(1)=6.91433927, null(1)=0, avgsize(1)=4, distinct(2)=3.09090909, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=3.09090909, null(2,3)=0, avgsize(2,3)=5]
  │    │   histogram(2)=  0   0   6.6262 0.2881
  │    │                <--- 125 -------- 149 -
  │    │   histogram(3)=  0   6.9143
@@ -749,7 +751,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mang
 scan hist@idx,partial
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  ├── constraint: /2/3/1: [/126 - /129]
- ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
+ ├── stats: [rows=4.60955951, distinct(1)=4.60955951, null(1)=0, avgsize(1)=4, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
  │   histogram(2)=  0   0   3.4572 1.1524
  │                <--- 125 -------- 129 -
  │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -772,7 +774,7 @@ select
  ├── scan hist@idx,partial
  │    ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  │    ├── constraint: /2/3/1: [/126/'mango' - /129/'mango']
- │    ├── stats: [rows=4.60955951, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
+ │    ├── stats: [rows=4.60955951, distinct(1)=4.60955951, null(1)=0, avgsize(1)=4, distinct(2)=1.27272727, null(2)=0, avgsize(2)=2, distinct(3)=3, null(3)=0, avgsize(3)=3, distinct(2,3)=3.81818182, null(2,3)=0, avgsize(2,3)=5]
  │    │   histogram(2)=  0   0   3.4572 1.1524
  │    │                <--- 125 -------- 129 -
  │    │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
@@ -799,7 +801,7 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'banana'
 scan hist@idx,partial
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  ├── constraint: /2/3/1: [/126 - /129]
- ├── stats: [rows=1.15238988, distinct(2)=1.15238988, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1.15238988, null(2,3)=0, avgsize(2,3)=5]
+ ├── stats: [rows=1.15238988, distinct(1)=1.15238988, null(1)=0, avgsize(1)=4, distinct(2)=1.15238988, null(2)=0, avgsize(2)=2, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1.15238988, null(2,3)=0, avgsize(2,3)=5]
  │   histogram(2)=  0   0   0.86429 0.2881
  │                <--- 125 --------- 129 -
  │   histogram(3)=  0   1.1524
@@ -872,7 +874,7 @@ project
       ├── inverted constraint: /7/1
       │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
       ├── flags: force-index=partial
-      ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
+      ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
       └── key: (1)
 
 opt
@@ -881,7 +883,7 @@ SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
 index-join inv
  ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
  ├── immutable
- ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0, avgsize(4)=23]
+ ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(2)=2.20004048, null(2)=0, avgsize(2)=2, distinct(3)=2.20004048, null(3)=0, avgsize(3)=34, distinct(4)=2, null(4)=0, avgsize(4)=23]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan inv@partial,partial
@@ -889,7 +891,7 @@ index-join inv
       ├── inverted constraint: /7/1
       │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
       ├── flags: force-index=partial
-      ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
+      ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
       └── key: (1)
 
 opt
@@ -908,7 +910,7 @@ project
       ├── fd: ()-->(4), (1)-->(3)
       ├── index-join inv
       │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
-      │    ├── stats: [rows=2.20440882]
+      │    ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(2)=1, null(2)=2.20440882, avgsize(2)=2, distinct(3)=2.20004048, null(3)=0, avgsize(3)=34, distinct(4)=2.20004048, null(4)=0.0220440882, avgsize(4)=23]
       │    ├── key: (1)
       │    ├── fd: (1)-->(3,4)
       │    └── scan inv@partial,partial
@@ -916,7 +918,7 @@ project
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
       │         ├── flags: force-index=partial
-      │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
+      │         ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
       │         └── key: (1)
       └── filters
            └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -932,7 +934,7 @@ select
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── index-join inv
  │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
- │    ├── stats: [rows=2.20440882]
+ │    ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(2)=2.20004048, null(2)=0, avgsize(2)=2, distinct(3)=2.20004048, null(3)=0, avgsize(3)=34, distinct(4)=2.20004048, null(4)=0.0220440882, avgsize(4)=23]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan inv@partial,partial
@@ -940,7 +942,7 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
+ │         ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
  │         └── key: (1)
  └── filters
       └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -956,7 +958,7 @@ select
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── index-join inv
  │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
- │    ├── stats: [rows=2.20440882]
+ │    ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(2)=2.20004048, null(2)=0, avgsize(2)=2, distinct(3)=2.20004048, null(3)=0, avgsize(3)=34, distinct(4)=2.20004048, null(4)=0.0220440882, avgsize(4)=23]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan inv@partial,partial
@@ -964,7 +966,7 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
+ │         ├── stats: [rows=2.20440882, distinct(1)=2.20440882, null(1)=0, avgsize(1)=5, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=2.20440882, null(7)=0, avgsize(7)=4]
  │         └── key: (1)
  └── filters
       ├── (i:2 > 0) AND (i:2 < 10) [type=bool, outer=(2), constraints=(/2: [/1 - /9]; tight)]
@@ -1049,7 +1051,7 @@ project
       ├── inverted constraint: /7/1
       │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
       ├── flags: force-index=partial
-      ├── stats: [rows=100, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
+      ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
       │   histogram(4)=  0     50     0     50
       │                <--- 'banana' --- 'cherry'
       │   histogram(7)=  0         100          5.9476e-16          0
@@ -1062,7 +1064,7 @@ SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana'
 index-join inv_hist
  ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
  ├── immutable
- ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0, avgsize(4)=23]
+ ├── stats: [rows=17.7777778, distinct(1)=17.7777778, null(1)=0, avgsize(1)=4, distinct(2)=17.7777778, null(2)=0.533333333, avgsize(2)=2, distinct(3)=17.7777778, null(3)=0, avgsize(3)=34, distinct(4)=2, null(4)=0, avgsize(4)=23]
  │   histogram(4)=  0   8.8889   0   8.8889
  │                <--- 'banana' --- 'cherry'
  ├── key: (1)
@@ -1072,7 +1074,7 @@ index-join inv_hist
       ├── inverted constraint: /7/1
       │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
       ├── flags: force-index=partial
-      ├── stats: [rows=100, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
+      ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
       │   histogram(4)=  0     50     0     50
       │                <--- 'banana' --- 'cherry'
       │   histogram(7)=  0         100          5.9476e-16          0
@@ -1097,7 +1099,7 @@ project
       ├── fd: ()-->(4), (1)-->(3)
       ├── index-join inv_hist
       │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=100, avgsize(2)=2, distinct(3)=82.0000303, null(3)=20, avgsize(3)=34, distinct(4)=37.128408, null(4)=0, avgsize(4)=23]
       │    ├── key: (1)
       │    ├── fd: (1)-->(3,4)
       │    └── scan inv_hist@partial,partial
@@ -1105,7 +1107,7 @@ project
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
       │         ├── flags: force-index=partial
-      │         ├── stats: [rows=100, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
+      │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
       │         │   histogram(4)=  0     50     0     50
       │         │                <--- 'banana' --- 'cherry'
       │         │   histogram(7)=  0         100          5.9476e-16          0
@@ -1127,7 +1129,7 @@ select
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── index-join inv_hist
  │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=37.8613167, null(2)=3, avgsize(2)=2, distinct(3)=82.0000303, null(3)=20, avgsize(3)=34, distinct(4)=37.128408, null(4)=0, avgsize(4)=23]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan inv_hist@partial,partial
@@ -1135,7 +1137,7 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=100, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
  │         │   histogram(4)=  0     50     0     50
  │         │                <--- 'banana' --- 'cherry'
  │         │   histogram(7)=  0         100          5.9476e-16          0
@@ -1159,7 +1161,7 @@ select
  ├── fd: (1)-->(2-4)
  ├── index-join inv_hist
  │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=37.8613167, null(2)=3, avgsize(2)=2, distinct(3)=82.0000303, null(3)=20, avgsize(3)=34, distinct(4)=37.128408, null(4)=0, avgsize(4)=23]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan inv_hist@partial,partial
@@ -1167,7 +1169,7 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=100, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(4)=2, null(4)=0, avgsize(4)=23, distinct(7)=1, null(7)=0, avgsize(7)=34, distinct(4,7)=2, null(4,7)=0, avgsize(4,7)=57]
  │         │   histogram(4)=  0     50     0     50
  │         │                <--- 'banana' --- 'cherry'
  │         │   histogram(7)=  0         100          5.9476e-16          0
@@ -1229,7 +1231,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=16.6666667]
+      │    ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, avgsize(1)=4, distinct(2)=6.35918747, null(2)=0, avgsize(2)=12, distinct(3)=13.6763712, null(3)=0, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1242,7 +1244,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=16.6666667]
+      │         ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1275,7 +1277,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=16.6666667]
+      │    ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, avgsize(1)=4, distinct(2)=6.35918747, null(2)=0, avgsize(2)=12, distinct(3)=13.6763712, null(3)=0, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1288,7 +1290,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=16.6666667]
+      │         ├── stats: [rows=16.6666667, distinct(1)=16.6666667, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1342,7 +1344,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=8.54700856]
+      │    ├── stats: [rows=8.54700856, distinct(1)=8.54700856, null(1)=0, avgsize(1)=4, distinct(2)=4.94085161, null(2)=0, avgsize(2)=12, distinct(3)=7.71036231, null(3)=4.27350428, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1355,7 +1357,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=8.54700856]
+      │         ├── stats: [rows=8.54700856, distinct(1)=8.54700856, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1386,7 +1388,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=8.54700856]
+      │    ├── stats: [rows=8.54700856, distinct(1)=8.54700856, null(1)=0, avgsize(1)=4, distinct(2)=4.94085161, null(2)=0, avgsize(2)=12, distinct(3)=7.71036231, null(3)=4.27350428, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1399,7 +1401,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=8.54700856]
+      │         ├── stats: [rows=8.54700856, distinct(1)=8.54700856, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1476,7 +1478,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=118.756842]
+      │    ├── stats: [rows=118.756842, distinct(1)=33.9305263, null(1)=0, avgsize(1)=4, distinct(2)=6.99999982, null(2)=0, avgsize(2)=12, distinct(3)=38.1258391, null(3)=0, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1489,7 +1491,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=118.756842]
+      │         ├── stats: [rows=118.756842, distinct(1)=33.9305263, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1528,7 +1530,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=118.756842]
+      │    ├── stats: [rows=118.756842, distinct(1)=33.9305263, null(1)=0, avgsize(1)=4, distinct(2)=6.99999982, null(2)=0, avgsize(2)=12, distinct(3)=38.1258391, null(3)=0, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1541,7 +1543,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=118.756842]
+      │         ├── stats: [rows=118.756842, distinct(1)=33.9305263, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1616,7 +1618,7 @@ project
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.569504]
+      │    ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4, distinct(2)=6.99999988, null(2)=0, avgsize(2)=12, distinct(3)=38.2609314, null(3)=6.07847521, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1629,7 +1631,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.569504]
+      │         ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
@@ -1666,7 +1668,7 @@ project
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.569504]
+      │    ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4, distinct(2)=6.99999988, null(2)=0, avgsize(2)=12, distinct(3)=38.2609314, null(3)=6.07847521, avgsize(3)=18]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -1679,7 +1681,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.569504]
+      │         ├── stats: [rows=121.569504, distinct(1)=34.7341441, null(1)=0, avgsize(1)=4]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
       │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)

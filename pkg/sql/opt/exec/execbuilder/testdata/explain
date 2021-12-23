@@ -1307,21 +1307,21 @@ EXPLAIN (OPT,VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 sort
  ├── columns: a:1 b:2
- ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=9.5617925, null(2)=0.1, avgsize(2)=4, distinct(3)=0.999956829, null(3)=0, avgsize(3)=4]
  ├── cost: 86.8243856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  └── index-join tc
       ├── columns: a:1 b:2
-      ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=9.5617925, null(2)=0.1, avgsize(2)=4, distinct(3)=0.999956829, null(3)=0, avgsize(3)=4]
       ├── cost: 85.74
       ├── fd: ()-->(1)
       ├── prune: (2)
       └── scan tc@c
            ├── columns: a:1 rowid:3
            ├── constraint: /1/3: [/10 - /10]
-           ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+           ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
            ├── cost: 24.82
            ├── key: (3)
            └── fd: ()-->(1)
@@ -1331,21 +1331,21 @@ EXPLAIN (OPT,TYPES) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 sort
  ├── columns: a:1(int!null) b:2(int)
- ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=9.5617925, null(2)=0.1, avgsize(2)=4, distinct(3)=0.999956829, null(3)=0, avgsize(3)=4]
  ├── cost: 86.8243856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
-      ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=9.5617925, null(2)=0.1, avgsize(2)=4, distinct(3)=0.999956829, null(3)=0, avgsize(3)=4]
       ├── cost: 85.74
       ├── fd: ()-->(1)
       ├── prune: (2)
       └── scan tc@c
            ├── columns: a:1(int!null) rowid:3(int!null)
            ├── constraint: /1/3: [/10 - /10]
-           ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4]
+           ├── stats: [rows=10, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
            ├── cost: 24.82
            ├── key: (3)
            └── fd: ()-->(1)
@@ -1393,20 +1393,20 @@ TABLE t
 inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, avgsize(1)=4, distinct(6)=99, null(6)=0, avgsize(6)=4]
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, avgsize(1)=4, distinct(2)=99.9950071, null(2)=9.9, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(6)=99, null(6)=0, avgsize(6)=4, distinct(7)=99.9950071, null(7)=9.9, avgsize(7)=4]
  ├── cost: 2269.90625
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
  │    ├── cost: 1125.02
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-5)
  ├── scan t
  │    ├── columns: k:6 v:7
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4]
  │    ├── cost: 1104.82
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
@@ -1456,7 +1456,7 @@ sort
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
-      │    │    ├── stats: [rows=1000]
+      │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
       │    │    ├── cost: 1125.02
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
@@ -1493,7 +1493,7 @@ sort
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)
-      │    │    ├── stats: [rows=1000]
+      │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
       │    │    ├── cost: 1125.02
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
@@ -1899,20 +1899,20 @@ memo (optimized, ~11KB, required=[presentation: info:10])
 inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── stats: [rows=990, distinct(1)=99, null(1)=0, avgsize(1)=4, distinct(6)=99, null(6)=0, avgsize(6)=4]
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, avgsize(1)=4, distinct(2)=99.9950071, null(2)=9.9, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(6)=99, null(6)=0, avgsize(6)=4, distinct(7)=99.9950071, null(7)=9.9, avgsize(7)=4]
  ├── cost: 2269.90625
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=1000, null(3)=0, avgsize(3)=4]
  │    ├── cost: 1125.02
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-5)
  ├── scan t
  │    ├── columns: k:6 v:7
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4, distinct(7)=100, null(7)=10, avgsize(7)=4]
  │    ├── cost: 1104.82
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)

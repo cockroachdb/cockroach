@@ -54,7 +54,7 @@ limit
  │         ├── limit hint: 5.00
  │         ├── scan a
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │         │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4]
+ │         │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=200, null(2)=20, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         │    └── limit hint: 50.00
@@ -83,7 +83,7 @@ limit
  │         ├── fd: ()-->(3), (1)-->(2,4-6), (4)-->(1,2,5,6)
  │         ├── scan a
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │         │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4]
+ │         │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=200, null(2)=20, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         └── filters
@@ -140,7 +140,7 @@ select
  │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │         └── scan a
  │    │              ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │    │              ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4]
+ │    │              ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=200, null(2)=20, avgsize(2)=4, distinct(3)=10, null(3)=0, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │    │              ├── key: (1)
  │    │              └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── 5 [type=int]
@@ -197,7 +197,7 @@ limit
  │    ├── limit hint: 5.00
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │         ├── stats: [rows=2000, distinct(2)=501, null(2)=1000, avgsize(2)=4, distinct(3)=11, null(3)=1000, avgsize(3)=4, distinct(2,3)=2000, null(2,3)=500, avgsize(2,3)=8]
+ │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=501, null(2)=1000, avgsize(2)=4, distinct(3)=11, null(3)=1000, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2,3)=2000, null(2,3)=500, avgsize(2,3)=8]
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         └── limit hint: 5.00
@@ -226,7 +226,7 @@ limit
  │         ├── limit hint: 5.00
  │         ├── scan a
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │         │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=501, null(2)=1000, avgsize(2)=4, distinct(3)=11, null(3)=1000, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4, distinct(2,3)=2000, null(2,3)=500, avgsize(2,3)=8]
+ │         │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=501, null(2)=1000, avgsize(2)=4, distinct(3)=11, null(3)=1000, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2,3)=2000, null(2,3)=500, avgsize(2,3)=8]
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         │    └── limit hint: 100.00
@@ -258,7 +258,7 @@ offset
  │    ├── ordering: +1
  │    └── scan b
  │         ├── columns: x:1(int)
- │         └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ │         └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4, distinct(2)=1000, null(2)=0, avgsize(2)=4]
  └── 9999 [type=int]
 
 # TopK
@@ -276,6 +276,6 @@ top-k
  ├── ordering: +2
  └── scan a
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4]
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(2)=501, null(2)=1000, avgsize(2)=4, distinct(3)=11, null(3)=1000, avgsize(3)=4, distinct(4)=200, null(4)=0, avgsize(4)=4]
       ├── key: (1)
       └── fd: (1)-->(2-4), (3,4)~~>(1,2)

@@ -77,7 +77,7 @@ sort
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) ps_availqty:3(int!null) ps_supplycost:4(float!null) s_suppkey:8(int!null) s_nationkey:11(int!null) n_nationkey:17(int!null) n_name:18(char!null)
       │    │    │    ├── key columns: [1 2] = [1 2]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, avgsize(1)=4, distinct(2)=399.934613, null(2)=0, avgsize(2)=4, distinct(3)=9536.12259, null(3)=0, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(8)=399.934613, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4, distinct(3,4)=31617.9161, null(3,4)=0, avgsize(3,4)=8]
+      │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, avgsize(1)=4, distinct(2)=399.934613, null(2)=0, avgsize(2)=4, distinct(3)=9920, null(3)=0, avgsize(3)=4, distinct(4)=1000, null(4)=0, avgsize(4)=4, distinct(5)=1, null(5)=0, avgsize(5)=4, distinct(8)=399.934613, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=25, null(17)=0, avgsize(17)=4, distinct(18)=25, null(18)=0, avgsize(18)=4, distinct(19)=1, null(19)=0, avgsize(19)=4, distinct(20)=1, null(20)=0, avgsize(20)=4, distinct(3,4)=31617.9161, null(3,4)=0, avgsize(3,4)=8]
       │    │    │    ├── key: (1,8)
       │    │    │    ├── fd: ()-->(18), (1,2)-->(3,4), (8)-->(11), (11)==(17), (17)==(11), (2)==(8), (8)==(2)
       │    │    │    ├── inner-join (lookup partsupp@ps_sk)
@@ -91,7 +91,7 @@ sort
       │    │    │    │    │    ├── save-table-name: q11_lookup_join_7
       │    │    │    │    │    ├── columns: s_suppkey:8(int!null) s_nationkey:11(int!null) n_nationkey:17(int!null) n_name:18(char!null)
       │    │    │    │    │    ├── key columns: [17] = [11]
-      │    │    │    │    │    ├── stats: [rows=400, distinct(8)=399.934613, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
+      │    │    │    │    │    ├── stats: [rows=400, distinct(8)=399.934613, null(8)=0, avgsize(8)=4, distinct(11)=1, null(11)=0, avgsize(11)=4, distinct(17)=1, null(17)=0, avgsize(17)=4, distinct(18)=1, null(18)=0, avgsize(18)=4, distinct(19)=1, null(19)=0, avgsize(19)=4, distinct(20)=1, null(20)=0, avgsize(20)=4]
       │    │    │    │    │    ├── key: (8)
       │    │    │    │    │    ├── fd: ()-->(18), (8)-->(11), (11)==(17), (17)==(11)
       │    │    │    │    │    ├── select
@@ -105,11 +105,15 @@ sort
       │    │    │    │    │    │    ├── scan nation
       │    │    │    │    │    │    │    ├── save-table-name: q11_scan_9
       │    │    │    │    │    │    │    ├── columns: n_nationkey:17(int!null) n_name:18(char!null)
-      │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(17)=25, null(17)=0, avgsize(17)=4, distinct(18)=25, null(18)=0, avgsize(18)=4]
+      │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(17)=25, null(17)=0, avgsize(17)=4, distinct(18)=25, null(18)=0, avgsize(18)=4, distinct(19)=5, null(19)=0, avgsize(19)=4, distinct(20)=25, null(20)=0, avgsize(20)=4]
       │    │    │    │    │    │    │    │   histogram(17)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
       │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
       │    │    │    │    │    │    │    │   histogram(18)=  0      1      23      1
       │    │    │    │    │    │    │    │                 <--- 'ALGERIA' ---- 'VIETNAM'
+      │    │    │    │    │    │    │    │   histogram(19)=  0  5  0  5  0  5  0  5  0  5
+      │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4
+      │    │    │    │    │    │    │    │   histogram(20)=  0                        1                         23                                                      1
+      │    │    │    │    │    │    │    │                 <--- ' Message force article begin investment lang' ---- 'uthern thousand claim. PM response how edge discover unit option town. Run just only particular west adm'
       │    │    │    │    │    │    │    ├── key: (17)
       │    │    │    │    │    │    │    └── fd: (17)-->(18)
       │    │    │    │    │    │    └── filters
@@ -152,7 +156,7 @@ sort
                           │    │    │    ├── columns: ps_suppkey:26(int!null) ps_availqty:27(int!null) ps_supplycost:28(float!null) s_suppkey:32(int!null) s_nationkey:35(int!null) n_nationkey:41(int!null) n_name:42(char!null)
                           │    │    │    ├── key columns: [25 26] = [25 26]
                           │    │    │    ├── lookup columns are key
-                          │    │    │    ├── stats: [rows=32258.0645, distinct(26)=399.934613, null(26)=0, avgsize(26)=4, distinct(27)=9536.12259, null(27)=0, avgsize(27)=4, distinct(28)=1000, null(28)=0, avgsize(28)=4, distinct(32)=399.934613, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4, distinct(27,28)=31617.9161, null(27,28)=0, avgsize(27,28)=8]
+                          │    │    │    ├── stats: [rows=32258.0645, distinct(25)=32258.0645, null(25)=0, avgsize(25)=8, distinct(26)=399.934613, null(26)=0, avgsize(26)=4, distinct(27)=9920, null(27)=0, avgsize(27)=4, distinct(28)=1000, null(28)=0, avgsize(28)=4, distinct(29)=1, null(29)=0, avgsize(29)=4, distinct(32)=399.934613, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=25, null(41)=0, avgsize(41)=4, distinct(42)=25, null(42)=0, avgsize(42)=4, distinct(43)=1, null(43)=0, avgsize(43)=4, distinct(44)=1, null(44)=0, avgsize(44)=4, distinct(27,28)=31617.9161, null(27,28)=0, avgsize(27,28)=8]
                           │    │    │    ├── fd: ()-->(42), (32)-->(35), (35)==(41), (41)==(35), (26)==(32), (32)==(26)
                           │    │    │    ├── inner-join (lookup partsupp@ps_sk)
                           │    │    │    │    ├── save-table-name: q11_lookup_join_14
@@ -165,7 +169,7 @@ sort
                           │    │    │    │    │    ├── save-table-name: q11_lookup_join_15
                           │    │    │    │    │    ├── columns: s_suppkey:32(int!null) s_nationkey:35(int!null) n_nationkey:41(int!null) n_name:42(char!null)
                           │    │    │    │    │    ├── key columns: [41] = [35]
-                          │    │    │    │    │    ├── stats: [rows=400, distinct(32)=399.934613, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4]
+                          │    │    │    │    │    ├── stats: [rows=400, distinct(32)=399.934613, null(32)=0, avgsize(32)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(41)=1, null(41)=0, avgsize(41)=4, distinct(42)=1, null(42)=0, avgsize(42)=4, distinct(43)=1, null(43)=0, avgsize(43)=4, distinct(44)=1, null(44)=0, avgsize(44)=4]
                           │    │    │    │    │    ├── key: (32)
                           │    │    │    │    │    ├── fd: ()-->(42), (32)-->(35), (35)==(41), (41)==(35)
                           │    │    │    │    │    ├── select
@@ -179,11 +183,15 @@ sort
                           │    │    │    │    │    │    ├── scan nation
                           │    │    │    │    │    │    │    ├── save-table-name: q11_scan_17
                           │    │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(char!null)
-                          │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(41)=25, null(41)=0, avgsize(41)=4, distinct(42)=25, null(42)=0, avgsize(42)=4]
+                          │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(41)=25, null(41)=0, avgsize(41)=4, distinct(42)=25, null(42)=0, avgsize(42)=4, distinct(43)=5, null(43)=0, avgsize(43)=4, distinct(44)=25, null(44)=0, avgsize(44)=4]
                           │    │    │    │    │    │    │    │   histogram(41)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
                           │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
                           │    │    │    │    │    │    │    │   histogram(42)=  0      1      23      1
                           │    │    │    │    │    │    │    │                 <--- 'ALGERIA' ---- 'VIETNAM'
+                          │    │    │    │    │    │    │    │   histogram(43)=  0  5  0  5  0  5  0  5  0  5
+                          │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4
+                          │    │    │    │    │    │    │    │   histogram(44)=  0                        1                         23                                                      1
+                          │    │    │    │    │    │    │    │                 <--- ' Message force article begin investment lang' ---- 'uthern thousand claim. PM response how edge discover unit option town. Run just only particular west adm'
                           │    │    │    │    │    │    │    ├── key: (41)
                           │    │    │    │    │    │    │    └── fd: (41)-->(42)
                           │    │    │    │    │    │    └── filters
@@ -247,9 +255,9 @@ column_names     row_count  distinct_count  null_count
 {s_suppkey}      31680      396             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}         32258.00       1.02           1.00                1.00                0.00            1.00
-{n_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
-{ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
+{n_name}         32258.00       1.02           25.00               25.00 <==           0.00            1.00
+{n_nationkey}    32258.00       1.02           25.00               25.00 <==           0.00            1.00
+{ps_availqty}    32258.00       1.02           9920.00             1.04                0.00            1.00
 {ps_partkey}     32258.00       1.02           29783.00            1.00                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
 {ps_supplycost}  32258.00       1.02           1000.00             27.35 <==           0.00            1.00
@@ -336,9 +344,9 @@ column_names     row_count  distinct_count  null_count
 {s_suppkey}      31680      396             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}         32258.00       1.02           1.00                1.00                0.00            1.00
-{n_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
-{ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
+{n_name}         32258.00       1.02           25.00               25.00 <==           0.00            1.00
+{n_nationkey}    32258.00       1.02           25.00               25.00 <==           0.00            1.00
+{ps_availqty}    32258.00       1.02           9920.00             1.04                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
 {ps_supplycost}  32258.00       1.02           1000.00             27.35 <==           0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00

@@ -1467,7 +1467,7 @@ inner-join (lookup geo_table)
  ├── key columns: [11] = [5]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=9801]
+ ├── stats: [rows=9801, distinct(5)=999.947218, null(5)=0, avgsize(5)=4, distinct(6)=100, null(6)=0, avgsize(6)=4]
  ├── cost: 112704.87
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
@@ -1476,7 +1476,7 @@ inner-join (lookup geo_table)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4, distinct(15)=1, null(15)=0, avgsize(15)=4]
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
@@ -1557,8 +1557,8 @@ left-join (lookup geo_table)
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
- ├── stats: [rows=10000]
- ├── cost: 112904.87
+ ├── stats: [rows=10000, distinct(5)=999.956829, null(5)=0, avgsize(5)=4, distinct(6)=100, null(6)=100, avgsize(6)=4]
+ ├── cost: 112704.87
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
@@ -1567,13 +1567,13 @@ left-join (lookup geo_table)
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
- │    ├── cost: 42004.84
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4, distinct(15)=1, null(15)=0, avgsize(15)=4]
+ │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
- │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
@@ -1593,8 +1593,8 @@ semi-join (lookup geo_table)
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
- ├── stats: [rows=10]
- ├── cost: 112704.87
+ ├── stats: [rows=10, distinct(5)=0.999956829, null(5)=0, avgsize(5)=4, distinct(6)=0.999956829, null(6)=0, avgsize(6)=4]
+ ├── cost: 112504.87
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
@@ -1603,8 +1603,8 @@ semi-join (lookup geo_table)
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
- │    ├── cost: 42004.84
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4, distinct(15)=1, null(15)=0, avgsize(15)=4]
+ │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
@@ -1630,8 +1630,8 @@ anti-join (lookup geo_table)
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
- ├── stats: [rows=990]
- ├── cost: 112704.87
+ ├── stats: [rows=990, distinct(5)=1, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
+ ├── cost: 112504.87
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
@@ -1640,13 +1640,13 @@ anti-join (lookup geo_table)
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
- │    ├── cost: 42004.84
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4, distinct(15)=1, null(15)=0, avgsize(15)=4]
+ │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
- │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)

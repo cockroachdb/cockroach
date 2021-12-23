@@ -35,7 +35,7 @@ group-by (streaming)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
-      ├── stats: [rows=10, distinct(1)=10, null(1)=10, avgsize(1)=4]
+      ├── stats: [rows=10, distinct(1)=10, null(1)=10, avgsize(1)=4, distinct(2)=10, null(2)=10, avgsize(2)=4, distinct(4)=10, null(4)=0, avgsize(4)=4]
       ├── cost: 14.41
       ├── ordering: +1
       ├── prune: (1)
@@ -72,7 +72,7 @@ group-by (hash)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
-      ├── stats: [rows=10, distinct(1)=10, null(1)=10, avgsize(1)=4]
+      ├── stats: [rows=10, distinct(1)=10, null(1)=10, avgsize(1)=4, distinct(2)=10, null(2)=10, avgsize(2)=4, distinct(4)=10, null(4)=0, avgsize(4)=4]
       ├── cost: 14.41
       ├── prune: (1)
       └── interesting orderings: (+1)

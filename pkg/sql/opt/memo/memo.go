@@ -399,12 +399,12 @@ func (m *Memo) CopyNextRankFrom(other *Memo) {
 // RequestColStat calculates and returns the column statistic calculated on the
 // relational expression.
 func (m *Memo) RequestColStat(
-	expr RelExpr, cols opt.ColSet,
+	expr RelExpr, cols opt.ColSet, useNormExpr bool,
 ) (colStat *props.ColumnStatistic, ok bool) {
 	// When SetRoot is called, the statistics builder may have been cleared.
 	// If this happens, we can't serve the request anymore.
 	if m.logPropsBuilder.sb.md != nil {
-		return m.logPropsBuilder.sb.colStat(cols, expr), true
+		return m.logPropsBuilder.sb.getColStat(cols, expr, useNormExpr), true
 	}
 	return nil, false
 }

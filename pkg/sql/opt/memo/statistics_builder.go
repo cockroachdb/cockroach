@@ -325,12 +325,21 @@ func (sb *statisticsBuilder) colStatFromInput(
 	panic(errors.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
 }
 
-// colStat gets a column statistic for the given set of columns if it exists.
-// If the column statistic is not available in the current expression, colStat
-// recursively tries to find it in the children of the expression, lazily
-// populating s.ColStats with the statistic as it gets passed up the expression
-// tree.
+// colStat gets a column statistic for the given set of columns if it exists
+// using the normalized expression of e.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
+	return sb.getColStat(colSet, e, true)
+}
+
+// getColStat gets a column statistic for the given set of columns if it exists.
+// If the column statistic is not available in the current expression,
+// getColStat recursively tries to find it in the children of the expression,
+// lazily populating s.ColStats with the statistic as it gets passed up the
+// expression tree. If useNormExpr is true, it will find statistics of the
+// equivalent normalized expression in the group.
+func (sb *statisticsBuilder) getColStat(
+	colSet opt.ColSet, e RelExpr, useNormExpr bool,
+) *props.ColumnStatistic {
 	if colSet.Empty() {
 		panic(errors.AssertionFailedf("column statistics cannot be determined for empty column set"))
 	}
@@ -340,8 +349,10 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return stat
 	}
 
-	// We only calculate statistics on the normalized expression in a memo group.
-	e = e.FirstExpr()
+	if useNormExpr {
+		// Only calculate statistics on the normalized expression in a memo group.
+		e = e.FirstExpr()
+	}
 
 	// The statistic was not found in the cache, so calculate it based on the
 	// type of expression.

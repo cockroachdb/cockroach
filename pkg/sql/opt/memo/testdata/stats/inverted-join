@@ -26,14 +26,14 @@ project
       ├── key columns: [10] = [5]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=9801]
+      ├── stats: [rows=9801, distinct(5)=1000, null(5)=0, avgsize(5)=4, distinct(6)=100, null(6)=0, avgsize(6)=4]
       ├── key: (1,5)
       ├── fd: (1)-->(2), (5)-->(6)
       ├── inner-join (inverted rtable@geom_index)
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:10(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:11) [type=bool]
-      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(10)=999.956829, null(10)=0, avgsize(10)=4]
+      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(10)=999.956829, null(10)=0, avgsize(10)=4, distinct(14)=1, null(14)=0, avgsize(14)=4]
       │    ├── key: (1,10)
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
@@ -58,14 +58,14 @@ project
       ├── key columns: [10] = [5]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=9801]
+      ├── stats: [rows=9801, distinct(5)=1000, null(5)=0, avgsize(5)=4, distinct(6)=100, null(6)=0, avgsize(6)=4]
       ├── key: (1,5)
       ├── fd: (1)-->(2), (5)-->(6)
       ├── inner-join (inverted rtable@geom_index)
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:10(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:11) [type=bool]
-      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(10)=999.956829, null(10)=0, avgsize(10)=4]
+      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(10)=999.956829, null(10)=0, avgsize(10)=4, distinct(14)=1, null(14)=0, avgsize(14)=4]
       │    ├── key: (1,10)
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
@@ -134,16 +134,16 @@ project
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=100]
+      ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=25, distinct(3)=1, null(3)=0, avgsize(3)=4]
       ├── fd: (1)-->(2)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=100, distinct(13)=95.617925, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=100, distinct(13)=95.617925, null(13)=0, avgsize(13)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.j:9(jsonb)
-      │    │    └── stats: [rows=10]
+      │    │    └── stats: [rows=10, distinct(8)=10, null(8)=0, avgsize(8)=4, distinct(9)=10, null(9)=0, avgsize(9)=63, distinct(10)=1, null(10)=0.1, avgsize(10)=4]
       │    └── filters (true)
       └── filters
            └── t1.j:2 @> t2.j:9 [type=bool, outer=(2,9), immutable]
@@ -162,20 +162,20 @@ inner-join (lookup json_arr1 [as=t1])
  ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=3.66666667]
+ ├── stats: [rows=3.66666667, distinct(1)=3.66666667, null(1)=0, avgsize(1)=4, distinct(2)=3.66666667, null(2)=0, avgsize(2)=25, distinct(3)=3.66666667, null(3)=0, avgsize(3)=4]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
  ├── inner-join (inverted json_arr1@a_idx [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 @> t2.a:10) AND (t1.a:15 @> ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4]
+ │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4, distinct(19)=1, null(19)=0, avgsize(19)=4]
  │    ├── key: (8,13)
  │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
  │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4]
+ │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4, distinct(9)=3.33333333, null(9)=0, avgsize(9)=63, distinct(10)=0.98265847, null(10)=0.0333333333, avgsize(10)=4]
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
@@ -198,19 +198,19 @@ project
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=33.3333333]
+      ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, avgsize(1)=4, distinct(2)=33.3333333, null(2)=0, avgsize(2)=25, distinct(3)=33.3333333, null(3)=0.333333333, avgsize(3)=4]
       ├── fd: (8)-->(9,10)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4]
+      │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4, distinct(9)=3.33333333, null(9)=0, avgsize(9)=63, distinct(10)=0.98265847, null(10)=0.0333333333, avgsize(10)=4]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -233,16 +233,16 @@ project
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=3333.33333]
+      ├── stats: [rows=3333.33333, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=1000, null(2)=0, avgsize(2)=25, distinct(3)=1, null(3)=0, avgsize(3)=4]
       ├── fd: (1)-->(2)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
-      │    ├── stats: [rows=100, distinct(13)=95.617925, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=100, distinct(13)=95.617925, null(13)=0, avgsize(13)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.j:9(jsonb)
-      │    │    └── stats: [rows=10]
+      │    │    └── stats: [rows=10, distinct(8)=10, null(8)=0, avgsize(8)=4, distinct(9)=10, null(9)=0, avgsize(9)=63, distinct(10)=1, null(10)=0.1, avgsize(10)=4]
       │    └── filters (true)
       └── filters
            └── t1.j:2 <@ t2.j:9 [type=bool, outer=(2,9), immutable]
@@ -258,20 +258,20 @@ inner-join (lookup json_arr1 [as=t1])
  ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=370.37037]
+ ├── stats: [rows=370.37037, distinct(1)=370.37037, null(1)=0, avgsize(1)=4, distinct(2)=370.37037, null(2)=0, avgsize(2)=25, distinct(3)=100, null(3)=3.7037037, avgsize(3)=4]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
  ├── inner-join (inverted json_arr1@a_idx [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 <@ t2.a:10) AND (t1.a:15 <@ ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4]
+ │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4, distinct(19)=1, null(19)=0, avgsize(19)=4]
  │    ├── key: (8,13)
  │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
  │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4]
+ │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4, distinct(9)=3.33333333, null(9)=0, avgsize(9)=63, distinct(10)=0.98265847, null(10)=0.0333333333, avgsize(10)=4]
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
@@ -294,19 +294,19 @@ project
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=370.37037]
+      ├── stats: [rows=370.37037, distinct(1)=370.37037, null(1)=0, avgsize(1)=4, distinct(2)=370.37037, null(2)=0, avgsize(2)=25, distinct(3)=100, null(3)=3.7037037, avgsize(3)=4]
       ├── fd: (8)-->(9,10)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4]
+      │    ├── stats: [rows=33.3333333, distinct(8)=3.33318943, null(8)=0, avgsize(8)=4, distinct(13)=32.9461714, null(13)=0, avgsize(13)=4, distinct(18)=1, null(18)=0, avgsize(18)=4]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4]
+      │    │    ├── stats: [rows=3.33333333, distinct(8)=3.33333333, null(8)=0, avgsize(8)=4, distinct(9)=3.33333333, null(9)=0, avgsize(9)=63, distinct(10)=0.98265847, null(10)=0.0333333333, avgsize(10)=4]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -368,14 +368,14 @@ project
       ├── key columns: [14] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=3]
+      ├── stats: [rows=3, distinct(1)=3, null(1)=0, avgsize(1)=4, distinct(2)=3, null(2)=0, avgsize(2)=34, distinct(3)=3, null(3)=0, avgsize(3)=12, distinct(4)=1, null(4)=0, avgsize(4)=4]
       ├── fd: (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sj_idx [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:14(int!null) s:16(string!null)
       │    ├── prefix key columns: [13] = [16]
       │    ├── inverted-expr
       │    │    └── t1.j:15 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=3, distinct(13)=3, null(13)=0, avgsize(13)=4, distinct(14)=2.99565406, null(14)=0, avgsize(14)=4, distinct(16)=3, null(16)=0, avgsize(16)=12]
+      │    ├── stats: [rows=3, distinct(13)=3, null(13)=0, avgsize(13)=4, distinct(14)=2.99565406, null(14)=0, avgsize(14)=4, distinct(16)=3, null(16)=0, avgsize(16)=12, distinct(20)=0.9502204, null(20)=0, avgsize(20)=4]
       │    ├── fd: (14)-->(16)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:9(jsonb) "inverted_join_const_col_@3":13(string!null)
@@ -383,7 +383,7 @@ project
       │    │    ├── stats: [rows=30, distinct(13)=3, null(13)=0, avgsize(13)=4]
       │    │    ├── scan json_arr2 [as=t2]
       │    │    │    ├── columns: t2.j:9(jsonb)
-      │    │    │    └── stats: [rows=10]
+      │    │    │    └── stats: [rows=10, distinct(8)=10, null(8)=0, avgsize(8)=4, distinct(9)=10, null(9)=0, avgsize(9)=63, distinct(10)=1, null(10)=0.1, avgsize(10)=4]
       │    │    ├── values
       │    │    │    ├── columns: "inverted_join_const_col_@3":13(string!null)
       │    │    │    ├── cardinality: [3 - 3]
@@ -419,14 +419,14 @@ project
       ├── key columns: [16] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=0.3]
+      ├── stats: [rows=0.3, distinct(1)=0.3, null(1)=0, avgsize(1)=4, distinct(2)=0.3, null(2)=0, avgsize(2)=34, distinct(3)=0.3, null(3)=0, avgsize(3)=12, distinct(4)=0.3, null(4)=0, avgsize(4)=2]
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sij_idx [as=t1])
       │    ├── columns: t2.j:10(jsonb) t1.k:16(int!null) s:18(string!null) i:19(int!null)
       │    ├── prefix key columns: [14 15] = [18 19]
       │    ├── inverted-expr
       │    │    └── t1.j:17 @> t2.j:10 [type=bool]
-      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, avgsize(14)=4, distinct(15)=0.3, null(15)=0, avgsize(15)=4, distinct(16)=0.299956504, null(16)=0, avgsize(16)=4, distinct(18)=0.3, null(18)=0, avgsize(18)=12, distinct(19)=0.3, null(19)=0, avgsize(19)=2, distinct(18,19)=0.3, null(18,19)=0, avgsize(18,19)=14]
+      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, avgsize(14)=4, distinct(15)=0.3, null(15)=0, avgsize(15)=4, distinct(16)=0.299956504, null(16)=0, avgsize(16)=4, distinct(18)=0.3, null(18)=0, avgsize(18)=12, distinct(19)=0.3, null(19)=0, avgsize(19)=2, distinct(23)=0.259182891, null(23)=0, avgsize(23)=4, distinct(18,19)=0.3, null(18,19)=0, avgsize(18,19)=14]
       │    ├── fd: ()-->(19), (16)-->(18)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":15(int!null) t2.j:10(jsonb) "inverted_join_const_col_@3":14(string!null)
@@ -438,7 +438,7 @@ project
       │    │    │    ├── stats: [rows=30, distinct(14)=3, null(14)=0, avgsize(14)=4]
       │    │    │    ├── scan json_arr2 [as=t2]
       │    │    │    │    ├── columns: t2.j:10(jsonb)
-      │    │    │    │    └── stats: [rows=10]
+      │    │    │    │    └── stats: [rows=10, distinct(9)=10, null(9)=0, avgsize(9)=4, distinct(10)=10, null(10)=0, avgsize(10)=63, distinct(11)=1, null(11)=0.1, avgsize(11)=4]
       │    │    │    ├── values
       │    │    │    │    ├── columns: "inverted_join_const_col_@3":14(string!null)
       │    │    │    │    ├── cardinality: [3 - 3]
@@ -477,7 +477,7 @@ project
       ├── key columns: [15] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=10, distinct(4)=10, null(4)=0, avgsize(4)=2, distinct(10)=10, null(10)=0, avgsize(10)=4]
+      ├── stats: [rows=10, distinct(1)=9.95511979, null(1)=0, avgsize(1)=4, distinct(2)=9.95511979, null(2)=0, avgsize(2)=34, distinct(3)=0.999954827, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=2, distinct(10)=10, null(10)=0, avgsize(10)=4, distinct(11)=6.32304575, null(11)=0, avgsize(11)=63, distinct(12)=0.999954827, null(12)=0, avgsize(12)=4]
       ├── key: (1)
       ├── fd: (1)-->(2,4), (10)-->(11), (4)==(10), (10)==(4)
       ├── inner-join (inverted json_multi_col@ij_idx [as=t1])
@@ -485,12 +485,12 @@ project
       │    ├── prefix key columns: [10] = [18]
       │    ├── inverted-expr
       │    │    └── t1.j:16 @> t2.j:11 [type=bool]
-      │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, avgsize(10)=4, distinct(15)=9.95511979, null(15)=0, avgsize(15)=4, distinct(18)=10, null(18)=0, avgsize(18)=2]
+      │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, avgsize(10)=4, distinct(15)=9.95511979, null(15)=0, avgsize(15)=4, distinct(18)=10, null(18)=0, avgsize(18)=2, distinct(23)=0.999954827, null(23)=0, avgsize(23)=4]
       │    ├── key: (15)
       │    ├── fd: (10)-->(11), (15)-->(18), (10)==(18), (18)==(10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:10(int!null) t2.j:11(jsonb)
-      │    │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, avgsize(10)=4]
+      │    │    ├── stats: [rows=10, distinct(10)=10, null(10)=0, avgsize(10)=4, distinct(11)=10, null(11)=0, avgsize(11)=63, distinct(12)=1, null(12)=0.1, avgsize(12)=4]
       │    │    ├── key: (10)
       │    │    └── fd: (10)-->(11)
       │    └── filters (true)

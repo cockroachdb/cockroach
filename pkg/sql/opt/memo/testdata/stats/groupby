@@ -56,7 +56,7 @@ project
            ├── fd: (1)-->(2)
            └── scan a
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0, avgsize(1,2)=5]
+                ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(1,2)=2000, null(1,2)=0, avgsize(1,2)=5]
                 ├── key: (1)
                 └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
 
@@ -80,7 +80,7 @@ project
       │    ├── fd: (1)-->(2)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
@@ -102,7 +102,7 @@ group-by (hash)
  │    ├── stats: [rows=2000, distinct(2)=400, null(2)=0, avgsize(2)=3]
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │         ├── stats: [rows=2000, distinct(2)=400, null(2)=0, avgsize(2)=3]
+ │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  └── aggregations
@@ -128,7 +128,7 @@ project
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │         ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=22]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=22]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
@@ -154,7 +154,7 @@ project
       │    ├── fd: (1)-->(2,3)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │         ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0, avgsize(2,3)=7]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2,3)=2000, null(2,3)=0, avgsize(2,3)=7]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
@@ -185,7 +185,7 @@ project
       │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    │    └── scan a
       │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │    │         ├── stats: [rows=2000, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=22]
+      │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=22]
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       │    └── aggregations
@@ -217,7 +217,7 @@ select
  │    │    ├── fd: (1)-->(4)
  │    │    └── scan a
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │    │         ├── stats: [rows=2000, distinct(4)=10, null(4)=0, avgsize(4)=6]
+ │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── aggregations
@@ -247,7 +247,7 @@ select
  │    │    ├── stats: [rows=2000]
  │    │    └── scan a
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │    │         ├── stats: [rows=2000]
+ │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=0, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=0, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── aggregations
@@ -315,7 +315,7 @@ project
            ├── fd: (1)-->(2)
            └── scan a
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0, avgsize(1,2)=5]
+                ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(1,2)=2000, null(1,2)=0, avgsize(1,2)=5]
                 ├── key: (1)
                 └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
 
@@ -339,7 +339,7 @@ project
       │    ├── fd: (1)-->(2)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
@@ -361,7 +361,7 @@ group-by (hash)
  │    ├── stats: [rows=2000, distinct(2)=400, null(2)=1000, avgsize(2)=3]
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │         ├── stats: [rows=2000, distinct(2)=400, null(2)=1000, avgsize(2)=3]
+ │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  └── aggregations
@@ -387,7 +387,7 @@ project
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │         ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=12]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=12]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
@@ -413,7 +413,7 @@ project
       │    ├── fd: (1)-->(2,3)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │         ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0, avgsize(2,3)=7]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2,3)=2000, null(2,3)=0, avgsize(2,3)=7]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
@@ -444,7 +444,7 @@ project
       │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    │    └── scan a
       │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
-      │    │         ├── stats: [rows=2000, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=12]
+      │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4, distinct(2-4)=600, null(2-4)=0, avgsize(2-4)=12]
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       │    └── aggregations
@@ -476,7 +476,7 @@ select
  │    │    ├── fd: (1)-->(4)
  │    │    └── scan a
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
- │    │         ├── stats: [rows=2000, distinct(4)=10, null(4)=1000, avgsize(4)=6]
+ │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=400, null(2)=1000, avgsize(2)=3, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=10, null(4)=1000, avgsize(4)=6, distinct(5)=200, null(5)=20, avgsize(5)=4, distinct(6)=200, null(6)=20, avgsize(6)=4]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── aggregations

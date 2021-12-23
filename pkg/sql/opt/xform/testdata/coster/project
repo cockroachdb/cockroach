@@ -14,7 +14,7 @@ project
  ├── fd: (1)-->(2,7)
  ├── scan a
  │    ├── columns: k:1!null i:2 s:3
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
  │    ├── cost: 1094.72
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
@@ -33,7 +33,7 @@ project
  ├── fd: (1)-->(7,8)
  ├── scan a
  │    ├── columns: k:1!null i:2 d:4!null
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4, distinct(3)=100, null(3)=10, avgsize(3)=4, distinct(4)=100, null(4)=0, avgsize(4)=4]
  │    ├── cost: 1094.72
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
