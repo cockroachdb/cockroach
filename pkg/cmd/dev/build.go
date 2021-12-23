@@ -90,6 +90,12 @@ var buildTargetMapping = map[string]string{
 	"workload":         "//pkg/cmd/workload:workload",
 }
 
+// Do not hoist any files from the sandbox into the workspace that have any of
+// the following basenames.
+var doNotHoistFiles = map[string]bool{
+	"gen-reports-TxnStateTransitions_stateNoTxn_write_reports.go": true,
+}
+
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
@@ -240,7 +246,11 @@ func (d *dev) stageArtifacts(
 
 		for _, file := range goFiles {
 			// We definitely don't want any code that was put in the sandbox for gomock.
-			if strings.Contains(file, "_gomock_gopath") {
+			if strings.Contains(file, "_gomock_gopath") || strings.HasSuffix(file, "_gomock_prog.go") {
+				continue
+			}
+			// Any files in doNotHoistFiles shouldn't be hoisted.
+			if _, doNotHoist := doNotHoistFiles[filepath.Base(file)]; doNotHoist {
 				continue
 			}
 			// First case: generated Go code that's checked into tree.
